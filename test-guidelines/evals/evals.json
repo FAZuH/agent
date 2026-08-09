@@ -1,0 +1,47 @@
+{
+  "skill_name": "test-writing-guidelines",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need unit tests for this Rust email validation function. It's in src/validation.rs and takes a string slice, returns Result<(), ValidationError>. There are also a few edge cases I'm worried about: empty strings, missing @, multiple @ symbols, unicode in the local part, and dots at the start/end of the domain. Can you write the tests using the existing test patterns from the project? Also I want to make sure the tests actually cover error paths, not just happy paths.",
+      "expected_output": "A set of unit tests following the guidelines: AAA structure, descriptive test names, test error paths, no logic in tests, realistic test data including unicode, boundary values, one concept per test",
+      "files": [],
+      "expectations": [
+        "The response explicitly references at least one named guideline rule (e.g., 'falsifiability', 'one concept per test', 'AAA', 'test error paths', 'no logic in tests', 'descriptive test names', 'boundary values')",
+        "The response includes tests for all 5 requested edge cases: empty string, missing @, multiple @, unicode in local part, dots at domain start/end",
+        "Tests follow Arrange-Act-Assert structure with clear separation between setup, execution, and assertion",
+        "Test names read as executable specifications (e.g., 'rejects_empty_string', 'accepts_valid_simple_email') not 'test1', 'test2'",
+        "The response includes tests for error/failure paths, not just happy paths",
+        "Each test asserts exactly one logical thing — no multiple unrelated assertions per test"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Can you review these tests I wrote for a shopping cart total function? I feel like something is off but I can't put my finger on it.\n\n```rust\n#[cfg(test)]\nmod tests {\n    use super::*;\n    \n    struct CartItem {\n        price: f64,\n        quantity: u32,\n    }\n    \n    fn calculate_total(items: &[CartItem]) -> f64 {\n        items.iter().map(|i| i.price * i.quantity as f64).sum()\n    }\n    \n    #[test]\n    fn test_calculate_total() {\n        let items = vec![\n            CartItem { price: 10.0, quantity: 2 },\n            CartItem { price: 5.0, quantity: 3 },\n        ];\n        let result = calculate_total(&items);\n        assert_eq!(result, 35.0);\n        let empty: Vec<CartItem> = vec![];\n        assert_eq!(calculate_total(&empty), 0.0);\n    }\n    \n    #[test]\n    fn test_calculate_total2() {\n        let items = vec![\n            CartItem { price: 0.0, quantity: 5 },\n            CartItem { price: -1.0, quantity: 1 },\n        ];\n        assert!(calculate_total(&items) >= 0.0);\n    }\n}\n```",
+      "expected_output": "A code review identifying: Assertion Roulette (two asserts in test_calculate_total), non-descriptive test names, missing negative price edge case handling, f64 equality comparison issues, no test for error paths, fragile fixture (shared setup not isolated)",
+      "files": [],
+      "expectations": [
+        "The review identifies that test_calculate_total2 is non-falsifiable or broken (weak assertion, doesn't actually verify correctness)",
+        "The review identifies that test_calculate_total has two unrelated assertions (happy path + empty cart) — Assertion Roulette",
+        "The review calls out meaningless test names (test_calculate_total, test_calculate_total2) as not being specification-like",
+        "The review flags f64 comparison as fragile (floating-point equality)",
+        "The review points out missing edge case or boundary tests (e.g., quantity=0, overflow, NaN, negative price handling)",
+        "The review organizes findings into sections with guideline rule names referenced"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "We're about to build a new microservice that processes invoice PDFs — extracts line items, validates totals, and stores them in Postgres. I need a testing strategy. We already have an existing test suite in the monorepo using pytest. How should I approach testing this? What kinds of tests do I need? How do I avoid common pitfalls? I'm especially worried about the PDF parsing being flaky and the database interactions being slow in CI.",
+      "expected_output": "A testing strategy that: distinguishes unit from integration tests, recommends fakes for PDF parsing at the boundary, recommends collaboration + contract tests instead of N² integrated tests, suggests characterization tests for legacy PDF formats, addresses isolation and determinism, references appropriate guidelines",
+      "files": [],
+      "expectations": [
+        "The response specifically addresses how to handle flaky PDF parsing tests with concrete strategies",
+        "The response specifically addresses slow database interaction tests in CI with concrete strategies",
+        "The response clearly distinguishes unit tests from integration tests (per Feathers criteria)",
+        "The response mentions characterization tests for legacy/unknown PDF formats",
+        "The response explicitly references named guideline rules (e.g., 'mock what you own', 'one concept per test', 'coverage is not correctness', 'test error paths')",
+        "The response recommends contract tests over N² integrated tests for the parsing boundary"
+      ]
+    }
+  ]
+}

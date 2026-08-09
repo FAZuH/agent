@@ -1,0 +1,127 @@
+---
+name: prepare-compact
+description: >-
+  Prepare the current session for context compaction. Use when the user is
+  about to compact the session context window, asks to prepare for
+  compaction, says the context is getting full or running low, wants to
+  persist state before compacting, or wants a resume checkpoint so work
+  survives a compaction. Persists the plan doc, deviations, decisions, todo
+  list, session-critical facts, and the active goal objective, then clears
+  the goal so it stops re-prompting after compaction.
+---
+
+# prepare-compact
+
+If you're told to call this skill, it means a session copmaction is imminent. This is the last
+chance to persist everything a fresh session needs to resume seamlessly. Be
+thorough: assume the conversation history is about to be deleted.
+
+Extra notes the user gives (see the conversation) count as arguments: use them
+as notes to persist, and/or the plan name for `docs/plan/<name>.md`.
+
+Do the steps in order. Do not compress or skip facts; the goal is fidelity,
+not brevity.
+
+IMPORTANT: If you lack write access — a read-only agent, Plan mode, or any restriction that
+blocks editing files, updating todos, memory, or clearing the goal — do NOT fail
+silently. Persist whatever you can, and explicitly tell the user in the final
+report which persistence steps could not be performed and what will therefore be
+lost on compaction.
+
+## 1. Snapshot current state
+
+Run `get_goal` and record the current goal's objective verbatim — the fresh
+session will need to re-create it. Then, from your own context, capture:
+
+- **Objective** — what is being worked on right now, in one or two sentences.
+- **Done** — what shipped so far: files created/changed, features working,
+  verification passed.
+- **In progress** — anything half-finished: partial edits, uncommitted work, a
+  design being worked out.
+- **Blocked** — external blockers, pending decisions, answers you are still
+  waiting on.
+- **Deviations** — anything that diverged from a plan, spec, or original
+  request.
+
+## 2. Update the plan doc
+
+Follow the conventions of the `fazuh-plans` skill.
+
+- If `docs/plan/<name>.md` exists, update it in place: refresh **Objective**,
+  **Decisions & constraints**, **File layout**, **Design**, and **Execution**
+  status to match reality. Append dated entries to the **Deviation log** for
+  every change since the doc was last written.
+- If no plan doc exists and the task is non-trivial, create
+  `docs/plan/<name>.md` using the fazuh-plans template. Keep it
+  self-contained: a fresh agent must be able to resume from the doc plus the
+  code.
+- If the work is essentially complete, say so and note that the plan should be
+  archived to `docs/plan/complete/`.
+
+## 3. Sync the todo list
+
+- Read the current todos (todowrite). Rewrite them so a fresh session can pick
+  them up: each pending or in-progress item must state what remains and how to
+  verify it.
+- Mark anything actually finished as completed. Merge duplicate items. Keep the
+  list short enough to be useful.
+
+## 4. Persist session-critical facts
+
+Capture anything that is cheap to lose and expensive to rediscover:
+
+- **Environment** — dev servers running (and which subagent/PTY owns them),
+  ports, URLs, relevant PIDs, current git branch and uncommitted files.
+- **Commands** — exact verification commands (build, lint, test, typecheck)
+  and any one-off commands that worked.
+- **Gotchas** — non-obvious findings, dead ends, API quirks, decisions and
+  their rationale. If a friction point hit the papercuts log, reference it; do
+  not duplicate it.
+- **Secrets** — do NOT write credentials or tokens. Note where they live
+  instead (env var, file path).
+
+## 5. Update memory (optional)
+
+If this session changed durable, high-signal facts — new project conventions,
+architecture decisions, or workflow changes — update the project or global
+memory blocks so they survive without the conversation. Do not add trivia.
+
+## 6. Write the resume checkpoint
+
+End the plan doc (or, if none, the summary you give the user) with a
+**Resume checkpoint** section containing exactly:
+
+```
+## Resume checkpoint
+- Goal to re-create: <the goal objective recorded in step 1, verbatim>
+- Next step: <the single next action, with file paths and line numbers if known>
+- Verify with: <exact command or test to confirm state>
+- Context to re-read first: <plan doc, specific files, code sections>
+- Open questions: <anything still unanswered>
+```
+
+After compaction, the first action of the fresh session must be to re-create
+the goal with the recorded objective (create_goal/set_goal), then continue
+from the resume checkpoint.
+
+## 7. Clear the goal
+
+When all persistence steps are done, clear the active goal with `clear_goal`.
+This stops the goal plugin from re-prompting to continue the current goal after
+compaction. The objective survives in the resume checkpoint, so nothing is lost
+by clearing it.
+
+## 8. Report
+
+Give the user a concise report:
+
+- Where each piece of state was persisted (plan doc path, todo list, memory,
+  papercuts).
+- The goal that was cleared, and the objective they must re-create after
+  compaction.
+- The single next step they can paste into a fresh session to continue.
+- Anything that could NOT be persisted, so they know what will be lost on
+  compaction.
+
+Do not commit or take any other side action. The user will compact or continue
+after reviewing your report.

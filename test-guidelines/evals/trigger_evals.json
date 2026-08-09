@@ -1,0 +1,22 @@
+[
+  {"query": "write unit tests for this function: fn calculate_bmi(weight_kg: f64, height_m: f64) -> Result<f64, String>. It should reject zero or negative values and return the bmi formula otherwise", "should_trigger": true},
+  {"query": "review these tests i wrote for a user registration endpoint - i feel like there's something off about how i'm structuring them but i can't figure out what", "should_trigger": true},
+  {"query": "our team is adding a new payment processing module and i need to figure out how to test it properly. What kinds of tests should we write and in what order?", "should_trigger": true},
+  {"query": "should each test have its own setup or should i use one big before_all function? i see different patterns online", "should_trigger": true},
+  {"query": "someone on my team wrote a test with a for loop inside it that generates random inputs and runs the same assertion 100 times. Is that a problem and what should i tell them?", "should_trigger": true},
+  {"query": "write tests for this csv parser - it reads a file and returns a Vec<Row>. Cover the edge cases like empty file, malformed rows, unicode headers", "should_trigger": true},
+  {"query": "our tests pass locally but fail on CI randomly. They hit a real postgres database. Any advice on how to fix this?", "should_trigger": true},
+  {"query": "we're at 90% line coverage according to tarpaulin but bugs still ship to production. what are we missing with our testing approach?", "should_trigger": true},
+  {"query": "can you check these test names and tell me if they convey what each test does? we have test_user_creation, test_user_2, test_auth_valid, handler_works, test_bogus", "should_trigger": true},
+  {"query": "what's the practical difference between a stub, a mock, and a fake? i get the theory but when should i actually use each one in real code?", "should_trigger": true},
+  {"query": "can you run the test suite in this project and tell me which tests failed and why?", "should_trigger": false},
+  {"query": "i need to set up GitHub Actions to run our rust tests on every PR push, with a 10 minute timeout and test report upload", "should_trigger": false},
+  {"query": "our CI is slow because integration tests take 45 minutes, can we split them across parallel runners?", "should_trigger": false},
+  {"query": "how do i configure pytest to use asyncio mode so our async tests actually run?", "should_trigger": false},
+  {"query": "write a bash script that runs cargo test --lib, cargo test --integration, and cargo test --doc separately with different flags", "should_trigger": false},
+  {"query": "how do i set up grcov to get test coverage reports from our rust project?", "should_trigger": false},
+  {"query": "can you install and configure testcontainers for our postgres integration tests? we use java with maven", "should_trigger": false},
+  {"query": "this test file won't compile because of a lifetime issue on line 42, can you figure out what's wrong?", "should_trigger": false},
+  {"query": "we need to migrate from pytest-asyncio to pytest-anyio because of our new fastapi dependency, what config changes are needed?", "should_trigger": false},
+  {"query": "write a Dockerfile for running our tests in CI with all the system dependencies like postgres-client and redis-tools", "should_trigger": false}
+]
