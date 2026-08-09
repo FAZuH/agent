@@ -100,6 +100,40 @@ function extractChangelogText(body) {
   return null;
 }
 
+// Parse repeated `scope:`/`changelog:` lines into pairs `{scope, text}`.
+// Line order is irrelevant: the nth scope line pairs with the nth changelog
+// line. This mirrors the transform, which always consumes scope[0] with
+// changelog[0] when building entry 1.
+function parsePairs(body) {
+  if (!body) return [];
+
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
+
+  const scopes = [];
+  const changelogs = [];
+  lines.forEach((line) => {
+    if (/^scope:\s*/i.test(line)) {
+      scopes.push(line.replace(/^scope:\s*/i, "").trim());
+    } else if (/^changelog:\s*/i.test(line)) {
+      changelogs.push(line.replace(/^changelog:\s*/i, "").trim());
+    }
+  });
+
+  return changelogs.map((text, index) => ({
+    scope: index < scopes.length ? scopes[index] : null,
+    text,
+  }));
+}
+
+function originalTypeFromHeader(header) {
+  if (!header) return "chore";
+  const match = header.match(/^([^(!:]+)/);
+  return match ? match[1].trim().toLowerCase() : "chore";
+}
+
 async function getOptions() {
   let options = await config({
     types: [{ type: "General", section: "General", hidden: false }],
@@ -161,6 +195,37 @@ async function getOptions() {
       }
 
       if (context.commitGroups) {
+        // One commit body can declare several `scope:`/`changelog:` pairs.
+        // The transform only consumed pair 1 (first scope + first changelog
+        // line); synthesize a sibling entry for every later pair.
+        for (const commit of commits || []) {
+          if (!commit) continue;
+          const originalType = (commit.raw && commit.raw.type) || originalTypeFromHeader(commit.header);
+          const pairs = parsePairs(commit.body);
+          for (let i = 1; i < pairs.length; i++) {
+            const pair = pairs[i];
+            if (!pair.text) continue;
+
+            const effectiveScope = pair.scope || originalType;
+            const groupTitle = effectiveScope === originalType ? typeLabel(effectiveScope) : effectiveScope;
+
+            let group = context.commitGroups.find((g) => g.title === groupTitle);
+            if (!group) {
+              group = { title: groupTitle, commits: [] };
+              context.commitGroups.push(group);
+            }
+
+            group.commits.push({
+              ...commit,
+              type: groupTitle,
+              subject: pair.text,
+              scope: null,
+              references: [],
+              notes: [],
+            });
+          }
+        }
+
         for (const group of context.commitGroups) {
           if (group.commits && group.commits.length > 0) {
             group.title = group.commits[0].type;
