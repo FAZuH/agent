@@ -17,7 +17,7 @@ The commit permission does not exist and does not pass to any other request or a
 
 ## 1. Update relevant docs
 
-Discover the docs before you write or change anything. Scour the `docs/` directory and all markdown files in it (e.g. `docs/plan/`, `docs/adr/`, `docs/plan/complete/`). Also look for markdown docs and agent docs. The common names are `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md`, `CONTEXT.md`, and `CLAUDE.md`. Read them first. Build your work on the existing docs. Do not duplicate or contradict them.
+Discover the docs before you write or change anything. Scour the `docs/` directory and all markdown files in it (e.g. ADRs under `docs/adr/`), plus any session/plan docs the repo tracks — commonly under `docs/plan/`, `docs/specs/`, or `.scratch/` (spec, checkpoint, archive). Also look for markdown docs and agent docs. The common names are `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md`, `CONTEXT.md`, and `CLAUDE.md`. Read them first. Build your work on the existing docs. Do not duplicate or contradict them.
 
 Review the conversation. Identify the docs that the changes require. Update the relevant docs. Change the agent docs (`AGENTS.md`, `CONTEXT.md`, `CLAUDE.md`) when the session changes a project convention, a command, a workflow, tooling, or the architecture. If nothing needs a change, say so and skip.
 

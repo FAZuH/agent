@@ -5,19 +5,20 @@ description: >-
   about to compact the session context window, asks to prepare for
   compaction, says the context is getting full or running low, wants to
   persist state before compacting, or wants a resume checkpoint so work
-  survives a compaction. Persists the plan doc, deviations, decisions, todo
-  list, session-critical facts, and the active goal objective, then clears
-  the goal so it stops re-prompting after compaction.
+  survives a compaction. Persists the session/plan doc, deviations, decisions,
+  todo list, session-critical facts, and the active goal objective, then
+  clears the goal so it stops re-prompting after compaction.
 ---
 
 # prepare-compact
 
-If you're told to call this skill, it means a session copmaction is imminent. This is the last
+If you're told to call this skill, it means a session compaction is imminent. This is the last
 chance to persist everything a fresh session needs to resume seamlessly. Be
 thorough: assume the conversation history is about to be deleted.
 
 Extra notes the user gives (see the conversation) count as arguments: use them
-as notes to persist, and/or the plan name for `docs/plan/<name>.md`.
+as notes to persist, and/or the feature slug when the repo uses the `.scratch/`
+layout.
 
 Do the steps in order. Do not compress or skip facts; the goal is fidelity,
 not brevity.
@@ -43,20 +44,23 @@ session will need to re-create it. Then, from your own context, capture:
 - **Deviations** — anything that diverged from a plan, spec, or original
   request.
 
-## 2. Update the plan doc
+## 2. Update the session doc
 
-Follow the conventions of the `fazuh-plans` skill.
+Detect the repo's session-doc convention rather than assuming one:
 
-- If `docs/plan/<name>.md` exists, update it in place: refresh **Objective**,
-  **Decisions & constraints**, **File layout**, **Design**, and **Execution**
-  status to match reality. Append dated entries to the **Deviation log** for
-  every change since the doc was last written.
-- If no plan doc exists and the task is non-trivial, create
-  `docs/plan/<name>.md` using the fazuh-plans template. Keep it
-  self-contained: a fresh agent must be able to resume from the doc plus the
-  code.
-- If the work is essentially complete, say so and note that the plan should be
-  archived to `docs/plan/complete/`.
+- If the repo uses the `.scratch/` layout (`.scratch/<feature-slug>/spec.md`
+  exists), update it in place: refresh **Objective**, **Decisions &
+  constraints**, **File layout**, **Design**, and **Execution** status to
+  match reality. Append dated entries to the **Deviation log** for every
+  change since the doc was last written.
+- Otherwise, update whatever plan/spec doc the repo already tracks (find it
+  by common names: `spec.md`, `plan.md`, `docs/plan/`, `docs/specs/`), if one
+  exists. Keep the same section refresh + dated deviation entries.
+- If no session doc exists, do not invent one — skip creation and note it in
+  the report.
+- If the work is essentially complete, say so and note that the doc should be
+  archived (`.scratch/complete/` when the repo uses `.scratch/`, or the
+  repo's equivalent archive location).
 
 ## 3. Sync the todo list
 
@@ -75,7 +79,7 @@ Capture anything that is cheap to lose and expensive to rediscover:
 - **Commands** — exact verification commands (build, lint, test, typecheck)
   and any one-off commands that worked.
 - **Gotchas** — non-obvious findings, dead ends, API quirks, decisions and
-  their rationale. If a friction point hit the papercuts log, reference it; do
+  their rationale. If a friction point hit a papercuts log, reference it; do
   not duplicate it.
 - **Secrets** — do NOT write credentials or tokens. Note where they live
   instead (env var, file path).
@@ -88,21 +92,40 @@ memory blocks so they survive without the conversation. Do not add trivia.
 
 ## 6. Write the resume checkpoint
 
-End the plan doc (or, if none, the summary you give the user) with a
-**Resume checkpoint** section containing exactly:
+Write the resume checkpoint to `.scratch/<feature-slug>/checkpoint.md` when
+the repo uses the `.scratch/` layout; otherwise write a generic `RESUME.md` at
+the repo root. The checkpoint contains exactly:
 
 ```
-## Resume checkpoint
-- Goal to re-create: <the goal objective recorded in step 1, verbatim>
-- Next step: <the single next action, with file paths and line numbers if known>
-- Verify with: <exact command or test to confirm state>
-- Context to re-read first: <plan doc, specific files, code sections>
-- Open questions: <anything still unanswered>
+# Resume checkpoint — <feature>
+
+## Goal to re-create
+<the goal objective recorded in step 1, verbatim>
+
+## Next step
+<the single next action, with file paths and line numbers if known>
+
+## Verify with
+<exact command or test to confirm state>
+
+## Context to re-read first
+<session doc path, specific files, code sections>
+
+## Open questions
+<anything still unanswered>
+
+## Session facts
+- Environment: dev servers (and which subagent/PTY owns them), ports, PIDs,
+  git branch, uncommitted files.
+- Commands: exact verification commands and any one-off commands that worked.
+- Gotchas: non-obvious findings, dead ends, API quirks, decisions and
+  rationale.
 ```
 
-After compaction, the first action of the fresh session must be to re-create
-the goal with the recorded objective (create_goal/set_goal), then continue
-from the resume checkpoint.
+Do NOT write credentials or tokens — note where they live instead (env var,
+file path). After compaction, the first action of the fresh session must be to
+re-create the goal with the recorded objective (create_goal/set_goal), then
+continue from the resume checkpoint.
 
 ## 7. Clear the goal
 
@@ -115,8 +138,8 @@ by clearing it.
 
 Give the user a concise report:
 
-- Where each piece of state was persisted (plan doc path, todo list, memory,
-  papercuts).
+- Where each piece of state was persisted (session doc path, checkpoint,
+  todo list, memory, papercuts).
 - The goal that was cleared, and the objective they must re-create after
   compaction.
 - The single next step they can paste into a fresh session to continue.
