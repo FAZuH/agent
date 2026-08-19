@@ -69,6 +69,8 @@ This is genuinely an opinionated stance, not settled practice — know the trade
 
 Pick based on what your alerting infrastructure actually consumes, not on which side has better rhetoric.
 
+**loguru note:** loguru ships two extra levels beyond the usual hierarchy — `trace` (below `debug`) and `success` (above `info`). Under the two-level stance, `success` is a natural fit for the "semantically distinct state" guidance above (e.g. a long-running batch completing, an auth path that succeeded via a specific method), and `warning` can be reserved the same way for CAPTCHA/fallback-style states — but keep the *normal* per-unit-of-work event at `info` with the degraded/outcome signal as a field, not as a level. There is no need to `logger.remove()`/`logger.add()` to collapse levels; just pick which levels you actually emit at and keep the semantic signal in fields. See `references/python.md` (Porting to `loguru`).
+
 ### Never Log Unstructured Strings
 
 Every log must be structured with queryable fields. `console.log('User logged in')` is useless for debugging at scale.

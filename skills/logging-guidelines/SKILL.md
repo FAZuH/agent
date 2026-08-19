@@ -105,7 +105,7 @@ Wide-event schemas feed dashboards and alerts the same way an API schema feeds c
 
 - **TypeScript/Node** (`pino` + Hono): `references/typescript.md`
 - **Rust** (`tracing` + `tracing-subscriber`): `references/rust.md`
-- **Python** (`structlog` + `contextvars`, FastAPI-style): `references/python.md`
+- **Python** (`structlog` + `contextvars`, FastAPI-style): `references/python.md` — includes a port to `loguru`, which has no direct entry in this list; see the "Porting to `loguru`" section for the concept mapping and the `format=` template gotcha.
 
 If the language you're working in isn't listed, follow the language-neutral rules in `rules/` and port the closest reference.
 
