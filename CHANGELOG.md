@@ -1,3 +1,10 @@
+## [0.2.0](https://github.com/FAZuH/skills/compare/v0.1.3...v0.2.0) (2026-08-19)
+
+
+### Features
+
+* add pr-creator skill ([b3c4246](https://github.com/FAZuH/skills/commit/b3c4246a34d5f6e01ae2d941ae84cec563a8fbf6))
+
 ## [0.1.3](https://github.com/FAZuH/skills/compare/v0.1.2...v0.1.3) (2026-08-19)
 
 
