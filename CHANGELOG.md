@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/FAZuH/skills/compare/v0.2.2...v0.2.3) (2026-08-19)
+
+
+### Features
+
+* add worktree skill ([966e6b4](https://github.com/FAZuH/skills/commit/966e6b48a9a704a9e7821fd0205689635cf19eb9))
+
 ## [0.2.2](https://github.com/FAZuH/skills/compare/v0.2.1...v0.2.2) (2026-08-19)
 
 
@@ -26,6 +33,4 @@
 ### Features
 
 * improve logging-guidelines ([83d418b](https://github.com/FAZuH/skills/commit/83d418b353be8599fe35dfc506b1ec37b4a52ca1))
-
-## [0.1.2](https://github.com/FAZuH/skills/compare/v0.1.1...v0.1.2) (2026-08-17)
 
