@@ -88,6 +88,13 @@ automatically. On a pull request, the preview bot shows the materialized
 release body (the `[Unreleased]` section renamed to
 `## <version> (<date>)`), matching what the release will post.
 
+If the topmost section is not `## [Unreleased]` (or the file has none), the
+tooling inserts an empty one before materializing. The release body is then
+just the version heading — it never shows a previous release's notes and is
+never completely empty. Keep a `## [Unreleased]` section at the top with the
+changes for the next release so the preview and release body carry the real
+entries.
+
 The file is project-local. `sync.sh` never ships it, and never pulls it.
 
 ## PR-level overrides (auto mode only)

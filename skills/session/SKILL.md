@@ -2,57 +2,29 @@
 name: session
 description: >-
   Manage a feature's session workspace under .scratch/, one date-prefixed
-  directory per feature (YYYY-MM-DD_slug) — plan and spec doc,
-  mattpocock-style tickets, deviation log, and pre-compaction checkpoints. Use
-  when starting a multi-step task and writing an initial plan, resuming or
-  recovering context after a session fork or context compaction, persisting
-  state before compaction, logging deviations during execution, drafting a
-  spec or splitting it into tickets, or archiving a finished feature. The
-  session doc is the single source of truth that keeps work consistent across
-  sessions.
+  directory per feature — plan and spec doc, mattpocock-style tickets,
+  deviation log, and pre-compaction checkpoints. Use when starting a
+  multi-step task and writing an initial plan, resuming or recovering context
+  after a session fork or context compaction, persisting state before
+  compaction, logging deviations during execution, or drafting a spec and
+  splitting it into tickets. The session doc is the single source of truth
+  that keeps work consistent across sessions. The `.scratch/` workspace
+  mechanics (slug format, layout, lifecycle, archiving) live in the `scratch`
+  skill.
 ---
 
 # session
 
 Every non-trivial feature gets a session workspace in `.scratch/` under a
-date-prefixed slug: `.scratch/<YYYY-MM-DD>_<feature-slug>/`. The date is the
-day the workspace was created; it keeps workspaces sorted by recency and
-disambiguates re-runs of the same feature. The doc survives session forks and
-context compactions, so any session can recover the full picture — decisions,
-file layout, deviations, status — from the workspace plus the code.
+date-prefixed slug: `.scratch/<YYYY-MM-DD>_<feature-slug>/`. The doc survives
+session forks and context compactions, so any session can recover the full
+picture — decisions, file layout, deviations, status — from the workspace
+plus the code.
 
-## Slug format
-
-`<YYYY-MM-DD>_<feature-slug>`, e.g. `2026-08-09_opencode-voice`. Use the
-creation date (not the completion date); it never changes afterwards.
-
-## Layout
-
-`.scratch/<YYYY-MM-DD>_<feature-slug>/` holds everything about one feature:
-
-```
-.scratch/<YYYY-MM-DD>_<feature-slug>/
-├── spec.md         # the plan/spec doc — canonical source of truth
-├── map.md          # wayfinder map (only for oversized efforts)
-├── issues/         # mattpocock tickets, one file each
-│   └── <NN>-<slug>.md
-├── checkpoint.md   # last pre-compaction resume checkpoint
-└── complete/       # archive for shipped features (.scratch/complete/<YYYY-MM-DD>_<slug>.md)
-```
-
-## Lifecycle
-
-`.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md` → execute →
-`.scratch/complete/<YYYY-MM-DD>_<feature-slug>.md`
-
-1. **Plan** — before implementation, write
-   `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
-2. **Split** — if the spec is too big for one session, break it into
-   tracer-bullet tickets under `.scratch/<YYYY-MM-DD>_<feature-slug>/issues/`
-   (mattpocock convention; see `to-tickets`).
-3. **Execute** — work the plan; log deviations as they happen.
-4. **Complete** — when the work ships, move the spec to `.scratch/complete/`
-   and mark open tickets `Status: resolved`.
+> **Load the `scratch` skill first.** It owns the `.scratch/` workspace
+> mechanics — the slug format, directory layout, lifecycle, and archiving of
+> completed features to `.scratch/complete/`. Follow its layout exactly when
+> you read or write `.scratch/` files.
 
 ## Read the workspace first
 
@@ -97,20 +69,23 @@ How to verify (tests, lint, build); which subagents to delegate to
 ## Tickets & specs (mattpocock)
 
 > [!NOTE]
-> If mattpocock's skills is not installed, follow installation instruction 
-> at https://github.com/mattpocock/skills
+> These skills come from the external
+> [mattpocock/skills](https://github.com/mattpocock/skills) repo, not this one.
+> If they are not installed, follow the installation instructions at
+> https://github.com/mattpocock/skills
 
 `.scratch/` doubles as the local issue tracker. Follow the conventions from
-`setup-matt-pocock-skills/issue-tracker-local.md`. The mattpocock skills use
+[`setup-matt-pocock-skills/issue-tracker-local.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md).
+The mattpocock skills use
 `<feature-slug>` as the directory name — on this machine the slug is always
 date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
 
-- **Spec** — `to-spec` publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
-- **Tickets** — `to-tickets` splits the spec into one file per ticket at
+- **Spec** — [`to-spec`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
+- **Tickets** — [`to-tickets`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
   `.scratch/<YYYY-MM-DD>_<feature-slug>/issues/<NN>-<slug>.md`, numbered from
   `01` in dependency order (blockers first). Each ticket has a `Blocked by:`
   line and a `Status:` line (`ready-for-agent` / `claimed` / `resolved`).
-- **Map** — `wayfinder` writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
+- **Map** — [`wayfinder`](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
   child ticket per decision. The **frontier** is the scan of
   `.scratch/<YYYY-MM-DD>_<effort>/issues/` for files that are open, unblocked,
   and unclaimed; first by number wins.
@@ -179,14 +154,8 @@ re-create the goal from the checkpoint, then continue from the next step.
 
 ## Completing a feature
 
-When the work ships (tests pass, lint clean, verified in the browser):
-
-1. Mark remaining checklist items done.
-2. Append an **Outcome** section to the spec: what shipped, test/lint results,
-   anything left for later.
-3. Move the spec to
-   `.scratch/complete/<YYYY-MM-DD>_<feature-slug>.md` (keep the content).
-4. Mark open tickets `Status: resolved`.
-5. Delete the now-stale `checkpoint.md`.
-6. Leave the archived doc untouched from then on, except to fix factual
-   errors.
+To archive a finished workspace, follow the **Completing / archiving a
+feature** steps in the `scratch` skill: mark remaining items done, append an
+Outcome section, move the spec to `.scratch/complete/`, mark tickets resolved,
+and delete the stale checkpoint. Do not archive until the work ships and all
+its items are done.
