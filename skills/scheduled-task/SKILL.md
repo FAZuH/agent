@@ -102,8 +102,11 @@ Description=Daily backup job
 
 [Service]
 Type=oneshot
-ExecStart=/home/fazuh/.local/bin/backup
+ExecStart=/home/<USER>/.local/bin/backup
 ```
+
+> [!NOTE]
+> Replace `<USER>` with actual user
 
 Then:
 ```bash
