@@ -26,3 +26,26 @@ tags: logging, schema, type-drift, validation, ci
 ### Strict Validation vs. Graceful Degradation
 
 There's a real tension between data-platform teams (who want strict runtime rejection of malformed events to protect warehouse schema integrity) and application teams (who don't want telemetry silently dropped during a production incident because of a validation failure). If you have to pick a default: **coerce and flag, don't drop.** Convert a type mismatch to a safe string representation and add a `schema_violation: true` field rather than discarding the event outright — you keep the operational signal and can still alert on the violation rate separately.
+
+### Value-Vocabulary Drift (enum-like strings)
+
+Field-name and type consistency still leave **value drift**: the same semantic
+outcome spelled differently across modules (`"failure"` vs `"error"` vs
+`"auth_failed"`), which silently breaks `WHERE outcome = 'error'` queries and
+alert thresholds. Standardize enum-like string fields — `outcome`, `reason`,
+`status`, `auth_method` — by defining the allowed literals once and reusing
+them:
+
+- A shared `enum.Enum` (in Python/Java/C#/Rust) or `const` object / union type
+  (in TS/JS) that all call sites import, so a new value is added in one place
+  and a typo is a compile error, not a silent drift.
+- For `str`-based enums (e.g. `class Outcome(str, Enum)`), keep `.value`
+  stable and equal to the wire/serialized string, so introducing the enum never
+  changes the bytes in the event.
+- Reserve free-form strings (where a bounded `reason`/`detail` is legitimately
+  open-ended) and note it explicitly so the fixed-vocabulary fields stay
+  closed.
+
+Like naming and type drift, this is enforced most cheaply by the shared
+definition (compile/import time) plus a schema test that asserts only known
+values appear.

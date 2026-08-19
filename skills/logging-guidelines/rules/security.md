@@ -55,6 +55,29 @@ async fn login(username: &str, password: &str, auth_token: &str) -> Result<(), E
 
 For Node/pino, redact at logger construction via the `redact` option — see the Redacting Sensitive Fields section of `references/typescript.md`.
 
+#### Secrets embedded in URL values (not just sensitive key names)
+
+Key-name redaction alone is not enough. Secrets are frequently embedded **inside
+a URL value** under a harmless key (`url`, `callback`, `endpoint`, `webhook`),
+so a blocklist of sensitive *keys* never matches them. The classic case is a
+Discord webhook URL that carries its token in the path:
+`https://discord.com/api/webhooks/<id>/<token>`. Logging such a URL under a
+`url` key leaks the token even though `"url"` is not a sensitive key.
+
+Redact by **value pattern** as well as by key, at the same serialization
+boundary:
+
+- Match known-format tokens and mask them in place, keeping enough to be
+  useful — e.g. replace the Discord webhook token but keep the channel id:
+  `https://discord.com/api/webhooks/123456/[REDACTED]`.
+- Also mask common token prefixes embedded anywhere in a string: `Bearer `,
+  `sk_live_`, `ghp_`, `xoxb-`, `?token=`, `?access_token=`, and so on.
+- Apply recursively over nested dicts/lists and over the message itself, not
+  only top-level event fields.
+
+Apply this in the same processor/sink that does key-name redaction, so one
+enforcement point covers both.
+
 ### Log Injection (CWE-117)
 
 Serializing to JSON neutralizes classic line-splitting (a literal newline becomes `\n` inside a JSON string), but that alone doesn't close every log injection vector:
