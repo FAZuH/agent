@@ -35,8 +35,8 @@ creation date (not the completion date); it never changes afterwards.
 .scratch/
 ├── <YYYY-MM-DD>_<feature-slug>/    # one dir per feature
 │   ├── spec.md         # plan/spec doc — canonical source of truth
-│   ├── map.md          # wayfinder map (only for oversized efforts)
-│   ├── issues/         # mattpocock tickets, one file each
+│   ├── map.md          # [wayfinder](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) map (only for oversized efforts)
+│   ├── issues/         # [mattpocock](https://github.com/mattpocock/skills) tickets, one file each
 │   │   └── <NN>-<slug>.md
 │   └── checkpoint.md   # last pre-compaction resume checkpoint
 └── complete/           # archive for shipped features

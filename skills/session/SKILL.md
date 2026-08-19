@@ -69,20 +69,23 @@ How to verify (tests, lint, build); which subagents to delegate to
 ## Tickets & specs (mattpocock)
 
 > [!NOTE]
-> If mattpocock's skills is not installed, follow installation instruction 
-> at https://github.com/mattpocock/skills
+> These skills come from the external
+> [mattpocock/skills](https://github.com/mattpocock/skills) repo, not this one.
+> If they are not installed, follow the installation instructions at
+> https://github.com/mattpocock/skills
 
 `.scratch/` doubles as the local issue tracker. Follow the conventions from
-`setup-matt-pocock-skills/issue-tracker-local.md`. The mattpocock skills use
+[`setup-matt-pocock-skills/issue-tracker-local.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md).
+The mattpocock skills use
 `<feature-slug>` as the directory name — on this machine the slug is always
 date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
 
-- **Spec** — `to-spec` publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
-- **Tickets** — `to-tickets` splits the spec into one file per ticket at
+- **Spec** — [`to-spec`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
+- **Tickets** — [`to-tickets`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
   `.scratch/<YYYY-MM-DD>_<feature-slug>/issues/<NN>-<slug>.md`, numbered from
   `01` in dependency order (blockers first). Each ticket has a `Blocked by:`
   line and a `Status:` line (`ready-for-agent` / `claimed` / `resolved`).
-- **Map** — `wayfinder` writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
+- **Map** — [`wayfinder`](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
   child ticket per decision. The **frontier** is the scan of
   `.scratch/<YYYY-MM-DD>_<effort>/issues/` for files that are open, unblocked,
   and unclaimed; first by number wins.
