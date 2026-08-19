@@ -35,7 +35,7 @@ If there is nothing to commit, say so. Then skip the rest of this section.
 
 You have NO commit permission: you must NOT run `git add`, `git commit`, or `git push` on your own, no matter what. Propose one message for each group. Use the format `type(scope): description`. Hand the proposed group messages to the orchestrator. The orchestrator restates them to the user for approval (the user can adjust the messages) and then runs the actual `git add` and `git commit` for each group. Do not run any other group or proceed to step 3 until you have handed off the full proposal.
 
-## 2.5 Archive a completed `.scratch/` workspace
+## 3 Archive a completed `.scratch/` workspace
 
 If the repo uses a `.scratch/` session workspace (see the `scratch` skill) and
 the session's feature is genuinely complete, archive it: every checklist item
@@ -49,14 +49,14 @@ If any item is still open, or the work is not merged/confirmed complete, do
 **not** archive. Leave the workspace in place and note in the summary that it
 still has open items.
 
-## 3. Summarize the session
+## 4. Summarize the session
 
 Review the conversation so far. Write a concise summary of what you accomplished. Include this information:
 - The files that you changed or created
 - The problems that you solved or the features that you added
 - The decisions that you made
 
-## 4. Suggest next steps
+## 5. Suggest next steps
 
 Identify what remains to do. Prioritize the tasks in this order:
 1. Tasks deferred on purpose. The examples are sub-tasks, unstarted phases of a plan, and postponed work.
