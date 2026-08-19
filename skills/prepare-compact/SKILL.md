@@ -16,6 +16,11 @@ If you're told to call this skill, it means a session compaction is imminent. Th
 chance to persist everything a fresh session needs to resume seamlessly. Be
 thorough: assume the conversation history is about to be deleted.
 
+> **Load the `scratch` skill if the repo uses `.scratch/`.** It owns the
+> `.scratch/` workspace mechanics — layout, slug format, and the
+> `.scratch/complete/` archive location. Follow it when you update the session
+> doc or checkpoint.
+
 Extra notes the user gives (see the conversation) count as arguments: use them
 as notes to persist, and/or the feature slug when the repo uses the `.scratch/`
 layout.

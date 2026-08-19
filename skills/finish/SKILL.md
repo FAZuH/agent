@@ -1,6 +1,6 @@
 ---
 name: finish
-description: "End a working session — update the relevant docs, plan the commit grouping and propose `type(scope): description` commit messages for each logical group, hand those proposals to the orchestrator to execute with the user, summarize what was accomplished, and suggest next steps. Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
+description: "End a working session — update the relevant docs, plan the commit grouping and propose `type(scope): description` commit messages for each logical group, hand those proposals to the orchestrator to execute with the user, archive a completed `.scratch/` session workspace, summarize what was accomplished, and suggest next steps. Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
 ---
 
 # Finish a session
@@ -34,6 +34,20 @@ Split the changes into separate commits. Use one commit per logical change. Do n
 If there is nothing to commit, say so. Then skip the rest of this section.
 
 You have NO commit permission: you must NOT run `git add`, `git commit`, or `git push` on your own, no matter what. Propose one message for each group. Use the format `type(scope): description`. Hand the proposed group messages to the orchestrator. The orchestrator restates them to the user for approval (the user can adjust the messages) and then runs the actual `git add` and `git commit` for each group. Do not run any other group or proceed to step 3 until you have handed off the full proposal.
+
+## 2.5 Archive a completed `.scratch/` workspace
+
+If the repo uses a `.scratch/` session workspace (see the `scratch` skill) and
+the session's feature is genuinely complete, archive it: every checklist item
+on the spec is done, all `issues/` tickets are `Status: resolved`, and the
+work is merged or the user confirms it is done. Follow the **Completing /
+archiving a feature** steps in the `scratch` skill — append an Outcome section
+to the spec, move it to `.scratch/complete/`, mark tickets resolved, and
+delete the stale checkpoint.
+
+If any item is still open, or the work is not merged/confirmed complete, do
+**not** archive. Leave the workspace in place and note in the summary that it
+still has open items.
 
 ## 3. Summarize the session
 

@@ -19,7 +19,9 @@ Or clone the repo and point your harness's skills directory at it.
 | `gui-test-guidelines` | GUI/UI test automation guidelines (selectors, Page Object, visual regression) |
 | `test-guidelines` | Comprehensive test writing guidelines (unit, integration, mocking, TDD) |
 | `prepare-compact` | Prepare a session for context compaction (persist state, clear goal)<br>Best used with [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/) |
-| `finish` | End a session: update docs, propose grouped commits, summarize |
+| `finish` | End a session: update docs, propose grouped commits, archive a completed `.scratch/` workspace, summarize |
+| `session` | Manage a feature's session workspace: plan/spec doc, tickets, deviation log, checkpoints |
+| `scratch` | The `.scratch/` workspace mechanics: slug format, layout, lifecycle, archiving to `.scratch/complete/`<br>Loaded by `session`, `finish`, `prepare-compact`, and `worktree` |
 | `pr-creator` | Create PRs following the repo's template/standards; never from the default branch |
 | `worktree` | Work on a branch in a separate git worktree; keeps untracked files (.scratch/, .papercuts.jsonl) on the main project dir |
 

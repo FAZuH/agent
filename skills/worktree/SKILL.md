@@ -7,6 +7,12 @@ description: Work on a feature/branch inside a separate git worktree so the main
 
 Work on a branch inside its own git worktree. The main working tree keeps the untracked project state, so creating or removing a worktree never touches `.scratch/`, `.papercuts.jsonl`, or other untracked files.
 
+> **Untracked main-tree state:** `.scratch/` (the session workspace; its
+> layout and lifecycle live in the `scratch` skill) and `.papercuts.jsonl` are
+> untracked, so they live only in the main tree. This skill only needs to know
+> they must not be created or edited inside a worktree — see the `scratch`
+> skill for anything you actually need to do with `.scratch/`.
+
 ## Key idea
 
 `git worktree add` checks out a branch into a separate directory. The **main tree** (the repo's original checkout) keeps all untracked files. Untracked items like `.scratch/` and `.papercuts.jsonl` are not part of any branch — they live only in the main tree and are invisible to worktree operations. This is exactly what we want: they are not duplicated into the worktree, and removing a worktree never deletes them.
