@@ -21,7 +21,7 @@ Or clone the repo and point your harness's skills directory at it.
 | `prepare-compact` | Prepare a session for context compaction (persist state, clear goal)<br>Best used with [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/) |
 | `finish` | End a session: update docs, propose grouped commits, summarize |
 | `pr-creator` | Create PRs following the repo's template/standards; never from the default branch |
-| `fazuh-worktree` | Work on a branch in a separate git worktree; keeps untracked files (.scratch/, .papercuts.jsonl) on the main project dir |
+| `worktree` | Work on a branch in a separate git worktree; keeps untracked files (.scratch/, .papercuts.jsonl) on the main project dir |
 
 ## License
 
