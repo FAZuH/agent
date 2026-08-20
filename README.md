@@ -23,7 +23,12 @@ Or clone the repo and point your harness's skills directory at it.
 | `session` | Manage a feature's session workspace: plan/spec doc, tickets, deviation log, checkpoints |
 | `scratch` | The `.scratch/` workspace mechanics: slug format, layout, lifecycle, archiving to `.scratch/complete/`<br>Loaded by `session`, `finish`, `prepare-compact`, and `worktree` |
 | `pr-creator` | Create PRs following the repo's template/standards; never from the default branch |
+| `pr-to-close` | End-to-end close of a worktree feature: create the PR, watch CI and merge when green, then close the worktree |
+| `pr-watchmerge` | Watch a PR's CI checks and merge automatically once they pass |
 | `worktree` | Work on a branch in a separate git worktree; keeps untracked files (.scratch/, .papercuts.jsonl) on the main project dir |
+| `worktree-close` | Finish a worktree session (finish workflow) and clean up the worktree and its branch |
+| `worktree-finish` | Finish a worktree's PR safely: conflict resolution and readiness checks |
+| `worktree-new` | Start work on a task in a new git worktree branch, keeping untracked items on the main project dir |
 
 ## License
 
