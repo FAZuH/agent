@@ -1,3 +1,11 @@
+## [0.2.6](https://github.com/FAZuH/skills/compare/v0.2.5...v0.2.6) (2026-08-20)
+
+
+### Features
+
+* add pr-to-close, pr-watchmerge, and worktree-close/finish/new skills ([7697ace](https://github.com/FAZuH/skills/commit/7697acecc5f0056367bad178c9edb98961c456cb))
+* auto-close linked issues with Closes in pr-creator ([18fc6a5](https://github.com/FAZuH/skills/commit/18fc6a5f112a214ec05ae19f44df34f4820c161f))
+
 ## [0.2.5](https://github.com/FAZuH/skills/compare/v0.2.4...v0.2.5) (2026-08-19)
 
 
@@ -25,12 +33,4 @@
 ### Bug Fixes
 
 * replace hardcoded user with placeholder ([912d806](https://github.com/FAZuH/skills/commit/912d8064a44911a24af7a0469ec0e1173867fd92))
-
-## [0.2.1](https://github.com/FAZuH/skills/compare/v0.2.0...v0.2.1) (2026-08-19)
-
-
-### Features
-
-* add scheduled-task skill ([2971340](https://github.com/FAZuH/skills/commit/2971340d37c4449ed6e67e57f826d3c887b94dc3))
-* add session skill ([18de1cc](https://github.com/FAZuH/skills/commit/18de1cc982e42d1739c82f04e259cfca57db0f73))
 
