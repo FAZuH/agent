@@ -66,12 +66,13 @@ export function wideEventMiddleware() {
     const startTime = Date.now();
 
     // Initialize event with standard fields + environment
+    // Path and user-agent are outsider-authored text: sanitize before logging.
     const wideEvent: Record<string, unknown> = {
       request_id: c.get('requestId') || crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       method: c.req.method,
-      path: c.req.path,
-      user_agent: c.req.header('user-agent'),
+      path: sanitizeLogField(c.req.path),
+      user_agent: sanitizeLogField(c.req.header('user-agent') || ''),
       ...envContext,  // Environment automatically included
     };
 
@@ -87,7 +88,7 @@ export function wideEventMiddleware() {
       wideEvent.outcome = 'error';
       wideEvent.error = {
         type: error.name,
-        message: error.message,
+        message: sanitizeLogField(error.message || String(error)),
       };
       throw error;
     } finally {
@@ -162,7 +163,7 @@ app.post('/articles', async (c) => {
   } catch (error) {
     wideEvent.status_code = 500;
     wideEvent.outcome = 'error';
-    wideEvent.error = { message: error.message, type: error.name };
+    wideEvent.error = { message: sanitizeLogField(error.message || String(error)), type: error.name };
     throw error;
   } finally {
     wideEvent.duration_ms = Date.now() - startTime;
@@ -219,9 +220,9 @@ async function processMessage(message: QueueMessage) {
   const startTime = Date.now();
   const wideEvent: Record<string, unknown> = {
     messaging_system: 'sqs',
-    messaging_message_id: message.id,
+    messaging_message_id: sanitizeLogField(message.id),
     retry_count: message.attempts,
-    request_id: message.headers['x-request-id'] ?? crypto.randomUUID(),
+    request_id: sanitizeLogField(message.headers['x-request-id']) ?? crypto.randomUUID(),
   };
 
   try {
