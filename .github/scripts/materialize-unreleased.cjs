@@ -42,9 +42,8 @@ function materialize(changelog, { version, date }) {
 
   const renamed = lines.slice();
   renamed[head] = `## ${stripPrefix(version)} (${date})`;
-  const fresh = [...renamed.slice(0, head), "## [Unreleased]", "", ...renamed.slice(head)];
-  while (fresh.length && fresh[fresh.length - 1] === "") fresh.pop();
-  return { changelog: fresh.join("\n"), body: extractSection(fresh, head + 2) };
+  while (renamed.length && renamed[renamed.length - 1] === "") renamed.pop();
+  return { changelog: renamed.join("\n"), body: extractSection(renamed, head) };
 }
 
 if (require.main === module) {
