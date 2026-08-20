@@ -7,6 +7,11 @@ description: "End a working session — update the relevant docs, plan the commi
 
 End a working session: update the relevant docs, plan the commit grouping and propose one conventional message per group, summarize what you accomplished, and suggest next steps. Do the steps in order.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the rules in the *Mode and commit
+> permission* section above.
+
 ## Mode and commit permission
 
 This agent has NO commit permission at all. You may never run `git add`, `git commit`, or `git push` — not on any argument, and not in an `auto` mode (there is no auto mode). Committing is executed by the orchestrator agent.
@@ -59,3 +64,11 @@ Review the conversation so far. Write a concise summary of what you accomplished
 Identify what remains to do. Prioritize the tasks in this order:
 1. Tasks deferred on purpose. The examples are sub-tasks, unstarted phases of a plan, and postponed work.
 2. Natural follow-ups from the work. The examples are cleanup, testing, documentation, and adjacent features. Suggest 2 or 3 items at most.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step2
+- step4 -> step2, step3
+- step5 -> step4

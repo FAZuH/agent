@@ -21,6 +21,11 @@ session forks and context compactions, so any session can recover the full
 picture — decisions, file layout, deviations, status — from the workspace
 plus the code.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> skill's numbered procedures: point-and-call narration, live deviation
+> logging, and a post-run report. The `## Interrupted procedures` section it
+> defines lives in this workspace's `spec.md`.
+
 > **Load the `scratch` skill first.** It owns the `.scratch/` workspace
 > mechanics — the slug format, directory layout, lifecycle, and archiving of
 > completed features to `.scratch/complete/`. Follow its layout exactly when
@@ -65,6 +70,14 @@ How to verify (tests, lint, build); which subagents to delegate to
 ## Deviation log
 - (none yet)
 ```
+
+## Interrupted procedures
+
+A procedure paused mid-run (a user interjection, or any halt that must be
+resumable) gets an entry in a `## Interrupted procedures` section in the same
+`spec.md`. The `following-procedures` skill owns the section format; keep it
+alongside the deviation log and update it in place. One entry per interrupted
+procedure.
 
 ## Tickets & specs (mattpocock)
 

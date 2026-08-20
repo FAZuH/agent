@@ -16,6 +16,10 @@ If you're told to call this skill, it means a session compaction is imminent. Th
 chance to persist everything a fresh session needs to resume seamlessly. Be
 thorough: assume the conversation history is about to be deleted.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report.
+
 > **Load the `scratch` skill if the repo uses `.scratch/`.** It owns the
 > `.scratch/` workspace mechanics — layout, slug format, and the
 > `.scratch/complete/` archive location. Follow it when you update the session
@@ -153,3 +157,14 @@ Give the user a concise report:
 
 Do not commit or take any other side action. The user will compact or continue
 after reviewing your report.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step2
+- step4 -> step2
+- step5
+- step6 -> step2, step4
+- step7 -> step6
+- step8 -> step6, step7

@@ -8,6 +8,11 @@ compatibility: Optional opencode-pty plugin — when present, use pty_spawn + pt
 
 Watch a pull request's CI runs to completion, then merge it immediately if everything is green. This saves the user from babysitting the checks tab — you monitor progress and merge the moment CI passes.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the rules in the *Safety rules* section
+> at the bottom.
+
 ## When to use
 
 The user wants a PR merged as soon as its CI/checks pass, without them having to watch or click merge themselves. Common triggers: "watch the PR and merge when green", "merge once CI passes", "wait for checks then auto-merge", "watch CI and merge if it passes".
@@ -71,6 +76,13 @@ gh pr merge --delete-branch
 Use the repo's conventional merge strategy — typically a merge commit (`--merge`, the default) rather than squash, unless the repo's history shows it uses rebase or squash. Do not squash by default. `--delete-branch` cleans up the remote branch on merge.
 
 If any check **failed**, do NOT merge. Stop and report the failure to the user with the failing run/check details, and let them decide next steps. Never merge a PR with failing CI unless the user explicitly overrides.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step1
+- step4 -> step2, step3
 
 ## Safety rules
 
