@@ -2,13 +2,12 @@
 name: scratch
 description: >-
   Manage the repo's `.scratch/` session workspace — the date-prefixed layout,
-  lifecycle, and archiving of completed features to `.scratch/complete/`.
-  Load this whenever a `.scratch/` workspace is involved: creating, resuming,
-  or completing a session workspace, or from any skill that needs the
-  `.scratch/` mechanics (session, finish, prepare-compact, worktree). Covers
-  the slug format, directory layout, spec → execute → archive lifecycle, the
-  conditions under which a workspace may be archived, and how to move a
-  shipped feature to `.scratch/complete/`.
+  slug format, and lifecycle. Load this whenever a `.scratch/` workspace is
+  involved: creating, resuming, or completing a session workspace, or from any
+  skill that needs the `.scratch/` mechanics (session, finish,
+  prepare-compact, worktree). Covers the slug format, directory layout, and
+  the spec → execute → archive lifecycle. The completion checklist and archive
+  steps for a finished feature live in the `scratch-finish` skill.
 ---
 
 # scratch
@@ -57,26 +56,7 @@ creation date (not the completion date); it never changes afterwards.
 
 ## Completing / archiving a feature
 
-Archive a workspace only when the work is genuinely done:
-
-- all checklist items on the spec are done;
-- all tickets under `issues/` are `Status: resolved` (or no tickets exist);
-- the work is merged/shared (commits landed or PR merged) or the user
-  confirms it is complete;
-- verification passed (tests, lint, build, browser check — whatever the spec
-  demands).
-
-If any condition is false, do **not** archive. Report what remains and keep
-the workspace in place.
-
-To archive:
-
-1. Mark remaining checklist items done.
-2. Append an **Outcome** section to the spec: what shipped, test/lint results,
-   anything left for later.
-3. Move the spec to
-   `.scratch/complete/<YYYY-MM-DD>_<feature-slug>.md` (keep the content).
-4. Mark open tickets `Status: resolved`.
-5. Delete the now-stale `checkpoint.md`.
-6. Leave the archived doc untouched from then on, except to fix factual
-   errors.
+When the work ships, archive the workspace. The completion checklist and the
+archive steps live in the `scratch-finish` skill — load and follow it. The
+workspace moves from `.scratch/<slug>/` to `.scratch/complete/<slug>.md`; do
+not duplicate those steps here.

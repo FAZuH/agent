@@ -154,8 +154,8 @@ re-create the goal from the checkpoint, then continue from the next step.
 
 ## Completing a feature
 
-To archive a finished workspace, follow the **Completing / archiving a
-feature** steps in the `scratch` skill: mark remaining items done, append an
-Outcome section, move the spec to `.scratch/complete/`, mark tickets resolved,
-and delete the stale checkpoint. Do not archive until the work ships and all
-its items are done.
+To archive a finished workspace, follow the `scratch-finish` skill: it owns
+the completion checklist and the archive steps — mark remaining items done,
+append an Outcome section, move the spec to `.scratch/complete/`, mark tickets
+resolved, and delete the stale checkpoint. Do not archive until the work ships
+and all its items are done.

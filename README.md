@@ -32,7 +32,8 @@ invoke model-invoked skills, but never another user-invoked one.
 - **[worktree](./skills/worktree/SKILL.md)**: Work on a branch in a separate git worktree; the mechanics behind `worktree-new`/`worktree-close`/`worktree-finish`.
 - **[finish](./skills/finish/SKILL.md)**: End a session: update docs, propose grouped commits, archive a completed `.scratch/` workspace, summarize.
 - **[session](./skills/session/SKILL.md)**: Manage a feature's session workspace: plan/spec doc, tickets, deviation log, checkpoints.
-- **[scratch](./skills/scratch/SKILL.md)**: The `.scratch/` workspace mechanics: slug format, layout, lifecycle, archiving to `.scratch/complete/`. Loaded by `session`, `finish`, `prepare-compact`, and `worktree`.
+- **[scratch](./skills/scratch/SKILL.md)**: The `.scratch/` workspace mechanics: slug format, layout, lifecycle. Loaded by `session`, `finish`, `prepare-compact`, and `worktree`.
+- **[scratch-finish](./skills/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps. Referenced by `finish`, `session`, and `scratch`.
 - **[prepare-compact](./skills/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, then clear the goal. Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
 - **[test-guidelines](./skills/test-guidelines/SKILL.md)**: Test writing guidelines: validity, isolation, determinism, test doubles, anti-patterns, coverage.
 - **[gui-test-guidelines](./skills/gui-test-guidelines/SKILL.md)**: GUI/E2E test automation guidelines: selectors, Page Object, visual regression, accessibility.
