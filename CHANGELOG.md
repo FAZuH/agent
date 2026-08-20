@@ -1,3 +1,11 @@
+## [0.4.0](https://github.com/FAZuH/skills/compare/v0.3.0...v0.4.0) (2026-08-20)
+
+
+### Features
+
+* add following-procedures skill for running numbered procedures ([ad25e98](https://github.com/FAZuH/skills/commit/ad25e98b03832d948b238b9b2db184b33f68cd96))
+* retrofit procedural skills to load following-procedures ([d336992](https://github.com/FAZuH/skills/commit/d336992dad85324ff7cea6dd2f4704aebec048ba))
+
 ## [0.3.0](https://github.com/FAZuH/skills/compare/v0.2.7...v0.3.0) (2026-08-20)
 
 
@@ -26,11 +34,4 @@
 ### Features
 
 * improve logging-guidelines with loguru port and security guidance ([fbddb18](https://github.com/FAZuH/skills/commit/fbddb1811359aa58ef0b3a5b4d6c24cdf8a411ef))
-
-## [0.2.4](https://github.com/FAZuH/skills/compare/v0.2.3...v0.2.4) (2026-08-19)
-
-
-### Features
-
-* add scratch skill for .scratch workspace mechanics ([4d7ba23](https://github.com/FAZuH/skills/commit/4d7ba2391845a7ce9742e352369d31e9ad357489))
 
