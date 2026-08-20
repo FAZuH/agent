@@ -3,26 +3,82 @@ config:
   theme: 'neutral'
 ---
 flowchart TD
-    subgraph skills[" "]
+    subgraph refdeps["Referential dependencies"]
+        direction LR
+        following_procedures["following-procedures"]
+        scratch["scratch"]
+        worktree["worktree"]
+
+        pr_to_close_r["pr-to-close"]
+        worktree_new_r["worktree-new"]
+        worktree_finish_r["worktree-finish"]
+        worktree_close_r["worktree-close"]
+        pr_creator_r["pr-creator"]
+        pr_watchmerge_r["pr-watchmerge"]
+        finish_r["finish"]
+        session_r["session"]
+        scratch_finish_r["scratch-finish"]
+        prepare_compact_r["prepare-compact"]
+
+        pr_to_close_r --> following_procedures
+        worktree_new_r --> following_procedures
+        worktree_finish_r --> following_procedures
+        worktree_close_r --> following_procedures
+        pr_creator_r --> following_procedures
+        pr_watchmerge_r --> following_procedures
+        finish_r --> following_procedures
+        session_r --> following_procedures
+        scratch_finish_r --> following_procedures
+        prepare_compact_r --> following_procedures
+
+        worktree_new_r --> worktree
+        worktree_finish_r --> worktree
+        worktree_close_r --> worktree
+
+        finish_r --> scratch
+        session_r --> scratch
+        prepare_compact_r --> scratch
+        worktree --> scratch
+        scratch --> scratch_finish_r
+    end
+
+    subgraph orchestration["Orchestration"]
         pr_to_close["pr-to-close"]
         worktree_new["worktree-new"]
         worktree_finish["worktree-finish"]
-        pr_creator["pr-creator"]
-        pr_watchmerge["pr-watchmerge"]
         worktree_close["worktree-close"]
-        worktree["worktree"]
-        finish["finish"]
-        session["session"]
-        scratch["scratch"]
-        scratch_finish["scratch-finish"]
-        prepare_compact["prepare-compact"]
-        to_spec["to-spec"]
-        to_tickets["to-tickets"]
-        wayfinder["wayfinder"]
-        setup_matt_pocock_skills["setup-matt-pocock-skills"]
+        subgraph workflow["Workflow"]
+            pr_creator["pr-creator"]
+            pr_watchmerge["pr-watchmerge"]
+            finish["finish"]
+            session["session"]
+            scratch_finish["scratch-finish"]
+            prepare_compact["prepare-compact"]
+            subgraph external["External"]
+                to_spec["to-spec"]
+                to_tickets["to-tickets"]
+                wayfinder["wayfinder"]
+                setup_matt_pocock_skills["setup-matt-pocock-skills"]
+            end
+        end
     end
 
-    subgraph referential["Referential"]
+    pr_to_close --> pr_watchmerge
+    pr_to_close --> pr_creator
+    pr_to_close --> worktree_close
+
+    worktree_finish --> pr_creator
+    worktree_finish --> finish
+
+    worktree_close --> finish
+    session --> scratch_finish
+    finish --> scratch_finish
+    session --> to_spec
+    session --> to_tickets
+    session --> wayfinder
+    session --> setup_matt_pocock_skills
+
+    subgraph standalone["Standalone"]
         test_guidelines["test-guidelines"]
         gui_test_guidelines["gui-test-guidelines"]
         error_message["error-message"]
@@ -31,46 +87,26 @@ flowchart TD
         scheduled_task["scheduled-task"]
     end
 
-    pr_to_close --> pr_creator
-    pr_to_close --> pr_watchmerge
-    pr_to_close --> worktree_close
-
-    worktree_finish --> worktree
-    worktree_finish --> pr_creator
-    worktree_finish --> finish
-
-    worktree_close --> finish
-    worktree_close --> worktree
-
-    worktree_new --> worktree
-
-    finish --> scratch
-    finish --> scratch_finish
-    session --> scratch
-    session --> scratch_finish
-    scratch --> scratch_finish
-    worktree --> scratch
-    prepare_compact --> scratch
-
-    session --> to_spec
-    session --> to_tickets
-    session --> wayfinder
-    session --> setup_matt_pocock_skills
-    scratch --> wayfinder
-
     subgraph legend["Legend"]
+        direction LR
         L_orch["Orchestration"]
         L_work["Workflow"]
-        L_ref["Reference"]
+        L_ref["Referential"]
         L_ext["External"]
+        L_standalone["Standalone"]
     end
 
-    classDef orchestration fill:#DE7A63,stroke:#BE5D48,color:#FFFFFF
+    classDef orchestration fill:#DE7A63,stroke:#BE5D48,color:#3A2E14
     classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
-    classDef reference fill:#9DBB98,stroke:#7B9C76,color:#FFFFFF
-    classDef external fill:#8FB4DE,stroke:#6C93C0,color:#FFFFFF
+    classDef referential fill:#9DBB98,stroke:#7B9C76,color:#3A2E14
+    classDef external fill:#8FB4DE,stroke:#6C93C0,color:#3A2E14
+    classDef standalone fill:#A78BFA,stroke:#7E5FD0,color:#3A2E14
 
     class L_orch,pr_to_close,worktree_new,worktree_finish,worktree_close orchestration
-    class L_work,pr_creator,pr_watchmerge,worktree,finish,session,scratch,scratch_finish,prepare_compact workflow
-    class L_ref,test_guidelines,gui_test_guidelines,error_message,logging_guidelines,design_tradeoffs,scheduled_task reference
+    class L_work,pr_creator,pr_watchmerge,finish,session,scratch_finish,prepare_compact workflow
+    class L_ref,following_procedures,scratch,worktree referential
+    class L_standalone,test_guidelines,gui_test_guidelines,error_message,logging_guidelines,design_tradeoffs,scheduled_task standalone
     class L_ext,to_spec,to_tickets,wayfinder,setup_matt_pocock_skills external
+
+    class pr_to_close_r,worktree_new_r,worktree_finish_r,worktree_close_r orchestration
+    class pr_creator_r,pr_watchmerge_r,finish_r,session_r,scratch_finish_r,prepare_compact_r workflow
