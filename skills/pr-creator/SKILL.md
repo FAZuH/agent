@@ -23,6 +23,11 @@ metadata:
 This skill guides the creation of high-quality pull requests that follow the
 repository's own templates and standards.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the rules in the *Principles* section
+> at the bottom.
+
 ## Workflow
 
 Follow these steps in order to create a pull request:
@@ -160,6 +165,17 @@ rm <temp_file_path>
 - **Title**: Use the [Conventional Commits](https://www.conventionalcommits.org/)
   format if the repository uses it (match the style of recent commits when in
   doubt).
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3
+- step4 -> step3
+- step5 -> step4
+- step6
+- step7 -> step1, step2
+- step8 -> step5, step6, step7
 
 ## Principles
 

@@ -7,6 +7,11 @@ description: "Full end-to-end close of a worktree feature: create a PR (pr-creat
 
 Take a finished worktree branch through the whole lifecycle: open a pull request, watch its CI, merge it as soon as it's green, then close the worktree. This composes three skills in order — do not skip or reorder any step.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the rules in the *Safety rules* section
+> at the bottom.
+
 ## When to use
 
 The user has finished work in a worktree and wants it shipped and cleaned up in one go. Triggers: "create a PR then close the worktree", "ship this and clean up the worktree", "open a PR, merge when green, then close the worktree", "take this worktree to done".
@@ -33,6 +38,12 @@ Follow the `pr-watchmerge` skill on the PR from step 1: check its CI checks/runs
 The branch is now merged into the default branch. Follow the `worktree-close` skill to finish the session (docs, commits, summary, next steps) and remove the worktree and its now-merged branch, keeping untracked items (`.scratch/`, `.papercuts.jsonl`) on the main project dir.
 
 Because the PR was merged, the branch is already gone remotely; `worktree-close` removes the local worktree/branch and verifies untracked main-tree items survive.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step2
 
 ## Safety rules
 

@@ -8,6 +8,11 @@ description: Finish work in a git worktree by following the /finish and /pr-crea
 Finish a worktree's pull request safely. This skill coordinates PR creation or
 readiness work with conflict resolution; it does not silently change behavior.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the rules in the *Safety rules* section
+> at the bottom.
+
 ## Workflow
 
 Run these steps in order.
@@ -88,6 +93,16 @@ cleanup rules if the user explicitly asks to remove the worktree:
   an unmerged branch.
 - Run `git worktree remove` and branch deletion from the main tree.
 - Verify `git worktree list` and preserve main-tree untracked state.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step1, step2
+- step4 -> step3
+- step5 -> step4
+- step6 -> step4
+- step7 -> step5, step6
 
 ## Safety rules
 

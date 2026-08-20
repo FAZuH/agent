@@ -17,6 +17,11 @@ This skill is the single home for the completion checklist and the archive
 steps of a `.scratch/` session workspace. Other skills (`finish`, `session`)
 and the `scratch` skill itself reference it instead of restating the steps.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the gate in the *Completion checklist*
+> section below.
+
 ## Load `scratch` for the mechanics
 
 The `scratch` skill owns the `.scratch/` workspace mechanics — how to verify
@@ -54,3 +59,12 @@ the workspace in place.
 5. Delete the now-stale `checkpoint.md`.
 6. Leave the archived doc untouched from then on, except to fix factual
    errors.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step2
+- step4 -> step1
+- step5 -> step3
+- step6 -> step3

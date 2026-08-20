@@ -7,6 +7,11 @@ description: Finish a worktree session and clean up the git worktree. Runs the e
 
 Finish a worktree session end-to-end: run the finish workflow (docs, commits, summary, next steps), then remove the worktree and its branch. Keeps untracked items (`.scratch/`, `.papercuts.jsonl`) on the main project dir.
 
+> **Load the `following-procedures` skill first.** It defines how you run this
+> numbered procedure: point-and-call narration, live deviation logging, and a
+> fixed post-run report. Always follow the rules in the *Safety rules* section
+> at the bottom.
+
 ## When to use
 
 The user wants to wrap up and clean up a worktree session. Triggers: "close the worktree", "finish and clean up the worktree", "merge and remove the worktree", "done with this worktree". Pairs with `worktree-new`.
@@ -42,6 +47,14 @@ Follow the `worktree` skill's "Finishing / cleanup" steps:
 1. **Verify the branch is merged** (`git branch --merged <main-branch>`) if the work is meant to be kept. If it has uncommitted or unmerged work, confirm with the user before discarding anything.
 2. **Remove the worktree** from the **main** tree (`git worktree remove <path>`), then delete the branch (`git branch -D <branch>`) once it's gone. Use `--force` only after confirming nothing there is worth keeping.
 3. **Verify**: `git worktree list` shows the worktree gone, and untracked main-tree items (`.scratch/`, `.papercuts.jsonl`) still exist in the main project dir.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step2
+- step4 -> step3
+- step5 -> step2
 
 ## Safety rules
 
