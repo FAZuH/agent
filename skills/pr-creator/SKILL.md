@@ -105,6 +105,13 @@ Create a PR description that strictly follows the template's structure:
 - **Content**: Fill each section with clear, concise summaries of your changes.
 - **Related Issues**: Link any issues fixed or related to this PR (e.g.
   `Fixes #123`).
+- **Auto-close issues**: If the PR resolves any issue (the branch, commits, or
+  the user references an issue this work addresses), add a `Closes #<number>`
+  line so that issue auto-closes when the PR merges. Include every issue the PR
+  resolves, one per line (`Closes #12`, `Closes #34`). Use `Closes` (not
+  `Fixes`) so the issue is closed automatically on merge. Only add issues the
+  PR genuinely resolves — do not list merely-related or tracking issues you
+  don't want auto-closed.
 
 Follow the template's own guidance for sections that don't apply: the bundled
 `reference/pr-template.md` instructs omitting non-applicable sections entirely
