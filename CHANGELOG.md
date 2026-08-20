@@ -1,3 +1,10 @@
+## [0.3.0](https://github.com/FAZuH/skills/compare/v0.2.7...v0.3.0) (2026-08-20)
+
+
+### Features
+
+* add scratch-finish skill for archiving .scratch workspaces ([267bd4d](https://github.com/FAZuH/skills/commit/267bd4de7e155684fd50f31af0b15bd57dee7158))
+
 ## [0.2.7](https://github.com/FAZuH/skills/compare/v0.2.6...v0.2.7) (2026-08-20)
 
 
@@ -26,11 +33,4 @@
 ### Features
 
 * add scratch skill for .scratch workspace mechanics ([4d7ba23](https://github.com/FAZuH/skills/commit/4d7ba2391845a7ce9742e352369d31e9ad357489))
-
-## [0.2.3](https://github.com/FAZuH/skills/compare/v0.2.2...v0.2.3) (2026-08-19)
-
-
-### Features
-
-* add worktree skill ([966e6b4](https://github.com/FAZuH/skills/commit/966e6b48a9a704a9e7821fd0205689635cf19eb9))
 
