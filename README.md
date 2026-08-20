@@ -10,6 +10,12 @@ npx skills@latest add fazuh/skills
 
 Or clone the repo and point your harness's skills directory at it.
 
+You can also install [Matt Pocock's engineering skills](https://github.com/mattpocock/skills):
+
+```
+npx skills@latest add mattpocock/skills
+```
+
 ## Skills
 
 These split on how you'll reach for them — a guide, not hard rules about who
@@ -21,6 +27,14 @@ you can invoke them directly, but they're usually pulled in automatically when
 a task fits. **Referential** skills are mechanics and conventions other skills
 load as dependencies while they run. **Standalone** skills are standards and
 conventions the agent consults on its own, to guide what it writes.
+
+### Diagrams
+
+![Orchestration](docs/diagrams/skill-relations-orchestration.png)
+
+![Referential dependencies](docs/diagrams/skill-relations-referential.png)
+
+![Standalone](docs/diagrams/skill-relations-standalone.png)
 
 ### Orchestration (you run these)
 
