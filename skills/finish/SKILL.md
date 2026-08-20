@@ -37,17 +37,15 @@ You have NO commit permission: you must NOT run `git add`, `git commit`, or `git
 
 ## 3 Archive a completed `.scratch/` workspace
 
-If the repo uses a `.scratch/` session workspace (see the `scratch` skill) and
-the session's feature is genuinely complete, archive it: every checklist item
-on the spec is done, all `issues/` tickets are `Status: resolved`, and the
-work is merged or the user confirms it is done. Follow the **Completing /
-archiving a feature** steps in the `scratch` skill — append an Outcome section
-to the spec, move it to `.scratch/complete/`, mark tickets resolved, and
-delete the stale checkpoint.
+If the repo uses a `.scratch/` session workspace (see the `scratch` skill),
+load the `scratch-finish` skill and follow it. It owns the completion
+checklist and the archive steps — append an Outcome section to the spec, move
+it to `.scratch/complete/`, mark tickets resolved, and delete the stale
+checkpoint. Do not restate or duplicate those steps here.
 
-If any item is still open, or the work is not merged/confirmed complete, do
-**not** archive. Leave the workspace in place and note in the summary that it
-still has open items.
+If any completion item is still open, or the work is not merged/confirmed
+complete, do **not** archive. Leave the workspace in place and note in the
+summary that it still has open items.
 
 ## 4. Summarize the session
 

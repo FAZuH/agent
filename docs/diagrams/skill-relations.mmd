@@ -1,0 +1,58 @@
+flowchart TD
+    subgraph "" 
+        pr_to_close["pr-to-close"]
+        worktree_new["worktree-new"]
+        worktree_finish["worktree-finish"]
+        pr_creator["pr-creator"]
+        pr_watchmerge["pr-watchmerge"]
+        worktree_close["worktree-close"]
+        worktree["worktree"]
+        finish["finish"]
+        session["session"]
+        scratch["scratch"]
+        scratch_finish["scratch-finish"]
+        prepare_compact["prepare-compact"]
+        to_spec["to-spec"]
+        to_tickets["to-tickets"]
+        wayfinder["wayfinder"]
+        setup_matt_pocock_skills["setup-matt-pocock-skills"]
+    end
+
+    subgraph standalone["Standalone skills (local)"]
+        test_guidelines["test-guidelines"]
+        gui_test_guidelines["gui-test-guidelines"]
+        error_message["error-message"]
+        logging_guidelines["logging-guidelines"]
+        design_tradeoffs["design-tradeoffs"]
+        scheduled_task["scheduled-task"]
+    end
+
+    pr_to_close --> pr_creator
+    pr_to_close --> pr_watchmerge
+    pr_to_close --> worktree_close
+
+    worktree_new --> worktree
+
+    worktree_finish --> worktree
+    worktree_finish --> pr_creator
+    worktree_finish --> finish
+
+    worktree_close --> finish
+    worktree_close --> worktree
+
+    finish --> scratch
+    finish --> scratch_finish
+    session --> scratch
+    session --> scratch_finish
+    scratch --> scratch_finish
+    prepare_compact --> scratch
+    worktree --> scratch
+
+    session --> to_spec
+    session --> to_tickets
+    session --> wayfinder
+    session --> setup_matt_pocock_skills
+    scratch --> wayfinder
+
+    classDef ext fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    class to_spec,to_tickets,wayfinder,setup_matt_pocock_skills ext
