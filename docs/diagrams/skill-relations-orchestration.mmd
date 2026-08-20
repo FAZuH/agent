@@ -1,0 +1,55 @@
+---
+config:
+  theme: 'neutral'
+---
+flowchart TD
+    subgraph orchestration["Orchestration"]
+        pr_to_close["pr-to-close"]
+        worktree_new["worktree-new"]
+        worktree_finish["worktree-finish"]
+        worktree_close["worktree-close"]
+        subgraph workflow["Workflow"]
+            pr_creator["pr-creator"]
+            pr_watchmerge["pr-watchmerge"]
+            finish["finish"]
+            session["session"]
+            scratch_finish["scratch-finish"]
+            prepare_compact["prepare-compact"]
+            subgraph external["External"]
+                to_spec["to-spec"]
+                to_tickets["to-tickets"]
+                wayfinder["wayfinder"]
+                setup_matt_pocock_skills["setup-matt-pocock-skills"]
+            end
+        end
+    end
+
+    pr_to_close --> pr_watchmerge
+    pr_to_close --> pr_creator
+    pr_to_close --> worktree_close
+
+    worktree_finish --> pr_creator
+    worktree_finish --> finish
+
+    worktree_close --> finish
+    session --> scratch_finish
+    finish --> scratch_finish
+    session --> to_spec
+    session --> to_tickets
+    session --> wayfinder
+    session --> setup_matt_pocock_skills
+
+    subgraph legend["Legend"]
+        direction LR
+        L_orch["Orchestration"]
+        L_work["Workflow"]
+        L_ext["External"]
+    end
+
+    classDef orchestration fill:#DE7A63,stroke:#BE5D48,color:#FFFFFF
+    classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
+    classDef external fill:#8FB4DE,stroke:#6C93C0,color:#FFFFFF
+
+    class L_orch,pr_to_close,worktree_new,worktree_finish,worktree_close orchestration
+    class L_work,pr_creator,pr_watchmerge,finish,session,scratch_finish,prepare_compact workflow
+    class L_ext,to_spec,to_tickets,wayfinder,setup_matt_pocock_skills external

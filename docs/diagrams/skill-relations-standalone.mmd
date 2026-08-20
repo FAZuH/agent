@@ -1,0 +1,17 @@
+---
+config:
+  theme: 'neutral'
+---
+flowchart LR
+    subgraph standalone["Standalone"]
+        test_guidelines["test-guidelines"]
+        gui_test_guidelines["gui-test-guidelines"]
+        error_message["error-message"]
+        logging_guidelines["logging-guidelines"]
+        design_tradeoffs["design-tradeoffs"]
+        scheduled_task["scheduled-task"]
+    end
+
+    classDef standalone fill:#A78BFA,stroke:#7E5FD0,color:#FFFFFF
+
+    class test_guidelines,gui_test_guidelines,error_message,logging_guidelines,design_tradeoffs,scheduled_task standalone
