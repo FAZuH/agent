@@ -1,3 +1,10 @@
+## [0.2.7](https://github.com/FAZuH/skills/compare/v0.2.6...v0.2.7) (2026-08-20)
+
+
+### Bug Fixes
+
+* treat request-derived log fields as untrusted in /logging-guidelines skill ([e732e28](https://github.com/FAZuH/skills/commit/e732e283d9aa9c6ace2a2d2228405c453a46ec3d))
+
 ## [0.2.6](https://github.com/FAZuH/skills/compare/v0.2.5...v0.2.6) (2026-08-20)
 
 
@@ -26,11 +33,4 @@
 ### Features
 
 * add worktree skill ([966e6b4](https://github.com/FAZuH/skills/commit/966e6b48a9a704a9e7821fd0205689635cf19eb9))
-
-## [0.2.2](https://github.com/FAZuH/skills/compare/v0.2.1...v0.2.2) (2026-08-19)
-
-
-### Bug Fixes
-
-* replace hardcoded user with placeholder ([912d806](https://github.com/FAZuH/skills/commit/912d8064a44911a24af7a0469ec0e1173867fd92))
 
