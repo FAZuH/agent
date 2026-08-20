@@ -1,5 +1,9 @@
+---
+config:
+  theme: 'neutral'
+---
 flowchart TD
-    subgraph "" 
+    subgraph skills[" "]
         pr_to_close["pr-to-close"]
         worktree_new["worktree-new"]
         worktree_finish["worktree-finish"]
@@ -18,7 +22,7 @@ flowchart TD
         setup_matt_pocock_skills["setup-matt-pocock-skills"]
     end
 
-    subgraph standalone["Standalone skills (local)"]
+    subgraph referential["Referential"]
         test_guidelines["test-guidelines"]
         gui_test_guidelines["gui-test-guidelines"]
         error_message["error-message"]
@@ -31,8 +35,6 @@ flowchart TD
     pr_to_close --> pr_watchmerge
     pr_to_close --> worktree_close
 
-    worktree_new --> worktree
-
     worktree_finish --> worktree
     worktree_finish --> pr_creator
     worktree_finish --> finish
@@ -40,13 +42,15 @@ flowchart TD
     worktree_close --> finish
     worktree_close --> worktree
 
+    worktree_new --> worktree
+
     finish --> scratch
     finish --> scratch_finish
     session --> scratch
     session --> scratch_finish
     scratch --> scratch_finish
-    prepare_compact --> scratch
     worktree --> scratch
+    prepare_compact --> scratch
 
     session --> to_spec
     session --> to_tickets
@@ -54,5 +58,19 @@ flowchart TD
     session --> setup_matt_pocock_skills
     scratch --> wayfinder
 
-    classDef ext fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
-    class to_spec,to_tickets,wayfinder,setup_matt_pocock_skills ext
+    subgraph legend["Legend"]
+        L_orch["Orchestration"]
+        L_work["Workflow"]
+        L_ref["Reference"]
+        L_ext["External"]
+    end
+
+    classDef orchestration fill:#DE7A63,stroke:#BE5D48,color:#FFFFFF
+    classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
+    classDef reference fill:#9DBB98,stroke:#7B9C76,color:#FFFFFF
+    classDef external fill:#8FB4DE,stroke:#6C93C0,color:#FFFFFF
+
+    class L_orch,pr_to_close,worktree_new,worktree_finish,worktree_close orchestration
+    class L_work,pr_creator,pr_watchmerge,worktree,finish,session,scratch,scratch_finish,prepare_compact workflow
+    class L_ref,test_guidelines,gui_test_guidelines,error_message,logging_guidelines,design_tradeoffs,scheduled_task reference
+    class L_ext,to_spec,to_tickets,wayfinder,setup_matt_pocock_skills external
