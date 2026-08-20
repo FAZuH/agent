@@ -28,20 +28,27 @@ logger = structlog.get_logger()
 
 ```python
 import time
+import re
 import uuid
 from fastapi import FastAPI, Request
 
 app = FastAPI()
+
+def sanitize_log_field(value, max_length=1024):
+    # Strip control characters (0x00-0x1F, 0x7F) before truncating
+    stripped = re.sub(r"[\x00-\x1f\x7f]", "", value or "")
+    return stripped[:max_length] + "…[truncated]" if len(stripped) > max_length else stripped
 
 @app.middleware("http")
 async def wide_event_middleware(request: Request, call_next):
     structlog.contextvars.clear_contextvars()  # don't leak the previous request's fields
     start = time.perf_counter()
 
+    # Path and headers are outsider-authored text: sanitize before logging.
     structlog.contextvars.bind_contextvars(
-        request_id=request.headers.get("x-request-id", str(uuid.uuid4())),
+        request_id=sanitize_log_field(request.headers.get("x-request-id")) or str(uuid.uuid4()),
         http_method=request.method,
-        http_path=request.url.path,
+        http_path=sanitize_log_field(request.url.path),
     )
 
     status_code = 500
@@ -50,7 +57,7 @@ async def wide_event_middleware(request: Request, call_next):
         status_code = response.status_code
         return response
     except Exception as exc:
-        logger.exception("unhandled_exception", error_type=type(exc).__name__)
+        logger.exception("unhandled_exception", error_type=type(exc).__name__, error_message=sanitize_log_field(str(exc)))
         raise
     finally:
         duration_ms = round((time.perf_counter() - start) * 1000, 2)

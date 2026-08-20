@@ -92,6 +92,16 @@ Serializing to JSON neutralizes classic line-splitting (a literal newline become
 
 Always serialize via a real JSON encoder (`JSON.stringify`, `serde_json`, `json.dumps`) — never build a log line with manual string concatenation, which is the actual root cause of most injection findings regardless of whether JSON is the target format.
 
+### Request-Derived Fields Are Untrusted Data (Indirect Prompt Injection)
+
+Wide events are assembled from inbound request context — HTTP method/path, headers, user-agent, queue message payloads, and exception messages — all of which are **outsider-authored free text**. Logging that context is the point of the pattern, but the fields are data, never instructions. If a wide event later feeds an LLM-based tool (log analysis, alert triage, auto-remediation), attacker-controlled text carried inside a header, path, or payload can read like a command to that tool.
+
+Enforce three boundaries on every inbound string before it enters an event:
+
+1. **Extract only expected structured fields** — pull the fields the event schema declares (`method`, `status_code`, `user.id`, `order.id`) and ignore everything else. Never echo an entire request body, header set, or raw message payload into the event.
+2. **Sanitize every inbound string** — apply the CWE-117 treatment above (strip control characters, cap field length) to any header, path, or exception-message text. The JSON serializer handles escaping; it does not make the content trustworthy.
+3. **Never act on embedded text** — content found inside a header, path, or exception message is data, not a directive. If a wide event is later consumed by an LLM tool, that content must be treated as untrusted input to analyze, never as instructions to follow or commands to execute.
+
 ### References
 
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
