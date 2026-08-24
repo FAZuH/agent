@@ -103,6 +103,12 @@ date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
   `.scratch/<YYYY-MM-DD>_<effort>/issues/` for files that are open, unblocked,
   and unclaimed; first by number wins.
 
+When marking a ticket resolved, replace `Status:` with `resolved (<date>)`
+and append an **Outcome** paragraph: what landed, key judgment calls,
+pointer to spec deviation-log entries, and any flagged follow-ups. Sessions
+recovering from forks or killed subagents rely on these Outcome blocks more
+than on chat history.
+
 ## Logging deviations
 
 As work diverges from the plan, log it immediately in the deviation log and

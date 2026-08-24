@@ -247,7 +247,7 @@ This is a real, current tooling immaturity for native/Rust GUI testing, not a re
 
 Exhaustive permutation coverage at the GUI layer is combinatorially intractable — N fields with M validation states each scales exponentially. Split coverage by risk tier: **Tier 1 (Critical User Journeys)** — checkout, subscription renewal, auth, onboarding — gets full E2E coverage. **Tier 2 (edge cases/permutations)** — field validation rules, conditional formatting — gets pushed down to unit/component tests where it's cheap to exhaustively cover.
 
-**Mutation testing does not translate well to GUI suites.** A 500-test E2E suite at 20 minutes runtime, times 1000 injected mutants, is months of compute. Mutated CSS/layout can break visual presentation without tripping a functional DOM assertion, producing noisy false "survivors." And a killed mutant in an E2E test doesn't tell you whether the UI layer caught it or an underlying backend dependency just crashed — the signal is too coarse. Reserve mutation testing for the unit layer (see `test-writing-guidelines`).
+**Mutation testing does not translate well to GUI suites.** A 500-test E2E suite at 20 minutes runtime, times 1000 injected mutants, is months of compute. Mutated CSS/layout can break visual presentation without tripping a functional DOM assertion, producing noisy false "survivors." And a killed mutant in an E2E test doesn't tell you whether the UI layer caught it or an underlying backend dependency just crashed — the signal is too coarse. Reserve mutation testing for the unit layer (see `test-guidelines`).
 
 ## 14. Emerging Tooling (2025–2026)
 

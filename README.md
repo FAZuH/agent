@@ -4,8 +4,25 @@ My personal agent skills.
 
 ## Install
 
+Deploy from a local checkout — picks up uncommitted changes directly, no push needed:
+
 ```bash
-npx skills@latest add -g fazuh/skills
+cd ~/Projects/skills
+npx skills@latest install -g --all .
+```
+
+One-off single skill:
+
+```bash
+npx skills@latest install -g --skill issue-closeout .
+```
+
+Installs are copies, not symlinks ([vercel-labs/skills#748](https://github.com/vercel-labs/skills/issues/748)) — re-run after edits. The old flow (`npx skills add -g fazuh/skills`) still works but deploys last-pushed state only.
+
+Heads-up: an install touches **every agent dir the CLI detects** on the machine (it created 50+ skill-symlink farms in one pass). Pin with `--agent opencode`, or sweep strays:
+
+```bash
+find ~ -type l -newermt '<date>' -lname '*agents/skills*' -delete
 ```
 
 Many skills here depends on [Matt Pocock's engineering skills](https://github.com/mattpocock/skills). Install it:
