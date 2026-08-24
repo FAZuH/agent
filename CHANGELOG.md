@@ -1,3 +1,17 @@
+## [0.4.1](https://github.com/FAZuH/skills/compare/v0.4.0...v0.4.1) (2026-08-24)
+
+
+### Features
+
+* add issue-closeout skill ([43ae348](https://github.com/FAZuH/skills/commit/43ae348fc75da889c19ba5b2906ddba13233b9b4))
+* adopt self-improve, skill-doctor, deep-research ([d5a03eb](https://github.com/FAZuH/skills/commit/d5a03eb520d4295ec977ca03d9c2c097371669e2))
+* improve session skill ([cbd5c79](https://github.com/FAZuH/skills/commit/cbd5c79894f72d37f089c3784758850fd19d84d1))
+
+
+### Bug Fixes
+
+* stale test-guidelines name; skill-doctor run path post-move ([e99aaf3](https://github.com/FAZuH/skills/commit/e99aaf38e35b22d93c5447bcaf1dfaf73c4718ad))
+
 ## [0.4.0](https://github.com/FAZuH/skills/compare/v0.3.0...v0.4.0) (2026-08-20)
 
 
@@ -27,11 +41,4 @@
 
 * add pr-to-close, pr-watchmerge, and worktree-close/finish/new skills ([7697ace](https://github.com/FAZuH/skills/commit/7697acecc5f0056367bad178c9edb98961c456cb))
 * auto-close linked issues with Closes in pr-creator ([18fc6a5](https://github.com/FAZuH/skills/commit/18fc6a5f112a214ec05ae19f44df34f4820c161f))
-
-## [0.2.5](https://github.com/FAZuH/skills/compare/v0.2.4...v0.2.5) (2026-08-19)
-
-
-### Features
-
-* improve logging-guidelines with loguru port and security guidance ([fbddb18](https://github.com/FAZuH/skills/commit/fbddb1811359aa58ef0b3a5b4d6c24cdf8a411ef))
 
