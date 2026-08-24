@@ -44,7 +44,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 1. Run the doctor from the skill base dir and append history:
 
    ```bash
-   cd ~/.config/opencode/skills/skill-doctor
+   cd ~/.agents/skills/skill-doctor   # installed base dir of this skill
    python3 scripts/build_graph.py | tee -a ~/.config/opencode/skill-doctor/findings.jsonl
    ```
 
@@ -73,7 +73,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 
 ```bash
 # Run the doctor and append to history
-cd ~/.config/opencode/skills/skill-doctor && python3 scripts/build_graph.py | tee -a ~/.config/opencode/skill-doctor/findings.jsonl
+cd ~/.agents/skills/skill-doctor   # installed base dir of this skill && python3 scripts/build_graph.py | tee -a ~/.config/opencode/skill-doctor/findings.jsonl
 
 # Summary counts only (first JSONL line)
 python3 scripts/build_graph.py | head -1
