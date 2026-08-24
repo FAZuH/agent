@@ -1,3 +1,10 @@
+## [0.4.3](https://github.com/FAZuH/skills/compare/v0.4.2...v0.4.3) (2026-08-24)
+
+
+### Bug Fixes
+
+* session-retry papercut -g only on global confs ([e8738e2](https://github.com/FAZuH/skills/commit/e8738e2de48c4bdc2607fa216d0a5efbd5c656f8))
+
 ## [0.4.2](https://github.com/FAZuH/skills/compare/v0.4.1...v0.4.2) (2026-08-24)
 
 
@@ -35,11 +42,4 @@
 ### Features
 
 * add scratch-finish skill for archiving .scratch workspaces ([267bd4d](https://github.com/FAZuH/skills/commit/267bd4de7e155684fd50f31af0b15bd57dee7158))
-
-## [0.2.7](https://github.com/FAZuH/skills/compare/v0.2.6...v0.2.7) (2026-08-20)
-
-
-### Bug Fixes
-
-* treat request-derived log fields as untrusted in /logging-guidelines skill ([e732e28](https://github.com/FAZuH/skills/commit/e732e283d9aa9c6ace2a2d2228405c453a46ec3d))
 
