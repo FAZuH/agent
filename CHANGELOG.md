@@ -1,3 +1,12 @@
+## [0.4.2](https://github.com/FAZuH/skills/compare/v0.4.1...v0.4.2) (2026-08-24)
+
+
+### Features
+
+* add improve-architecture-oop skill ([333ee4d](https://github.com/FAZuH/skills/commit/333ee4dc10d2e52efc6a9d8a54a68256ca7c2c84))
+* add session-retro skill ([709e1d7](https://github.com/FAZuH/skills/commit/709e1d7e7bc3cc2e598407e388b0cf9f4c3631a5))
+* rename self-improve to papercut-sweep ([cc81dc2](https://github.com/FAZuH/skills/commit/cc81dc2e3617ba9e2453ed45465cb004674ad16e))
+
 ## [0.4.1](https://github.com/FAZuH/skills/compare/v0.4.0...v0.4.1) (2026-08-24)
 
 
@@ -33,12 +42,4 @@
 ### Bug Fixes
 
 * treat request-derived log fields as untrusted in /logging-guidelines skill ([e732e28](https://github.com/FAZuH/skills/commit/e732e283d9aa9c6ace2a2d2228405c453a46ec3d))
-
-## [0.2.6](https://github.com/FAZuH/skills/compare/v0.2.5...v0.2.6) (2026-08-20)
-
-
-### Features
-
-* add pr-to-close, pr-watchmerge, and worktree-close/finish/new skills ([7697ace](https://github.com/FAZuH/skills/commit/7697acecc5f0056367bad178c9edb98961c456cb))
-* auto-close linked issues with Closes in pr-creator ([18fc6a5](https://github.com/FAZuH/skills/commit/18fc6a5f112a214ec05ae19f44df34f4820c161f))
 
