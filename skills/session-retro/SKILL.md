@@ -1,6 +1,6 @@
 ---
 name: session-retro
-description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Files proposals into the global papercuts store — it does NOT apply fixes (that is `papercut-sweep`) and does NOT touch repo-local code sanding (plain `papercuts add`).
+description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Files proposals into the papercuts store — it does NOT apply fixes (that is `papercut-sweep`) and does NOT touch repo-local code sanding.
 ---
 
 # Session retro
@@ -33,11 +33,12 @@ Walk back through the conversation and look for four things:
 
 ## File proposals
 
-For each finding, file one entry in the global store:
+For each finding, file one entry:
 
-```bash
-papercuts -g add --tag self::<namespace> "<friction observed > proposed fix>"
-```
+- For global scope (global skills/tools/agents): `papercuts -g add --tag self::<namespace> "<friction observed > proposed fix>"`
+- For repo/project scope (fix lives inside the current repo): `papercuts add --tag self::<namespace> "<friction observed > proposed fix>"` — no `-g`
+
+Use `-g` only for global scope.
 
 - Namespaces: `self::skill`, `self::agent-def`, `self::tool`,
   `self::process`. Add free-form tags when a theme helps sweeps group.
@@ -59,5 +60,4 @@ Mark which entries look immediately actionable versus needing thought.
 - **Propose only.** Never edit skills, agent defs, or config from this
   skill. If the user wants immediate application, hand off explicitly to
   `papercut-sweep`.
-- **Global store only.** Friction whose fix lives inside the current repo
-  goes through plain `papercuts add`, not here.
+- **Scope decides store.** Global scope → global store (`-g`); repo/project scope → local store (no `-g`). Do not use `-g` for repo-local fixes.
