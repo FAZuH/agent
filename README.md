@@ -4,9 +4,20 @@ My personal agent skills.
 
 ## Install
 
+Deploy from a local checkout — picks up uncommitted changes directly, no push needed:
+
 ```bash
-npx skills@latest add -g fazuh/skills
+cd ~/Projects/skills
+npx skills@latest install -g --all .
 ```
+
+One-off single skill:
+
+```bash
+npx skills@latest install -g --skill issue-closeout .
+```
+
+Installs are copies, not symlinks ([vercel-labs/skills#748](https://github.com/vercel-labs/skills/issues/748)) — re-run after edits. The old flow (`npx skills add -g fazuh/skills`) still works but deploys last-pushed state only.
 
 Many skills here depends on [Matt Pocock's engineering skills](https://github.com/mattpocock/skills). Install it:
 
