@@ -1,0 +1,8 @@
+# installer manifest — tracked links live here, never commit it
+.agent-links.json
+
+# plugin dependencies (plugins/package.json is committed, modules are not)
+node_modules/
+
+# agent friction log (machine-local, never tracked)
+.papercuts.jsonl
