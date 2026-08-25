@@ -5,6 +5,8 @@
 tokens = [
   # CLI tools and role words referenced in prose, not skills or agents
   "adr-tools", "mermaid-compile", "test-runner",
+  # OpenCode custom tool names (registered by plugins/mermaid, not skills/agents)
+  "mermaid-doctor",
   # MCP tools / server profiles, not user-installable skills
   "discord-notify", "playwright-brave",
   # config keys and HTTP headers quoted in docs
