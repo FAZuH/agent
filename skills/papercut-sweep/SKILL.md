@@ -41,14 +41,14 @@ Run top to bottom when invoked. Do not skip the user gates.
    group). Dedup overlapping entries.
 2. **Propose** — per group, draft the concrete change (exact edit or diff).
    Check the target is user-owned before drafting: skills in
-   `~/Projects/skills/` (source) or `~/.config/opencode/skills/`
+   `~/Projects/agent/` (source) or `~/.config/opencode/skills/`
    (personal-global); agent defs in `~/.config/opencode/agents/*.md`.
    External skills under `~/.agents/skills/` are install targets — NEVER
    edit them; file upstream issues instead.
 3. **Gate by tier**, then apply:
    - Drafts and proposals are always free; **applying is gated**:
    - Process notes in `.scratch/` and docs → apply autonomously.
-   - Skill content (`~/Projects/skills`, personal-global skills) → after
+   - Skill content (`~/Projects/agent`, personal-global skills) → after
      explicit OK on the exact diff.
    - **Any config artifact — agent defs, `opencode.json*`, `AGENTS.md`,
      store configs (`*.toml`) → explicit OK every time. No autonomous

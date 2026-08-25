@@ -9,7 +9,7 @@ Investigate, validate, and fix how skills relate to each other and to agent
 definitions. The scanner (`scripts/build_graph.py`) reads four sources:
 
 - Skill roots, later-wins on duplicate ids: `~/.agents/skills` (installed),
-  `~/.config/opencode/skills` (config), `~/Projects/skills/skills` (source repo).
+  `~/.config/opencode/skills` (config), `~/Projects/agent/skills` (source repo, symlinked into the config root by the repo's install.sh).
 - Agent definitions: `~/.config/opencode/agents/*.md`.
 - Documented references: `~/.config/opencode/AGENTS.md`.
 
@@ -19,9 +19,9 @@ later locations win (see https://opencode.ai/docs/skills/). Among *installed*
 roots that means config shadows agents; the repo root is source-only and never
 loaded directly.
 
-Outputs on every run:
+State lives under the XDG data home (never in the config dir):
 
-- `~/.config/opencode/skill-doctor/graph.mmd` — full regeneration; mermaid
+- `$XDG_DATA_HOME/skill-doctor/graph.mmd` (default `~/.local/share/skill-doctor/graph.mmd`) — full regeneration; mermaid
   flowchart LR, one subgraph per root plus an agent-defs subgraph. The header
   comments define the legend; keep them true if you ever touch generation.
 - stdout — JSONL: first a run-summary line
@@ -37,7 +37,7 @@ even when a file is obviously wrong, even when the fix is trivial. If a fix
 belongs there: propose the change upstream in the source repo AND file
 `papercuts -g add --tag self::skill "..."`, or hand the user the reinstall
 command so their tooling rewrites the copy. Owned roots you may edit directly:
-`~/.config/opencode/skills` and `~/Projects/skills/skills`.
+`~/.config/opencode/skills` and `~/Projects/agent/skills`.
 
 ## Procedure
 
@@ -45,7 +45,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 
    ```bash
    cd ~/.agents/skills/skill-doctor   # installed base dir of this skill
-   python3 scripts/build_graph.py | tee -a ~/.config/opencode/skill-doctor/findings.jsonl
+   mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
    ```
 
 2. Triage findings by class: `broken-ref` (stale rename or reference to
@@ -55,7 +55,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    approves. Nothing under `~/.config/opencode/` or any skill file is edited
    without an explicit OK for that specific change:**
    - **Stale-name retarget** — propose retargeting the reference in OWNED
-     roots only (`~/.config/opencode/skills`, `~/Projects/skills/skills`);
+     roots only (`~/.config/opencode/skills`, `~/Projects/agent/skills`);
      apply after OK; then reinstall.
    - **Missing subagent** (routes to a nonexistent agent def) — report to the
      user and file a `papercuts -g` entry; do not invent agent definitions.
@@ -73,7 +73,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 
 ```bash
 # Run the doctor and append to history
-cd ~/.agents/skills/skill-doctor   # installed base dir of this skill && python3 scripts/build_graph.py | tee -a ~/.config/opencode/skill-doctor/findings.jsonl
+cd ~/.agents/skills/skill-doctor   # installed base dir of this skill && mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
 
 # Summary counts only (first JSONL line)
 python3 scripts/build_graph.py | head -1
@@ -89,9 +89,9 @@ papercuts -g add --tag self::skill "gui-test-guidelines references test-writing-
 papercuts -g list --tag self::skill --status open
 papercuts -g resolve pc_abc1234 --note "created local agent defs"
 
-# Reinstall a drifted/stale skill from the source repo (verified via `npx skills --help`:
-# package = owner/repo, pick the skill with -s/--skill, -g installs globally)
-npx skills add fazuh/skills -g -s session
+# Repo changes need no reinstall — global installs are symlinks.
+# Re-run the installer to repair or re-link:
+~/Projects/agent/install.sh -g
 ```
 
 ## Rules

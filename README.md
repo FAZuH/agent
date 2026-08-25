@@ -1,35 +1,29 @@
-# skills
+# agent
 
-My personal agent skills.
+My personal OpenCode setup as one repo: skills, agent definitions, plugins,
+and commands. Installed by symlink, so one checkout serves every project and
+edits apply everywhere after a restart.
 
 ## Install
 
-Deploy from a local checkout — picks up uncommitted changes directly, no push needed:
-
 ```bash
-cd ~/Projects/skills
-npx skills@latest install -g --all .
+cd ~/Projects/agent
+./install.sh -g                  # global (~/.config/opencode)
+./install.sh ~/Projects/notes    # or project-level (<project>/.opencode)
 ```
 
-One-off single skill:
+`install.sh` links `skills/ agents/ plugins/ commands/` into the target config
+dir and tracks them in `.agent-links.json` (gitignored); `uninstall.sh` removes
+exactly those links.
 
-```bash
-npx skills@latest install -g --skill issue-closeout .
-```
+**Do not also install these skills via `npx skills`.** The config root shadows
+`~/.agents/skills`, so npx copies become dead weight that silently drifts from
+source — `install.sh` warns when it finds shadowed copies; delete them when it
+does.
 
-Installs are copies, not symlinks ([vercel-labs/skills#748](https://github.com/vercel-labs/skills/issues/748)) — re-run after edits. The old flow (`npx skills add -g fazuh/skills`) still works but deploys last-pushed state only.
-
-Heads-up: an install touches **every agent dir the CLI detects** on the machine (it created 50+ skill-symlink farms in one pass). Pin with `--agent opencode`, or sweep strays:
-
-```bash
-find ~ -type l -newermt '<date>' -lname '*agents/skills*' -delete
-```
-
-Many skills here depends on [Matt Pocock's engineering skills](https://github.com/mattpocock/skills). Install it:
-
-```bash
-npx skills@latest add -g mattpocock/skills
-```
+External dependencies are separate repos, still installed with `npx skills`
+(see `~/.config/opencode/scripts/setup-skills.sh`). Many skills here depend on
+[Matt Pocock's engineering skills](https://github.com/mattpocock/skills).
 
 I also use [papercuts](https://github.com/treygoff24/papercuts) for agents to issue frictions/hiccups. Install with [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 
@@ -59,6 +53,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[pr-watchmerge](./skills/pr-watchmerge/SKILL.md)**: Watch a PR's CI checks and merge automatically once they pass.
 - **[finish](./skills/finish/SKILL.md)**: End a session: update docs, propose grouped commits, archive a completed `.scratch/` workspace, summarize.
 - **[session](./skills/session/SKILL.md)**: Manage a feature's session workspace: plan/spec doc, tickets, deviation log, checkpoints.
+- **[workflows](./skills/workflows/SKILL.md)**: The orchestrator's concrete workflows and subagent routing table; loaded before any routing decision.
 - **[scratch-finish](./skills/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps.
 - **[prepare-compact](./skills/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, then clear the goal. Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
 

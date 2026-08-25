@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sys
 import tomllib
@@ -27,14 +28,15 @@ HOME = Path.home()
 ROOTS = [
     ("agents", HOME / ".agents" / "skills"),
     ("config", HOME / ".config" / "opencode" / "skills"),
-    ("repo", HOME / "Projects" / "skills" / "skills"),
+    ("repo", HOME / "Projects" / "agent" / "skills"),
 ]
 ACTIVE_ROOTS = ("agents", "config")
 EDGE_TARGET_ORDER = ("config", "agents", "repo")
 
 AGENT_DEFS_DIR = HOME / ".config" / "opencode" / "agents"
 AGENTS_MD = HOME / ".config" / "opencode" / "AGENTS.md"
-OUT_DIR = HOME / ".config" / "opencode" / "skill-doctor"
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share")
+OUT_DIR = DATA_HOME / "skill-doctor"
 GRAPH_PATH = OUT_DIR / "graph.mmd"
 IGNORE_TOML = Path(__file__).resolve().parent.parent / "ignore.toml"
 
@@ -168,7 +170,7 @@ def main() -> int:
                 sid,
                 f"id present in multiple active roots ({', '.join(active_hits)}); per opencode v2 "
                 f"precedence (~/.config/opencode/skills wins over ~/.agents/skills) the loaded "
-                f"definition is {winner}; repo copy in ~/Projects/skills/skills is source-only",
+                f"definition is {winner}; repo copy in ~/Projects/agent/skills is source-only",
             )
 
     for sid in sorted(all_skill_ids):
@@ -185,7 +187,7 @@ def main() -> int:
                 sid,
                 f"SKILL.md differs between repo source and installed copy "
                 f"(repo {repo_hash[:12]} != {installed_root} {installed_hash[:12]}); "
-                f"reinstall from ~/Projects/skills/skills instead of hand-syncing",
+                f"reinstall from ~/Projects/agent/skills instead of hand-syncing",
             )
 
     lines: list[str] = [
@@ -201,7 +203,7 @@ def main() -> int:
     subgraph_titles = {
         "agents": "~/.agents/skills",
         "config": "~/.config/opencode/skills",
-        "repo": "~/Projects/skills/skills",
+        "repo": "~/Projects/agent/skills",
     }
     for root_name, _ in ROOTS:
         lines.append(f'  subgraph root_{root_name}["{mermaid_escape(subgraph_titles[root_name])}"]')
