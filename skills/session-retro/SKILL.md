@@ -49,11 +49,19 @@ Use `-g` only for global scope.
 
 ## Present
 
-Report a compact table of what was filed:
+Report a compact table of what was filed. The first column is a plain
+incrementing number (1, 2, 3, …) — the user refers to findings by these
+numbers ("apply papercut 1-3", "fix number 2"), so keep them stable within
+the retro report:
 
-| id | tag | proposal | actionable now? |
+| # | id | tag | proposal | actionable now? |
 
-Mark which entries look immediately actionable versus needing thought.
+- `#` starts at 1 and increments per row, in the order filed.
+- Keep the `id` column: it is the store handle used for
+  `papercuts resolve` once the user approves application.
+- Mark which entries look immediately actionable versus needing thought.
+- When the user later says "apply papercut <N>" or "fix <N>", map N back to
+  that row's `id` from this table before touching the store.
 
 ## Boundary
 
