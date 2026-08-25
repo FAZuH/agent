@@ -62,6 +62,9 @@ Constraints:
 - Node labels are declared identifiers (`webhook::prepare`), never invented roles.
 - An arrow must represent a real dependency in the code; do not draw edges to make
   the layout symmetric.
+- Validate before presenting: run `mermaid-doctor` on the file carrying the
+  diagram (parse plus full render); when the finding publishes a rendered
+  image, produce it with `mermaid-compile`. An unvalidated diagram is not done.
 - If no standard diagram fits, plain descriptive text beats a forced one.
 
 ## Principles
