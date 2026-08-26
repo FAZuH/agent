@@ -15,8 +15,6 @@ description: >
 license: MIT
 metadata:
   author: boristane (original wide-events pattern), extended by FAZuH
-  version: "2.0.0"
-  category: observability
 ---
 
 # Logging Guidelines at @skills/logging-guidelines/

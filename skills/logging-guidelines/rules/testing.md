@@ -28,8 +28,8 @@ def test_checkout_logs_expected_fields():
 ```
 
 ```rust
-// Rust/tracing-subscriber — an in-memory MakeWriter for assertions
-// tracing_subscriber::fmt().with_writer(test_writer).init();
+// Rust/tracing — in-memory MakeWriter + per-test scoped subscriber
+// See references/rust.md ("Testing") for the full recipe.
 ```
 
 ### Two Things Worth Testing

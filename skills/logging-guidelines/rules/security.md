@@ -88,7 +88,7 @@ Serializing to JSON neutralizes classic line-splitting (a literal newline become
 
 **Mitigation, applied to any user-controlled string before it enters a wide event:**
 
-- Strip control characters (0x00-0x1F, 0x7F) and truncate to a bounded length (e.g. 1024 chars) — see the `sanitizeLogField` example in `references/typescript.md`.
+- Strip control characters (0x00-0x1F, 0x7F) and truncate to a bounded length (e.g. 1024 chars) — see the `sanitizeLogField` example in `references/typescript.md` (`sanitize_log_field` in `references/rust.md`).
 
 Always serialize via a real JSON encoder (`JSON.stringify`, `serde_json`, `json.dumps`) — never build a log line with manual string concatenation, which is the actual root cause of most injection findings regardless of whether JSON is the target format.
 
