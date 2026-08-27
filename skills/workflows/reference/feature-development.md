@@ -57,3 +57,18 @@ START (user request: feature / ticket / bug fix)
 - FINISH only runs on explicit user request.
 - VERIFY always runs before REVIEW; no implementation reaches review with failing tests.
 - Loop REVIEW → IMPLEMENT → VERIFY while review turns up fixes; always resume the same sessions.
+
+## Parallel multi-repo batches
+
+When one piece of work spans multiple repositories (e.g. a dependee/dependency pair),
+run the batch in parallel instead of serializing:
+
+- One independent `implement` agent per repo — never share a session across repos.
+- Downstream compile gate: after any change that affects a dependee's view
+  (visibility, public signatures, message shapes), run `cargo check` (or the
+  equivalent) in the dependee before declaring the batch green.
+- Bounded retry: when a sibling repo's tree is dirty, retry the dependee check in a
+  tight window (a few tries) rather than serializing the whole batch.
+- Never-touch-sibling: each `implement` agent edits only its own repo; cross-repo
+  coupling is resolved by the downstream gate, not by editing both.
+- Keep review gates per repo (delegate `review` for each repo independently).
