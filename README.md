@@ -7,29 +7,14 @@ edits apply everywhere after a restart.
 ## Install
 
 ```bash
-cd ~/Projects/agent
-./install.sh -g                  # global (~/.config/opencode)
-./install.sh ~/Projects/notes    # or project-level (<project>/.opencode)
+./install.sh -g                # global (~/.config/opencode)
+./install.sh ~/Projects/notes  # project (<project>/.opencode)
+# --dry-run to preview; needs restart after
 ```
 
-`install.sh` links `skills/ agents/ plugins/ commands/` into the target config
-dir and tracks them in `.agent-links.json` (gitignored); `uninstall.sh` removes
-exactly those links.
+Symlinks `skills/ agents/ plugins/ commands/` (tracked in `.agent-links.json`); existing non-symlink files are left alone. Config shadows `~/.agents/skills` — delete shadowed npx copies when `install.sh` warns.
 
-**Do not also install these skills via `npx skills`.** The config root shadows
-`~/.agents/skills`, so npx copies become dead weight that silently drifts from
-source — `install.sh` warns when it finds shadowed copies; delete them when it
-does.
-
-External dependencies are separate repos, still installed with `npx skills`
-(see `~/.config/opencode/scripts/setup-skills.sh`). Many skills here depend on
-[Matt Pocock's engineering skills](https://github.com/mattpocock/skills).
-
-I also use [papercuts](https://github.com/treygoff24/papercuts) for agents to issue frictions/hiccups. Install with [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
-
-```bash
-cargo install papercuts
-```
+Requires [`creating-mermaid-diagrams`](https://github.com/Agents365-ai/creating-mermaid-diagrams) (`npx skills add Agents365-ai/365-skills -g`) for diagram export; `mattpocock/skills` for engineering workflows (see `~/.config/opencode/scripts/setup-skills.sh`). `papercuts` optional: `cargo install papercuts`.
 
 ## Skills
 
@@ -56,6 +41,10 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[workflows](./skills/workflows/SKILL.md)**: The orchestrator's concrete workflows and subagent routing table; loaded before any routing decision.
 - **[scratch-finish](./skills/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps.
 - **[prepare-compact](./skills/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, then clear the goal. Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
+- **[deep-research](./skills/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via the `research` subagent.
+- **[papercut-sweep](./skills/papercut-sweep/SKILL.md)**: Sweep the global papercuts backlog (`self::` entries) and apply approved self-improvement drafts.
+- **[session-retro](./skills/session-retro/SKILL.md)**: End-of-session retrospective — files `self::` proposals without touching code.
+- **[skill-doctor](./skills/skill-doctor/SKILL.md)**: Audit the skill/agent relation graph (`loads`/`routes`/`documents`), flag `broken-ref`/`collision`/`drift`, optionally render via `creating-mermaid-diagrams`.
 
 ### Referential (loaded by other skills while they run)
 
@@ -71,14 +60,14 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[logging-guidelines](./skills/logging-guidelines/SKILL.md)**: Structured logging with wide events, correlation, and safe redaction.
 - **[design-tradeoffs](./skills/design-tradeoffs/SKILL.md)**: Compare design options with structured tradeoff analysis.
 - **[scheduled-task](./skills/scheduled-task/SKILL.md)**: Manage scheduled tasks through crontab and systemd timers.
+- **[issue-closeout](./skills/issue-closeout/SKILL.md)**: Link merged PRs to resolved issues — closeout comment with PR/SHA, close issues where `Closes #N` does not fire.
+- **[improve-architecture-oop](./skills/improve-architecture-oop/SKILL.md)**: OOP vocabulary overlay for `improve-codebase-architecture` findings and diagrams.
 
 ### Dependency Diagrams
 
 ![Orchestration](docs/diagrams/skill-relations-orchestration.png)
 
 ![Referential dependencies](docs/diagrams/skill-relations-referential.png)
-
-![Standalone](docs/diagrams/skill-relations-standalone.png)
 
 ## License
 

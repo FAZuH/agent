@@ -29,7 +29,7 @@ flowchart TD
                 wayfinder["wayfinder"]
                 setup_matt_pocock_skills["setup-matt-pocock-skills"]
                 grill_with_docs["grill-with-docs"]
-                fazuh_diagrams["fazuh-diagrams (private)"]
+                creating_mermaid_diagrams["creating-mermaid-diagrams (external)"]
             end
         end
     end
@@ -52,7 +52,7 @@ flowchart TD
     session_retro --> papercut_sweep
     papercut_sweep --> session_retro
     papercut_sweep --> skill_doctor
-    skill_doctor --> fazuh_diagrams
+    skill_doctor --> creating_mermaid_diagrams
     deep_research --> grill_with_docs
     deep_research --> to_spec
     improve_codebase_architecture --> codebase_design
@@ -73,4 +73,4 @@ flowchart TD
     class L_orch,pr_to_close,worktree_new,worktree_finish,worktree_close orchestration
     class L_work,pr_creator,pr_watchmerge,finish,session,scratch_finish,prepare_compact,codebase_design,improve_codebase_architecture workflow
     class L_self,session_retro,papercut_sweep,skill_doctor,deep_research selfimp
-    class L_ext,to_spec,to_tickets,wayfinder,setup_matt_pocock_skills,grill_with_docs,fazuh_diagrams external
+    class L_ext,to_spec,to_tickets,wayfinder,setup_matt_pocock_skills,grill_with_docs,creating_mermaid_diagrams external

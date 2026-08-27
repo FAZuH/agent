@@ -67,7 +67,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    `findings.jsonl`: keep the original finding line untouched and add a new
    line merging `{"disposition":"proposed-fix|reported|documented|upstream|user-action","note":"..."}`
    into a copy of it.
-5. Optional: render `graph.mmd` via the `fazuh-diagrams` tooling.
+5. Optional: render `graph.mmd` via the `creating-mermaid-diagrams` skill (`~/.agents/skills/creating-mermaid-diagrams`, source `Agents365-ai/365-skills`).
 
 ## Common commands
 
