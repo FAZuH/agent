@@ -1,3 +1,5 @@
+## [0.5.1](https://github.com/FAZuH/agent/compare/v0.5.0...v0.5.1) (2026-08-27)
+
 ## [0.5.0](https://github.com/FAZuH/agent/compare/v0.4.3...v0.5.0) (2026-08-26)
 
 
@@ -41,12 +43,4 @@
 ### Bug Fixes
 
 * stale test-guidelines name; skill-doctor run path post-move ([accc643](https://github.com/FAZuH/agent/commit/accc643fde9bc018ddd84fcfd08aa9296763320c))
-
-## [0.4.0](https://github.com/FAZuH/agent/compare/v0.3.0...v0.4.0) (2026-08-25)
-
-
-### Features
-
-* add following-procedures skill for running numbered procedures ([9e5aeda](https://github.com/FAZuH/agent/commit/9e5aeda85305abfa57745a9df280d2b91100add8))
-* retrofit procedural skills to load following-procedures ([95f7fee](https://github.com/FAZuH/agent/commit/95f7feed2f1834ab33144a176381e46242308c57))
 
