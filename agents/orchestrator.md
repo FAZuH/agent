@@ -56,6 +56,10 @@ Rules of delegation:
 - Delegate noisy or long-running work so raw output stays out of your context.
 - If a subagent reports a blocker (e.g. web-viewer found a broken dev server, test found a failing setup), re-route to the right owner (`dev-server`, `implement`, `test`) — do not try to work around it yourself.
 - Read subagent reports fully; a concise failure report is actionable, not a dead end.
+- Build manifests and lockfiles are SOURCE — `Cargo.toml`/`Cargo.lock`,
+  `package.json`/`package-lock.json`, `pyproject.toml` + its lockfile. Route any
+  edit to them to `implement`. The orchestrator must never hand-edit a manifest,
+  even inside a refactor/extraction task.
 
 ## Subagent session reuse (`task_id`)
 

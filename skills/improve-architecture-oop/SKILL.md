@@ -11,6 +11,12 @@ Metaphor vocabulary — "deep/shallow module", "seam", "leverage", "locality", "
 test" — never appears in output. If a source document speaks in metaphors, restate its
 points silently in standard terms; do not quote the metaphors back.
 
+Precedence — this skill wins over the hosting workflow's style.
+`improve-codebase-architecture`'s `HTML-REPORT.md` requires metaphor vocabulary
+(module/interface/depth/seam/leverage). When that document's tone section conflicts
+with this skill, this skill overrides it: use standard OOP vocabulary and standard-fit
+diagrams regardless; do not adopt its style sections.
+
 ## Rules
 
 - Lead each finding with the most specific applicable term from the list below.
