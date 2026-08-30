@@ -11,11 +11,11 @@ Format: `type(scope): summary` or `type: summary`.
 
 | Scope     | Covers                                              |
 | --------- | --------------------------------------------------- |
-| `agents`   | `agents/**`                                          |
-| `skills`   | `skills/**`                                          |
-| `plugins`  | `plugins/**` (mermaid tools live under `plugins/mermaid/`) |
-| `commands` | `commands/**`                                        |
-| `install`  | `install.sh`, `uninstall.sh`, `.agent-links.json`, `.gitignore` entries about them |
+| `agent`    | `agents/**`                                          |
+| `skill`    | `skills/**`                                          |
+| `plugin`   | `plugins/**`                                         |
+| `command`  | `commands/**`                                        |
+| `script`   | `sync.sh`, `targets.conf`, `.agent-sync.json`, `.gitignore` entries about them |
 | `release`  | Version bumps and changelog materialization produced by the release workflow (`chore(release)`) |
 
 No scope = repo-wide: README, `docs/`, `.github/`, `dev.sh`, and any change
@@ -35,10 +35,12 @@ that genuinely spans several components.
 ## Examples
 
 ```
-feat(skills): add issue-closeout skill
-fix(plugins): mermaid-doctor timeout guard ignores render:false
-docs(install): document project-level installs
-feat(agents): teach review subagent the spec axis
-feat: restructure repo into skills/agents/plugins/commands
+feat(skill): add issue-closeout skill
+fix(plugin): mermaid-doctor timeout guard ignores render:false
+docs(script): document project-level sync targets
+feat(plugin): /md-link-keep trims existing mirrors immediately
+feat(plugin): configurable publish dir via viz-state.json
+feat(agent): teach review subagent the spec axis
+feat: restructure repo into skill/agent/plugin/command
 docs: add commit scopes reference
 ```

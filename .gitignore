@@ -1,5 +1,5 @@
-# installer manifest — tracked links live here, never commit it
-.agent-links.json
+# sync manifest — tracked pushes live here, never commit it
+.agent-sync.json
 
 # plugin dependencies (plugins/package.json is committed, modules are not)
 node_modules/

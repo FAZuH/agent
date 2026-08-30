@@ -7,6 +7,10 @@ tokens = [
   "adr-tools", "mermaid-compile", "test-runner",
   # OpenCode custom tool names (registered by plugins/mermaid, not skills/agents)
   "mermaid-doctor",
+  # md-link plugin: CLI commands + mirror file vocabulary, not skills
+  "md-link", "md-link-dir", "md-link-keep", "md-link-persist",
+  # external binaries used by plugin renderers
+  "rsvg-convert",
   # MCP tools / server profiles, not user-installable skills
   "discord-notify", "playwright-brave",
   # config keys and HTTP headers quoted in docs
@@ -32,4 +36,6 @@ tokens = [
   "skill-snapshot", "skill-test",
   # skill-doctor's own check-class vocabulary quoted in its docs
   "broken-ref",
+  # scheduled-task/scheduled-agent helper script names (scripts/, not skills)
+  "octask-add", "octask-remove", "octask-list", "octask-agent-add",
 ]
