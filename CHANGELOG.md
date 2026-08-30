@@ -1,3 +1,11 @@
+## [0.6.3](https://github.com/FAZuH/agent/compare/v0.6.2...v0.6.3) (2026-08-30)
+
+
+### Features
+
+* **skill:** add fazuh-changelog skill ([656cc70](https://github.com/FAZuH/agent/commit/656cc70e2b33b39cbb891af55464b9919e28c770))
+* **skill:** add fazuh-readme skill ([7b69305](https://github.com/FAZuH/agent/commit/7b6930559bb3155df684760e4ff656eba785d8b5))
+
 ## [0.6.2](https://github.com/FAZuH/agent/compare/v0.6.1...v0.6.2) (2026-08-30)
 
 
@@ -27,18 +35,4 @@
 * **skill:** organize skills by README taxonomy, adopt teach, visualize ([b607b48](https://github.com/FAZuH/agent/commit/b607b4844d1ab59f94a6670fd5b6c34fdb0faee4))
 
 ## [0.5.1](https://github.com/FAZuH/agent/compare/v0.5.0...v0.5.1) (2026-08-27)
-
-## [0.5.0](https://github.com/FAZuH/agent/compare/v0.4.3...v0.5.0) (2026-08-26)
-
-
-### Features
-
-* **agents:** move agent definitions into this repo ([a1a3a5e](https://github.com/FAZuH/agent/commit/a1a3a5e3c967e88ddf63d6804024154dcb3654bd))
-* **commands:** add finish and status-report commands ([23f997d](https://github.com/FAZuH/agent/commit/23f997dba871e8eff3f904d4c7a0614301a5b079))
-* improve skill-retro agent output ([cda5f28](https://github.com/FAZuH/agent/commit/cda5f28bc01c8a4d34f8c9b187ca4b7429b3ce0a))
-* **plugins:** consolidate mermaid tools into plugins/mermaid ([5c62fce](https://github.com/FAZuH/agent/commit/5c62fcee0f61fd065e6400e4c65ecfea47b7b16c))
-* require qualified first mentions and standard fit-for-purpose diagrams in improve-architecture-oop ([a8278b6](https://github.com/FAZuH/agent/commit/a8278b632203811146f6d8c1cb14f1c470bed72e))
-* **skill:** improve logging-guidelines ([47d3585](https://github.com/FAZuH/agent/commit/47d3585dd2be58462038d235be5564c535426557))
-* **skills:** add workflows skill (generalized from fazuh-workflows) ([f5a02dc](https://github.com/FAZuH/agent/commit/f5a02dc41c2b88a9ed00e7033e6b90a7761374b0))
-* **skill:** validate diagrams with mermaid plugins in improve-architecture-oop ([3053c1f](https://github.com/FAZuH/agent/commit/3053c1f0c172b057abcb6ec80729b7e9a76692a2))
 
