@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# octask-agent-add — schedule unattended OpenCode agent runs (octask-<name>)
+#
+# Usage:
+#   octask-agent-add <name> --agent <agent-id> --prompt "<text>" --workdir <dir>
+#                    [--oncalendar "<expr>"] [--description "..."]
+#                    [--persistent] [--dirty-only] [--timeout <sec>]
+#                    [--delay "<span>"] [--no-enable] [--force]
+#
+# Creates octask-<name>.{service,timer} running:
+#   opencode run --agent <agent-id> "<prompt>"   (in --workdir)
+# Same namespace as octask-add — manage with octask-list / octask-remove.
+set -euo pipefail
+
+PREFIX="octask-"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+die() { echo "octask-agent-add: $*" >&2; exit 1; }
+
+# locate octask-add: same dir, or the sibling scheduled-task skill (repo and
+# installed layouts both keep the two skills side by side)
+OCTASK_ADD="$SCRIPT_DIR/octask-add"
+if [ ! -x "$OCTASK_ADD" ]; then
+  OCTASK_ADD="$SCRIPT_DIR/../../scheduled-task/scripts/octask-add"
+fi
+[ -x "$OCTASK_ADD" ] || die "cannot find octask-add (looked in $SCRIPT_DIR and ../../scheduled-task/scripts)"
+
+name="" agent_id="" prompt="" workdir="" oncalendar="*-*-* 00/12:00:00"
+description="" timeout="600" delay="" dirty_only=0
+extra_args=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --agent)       agent_id="$2"; shift 2 ;;
+    --prompt)      prompt="$2"; shift 2 ;;
+    --workdir)     workdir="$2"; shift 2 ;;
+    --oncalendar)  oncalendar="$2"; shift 2 ;;
+    --description) description="$2"; shift 2 ;;
+    --timeout)     timeout="$2"; shift 2 ;;
+    --delay)       delay="$2"; shift 2 ;;
+    --persistent)  extra_args+=(--persistent); shift ;;
+    --dirty-only)  dirty_only=1; shift ;;
+    --no-enable)   extra_args+=(--no-enable); shift ;;
+    --force)       extra_args+=(--force); shift ;;
+    -h|--help)     sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)            die "unknown option: $1" ;;
+    *)             [ -z "$name" ] || die "unexpected argument: $1"; name="$1"; shift ;;
+  esac
+done
+
+[ -n "$name" ] || { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ -n "$agent_id" ] || die "--agent is required"
+[ -n "$prompt" ] || die "--prompt is required"
+[ -n "$workdir" ] || die "--workdir is required"
+
+# pre-flight checks
+[ -d "$workdir" ] || die "--workdir does not exist: $workdir"
+if ! git -C "$workdir" rev-parse --git-dir >/dev/null 2>&1; then
+  [ "$dirty_only" -eq 1 ] && die "not a git repository: $workdir (--dirty-only requires git)"
+  echo "octask-agent-add: warning: $workdir is not a git repository" >&2
+fi
+if ! command -v opencode >/dev/null 2>&1 && [ ! -x "${HOME}/.opencode/bin/opencode2" ]; then
+  echo "octask-agent-add: warning: no opencode binary found" >&2
+fi
+if [ "$dirty_only" -eq 1 ]; then
+  command -v git >/dev/null 2>&1 || die "git not found (--dirty-only requires it)"
+fi
+
+# agent definition must exist somewhere reachable
+agent_found=0
+for f in "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agents/$agent_id.md" \
+         "$workdir/.opencode/agents/$agent_id.md"; do
+  [ -f "$f" ] && { agent_found=1; echo "agent def: $f"; break; }
+done
+if [ "$agent_found" -eq 0 ]; then
+  echo "octask-agent-add: WARNING: no agent definition found for '$agent_id'" >&2
+  echo "  (checked ~/.config/opencode/agents/ and $workdir/.opencode/agents/)" >&2
+  echo "  the run will fail until the agent exists — create it before enabling" >&2
+fi
+
+# build the run command. The whole command is single-quoted for systemd by
+# octask-add (sq()); the prompt itself must be double-quoted for the inner
+# bash, with \ " $ ` escaped.
+bq() {
+  # shellcheck disable=SC2016  # sed patterns intentionally use literal $
+  printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\$/\\$/g' -e 's/`/\\`/g')"
+}
+
+# pick the opencode binary: prefer the v2 beta (~/.opencode/bin/opencode2) —
+# the service DB is migrated by it, and older builds fail with
+# "no such column: project_id". Fall back to PATH.
+if [ -x "${HOME}/.opencode/bin/opencode2" ]; then
+  OC_BIN="$HOME/.opencode/bin/opencode2"
+else
+  OC_BIN="$(command -v opencode || true)"
+  [ -n "$OC_BIN" ] || die "no opencode binary found"
+fi
+echo "binary: $OC_BIN"
+
+run_cmd="$OC_BIN run --agent $agent_id $(bq "$prompt")"
+if [ "$dirty_only" -eq 1 ]; then
+  run_cmd="if [ -z \"\$(git status --porcelain)\" ]; then exit 0; fi; exec $run_cmd"
+fi
+
+[ -n "$description" ] || description="$PREFIX$name: agent $agent_id in ${workdir/#$HOME/~}"
+
+exec "$OCTASK_ADD" "$name" \
+  --exec "$run_cmd" \
+  --oncalendar "$oncalendar" \
+  --description "$description" \
+  --workdir "$workdir" \
+  --timeout "$timeout" \
+  --env "PATH=/usr/local/bin:/usr/bin" \
+  ${delay:+--delay "$delay"} \
+  ${extra_args[@]+"${extra_args[@]}"}
