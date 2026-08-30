@@ -20,7 +20,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Run test/lint/typecheck suites | `test` | Returns concise analysis only |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
-| Finish a session (docs + summary + proposed commits) | `finish` | Uses the `finish` skill; proposes grouped commit messages, which you restate to the user for approval and then commit yourself; only when the user explicitly asks |
+| Finish a session (docs + summary + proposed commits + gated retro + doctor; offers sweep) | `finish` | Uses the `finish` skill; proposes grouped commit messages, which you restate to the user for approval and then commit yourself, then runs gated `session-retro` + `skill-doctor` and offers `papercut-sweep` (never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `dev-server` | Owns PTY lifecycle |
 | Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
 | Read/transcribe image files | `image-viewer` | Vision, read-only |
