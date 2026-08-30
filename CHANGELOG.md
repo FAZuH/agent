@@ -1,3 +1,17 @@
+## [0.6.0](https://github.com/FAZuH/agent/compare/v0.5.1...v0.6.0) (2026-08-30)
+
+
+### Features
+
+* **agent:** add autocommit agent ([128f239](https://github.com/FAZuH/agent/commit/128f2396abbae80ff90aea7b1a9c18392d14c8c7))
+* **agent:** group agent definitions by role, adopt learn makers ([d075cf5](https://github.com/FAZuH/agent/commit/d075cf568bc11f454038d7ebfff802bcdbad88f5))
+* **plugin:** restructure mermaid, adopt learn plugins as fazuh.* ([1a3e204](https://github.com/FAZuH/agent/commit/1a3e204e1de29ac74bffaaafd6d830cd96e36a6b))
+* **script:** replace symlink installer with copy-based sync.sh ([360b5cc](https://github.com/FAZuH/agent/commit/360b5ccab9504de338e71f6764a683e686d3c106))
+* **skill:** add oop vocabulary skill, split from improve-architecture-oop ([b81d94c](https://github.com/FAZuH/agent/commit/b81d94c2149b8d816e7058323fcdc93a657f0796))
+* **skill:** add scheduled-agent skill ([8a8d7c2](https://github.com/FAZuH/agent/commit/8a8d7c2d600b3eeb822d07838a3d588bd0acc0e0))
+* **skill:** narrow scheduled-task to systemd user timers ([3039e57](https://github.com/FAZuH/agent/commit/3039e57f2b678e1de7c66d3042d8da744c9a67da))
+* **skill:** organize skills by README taxonomy, adopt teach, visualize ([b607b48](https://github.com/FAZuH/agent/commit/b607b4844d1ab59f94a6670fd5b6c34fdb0faee4))
+
 ## [0.5.1](https://github.com/FAZuH/agent/compare/v0.5.0...v0.5.1) (2026-08-27)
 
 ## [0.5.0](https://github.com/FAZuH/agent/compare/v0.4.3...v0.5.0) (2026-08-26)
@@ -29,18 +43,4 @@
 * add improve-architecture-oop skill ([d4ca785](https://github.com/FAZuH/agent/commit/d4ca785ecabdc1437ef0b83ab721f8dd872c60e8))
 * add session-retro skill ([3d47ccd](https://github.com/FAZuH/agent/commit/3d47ccdf40b30f84344b40b9165361ed757685a1))
 * rename self-improve to papercut-sweep ([5076cce](https://github.com/FAZuH/agent/commit/5076cce03ebd4dbed350ff5ca6691225de99bd92))
-
-## [0.4.1](https://github.com/FAZuH/agent/compare/v0.4.0...v0.4.1) (2026-08-25)
-
-
-### Features
-
-* add issue-closeout skill ([fc87c6e](https://github.com/FAZuH/agent/commit/fc87c6e9471e0ce7825f813da4ca66e0d8e5a766))
-* adopt self-improve, skill-doctor, deep-research ([f4edb6c](https://github.com/FAZuH/agent/commit/f4edb6cdd3b56d8c3d1069fb62c5db00d64a178e))
-* improve session skill ([ab7e87f](https://github.com/FAZuH/agent/commit/ab7e87fe64a90da778581acc4f0157eed529fcdd))
-
-
-### Bug Fixes
-
-* stale test-guidelines name; skill-doctor run path post-move ([accc643](https://github.com/FAZuH/agent/commit/accc643fde9bc018ddd84fcfd08aa9296763320c))
 
