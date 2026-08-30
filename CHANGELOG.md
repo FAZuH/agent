@@ -1,3 +1,10 @@
+## [0.6.1](https://github.com/FAZuH/agent/compare/v0.6.0...v0.6.1) (2026-08-30)
+
+
+### Features
+
+* **agent:** improve pii-check permissions ([b3272fb](https://github.com/FAZuH/agent/commit/b3272fb19df638cbaff8c6ab316289113719e95f))
+
 ## [0.6.0](https://github.com/FAZuH/agent/compare/v0.5.1...v0.6.0) (2026-08-30)
 
 
@@ -34,13 +41,4 @@
 ### Bug Fixes
 
 * session-retry papercut -g only on global confs ([f1c73e0](https://github.com/FAZuH/agent/commit/f1c73e0e9b16181655227d6cc6ed682708827d34))
-
-## [0.4.2](https://github.com/FAZuH/agent/compare/v0.4.1...v0.4.2) (2026-08-25)
-
-
-### Features
-
-* add improve-architecture-oop skill ([d4ca785](https://github.com/FAZuH/agent/commit/d4ca785ecabdc1437ef0b83ab721f8dd872c60e8))
-* add session-retro skill ([3d47ccd](https://github.com/FAZuH/agent/commit/3d47ccdf40b30f84344b40b9165361ed757685a1))
-* rename self-improve to papercut-sweep ([5076cce](https://github.com/FAZuH/agent/commit/5076cce03ebd4dbed350ff5ca6691225de99bd92))
 
