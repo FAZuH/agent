@@ -7,9 +7,9 @@
 #              [--env "KEY=VALUE"] [--delay "<span>"] [--persistent]
 #              [--no-enable] [--force]
 #   octask add <name> --agent <agent-id> --prompt "<text>" --workdir <dir>
-#              [--oncalendar "<expr>"] [--description "..."] [--persistent]
-#              [--dirty-only] [--timeout <sec>] [--delay "<span>"]
-#              [--no-enable] [--force]
+#              [--model <provider/model>] [--oncalendar "<expr>"]
+#              [--description "..."] [--persistent] [--dirty-only]
+#              [--timeout <sec>] [--delay "<span>"] [--no-enable] [--force]
 #   octask remove <name> [--dry-run]
 #   octask list
 #   octask enable <name>
@@ -56,7 +56,7 @@ units_exist() {
 cmd_add() {
   local name="" oncalendar="" exec_cmd="" description="" workdir="" timeout=""
   local delay="" persistent=0 no_enable=0 force=0 dirty_only=0
-  local agent_id="" prompt=""
+  local agent_id="" prompt="" model=""
   local -a envs=()
 
   while [ $# -gt 0 ]; do
@@ -64,6 +64,7 @@ cmd_add() {
       --exec)        exec_cmd="$2"; shift 2 ;;
       --agent)       agent_id="$2"; shift 2 ;;
       --prompt)      prompt="$2"; shift 2 ;;
+      --model)       model="$2"; shift 2 ;;
       --dirty-only)  dirty_only=1; shift ;;
       --oncalendar)  oncalendar="$2"; shift 2 ;;
       --description) description="$2"; shift 2 ;;
@@ -140,14 +141,24 @@ cmd_add() {
 
   # ---- build the run command ------------------------------------------
   if [ "$is_agent" -eq 1 ]; then
-    exec_cmd="$oc_bin run --agent $agent_id $(bq "$prompt")"
+    if [ -n "$model" ]; then
+      exec_cmd="$oc_bin run --model $model --agent $agent_id $(bq "$prompt")"
+    else
+      exec_cmd="$oc_bin run --agent $agent_id $(bq "$prompt")"
+    fi
     if [ "$dirty_only" -eq 1 ]; then
       exec_cmd="if [ -z \"\$(git status --porcelain)\" ]; then exit 0; fi; exec $exec_cmd"
     fi
     [ -n "$timeout" ] || timeout=600
     envs+=("PATH=/usr/local/bin:/usr/bin")
     [ -n "$description" ] || description="$PREFIX$name: agent $agent_id in ${workdir/#$HOME/~}"
+    if [ -n "$model" ]; then
+      description="$description [$model]"
+    fi
   else
+    if [ -n "$model" ]; then
+      echo "octask: warning: --model is ignored for --exec tasks" >&2
+    fi
     [ -n "$description" ] || description="$PREFIX$name job"
   fi
 

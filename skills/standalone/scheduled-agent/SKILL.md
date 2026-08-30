@@ -99,6 +99,7 @@ octask add <name> \
   --agent <agent-id> \
   --prompt "<instruction for the run>" \
   --workdir <project dir> \
+  --model opencode/muse-spark-1.2-contributor-free \
   --oncalendar '*-*-* 00/12:00:00' \
   --persistent --dirty-only --delay 30min
 ```
@@ -106,8 +107,11 @@ octask add <name> \
 Options: `--oncalendar` (default every 12 h), `--persistent` (catch up after
 the machine was off — prefer it), `--dirty-only` (skip the run when the git
 worktree is clean), `--delay <span>` (→ `RandomizedDelaySec=`, staggers runs
-that share a schedule), `--timeout <sec>` (default 600), `--no-enable`
-(create without enabling), `--force` (overwrite).
+that share a schedule), `--model <provider/model>` (→ `opencode run --model
+<model>`; without it the run falls back to the agent's `model:` frontmatter
+and then the server's catalog default — currently `opencode-go/hy4-preview` —
+so pass `--model` explicitly for cheap unattended runs), `--timeout <sec>`
+(default 600), `--no-enable` (create without enabling), `--force` (overwrite).
 
 The script pre-flights: workdir exists and is a git repo, `opencode` binary
 resolution (`~/.opencode/bin/opencode2` preferred, PATH fallback), and the
