@@ -33,6 +33,12 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   octask status <name> | logs <name> [-n <lines>]
   ```
 
+  > **Agent runs are unattended.** The agent cannot answer permission prompts,
+  > so it MUST be deny-all-by-default with a narrow allowlist (see
+  > [permissions](https://opencode.ai/v2/docs/agents/#permissions)). Use the
+  > `scheduled-agent` skill to write the restricted agent definition before
+  > scheduling with `--agent`.
+
 ## First, discover what exists
 
 Never assume. Run `octask list` before adding, editing, or removing anything,
@@ -105,6 +111,8 @@ this is NOT the same as cron's `*/6`). Validate anything non-trivial with
 - Units use the `octask-` prefix and live in `~/.config/systemd/user/`.
 - After any change you re-listed timers and stated the next run time.
 - Destructive steps used `--dry-run` first when anything was ambiguous.
+- Agent-scheduled tasks (`--agent`) use a restricted deny-all-by-default
+  agent definition, or the run was refused/reported as unsafe.
 
 ## Report
 

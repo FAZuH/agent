@@ -18,7 +18,9 @@ enable`/`disable`, and `octask logs` manage these runs too.
 ## Step 1 — write the restricted agent definition
 
 Unattended runs can never answer permission prompts. The agent MUST be
-deny-all-by-default with a narrow allowlist, or it is not safe to schedule.
+deny-all-by-default with a narrow allowlist, or it is not safe to schedule
+(see [permissions](https://opencode.ai/v2/docs/agents/#permissions) — V2
+ordered-array `permissions`, broad `*` deny first, narrow allows after).
 
 Create a Markdown agent file:
 
