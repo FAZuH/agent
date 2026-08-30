@@ -18,17 +18,30 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   `octask-<name>.timer` (the schedule).
 - Discovery: `systemctl --user list-timers 'octask-*' --all` — the prefix is
   the discovery mechanism; never create manually named timer pairs.
-- Helper scripts (run from this skill's installed base directory, i.e.
-  `~/.config/opencode/skills/scheduled-task/scripts/`):
-  - `octask-add <name> --exec "<cmd>" [--oncalendar "<expr>"] [--persistent]
-    [--description "..."] [--workdir <dir>] [--timeout <sec>] [--env "K=V"]
-    [--delay "<span>"] [--no-enable] [--force]`
-  - `octask-remove <name> [--dry-run]`
-  - `octask-list`
+- Helper script: **`octask`** — installed on `$PATH` as
+  `~/.local/bin/octask` → `~/.config/opencode/skills/scheduled-task/scripts/octask`
+  (also runnable by full path from this skill's base directory):
+
+  ```bash
+  octask add <name> --exec "<cmd>" [--oncalendar "<expr>"] [--persistent]
+             [--description "..."] [--workdir <dir>] [--timeout <sec>]
+             [--env "K=V"] [--delay "<span>"] [--no-enable] [--force]
+  octask add <name> --agent <id> --prompt "..." --workdir <dir> [opts]
+  octask remove <name> [--dry-run]
+  octask list
+  octask enable <name> | disable <name>
+  octask status <name> | logs <name> [-n <lines>]
+  ```
+
+  > **Agent runs are unattended.** The agent cannot answer permission prompts,
+  > so it MUST be deny-all-by-default with a narrow allowlist (see
+  > [permissions](https://opencode.ai/v2/docs/agents/#permissions)). Use the
+  > `scheduled-agent` skill to write the restricted agent definition before
+  > scheduling with `--agent`.
 
 ## First, discover what exists
 
-Never assume. Run `octask-list` before adding, editing, or removing anything,
+Never assume. Run `octask list` before adding, editing, or removing anything,
 and `systemctl --user list-timers --all --no-pager` for timers NOT managed by
 octask (this machine has other user timers). Report what you found: managed
 octask units, other timers and their next run, anything inactive or failed
@@ -49,15 +62,15 @@ octask units, other timers and their next run, anything inactive or failed
 2. Validate it: `systemd-analyze calendar "<expr>"` — shows parse + next runs.
 3. Add and enable:
    ```bash
-   cd ~/.config/opencode/skills/scheduled-task/scripts
-   ./octask-add <name> --oncalendar "<expr>" --exec "<command>" --persistent
+   octask add <name> --oncalendar "<expr>" --exec "<command>" --persistent
    ```
-   - `octask-add` validates the expression again before writing anything.
+   - `octask add` validates the expression again before writing anything, and
+     runs `systemd-analyze verify` on the generated units after writing.
    - Prefer `--persistent` so missed runs catch up after the machine was off
      (systemd timers do not catch up without it).
    - Prefer `--delay <span>` (→ `RandomizedDelaySec=`) when several timers
      share a schedule, so they do not fire in the same instant.
-4. Confirm: re-run `octask-list` and state the NEXT run time to the user.
+4. Confirm: re-run `octask list` and state the NEXT run time to the user.
 
 Schedule hint for "run every N hours": use `00/N:00:00` (fires on the hour,
 every N hours). For "once per 12 hours with a stagger" use
@@ -65,17 +78,19 @@ every N hours). For "once per 12 hours with a stagger" use
 
 ## Removing and editing
 
-- Remove: `./octask-remove <name>` — stops, disables, deletes both unit files,
+- Remove: `octask remove <name>` — stops, disables, deletes both unit files,
   reloads the daemon. Use `--dry-run` first for anything you are unsure about.
+- Pause: `octask disable <name>` — stops and disables the timer but keeps the
+  units; re-enable later with `octask enable <name>`.
 - Edit: simplest is remove + re-add with the new options. Direct unit-file
   edits are fine for one-line changes, but always `systemctl --user
-  daemon-reload` after and verify with `octask-list`.
+  daemon-reload` after and verify with `octask list`.
 
 ## Troubleshooting
 
-- Did it run? `journalctl --user -u octask-<name>.service -n 50`
-- Why failed? `systemctl --user status octask-<name>.service`
-- Not firing? Check the timer is loaded and enabled: `octask-list`; check the
+- Did it run? `octask logs <name>` (or `octask logs <name> -n 200`)
+- Why failed? `octask status <name>` (timer + service status)
+- Not firing? Check the timer is loaded and enabled: `octask list`; check the
   service is not in `systemctl --user --failed`; remember `Persistent=true`
   only matters with a valid last-trigger timestamp.
 - After editing unit files by hand: `systemctl --user daemon-reload`.
@@ -92,10 +107,12 @@ this is NOT the same as cron's `*/6`). Validate anything non-trivial with
 
 - You ran discovery first and said what already exists.
 - The expression was validated with `systemd-analyze calendar` (or by
-  `octask-add`, which re-validates) before any unit file was written.
+  `octask add`, which re-validates) before any unit file was written.
 - Units use the `octask-` prefix and live in `~/.config/systemd/user/`.
 - After any change you re-listed timers and stated the next run time.
 - Destructive steps used `--dry-run` first when anything was ambiguous.
+- Agent-scheduled tasks (`--agent`) use a restricted deny-all-by-default
+  agent definition, or the run was refused/reported as unsafe.
 
 ## Report
 
@@ -104,6 +121,6 @@ Give a short summary after any change, for example:
 ```
 Added octask-backup.timer → octask-backup.service,
 OnCalendar=*-*-* 02:00:00, Persistent=true.
-Next run: 2026-08-31 02:00:00 WIT (via octask-list).
+Next run: 2026-08-31 02:00:00 WIT (via octask list).
 Enabled+started. Confirmed NEXT column.
 ```

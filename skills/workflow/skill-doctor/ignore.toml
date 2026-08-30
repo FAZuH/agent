@@ -36,6 +36,6 @@ tokens = [
   "skill-snapshot", "skill-test",
   # skill-doctor's own check-class vocabulary quoted in its docs
   "broken-ref",
-  # scheduled-task/scheduled-agent helper script names (scripts/, not skills)
-  "octask-add", "octask-remove", "octask-list", "octask-agent-add",
+  # scheduled-task/scheduled-agent octask CLI name (scripts/, not a skill)
+  "octask",
 ]
