@@ -1,3 +1,10 @@
+## [0.6.4](https://github.com/FAZuH/agent/compare/v0.6.3...v0.6.4) (2026-08-30)
+
+
+### Features
+
+* **script:** add --model flag to octask add --agent ([b40ffce](https://github.com/FAZuH/agent/commit/b40ffce22fbd0ba897dcdc65688345d1e6e3b951))
+
 ## [0.6.3](https://github.com/FAZuH/agent/compare/v0.6.2...v0.6.3) (2026-08-30)
 
 
@@ -33,6 +40,4 @@
 * **skill:** add scheduled-agent skill ([8a8d7c2](https://github.com/FAZuH/agent/commit/8a8d7c2d600b3eeb822d07838a3d588bd0acc0e0))
 * **skill:** narrow scheduled-task to systemd user timers ([3039e57](https://github.com/FAZuH/agent/commit/3039e57f2b678e1de7c66d3042d8da744c9a67da))
 * **skill:** organize skills by README taxonomy, adopt teach, visualize ([b607b48](https://github.com/FAZuH/agent/commit/b607b4844d1ab59f94a6670fd5b6c34fdb0faee4))
-
-## [0.5.1](https://github.com/FAZuH/agent/compare/v0.5.0...v0.5.1) (2026-08-27)
 
