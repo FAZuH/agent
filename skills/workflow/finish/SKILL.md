@@ -1,11 +1,11 @@
 ---
 name: finish
-description: "End a working session — update the relevant docs, plan the commit grouping and propose `type(scope): description` commit messages for each logical group, hand those proposals to the orchestrator to execute with the user, archive a completed `.scratch/` session workspace, summarize what was accomplished, and suggest next steps. Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
+description: "End a working session — update the relevant docs, plan the commit grouping and propose `type(scope): description` commit messages for each logical group, hand those proposals to the orchestrator to execute with the user, archive a completed `.scratch/` session workspace, summarize what was accomplished, suggest next steps, then run gated self-improvement (session-retro + skill-doctor) and offer papercut-sweep. Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
 ---
 
 # Finish a session
 
-End a working session: update the relevant docs, plan the commit grouping and propose one conventional message per group, summarize what you accomplished, and suggest next steps. Do the steps in order.
+End a working session: update the relevant docs, plan the commit grouping and propose one conventional message per group, summarize what you accomplished, suggest next steps, then run gated self-improvement (collect + validate) and offer the sweep. Do the steps in order.
 
 > **Load the `following-procedures` skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -65,6 +65,41 @@ Identify what remains to do. Prioritize the tasks in this order:
 1. Tasks deferred on purpose. The examples are sub-tasks, unstarted phases of a plan, and postponed work.
 2. Natural follow-ups from the work. The examples are cleanup, testing, documentation, and adjacent features. Suggest 2 or 3 items at most.
 
+## 6. Run self-improvement (collect + validate) — then offer the sweep
+
+This step is part of `finish` and runs after the summary/next-steps. It is
+gated and non-destructive — it never auto-applies fixes.
+
+1. **Collect — `session-retro` (gated).** Load the `session-retro` skill and
+   follow it exactly: mine the session for friction / repeated corrections /
+   skill gaps / wins, draft papercut proposals (do not file yet), render the
+   proposal table, gate with `default.question` (File all / Pick individually /
+   File none), and file only the approved subset. If the user picks none, file
+   nothing and note it.
+2. **Validate — `skill-doctor`.** Load the `skill-doctor` skill and follow its
+   Procedure §1 from the skill's base dir:
+
+   ```bash
+   cd ~/.config/opencode/skills/skill-doctor
+   mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor \
+     && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
+   ```
+
+   Report the run-summary line (`skills, agents, edges, broken, collisions,
+   drift`). If `broken` or `drift` > 0, note them as follow-ups but do not
+   fix them here — fixing belongs to `papercut-sweep` or a dedicated follow-up.
+3. **Offer the sweep — do not run it.** If `session-retro` filed any
+   papercuts, or `skill-doctor` reported `broken`/`drift`, or
+   `papercuts -g list --status open` shows open `self::` entries, tell the
+   user:
+
+   > Self-improvement backlog ready — `N` papercuts filed this session, `M`
+   > open total, doctor: `broken X / drift Y`. Run `papercut-sweep` now?
+   > [y/N]
+
+   Do not run `papercut-sweep` without an explicit "yes". If the user says
+   no, leave the backlog for a later sweep.
+
 ## Dependency graph
 
 - step1
@@ -72,3 +107,6 @@ Identify what remains to do. Prioritize the tasks in this order:
 - step3 -> step2
 - step4 -> step2, step3
 - step5 -> step4
+- step6a (retro) -> step5
+- step6b (doctor) -> step6a
+- step6c (offer sweep) -> step6b

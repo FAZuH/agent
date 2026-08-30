@@ -40,4 +40,6 @@ tokens = [
   "octask",
   # external repo example referenced in docs (not a skill/agent)
   "pwr-bot",
+  # scope examples and repo names referenced in fazuh-scopes (not skills/agents)
+  "authentication-service", "faz-lab",
 ]
