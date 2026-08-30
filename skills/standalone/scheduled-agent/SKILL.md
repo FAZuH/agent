@@ -12,8 +12,8 @@ example on this machine: `notes-autocommit.timer` running the `autocommit`
 agent (see "Reference implementation").
 
 Everything scheduled uses the `octask-` prefix (same namespace as the
-`scheduled-task` skill) — `octask-list` and `octask-remove` from that skill
-manage these runs too.
+`scheduled-task` skill) — `octask list`, `octask remove`, `octask
+enable`/`disable`, and `octask logs` manage these runs too.
 
 ## Step 1 — write the restricted agent definition
 
@@ -89,12 +89,11 @@ Rules and gotchas:
 
 ## Step 2 — schedule the run
 
-Use the helper script (from this skill's installed base directory,
-`~/.config/opencode/skills/scheduled-agent/scripts/`):
+Use the unified `octask` CLI (on `$PATH` as `~/.local/bin/octask`, or from
+`~/.config/opencode/skills/scheduled-task/scripts/octask`):
 
 ```bash
-cd ~/.config/opencode/skills/scheduled-agent/scripts
-./octask-agent-add <name> \
+octask add <name> \
   --agent <agent-id> \
   --prompt "<instruction for the run>" \
   --workdir <project dir> \
@@ -108,17 +107,19 @@ worktree is clean), `--delay <span>` (→ `RandomizedDelaySec=`, staggers runs
 that share a schedule), `--timeout <sec>` (default 600), `--no-enable`
 (create without enabling), `--force` (overwrite).
 
-The script pre-flights: workdir exists and is a git repo, `opencode` on PATH,
-and the agent definition exists (`~/.config/opencode/agents/<id>.md` or
-`<workdir>/.opencode/agents/<id>.md`) — it warns loudly if not. The service
-runs with a trimmed `PATH=/usr/local/bin:/usr/bin` and `WorkingDirectory`.
+The script pre-flights: workdir exists and is a git repo, `opencode` binary
+resolution (`~/.opencode/bin/opencode2` preferred, PATH fallback), and the
+agent definition exists (`~/.config/opencode/agents/<id>.md` or
+`<workdir>/.opencode/agents/<id>.md`) — it warns loudly if not. It also runs
+`systemd-analyze verify` on the generated units. The service runs with a
+trimmed `PATH=/usr/local/bin:/usr/bin` and `WorkingDirectory`.
 
 ## Step 3 — verify BEFORE trusting it
 
 1. One manual run: `systemctl --user start octask-<name>.service` — watch it:
-   `journalctl --user -u octask-<name>.service -n 50 -f`
+   `octask logs <name> -f` (or `journalctl --user -u octask-<name>.service -n 50 -f`)
 2. Check the agent actually did the right thing (and nothing else).
-3. `octask-list` → confirm the timer is enabled and note the NEXT run.
+3. `octask list` → confirm the timer is enabled and note the NEXT run.
 4. Only then leave it enabled.
 
 ## Reference implementation
