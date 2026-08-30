@@ -1,16 +1,31 @@
 ---
 description: Scans repositories for PII and leaked secrets
 mode: subagent
-temperature: 0.1
-permission:
-  edit: deny
-  write: deny
-  bash:
-    "*": deny
-    "grep *": allow
-    "rg *": allow
-    "file *": allow
-  webfetch: deny
+permissions:
+  - action: "*"
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: list
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "rg *"
+    effect: allow
+  - action: shell
+    resource: "grep *"
+    effect: allow
+  - action: shell
+    resource: "file *"
+    effect: allow
 ---
 
 Act as a privacy auditor. Scan the following repository/code for:
