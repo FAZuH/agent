@@ -9,7 +9,8 @@ Investigate, validate, and fix how skills relate to each other and to agent
 definitions. The scanner (`scripts/build_graph.py`) reads four sources:
 
 - Skill roots, later-wins on duplicate ids: `~/.agents/skills` (installed),
-  `~/.config/opencode/skills` (config), `~/Projects/agent/skills` (source repo, symlinked into the config root by the repo's install.sh).
+  `~/.config/opencode/skills` (config), `~/Projects/agent/skills` (source repo, in
+  category subdirs; copies are pushed into the config root by the repo's sync.sh).
 - Agent definitions: `~/.config/opencode/agents/*.md`.
 - Documented references: `~/.config/opencode/AGENTS.md`.
 
@@ -89,9 +90,8 @@ papercuts -g add --tag self::skill "gui-test-guidelines references test-writing-
 papercuts -g list --tag self::skill --status open
 papercuts -g resolve pc_abc1234 --note "created local agent defs"
 
-# Repo changes need no reinstall — global installs are symlinks.
-# Re-run the installer to repair or re-link:
-~/Projects/agent/install.sh -g
+# Repo changes need a push — global installs are copies, not symlinks:
+~/Projects/agent/sync.sh push -g
 ```
 
 ## Rules

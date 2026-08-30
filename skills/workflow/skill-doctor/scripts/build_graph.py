@@ -72,6 +72,12 @@ def load_root_skills(root_path: Path) -> dict[str, Path]:
         skill_md = entry / "SKILL.md"
         if entry.is_dir() and skill_md.is_file():
             skills[entry.name] = skill_md
+        elif entry.is_dir():
+            # category subdirs (repo root only): skills/<cat>/<name>/SKILL.md
+            for sub in sorted(entry.iterdir()):
+                sm = sub / "SKILL.md"
+                if sub.is_dir() and sm.is_file():
+                    skills[sub.name] = sm
     return skills
 
 
@@ -187,7 +193,7 @@ def main() -> int:
                 sid,
                 f"SKILL.md differs between repo source and installed copy "
                 f"(repo {repo_hash[:12]} != {installed_root} {installed_hash[:12]}); "
-                f"reinstall from ~/Projects/agent/skills instead of hand-syncing",
+                f"sync.sh push -g instead of hand-syncing",
             )
 
     lines: list[str] = [
