@@ -1,3 +1,10 @@
+## [0.6.2](https://github.com/FAZuH/agent/compare/v0.6.1...v0.6.2) (2026-08-30)
+
+
+### Features
+
+* **script:** unify octask scripts into a single CLI ([4a8738c](https://github.com/FAZuH/agent/commit/4a8738c2520cb0c01c37a85ce946274fa69bbd05))
+
 ## [0.6.1](https://github.com/FAZuH/agent/compare/v0.6.0...v0.6.1) (2026-08-30)
 
 
@@ -34,11 +41,4 @@
 * **skill:** improve logging-guidelines ([47d3585](https://github.com/FAZuH/agent/commit/47d3585dd2be58462038d235be5564c535426557))
 * **skills:** add workflows skill (generalized from fazuh-workflows) ([f5a02dc](https://github.com/FAZuH/agent/commit/f5a02dc41c2b88a9ed00e7033e6b90a7761374b0))
 * **skill:** validate diagrams with mermaid plugins in improve-architecture-oop ([3053c1f](https://github.com/FAZuH/agent/commit/3053c1f0c172b057abcb6ec80729b7e9a76692a2))
-
-## [0.4.3](https://github.com/FAZuH/agent/compare/v0.4.2...v0.4.3) (2026-08-25)
-
-
-### Bug Fixes
-
-* session-retry papercut -g only on global confs ([f1c73e0](https://github.com/FAZuH/agent/commit/f1c73e0e9b16181655227d6cc6ed682708827d34))
 
