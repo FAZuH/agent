@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+# octask — unified CLI for managed octask-* systemd user timers
+#
+# Usage:
+#   octask add <name> --exec "<cmd>" [--oncalendar "<expr>"]
+#              [--description "..."] [--workdir <dir>] [--timeout <sec>]
+#              [--env "KEY=VALUE"] [--delay "<span>"] [--persistent]
+#              [--no-enable] [--force]
+#   octask add <name> --agent <agent-id> --prompt "<text>" --workdir <dir>
+#              [--oncalendar "<expr>"] [--description "..."] [--persistent]
+#              [--dirty-only] [--timeout <sec>] [--delay "<span>"]
+#              [--no-enable] [--force]
+#   octask remove <name> [--dry-run]
+#   octask list
+#   octask enable <name>
+#   octask disable <name>
+#   octask status <name>
+#   octask logs <name> [-n <lines>]
+#
+# Manages ~/.config/systemd/user/octask-<name>.{service,timer}.
+# `add --agent` schedules unattended `opencode run --agent <id>` runs and
+# prefers the v2 beta binary (~/.opencode/bin/opencode2).
+set -euo pipefail
+
+PREFIX="octask-"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+die() { echo "octask: $*" >&2; exit 1; }
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# single-quote a string for systemd ExecStart (no $ expansion inside)
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+# double-quote a string for the inner bash (used for agent prompts); the
+# result is later single-quoted for systemd by sq(), which converts any
+# literal ' to '\'' — the two together keep apostrophes balanced
+bq() {
+  # shellcheck disable=SC2016  # sed patterns intentionally use literal $
+  printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\$/\\$/g' -e 's/`/\\`/g')"
+}
+
+valid_name() {
+  printf '%s' "$1" | grep -Eq '^[a-z0-9][a-z0-9_-]*$'
+}
+
+require_name() {
+  [ -n "${1:-}" ] || { usage; die "missing <name>"; }
+  valid_name "$1" || die "invalid name '$1' (use [a-z0-9][a-z0-9_-]*)"
+}
+
+units_exist() {
+  [ -e "$UNIT_DIR/$PREFIX$1.service" ] || [ -e "$UNIT_DIR/$PREFIX$1.timer" ]
+}
+
+# ---------------------------------------------------------------- add ----
+cmd_add() {
+  local name="" oncalendar="" exec_cmd="" description="" workdir="" timeout=""
+  local delay="" persistent=0 no_enable=0 force=0 dirty_only=0
+  local agent_id="" prompt=""
+  local -a envs=()
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --exec)        exec_cmd="$2"; shift 2 ;;
+      --agent)       agent_id="$2"; shift 2 ;;
+      --prompt)      prompt="$2"; shift 2 ;;
+      --dirty-only)  dirty_only=1; shift ;;
+      --oncalendar)  oncalendar="$2"; shift 2 ;;
+      --description) description="$2"; shift 2 ;;
+      --workdir)     workdir="$2"; shift 2 ;;
+      --timeout)     timeout="$2"; shift 2 ;;
+      --env)         envs+=("$2"); shift 2 ;;
+      --delay)       delay="$2"; shift 2 ;;
+      --persistent)  persistent=1; shift ;;
+      --no-enable)   no_enable=1; shift ;;
+      --force)       force=1; shift ;;
+      -h|--help)     usage; exit 0 ;;
+      -*)            die "add: unknown option: $1" ;;
+      *)             [ -z "$name" ] || die "add: unexpected argument: $1"; name="$1"; shift ;;
+    esac
+  done
+
+  require_name "$name"
+
+  # ---- mode dispatch -------------------------------------------------
+  local is_agent=0
+  if [ -n "$agent_id" ] || [ -n "$prompt" ]; then
+    is_agent=1
+    [ -n "$agent_id" ] || die "add: --agent is required with --prompt"
+    [ -n "$prompt" ]   || die "add: --prompt is required with --agent"
+    [ -n "$workdir" ]  || die "add: --workdir is required for agent runs"
+    [ -z "$exec_cmd" ] || die "add: --exec cannot be combined with --agent/--prompt"
+  else
+    [ -n "$exec_cmd" ] || die "add: --exec is required (or use --agent/--prompt)"
+  fi
+
+  [ -n "$oncalendar" ] || oncalendar="*-*-* 00/12:00:00"
+
+  # ---- validation BEFORE writing anything -----------------------------
+  if ! systemd-analyze calendar "$oncalendar" >/dev/null 2>&1; then
+    systemd-analyze calendar "$oncalendar" 2>&1 | head -3 >&2 || true
+    die "add: invalid OnCalendar expression: $oncalendar"
+  fi
+  [ -z "$workdir" ] || [ -d "$workdir" ] || die "add: --workdir does not exist: $workdir"
+  [ -z "$timeout" ] || printf '%s' "$timeout" | grep -Eq '^[0-9]+$' || die "add: --timeout must be seconds"
+  if [ -n "$delay" ] && ! systemd-analyze timespan "$delay" >/dev/null 2>&1; then
+    die "add: invalid --delay timespan: $delay"
+  fi
+
+  # ---- agent-mode pre-flights -----------------------------------------
+  local oc_bin=""
+  if [ "$is_agent" -eq 1 ]; then
+    if ! git -C "$workdir" rev-parse --git-dir >/dev/null 2>&1; then
+      [ "$dirty_only" -eq 1 ] && die "add: not a git repository: $workdir (--dirty-only requires git)"
+      echo "octask: warning: $workdir is not a git repository" >&2
+    fi
+    if [ "$dirty_only" -eq 1 ]; then
+      command -v git >/dev/null 2>&1 || die "add: git not found (--dirty-only requires it)"
+    fi
+    # prefer the v2 beta — the service DB is migrated by it; older builds
+    # fail with "no such column: project_id"
+    if [ -x "${HOME}/.opencode/bin/opencode2" ]; then
+      oc_bin="$HOME/.opencode/bin/opencode2"
+    else
+      oc_bin="$(command -v opencode || true)"
+      [ -n "$oc_bin" ] || die "add: no opencode binary found"
+    fi
+    echo "binary: $oc_bin"
+    local agent_found=0 f
+    for f in "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agents/$agent_id.md" \
+             "$workdir/.opencode/agents/$agent_id.md"; do
+      [ -f "$f" ] && { agent_found=1; echo "agent def: $f"; break; }
+    done
+    if [ "$agent_found" -eq 0 ]; then
+      echo "octask: WARNING: no agent definition found for '$agent_id'" >&2
+      echo "  (checked ~/.config/opencode/agents/ and $workdir/.opencode/agents/)" >&2
+      echo "  the run will fail until the agent exists — create it before enabling" >&2
+    fi
+  fi
+
+  # ---- build the run command ------------------------------------------
+  if [ "$is_agent" -eq 1 ]; then
+    exec_cmd="$oc_bin run --agent $agent_id $(bq "$prompt")"
+    if [ "$dirty_only" -eq 1 ]; then
+      exec_cmd="if [ -z \"\$(git status --porcelain)\" ]; then exit 0; fi; exec $exec_cmd"
+    fi
+    [ -n "$timeout" ] || timeout=600
+    envs+=("PATH=/usr/local/bin:/usr/bin")
+    [ -n "$description" ] || description="$PREFIX$name: agent $agent_id in ${workdir/#$HOME/~}"
+  else
+    [ -n "$description" ] || description="$PREFIX$name job"
+  fi
+
+  # ---- refuse to clobber ------------------------------------------------
+  local base="$UNIT_DIR/$PREFIX$name"
+  local f
+  for f in "$base.service" "$base.timer"; do
+    if [ -e "$f" ] && [ "$force" -ne 1 ]; then
+      die "add: $f already exists (use --force to overwrite)"
+    fi
+  done
+
+  # ---- write units -------------------------------------------------------
+  mkdir -p "$UNIT_DIR"
+  {
+    echo "[Unit]"
+    echo "Description=$description"
+    echo ""
+    echo "[Service]"
+    echo "Type=oneshot"
+    [ -n "$workdir" ] && echo "WorkingDirectory=$workdir"
+    local e
+    for e in "${envs[@]+"${envs[@]}"}"; do echo "Environment=$e"; done
+    [ -n "$timeout" ] && echo "TimeoutStartSec=$timeout"
+    echo "ExecStart=/usr/bin/bash -c $(sq "$exec_cmd")"
+  } > "$base.service"
+  {
+    echo "[Unit]"
+    echo "Description=$description (timer)"
+    echo ""
+    echo "[Timer]"
+    echo "OnCalendar=$oncalendar"
+    [ -n "$delay" ] && echo "RandomizedDelaySec=$delay"
+    [ "$persistent" -eq 1 ] && echo "Persistent=true"
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=timers.target"
+  } > "$base.timer"
+
+  systemctl --user daemon-reload
+
+  # ---- self-check the generated units ------------------------------------
+  local verify_out
+  if ! verify_out="$(systemd-analyze verify "$base.service" "$base.timer" 2>&1)"; then
+    printf '%s\n' "$verify_out" >&2
+    die "add: generated units failed systemd-analyze verify (removed); check quoting of --exec/--prompt"
+  fi
+
+  if [ "$no_enable" -eq 1 ]; then
+    echo "added $PREFIX$name (not enabled): $base.{service,timer}"
+    echo "enable later: octask enable $name"
+    return 0
+  fi
+
+  systemctl --user enable --now "$PREFIX$name.timer" >/dev/null
+  local next
+  next="$(systemctl --user show "$PREFIX$name.timer" --property=NextElapseUSecRealtime --value 2>/dev/null)"
+  echo "added $PREFIX$name: $base.{service,timer}"
+  echo "  schedule: OnCalendar=$oncalendar${delay:+ (delay up to $delay)}$([ "$persistent" -eq 1 ] && echo -n ', persistent')"
+  [ -n "$workdir" ] && echo "  workdir:  $workdir"
+  echo "  next run: ${next:-unknown} (octask list)"
+}
+
+# ------------------------------------------------------------- remove ----
+cmd_remove() {
+  local dry_run=0 name=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      -*)        die "remove: unknown option: $1" ;;
+      *)         [ -z "$name" ] || die "remove: unexpected argument: $1"; name="$1"; shift ;;
+    esac
+  done
+  require_name "$name"
+
+  local base="$UNIT_DIR/$PREFIX$name"
+  local -a units=("$base.timer" "$base.service")
+  local found=0 f
+  for f in "${units[@]}"; do [ -e "$f" ] && found=1; done
+
+  if [ "$found" -eq 0 ]; then
+    echo "octask: no units found for '$PREFIX$name' (nothing to do)"
+    return 0
+  fi
+
+  if [ "$dry_run" -eq 1 ]; then
+    echo "dry-run: would stop+disable $PREFIX$name.timer, delete:"
+    for f in "${units[@]}"; do [ -e "$f" ] && echo "  $f"; done
+    return 0
+  fi
+
+  systemctl --user stop "$PREFIX$name.timer" 2>/dev/null || true
+  systemctl --user disable "$PREFIX$name.timer" 2>/dev/null || true
+  for f in "${units[@]}"; do [ -e "$f" ] && rm -f "$f"; done
+  systemctl --user daemon-reload
+  systemctl --user reset-failed "$PREFIX$name.timer" "$PREFIX$name.service" 2>/dev/null || true
+  echo "removed $PREFIX$name ({timer,service})"
+}
+
+# ---------------------------------------------------------------- list ----
+cmd_list() {
+  echo "== managed timers ($PREFIX*) =="
+  systemctl --user list-timers "$PREFIX*" --all --no-pager 2>/dev/null || true
+
+  echo ""
+  echo "== managed unit files =="
+  local found=0 f base tag workdir
+  for f in "$UNIT_DIR"/"$PREFIX"*".timer"; do
+    [ -e "$f" ] || continue
+    found=1
+    base="${f%.timer}"
+    if grep -q -- '--agent' "$base.service" 2>/dev/null; then tag="agent"; else tag="task"; fi
+    workdir="$(sed -n 's/^WorkingDirectory=//p' "$base.service" 2>/dev/null)"
+    printf '  [%s] %s%s\n' "$tag" "$(basename "$base")" "${workdir:+  (${workdir/#$HOME/~})}"
+  done
+  if [ "$found" -eq 0 ]; then
+    echo "  (none — nothing managed by octask yet)"
+  fi
+}
+
+# -------------------------------------------------------------- enable ----
+cmd_enable() {
+  [ $# -eq 1 ] || { usage; die "enable: exactly one <name> required"; }
+  require_name "$1"
+  units_exist "$1" || die "enable: no units found for '$PREFIX$1' (octask list)"
+  systemctl --user daemon-reload
+  systemctl --user enable --now "$PREFIX$1.timer"
+  local next
+  next="$(systemctl --user show "$PREFIX$1.timer" --property=NextElapseUSecRealtime --value 2>/dev/null)"
+  echo "enabled $PREFIX$1.timer — next run: ${next:-unknown}"
+}
+
+# ------------------------------------------------------------- disable ----
+cmd_disable() {
+  [ $# -eq 1 ] || { usage; die "disable: exactly one <name> required"; }
+  require_name "$1"
+  units_exist "$1" || die "disable: no units found for '$PREFIX$1' (octask list)"
+  systemctl --user disable --now "$PREFIX$1.timer"
+  echo "disabled $PREFIX$1.timer (units kept — re-enable with: octask enable $1)"
+}
+
+# -------------------------------------------------------------- status ----
+cmd_status() {
+  [ $# -eq 1 ] || { usage; die "status: exactly one <name> required"; }
+  require_name "$1"
+  systemctl --user status "$PREFIX$1.timer" "$PREFIX$1.service" --no-pager
+}
+
+# ---------------------------------------------------------------- logs ----
+cmd_logs() {
+  local name="" lines=50
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -n) lines="$2"; shift 2 ;;
+      -*) die "logs: unknown option: $1" ;;
+      *)  [ -z "$name" ] || die "logs: unexpected argument: $1"; name="$1"; shift ;;
+    esac
+  done
+  require_name "$name"
+  journalctl --user -u "$PREFIX$name.service" -n "$lines" --no-pager
+}
+
+# -------------------------------------------------------------- dispatcher
+cmd="${1:-}"
+[ -n "$cmd" ] || { usage; exit 1; }
+shift
+
+case "$cmd" in
+  add)     cmd_add "$@" ;;
+  remove)  cmd_remove "$@" ;;
+  list)    cmd_list "$@" ;;
+  enable)  cmd_enable "$@" ;;
+  disable) cmd_disable "$@" ;;
+  status)  cmd_status "$@" ;;
+  logs)    cmd_logs "$@" ;;
+  help|-h|--help) usage; exit 0 ;;
+  *)       usage; die "unknown subcommand: $cmd" ;;
+esac
