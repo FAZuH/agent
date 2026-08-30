@@ -1,148 +1,109 @@
 ---
 name: scheduled-task
-description: Manage scheduled tasks on this machine through classic user crontab AND systemd timers (both per-user and system-wide). Use this skill whenever the user asks to set up, list, edit, remove, or troubleshoot anything scheduled to run on a schedule — cron, crontab, cron jobs, scheduled jobs, recurring tasks, "run every X", background jobs that repeat, systemd .timer units, timer-based automation, or asks "is this running on a schedule?" or how to schedule a backup/sync/script. This includes explaining and validating the 5 cron time fields, building a `*/5 * * * *` style schedule expression, and computing next-run times (using `crontab -l`, `systemctl list-timers`, `next` probing, and `systemd-analyze calendar`). Prefer this over generic scheduling advice; also use it when deciding whether a task belongs in cron vs a systemd timer.
+description: Manage scheduled tasks on this machine through systemd user timers ONLY (`systemctl --user`) — add, list, remove, edit, and troubleshoot anything scheduled to run on a schedule. Use this skill whenever the user asks to schedule, run every X, cron, crontab, cron job, recurring task, background job, systemd timer, .timer unit, "on a schedule", backup/sync automation, or asks what is scheduled and when it next runs. Cron requests are translated into systemd user timers. Schedule expressions use OnCalendar syntax, validated with `systemd-analyze calendar` and confirmed with next-run times.
 ---
 
 # scheduled-task
 
-Manage scheduled tasks on this Arch Linux machine. Two scheduling systems exist here, and you must figure out which one a given task uses (or should use) before acting:
+Manage scheduled tasks on this Arch Linux machine with **per-user systemd
+timers** (`systemctl --user`). Do not use crontab, anacron, or system-wide
+timers. If the user says "cron job", translate the schedule to an `OnCalendar`
+user timer.
 
-1. **Classic user crontab** (`crontab`) — plain `*/5 * * * * cmd` lines.
-2. **systemd timers** — `.timer` + `.service` unit pairs, either per-user (`systemctl --user`) or system-wide (`systemctl`).
+## The model
 
-This machine also uses **anacron** for some cron entries (a crontab line may invoke `anacron` with a custom config) — see the "Anacron" section before assuming a plain crontab schedule is the whole story.
+Everything this skill manages uses the shared prefix **`octask-`**:
 
-## First, find out what actually exists
+- Units: `~/.config/systemd/user/octask-<name>.service` (the job) and
+  `octask-<name>.timer` (the schedule).
+- Discovery: `systemctl --user list-timers 'octask-*' --all` — the prefix is
+  the discovery mechanism; never create manually named timer pairs.
+- Helper scripts (run from this skill's installed base directory, i.e.
+  `~/.config/opencode/skills/scheduled-task/scripts/`):
+  - `octask-add <name> --exec "<cmd>" [--oncalendar "<expr>"] [--persistent]
+    [--description "..."] [--workdir <dir>] [--timeout <sec>] [--env "K=V"]
+    [--delay "<span>"] [--no-enable] [--force]`
+  - `octask-remove <name> [--dry-run]`
+  - `octask-list`
 
-Never assume. OpenCode can serve the user badly by guessing which scheduler is in use. Run this discovery set and read the output:
+## First, discover what exists
 
-```bash
-crontab -l 2>&1                    # user crontab entries
-ls -la /etc/cron* 2>/dev/null      # system cron dirs, if any
-systemctl list-timers --all --no-pager        # system timers
-systemctl --user list-timers --all --no-pager # per-user timers
-systemctl list-timers --all --no-pager --state=inactive 2>/dev/null
-systemctl --user list-timers --all --no-pager --state=inactive 2>/dev/null
-```
+Never assume. Run `octask-list` before adding, editing, or removing anything,
+and `systemctl --user list-timers --all --no-pager` for timers NOT managed by
+octask (this machine has other user timers). Report what you found: managed
+octask units, other timers and their next run, anything inactive or failed
+(`systemctl --user --failed`).
 
-Report concisely what you found: how many cron entries, which user/system timers exist and their activate targets, and whether anything is inactive (a crippled config the user may have forgotten). Distinguish entry types — a crontab line that starts with a time like `0 * * * *` is a classic entry; a line that shells out to `anacron` is an anacron-managed job (see the anacron note).
+## Adding a scheduled task
 
-## Which scheduler should the task use?
+1. Decide the schedule and build an `OnCalendar` expression:
 
-Recommend the right tool rather than blindly using whatever the user said. General guidance:
+   | Expression | Meaning |
+   |------------|---------|
+   | `*-*-* 02:00:00` | daily at 02:00 |
+   | `00/6:00:00` | every 6 hours (00:00, 06:00, …) |
+   | `*:0/5` | every 5 minutes |
+   | `Mon *-*-* 03:00:00` | Mondays at 03:00 |
+   | `*-*-* 00/12:00:00` | twice a day, every 12 hours |
 
-- **User-level recurring app tasks** (screenlogs, media syncs, personal scripts) → **per-user systemd timers** (`systemctl --user`) is the cleanest modern option, especially if the task starts X or needs the user session.
-- **Shorter/more frequent jobs** (minutes) or things you already have in crontab → crontab is fine.
-- **System-level maintenance** (backups, log rotation, arch sync) → system systemd timers.
+2. Validate it: `systemd-analyze calendar "<expr>"` — shows parse + next runs.
+3. Add and enable:
+   ```bash
+   cd ~/.config/opencode/skills/scheduled-task/scripts
+   ./octask-add <name> --oncalendar "<expr>" --exec "<command>" --persistent
+   ```
+   - `octask-add` validates the expression again before writing anything.
+   - Prefer `--persistent` so missed runs catch up after the machine was off
+     (systemd timers do not catch up without it).
+   - Prefer `--delay <span>` (→ `RandomizedDelaySec=`) when several timers
+     share a schedule, so they do not fire in the same instant.
+4. Confirm: re-run `octask-list` and state the NEXT run time to the user.
 
-If the user has an existing journal (many jobs already in cron) and just wants one more, prefer consistency. Don't force a migration unless one already started — but do mention the option when adding something new and clearly better as a --user timer.
+Schedule hint for "run every N hours": use `00/N:00:00` (fires on the hour,
+every N hours). For "once per 12 hours with a stagger" use
+`--oncalendar '*-*-* 00/12:00:00' --delay 30min`.
 
-## Cron: explaining and validating syntax
+## Removing and editing
 
-The 5 (optionally 6) fields of a standard cron line are, in order:
+- Remove: `./octask-remove <name>` — stops, disables, deletes both unit files,
+  reloads the daemon. Use `--dry-run` first for anything you are unsure about.
+- Edit: simplest is remove + re-add with the new options. Direct unit-file
+  edits are fine for one-line changes, but always `systemctl --user
+  daemon-reload` after and verify with `octask-list`.
 
-| Field | Allowed values |
-|-------|----------------|
-| minute | 0–59 |
-| hour | 0–23 |
-| day of month | 1–31 |
-| month | 1–12 (or JAN–DEC) |
-| day of week | 0–7 (0 and 7 both mean Sunday, or SUN–SAT) |
+## Troubleshooting
 
-Common syntax elements:
+- Did it run? `journalctl --user -u octask-<name>.service -n 50`
+- Why failed? `systemctl --user status octask-<name>.service`
+- Not firing? Check the timer is loaded and enabled: `octask-list`; check the
+  service is not in `systemctl --user --failed`; remember `Persistent=true`
+  only matters with a valid last-trigger timestamp.
+- After editing unit files by hand: `systemctl --user daemon-reload`.
 
-- **`*`** — every value in the field.
-- **`*/N`** — every N (e.g. `*/5` = every 5 minutes / units).
-- **`a-b`** — range.
-- **`a,b,c`** — list.
-- **`a-b/N`** — step over a range.
-- Note the gotcha: when **both** day-of-month and day-of-week are restricted (not `*`), the job runs when EITHER matches (OR logic). When only one is restricted, the other acts as `*`.
+## OnCalendar reference
 
-Validate a proposed expression before writing it. Good rule of thumb for a common schedule: `*/5 * * * *` is every 5 minutes, `0 * * * *` is top of every hour, `0 2 * * *` is 2:00 AM daily, `0 3 * * 1` is 3:00 AM every Monday.
-
-Use `crontab`'/s own parser where possible to validate a full appended line before committing:
-
-```bash
-echo "*/5 * * * * /usr/bin/foo" | crontab -   # DOES commit — see warning below
-```
-
-**Warning — commit carefully.** `crontab -` replaces the ENTIRE crontab from stdin. It is far safer to write to a temp file, validate, then install, and to back up first:
-
-```bash
-crontab -l > /tmp/crontab.bak          # backup
-# ... edit /tmp/newcrontab ...
-crontab /tmp/newcrontab                # install validated file
-```
-
-Show the user a `diff` of old vs new before installing. If you only need to validate an expression without touching reality, use `systemd-analyze calendar "*/5 * * * *"` for timers, or a crontab-specific checker if available. When editing with the interactive `crontab -e` is impossible (non-interactive shell), always go the file route above.
-
-## Systemd timers
-
-A timer needs two units: a `<name>.timer` (the schedule) and a `<name>.service` (the job). For **per-user**, files live in `~/.config/systemd/user/` and use `systemctl --user ...`. For **system-wide**, files live in `/etc/systemd/system/` and use `systemctl ...` (which requires `sudo -A`).
-
-Example per-user daily backup timer:
-
-`~/.config/systemd/user/backup.timer`:
-```
-[Unit]
-Description=Daily backup
-
-[Timer]
-OnCalendar=*-*-* 02:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-`~/.config/systemd/user/backup.service`:
-```
-[Unit]
-Description=Daily backup job
-
-[Service]
-Type=oneshot
-ExecStart=/home/<USER>/.local/bin/backup
-```
-
-> [!NOTE]
-> Replace `<USER>` with actual user
-
-Then:
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now backup.timer
-systemctl --user list-timers
-```
-
-`OnCalendar=` takes a calendar expression very close to cron (e.g. `*-*-* 02:00:00`, `Mon *-*-* 03:00:00`, `*:0/5` for every 5 minutes). Use `systemd-analyze calendar "<expr>"` to validate and see the next fire time.
-
-For **system** timers, repeat with `systemctl` (no `--user`) and `sudo -A <cmd>` for the file write / enable, per this repo's safety rules (`sudo -A`, never plain `sudo`).
-
-## Next-run and verification
-
-- **cron**: run `crontab -l` and, where feasible, compute the next fire time by hand from the fields (or use a helper). There is no built-in "next run" for cronie; reason it out from the schedule and `date`, showing your work briefly.
-- **timers**: `systemctl --user list-timers` / `systemctl list-timers` shows `NEXT` immediately. For a precise next-fire of an OnCalendar, use `systemd-analyze calendar "<cal>"`.
-- After adding/editing anything, re-list to confirm and tell the user the next scheduled run.
-
-## The anacron note
-
-Anacron catches up on jobs that were missed while the machine was off (cron itself does not run missed jobs). That's why this machine might have an anacron entry in crontab (observed line: `0 * * * * anacron -t ~/.config/anacron/anacrontab -S .../spool`). If a cron entry shells out to `anacron`, respect that it's anacron-managed — the real schedule lives in the anacrontab file, and "run missed job on next boot" is expected behavior, not a bug. Do not blindly rewrite it into a bare crontab time.
+`OnCalendar=` is close to cron but explicit: `DayOfWeek Year-Month-Day
+Hour:Minute:Second`, e.g. `*-*-* 02:00:00` or `Mon *-*-* 03:00:00`. Slashes
+mean "every N from the left value" (`00/6:00:00` = every 6 h from 00:00; note
+this is NOT the same as cron's `*/6`). Validate anything non-trivial with
+`systemd-analyze calendar`.
 
 ## Success criteria
 
-- You identified which scheduler each task uses (cron vs timer, user vs system) and said so.
-- You produced a valid schedule expression (cron or `OnCalendar`), validated it, and can state the next run time.
-- For edits/removals you backed up or diffed before installing, and confirmed live state after.
-- You used `sudo -A` (never bare `sudo`) for any system-level change.
+- You ran discovery first and said what already exists.
+- The expression was validated with `systemd-analyze calendar` (or by
+  `octask-add`, which re-validates) before any unit file was written.
+- Units use the `octask-` prefix and live in `~/.config/systemd/user/`.
+- After any change you re-listed timers and stated the next run time.
+- Destructive steps used `--dry-run` first when anything was ambiguous.
 
 ## Report
 
 Give a short summary after any change, for example:
 
 ```
-Added per-user timer backup.timer → backup.service, OnCalendar=*-*-* 02:00:00.
-Next run: 2026-08-03 02:00:00 WIB (via systemctl --user list-timers).
+Added octask-backup.timer → octask-backup.service,
+OnCalendar=*-*-* 02:00:00, Persistent=true.
+Next run: 2026-08-31 02:00:00 WIT (via octask-list).
 Enabled+started. Confirmed NEXT column.
-```
 ```
