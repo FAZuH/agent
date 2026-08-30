@@ -26,12 +26,21 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   octask add <name> --exec "<cmd>" [--oncalendar "<expr>"] [--persistent]
              [--description "..."] [--workdir <dir>] [--timeout <sec>]
              [--env "K=V"] [--delay "<span>"] [--no-enable] [--force]
-  octask add <name> --agent <id> --prompt "..." --workdir <dir> [opts]
+  octask add <name> --agent <id> --prompt "..." --workdir <dir>
+             [--model <provider/model>] [--oncalendar "<expr>"]
+             [--persistent] [--dirty-only] [--timeout <sec>]
+             [--delay "<span>"] [--no-enable] [--force]
   octask remove <name> [--dry-run]
   octask list
   octask enable <name> | disable <name>
   octask status <name> | logs <name> [-n <lines>]
   ```
+
+  Without `--model`, agent runs use the `model:` field from the agent's
+  frontmatter. Passing `--model` overrides it (→ `opencode run --model
+  <provider/model> --agent <id>`); without it, the server may fall back to
+  its catalog default (currently `opencode-go/hy4-preview`), so always set
+  `--model` explicitly for cost-controlled unattended runs.
 
   > **Agent runs are unattended.** The agent cannot answer permission prompts,
   > so it MUST be deny-all-by-default with a narrow allowlist (see

@@ -38,4 +38,6 @@ tokens = [
   "broken-ref",
   # scheduled-task/scheduled-agent octask CLI name (scripts/, not a skill)
   "octask",
+  # external repo example referenced in docs (not a skill/agent)
+  "pwr-bot",
 ]
