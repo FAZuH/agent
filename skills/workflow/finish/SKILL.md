@@ -14,11 +14,21 @@ End a working session: update the relevant docs, plan the commit grouping and pr
 
 ## Mode and commit permission
 
-This agent has NO commit permission at all. You may never run `git add`, `git commit`, or `git push` — not on any argument, and not in an `auto` mode (there is no auto mode). Committing is executed by the orchestrator agent.
+The finish skill is executed by the orchestrator. The command wrapper grants
+commit permission when its argument begins with `auto`; the wrapper passes any
+remaining argument text as extra instructions. In that mode, the orchestrator
+may stage and commit each proposed logical group without asking. In all other
+modes, the orchestrator must propose the groups and wait for confirmation.
+
+The finish subagent remains read-only with respect to commits: it never runs
+`git add`, `git commit`, or `git push`. It only proposes groups for the
+orchestrator.
 
 Your job in the commit step is only to PLAN the commit grouping and PROPOSE one `type(scope): description` message per logical group. Return the proposed group messages to the orchestrator. The orchestrator restates them to the user, the user can adjust them, and only the orchestrator runs the actual `git add` and `git commit`.
 
-The commit permission does not exist and does not pass to any other request or agent. When in doubt, do not commit; propose and hand off.
+The commit permission does not persist beyond the command invocation and does
+not pass to any other request or agent. When in doubt, do not commit; propose
+and hand off.
 
 ## 1. Update relevant docs
 
