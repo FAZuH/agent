@@ -1,3 +1,12 @@
+## [0.6.7](https://github.com/FAZuH/agent/compare/v0.6.6...v0.6.7) (2026-08-31)
+
+
+### Features
+
+* **agent:** template agent model lines ([d671c8e](https://github.com/FAZuH/agent/commit/d671c8e6b6bc4400e66527203dc9ff0e7a28d838))
+* **script:** rewrite set-agent-model.sh as values-file wrapper ([6ca3ded](https://github.com/FAZuH/agent/commit/6ca3dedaf3db8af85c03f3d586db4fa294bffc2c))
+* **script:** substitute {{KEY}} placeholders from gitignored .agent-values on push ([a302ac1](https://github.com/FAZuH/agent/commit/a302ac174f9c7aba0df7b75e99caa737b82a9498))
+
 ## [0.6.6](https://github.com/FAZuH/agent/compare/v0.6.5...v0.6.6) (2026-08-31)
 
 
@@ -37,11 +46,4 @@
 
 * **skill:** add fazuh-changelog skill ([656cc70](https://github.com/FAZuH/agent/commit/656cc70e2b33b39cbb891af55464b9919e28c770))
 * **skill:** add fazuh-readme skill ([7b69305](https://github.com/FAZuH/agent/commit/7b6930559bb3155df684760e4ff656eba785d8b5))
-
-## [0.6.2](https://github.com/FAZuH/agent/compare/v0.6.1...v0.6.2) (2026-08-30)
-
-
-### Features
-
-* **script:** unify octask scripts into a single CLI ([4a8738c](https://github.com/FAZuH/agent/commit/4a8738c2520cb0c01c37a85ce946274fa69bbd05))
 
