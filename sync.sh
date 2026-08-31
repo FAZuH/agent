@@ -48,6 +48,8 @@ ${B}Usage:${R}
 
   target   "global" (default), a name from $TARGETS_CONF, or a project dir
            (installs into <dir>/.opencode). -g selects the global config.
+           A top in the target slot (e.g. \`sync.sh push skills\`) also means
+           global.
   top      one or more of: ${TOPS[*]} (default: all)
 
 ${B}Options:${R}
@@ -71,6 +73,7 @@ ${B}Notes:${R}
 
 ${B}Examples:${R}
   sync.sh push -g                        # install globally
+  sync.sh push agents                    # global, only the agents top
   sync.sh push ~/Projects/notes          # into ~/Projects/notes/.opencode
   sync.sh push -g skills plugins         # only skills + plugins
   sync.sh diff -g                        # drift preview
@@ -92,7 +95,11 @@ while [[ $# -gt 0 ]]; do
       elif [[ "$COMMAND" == "all" && -z "$SUB_CMD" ]]; then
         SUB_CMD="$1"
       elif [[ -z "$TARGET_NAME" ]]; then
-        TARGET_NAME="$1"
+        if [[ " ${TOPS[*]} " == *" $1 "* ]]; then
+          TOPS_SEL+=("$1")     # top in the target slot — global is the default
+        else
+          TARGET_NAME="$1"
+        fi
       else
         TOPS_SEL+=("$1")
       fi
