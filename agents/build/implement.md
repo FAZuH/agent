@@ -1,7 +1,7 @@
 ---
 description: Subagent that implements a piece of work from a ticket, spec, or plan. Drives the implement and tdd skills, works in small testable increments, and delegates server/test running to dev-server/test. Use for "implement this ticket", "build this feature", "fix this per the plan". Never finishes/commits — finish is a separate subagent.
 mode: subagent
-model: cline/z-ai/glm-5.3-flash
+model: {{BUILD_MODEL}}
 permission:
   edit: allow
   write: allow

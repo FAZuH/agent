@@ -1,6 +1,9 @@
 # sync manifest — tracked pushes live here, never commit it
 .agent-sync.json
 
+# machine-local template values ({{KEY}} substitution source)
+.agent-values
+
 # plugin dependencies (plugins/package.json is committed, modules are not)
 node_modules/
 

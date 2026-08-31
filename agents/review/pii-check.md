@@ -1,7 +1,7 @@
 ---
 description: Scans repositories for PII and leaked secrets
 mode: subagent
-model: cline/z-ai/glm-5.3-flash
+model: {{REVIEW_MODEL}}
 permissions:
   - action: "*"
     resource: "*"

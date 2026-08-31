@@ -15,7 +15,10 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 ```
 
 `sync.sh` copies `skills/ agents/ plugins/ commands/` (tracked in
-`.agent-sync.json`); files that are not ours are left alone. Because installs
+`.agent-sync.json`); files that are not ours are left alone. Files may carry
+`{{KEY}}` placeholders — `sync.sh` substitutes values from the gitignored
+`.agent-values` at push time (template: `.agent-values.example`), an undefined
+key fails the run, and `pull` skips templated files. Because installs
 are copies, edits in the repo apply where they are pushed — run `./sync.sh push
 -g` after changing anything. `pull` copies target edits back (existing files
 only), `remove` uninstalls exactly what was pushed, and `all` runs across every

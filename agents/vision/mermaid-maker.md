@@ -1,7 +1,7 @@
 ---
 description: Authors ONE Mermaid diagram from a brief, renders it to a PNG, LOOKS at the result, iterates until it is correct and clean, publishes the PNG into the Obsidian vault, and returns the filename. For structural/relational visuals — dependency graphs, flows, sequences, state machines, trees, ER, timelines.
 mode: subagent
-model: opencode/muse-spark-1.2-contributor-free
+model: {{MERMAID_MAKER_MODEL}}
 # Permissive by default (verified 2026-08-31): deny-all wildcards hide plugin
 # custom tools (write/edit/render_*) from subagent sessions entirely — the
 # allows below did NOT resurrect them. Scope confinement is enforced by the

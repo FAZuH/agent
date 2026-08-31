@@ -6,6 +6,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_CFG="$HOME/.config/opencode"
 MANIFEST="$REPO/.agent-sync.json"
+VALUES_FILE="${AGENT_VALUES:-$REPO/.agent-values}"
 TARGETS_CONF="$REPO/targets.conf"
 AGENTS_SKILLS="$HOME/.agents/skills"
 TOPS=(skills agents plugins commands)
@@ -66,6 +67,9 @@ ${B}Notes:${R}
   - Pushed files are tracked in .agent-sync.json (gitignored) with content
     hashes. remove/pull only touch tracked items; files modified in the target
     are reported and kept.
+  - Files may carry {{KEY}} placeholders (UPPER_SNAKE). push/diff substitute
+    values from .agent-values (gitignored; see .agent-values.example); an
+    undefined key fails the run, and pull skips templated files.
   - Config roots shadow ~/.agents/skills: same-named copies there drift and
     trip collision checks. push warns when it finds any.
   - Do NOT also npx-install fazuh/agent: config copies would shadow the
@@ -216,6 +220,133 @@ print(h.hexdigest())
 EOF
 }
 
+# ── template substitution ({{KEY}} from gitignored .agent-values) ────────────
+STAGE=""   # lazily created staging dir for substituted copies
+
+stage_init() {
+  [[ -n "$STAGE" ]] && return 0
+  STAGE="$(mktemp -d)"
+  trap 'rm -rf "$STAGE"' EXIT
+}
+
+# Substitute {{UPPER_SNAKE}} placeholders in one file, in place. Unknown
+# UPPER_SNAKE keys fail (a literal placeholder must never reach a target);
+# lowercase {{...}} is left alone; binary files are skipped.
+substitute_file() { # <path> <rel-label>
+  python3 - "$1" "$2" "$VALUES_FILE" <<'PYEOF'
+import os, re, sys
+path, rel, values_path = sys.argv[1:4]
+pat = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+values = {}
+if os.path.exists(values_path):
+    vp = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
+    for line in open(values_path, encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = vp.match(line)
+        if m:
+            v = m.group(2).strip()
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                v = v[1:-1]
+            values[m.group(1)] = v
+data = open(path, "rb").read()
+if b"\x00" in data:
+    raise SystemExit(0)          # binary — never touched
+text = data.decode("utf-8", errors="surrogateescape")
+used = set(pat.findall(text))
+missing = sorted(used - set(values))
+if missing:
+    for key in missing:
+        sys.stderr.write(f"  ! {rel}: {{{{{key}}}}} is not defined in .agent-values\n")
+    sys.stderr.write("✗ error: unresolved placeholders — add the keys to .agent-values (see .agent-values.example) or reword the content\n")
+    raise SystemExit(1)
+new = pat.sub(lambda m: values[m.group(1)], text)
+if new != text:
+    open(path, "w", encoding="utf-8", errors="surrogateescape", newline="").write(new)
+PYEOF
+}
+
+# Copy a repo item (file or dir) into the stage, substituting every text file.
+# Sets STAGED_PATH (no command substitution — the EXIT trap must live in the
+# main shell, and a subshell's trap would delete the stage too early). The
+# stage key is the full src — basenames collide across tops (skill `finish`
+# vs agent `finish.md`).
+stage_item() { # <src>
+  stage_init
+  local src="$1" f
+  STAGED_PATH="$STAGE/$(printf '%s' "$src" | tr '/' '_')"
+  rm -rf "$STAGED_PATH"
+  if [[ -d "$REPO/$src" ]]; then
+    cp -a "$REPO/$src" "$STAGED_PATH"
+    while IFS= read -r -d '' f; do
+      substitute_file "$f" "$src/${f#"$STAGED_PATH"/}"
+    done < <(find "$STAGED_PATH" -type f -print0 | sort -z)
+  else
+    cp -p "$REPO/$src" "$STAGED_PATH"
+    substitute_file "$STAGED_PATH" "$src"
+  fi
+}
+
+# Fail before anything is written if any selected item references an
+# undefined {{KEY}}.
+preflight_placeholders() {
+  local srcs=() src rel
+  while IFS='|' read -r src rel; do
+    [[ -n "$src" ]] && srcs+=("$REPO/$src")
+  done < <(enumerate_items)
+  [[ ${#srcs[@]} -gt 0 ]] || return 0
+  python3 - "$VALUES_FILE" "$REPO" "${srcs[@]}" <<'PYEOF'
+import os, re, sys
+values_path, repo, roots = sys.argv[1], sys.argv[2], sys.argv[3:]
+pat = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+values = set()
+if os.path.exists(values_path):
+    vp = re.compile(r"^([A-Z][A-Z0-9_]*)=")
+    for line in open(values_path, encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            m = vp.match(line)
+            if m:
+                values.add(m.group(1))
+bad = []
+for root in roots:
+    if os.path.isfile(root):
+        walk = [root]
+    else:
+        walk = []
+        for r, dirs, files in os.walk(root):
+            dirs.sort()
+            for f in sorted(files):
+                walk.append(os.path.join(r, f))
+    for fp in walk:
+        try:
+            data = open(fp, "rb").read()
+        except OSError:
+            continue
+        if b"\x00" in data:
+            continue
+        for key in pat.findall(data.decode("utf-8", errors="replace")):
+            if key not in values:
+                bad.append((fp[len(repo) + 1:] if fp.startswith(repo + os.sep) else fp, key))
+if bad:
+    for fp, key in sorted(set(bad)):
+        sys.stderr.write(f"  ! {fp}: {{{{{key}}}}} not defined in .agent-values\n")
+    sys.stderr.write("✗ error: unresolved placeholders — nothing was pushed\n")
+    raise SystemExit(1)
+PYEOF
+}
+
+# True when a repo item carries any {{UPPER_SNAKE}} placeholder.
+item_templated() { # <src>
+  local p="$REPO/$1"
+  if [[ -d "$p" ]]; then
+    grep -rqE '\{\{[A-Z][A-Z0-9_]*\}\}' "$p" 2>/dev/null
+  else
+    grep -qE '\{\{[A-Z][A-Z0-9_]*\}\}' "$p" 2>/dev/null
+  fi
+}
+
 # ── manifest helpers ─────────────────────────────────────────────────────────
 manifest_set_item() { # <target> <rel> <src> <sha>
   local target="$1" rel="$2" src="$3" sha="$4"
@@ -296,9 +427,10 @@ EOF
 action_push() {
   local target="$1" src rel item tgt current
   step "Push → $target"
+  preflight_placeholders
   while IFS='|' read -r src rel; do
     [[ -n "$src" ]] || continue
-    item="$REPO/$src"; tgt="$target/$rel"
+    tgt="$target/$rel"
     if [[ -L "$tgt" ]]; then
       warn "$rel skipped — target path is a symlink (remove it first: rm $tgt)"
       continue
@@ -307,6 +439,8 @@ action_push() {
       would "push $rel"
       continue
     fi
+    stage_item "$src"
+    item="$STAGED_PATH"
     mkdir -p "$(dirname "$tgt")"
     if [[ -d "$item" ]]; then
       rsync -a --delete "$item/" "$tgt/"
@@ -349,7 +483,12 @@ action_pull() {
   [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to pull"; return; }
   while IFS='|' read -r rel src sha; do
     [[ -n "$rel" && -n "$src" ]] || continue
+    [[ " ${TOP_LIST[*]} " == *" ${rel%%/*} "* ]] || continue   # top filter
     [[ -e "$REPO/$src" ]] || continue          # only items the repo still ships
+    if item_templated "$src"; then
+      info "pull skipped $rel — templated (repo-owned: edit .agent-values, then push)"
+      continue
+    fi
     tgt="$target/$rel"
     [[ -e "$tgt" ]] || continue                # existing files only
     if [[ $DRY -eq 1 ]]; then
@@ -369,9 +508,11 @@ action_pull() {
 action_diff() {
   local target="$1" src rel item tgt
   step "Diff $target"
+  preflight_placeholders
   while IFS='|' read -r src rel; do
     [[ -n "$src" ]] || continue
-    item="$REPO/$src"; tgt="$target/$rel"
+    stage_item "$src"
+    item="$STAGED_PATH"; tgt="$target/$rel"
     if [[ ! -e "$tgt" ]]; then
       would "push $rel (not installed)"
     elif [[ "$(tree_sha "$tgt")" == "$(tree_sha "$item")" ]]; then

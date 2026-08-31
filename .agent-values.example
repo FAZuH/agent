@@ -1,0 +1,16 @@
+# .agent-values.example — committed template for the gitignored .agent-values
+# Copy to .agent-values and adjust. Only these keys are referenced by repo
+# files today; sync.sh fails on any {{KEY}} it cannot resolve.
+# NOTE: values must not carry inline comments — everything after '=' is the
+# value, verbatim.
+
+# agents/build/{implement,dev-server}
+BUILD_MODEL=cline/z-ai/glm-5.3-flash
+# agents/review/{review,test,malware-check,pii-check}
+REVIEW_MODEL=cline/z-ai/glm-5.3-flash
+# agents/primary/autocommit
+AUTOCOMMIT_MODEL=opencode/muse-spark-1.2-contributor-free
+# agents/vision/mermaid-maker
+MERMAID_MAKER_MODEL=opencode/muse-spark-1.2-contributor-free
+# agents/vision/svg-maker
+SVG_MAKER_MODEL=commandcode/Qwen/Qwen3.7-Flash
