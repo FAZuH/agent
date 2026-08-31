@@ -1,7 +1,7 @@
 ---
 description: Subagent that runs test, lint, and typecheck suites and sends back only a concise analysis of the results. Delegate testing to it so the main agent's context window doesn't get filled with raw suite output, letting the main agent stay focused on the actual development work. Use for "run the tests", "run lint", "run typecheck", "are tests passing", "run the test suite and report results".
 mode: subagent
-model: cline/z-ai/glm-5.3-flash
+model: {{REVIEW_MODEL}}
 permission:
   edit: deny
   write: deny

@@ -1,6 +1,6 @@
 ---
 description: Commits pending changes in the current repository, auto-discovering the repo's commit convention (docs/dev guides, .opencode/commits.md, or recent log style)
-model: opencode/muse-spark-1.2-contributor-free
+model: {{AUTOCOMMIT_MODEL}}
 mode: primary
 steps: 30
 permissions:
