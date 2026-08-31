@@ -8,6 +8,7 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
+./sync.sh push agents            # same target (global), one top only
 ./sync.sh push ~/Notes           # project (<project>/.opencode)
 ./sync.sh diff -g                # preview drift (push + pull directions)
 # --dry-run to preview; needs restart after
@@ -85,8 +86,8 @@ the orchestrator and subagent tool reference.
 | Category | Agents |
 | --- | --- |
 | `primary` | **[orchestrator](./agents/primary/orchestrator.md)** (routes work to subagents), [autocommit](./agents/primary/autocommit.md) (unattended conventional commits; deny-all permissions), [chat](./agents/primary/chat.md), [tutor](./agents/primary/tutor.md) |
-| `build` | [implement](./agents/build/implement.md), [test](./agents/build/test.md), [dev-server](./agents/build/dev-server.md) |
-| `review` | [review](./agents/review/review.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
+| `build` | [implement](./agents/build/implement.md), [dev-server](./agents/build/dev-server.md) |
+| `review` | [review](./agents/review/review.md), [test](./agents/review/test.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
 | `research` | [research](./agents/research/research.md) (discovery + deep research), [researcher](./agents/research/researcher.md) (web synthesis) |
 | `vision` | [image-viewer](./agents/vision/image-viewer.md), [web-viewer](./agents/vision/web-viewer.md), [mermaid-maker](./agents/vision/mermaid-maker.md), [svg-maker](./agents/vision/svg-maker.md) |
 | `document` | [document](./agents/document/document.md), [finish](./agents/document/finish.md) |
