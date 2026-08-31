@@ -1,6 +1,7 @@
 ---
 description: Subagent that owns the dev server lifecycle — starts/stops dev servers in background PTYs, monitors output, restarts on crash, and reports only concise status/errors. Delegate dev server management to it so raw log output stays out of the main agent's context window, letting the main agent stay focused on the actual development work. Use for "start the dev server", "is the server up", "check the dev server logs", "restart the dev server".
 mode: subagent
+model: cline/z-ai/glm-5.3-flash
 permission:
   edit: deny
   write: deny
