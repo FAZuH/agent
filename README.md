@@ -8,6 +8,7 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
+./sync.sh push -g -t dev,ocv2    # only items tagged dev or ocv2 (tags.conf)
 ./sync.sh push agents            # same target (global), one top only
 ./sync.sh push ~/Notes           # project (<project>/.opencode)
 ./sync.sh diff -g                # preview drift (push + pull directions)
@@ -15,7 +16,10 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 ```
 
 `sync.sh` copies `skills/ agents/ plugins/ commands/` (tracked in
-`.agent-sync.json`); files that are not ours are left alone. Files may carry
+`.agent-sync.json`); files that are not ours are left alone. Items can be
+tagged in `tags.conf` (`tag=pattern,pattern` against repo paths) and deployed
+selectively: `./sync.sh push -g -t learn,dev` — no `-t` deploys everything,
+and `"all"` is reserved. Files may carry
 `{{KEY}}` placeholders — `sync.sh` substitutes values from the gitignored
 `.agent-values` at push time (template: `.agent-values.example`), an undefined
 key fails the run, and `pull` skips templated files. Because installs
@@ -84,7 +88,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 
 - **[ocv2-api](./skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API and where its docs live.
 - **[ocv2-findings](./skills/ocv2/ocv2-findings/SKILL.md)**: Save and retrieve hard-won OpenCode v2 findings.
-- **[ocv2-fork](./skills/ocv2/ocv2-fork/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
+- **[ocv2-sessions](./skills/ocv2/ocv2-sessions/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
 - **[ocv2-move](./skills/ocv2/ocv2-move/SKILL.md)**: Move a session to another project directory.
 - **[ocv2-pluginhealth](./skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin status and errors.
 

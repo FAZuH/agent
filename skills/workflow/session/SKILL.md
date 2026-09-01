@@ -71,6 +71,11 @@ How to verify (tests, lint, build); which subagents to delegate to
 - (none yet)
 ```
 
+Append entries to this log with a shell append (`cat >> spec.md <<'EOF' …`),
+or an edit that anchors on the file's final line and ADDS after it. Never
+anchor an edit on a duplicated phrase mid-file: replace-edits anchored on
+recurring log text silently overwrite an existing entry.
+
 ## Interrupted procedures
 
 A procedure paused mid-run (a user interjection, or any halt that must be
