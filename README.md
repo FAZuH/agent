@@ -8,6 +8,7 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
+./sync.sh push -g -t dev,ocv2    # only items tagged dev or ocv2 (tags.conf)
 ./sync.sh push agents            # same target (global), one top only
 ./sync.sh push ~/Notes           # project (<project>/.opencode)
 ./sync.sh diff -g                # preview drift (push + pull directions)
@@ -15,7 +16,10 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 ```
 
 `sync.sh` copies `skills/ agents/ plugins/ commands/` (tracked in
-`.agent-sync.json`); files that are not ours are left alone. Files may carry
+`.agent-sync.json`); files that are not ours are left alone. Items can be
+tagged in `tags.conf` (`tag=pattern,pattern` against repo paths) and deployed
+selectively: `./sync.sh push -g -t learn,dev` — no `-t` deploys everything,
+and `"all"` is reserved. Files may carry
 `{{KEY}}` placeholders — `sync.sh` substitutes values from the gitignored
 `.agent-values` at push time (template: `.agent-values.example`), an undefined
 key fails the run, and `pull` skips templated files. Because installs
