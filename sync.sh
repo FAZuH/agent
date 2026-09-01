@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # agent — sync. Copies repo items (skills, agents, plugins, commands) into
 # OpenCode config dirs. Repo is the source of truth; targets hold copies.
+# Items can be tagged in tags.conf and deployed selectively with -t/--tags.
 set -euo pipefail
+shopt -s extglob   # tags.conf patterns may use @(), !(), etc.
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_CFG="$HOME/.config/opencode"
 MANIFEST="$REPO/.agent-sync.json"
 VALUES_FILE="${AGENT_VALUES:-$REPO/.agent-values}"
 TARGETS_CONF="$REPO/targets.conf"
+TAGS_CONF="$REPO/tags.conf"
 AGENTS_SKILLS="$HOME/.agents/skills"
 TOPS=(skills agents plugins commands)
 
@@ -18,6 +21,9 @@ SUB_CMD=""
 TARGET_NAME=""      # as given: "global", a targets.conf name, or a path
 TARGET=""           # resolved config dir
 TOPS_SEL=()
+TAGS_SEL=()         # selected tags (empty = no filter = all items)
+TAG_NAME=()         # tags.conf: tag names, parallel to TAG_PATS
+TAG_PATS=()         # tags.conf: comma-joined item patterns per tag
 
 # ── output helpers (colors on TTY only, respect NO_COLOR) ────────────────────
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -40,13 +46,16 @@ The repo is the source of truth — run push after editing repo content.
 
 ${B}Usage:${R}
   sync.sh list
-  sync.sh push|pull|diff|remove [target] [top...]
-  sync.sh all [push|pull|diff|remove] [top...]
+  sync.sh push|pull|diff|remove [target] [top...] [-t TAG,TAG...]
+  sync.sh all [push|pull|diff|remove] [top...] [-t TAG,TAG...]
 
 ${B}Args:${R}
   target   global (default), a name from $TARGETS_CONF, or a project dir
            (a top in the target slot, e.g. \`sync.sh push skills\`, means global)
   top      one or more of: ${TOPS[*]} (default: all)
+  -t TAGS  deploy only items tagged TAGS in $TAGS_CONF —
+           0 to N tags, comma-separated or repeated -t; no -t means all;
+           "all" is reserved and selects everything
 
 ${B}Options:${R}
   -g                 global config (~/.config/opencode)
@@ -56,11 +65,129 @@ ${B}Options:${R}
 
 ${B}Examples:${R}
   sync.sh push -g                 install everything, globally
-  sync.sh diff -g                 preview drift (push + pull directions)
-  sync.sh list                    targets + installed items
+  sync.sh push -g -t dev,ocv2     install only dev + ocv2 items
+  sync.sh list                    targets, tags, installed items
 
 See README.md for manifest, templating ({{KEY}}), and collision details.
 EOF
+}
+
+# ── tags (tags.conf) ─────────────────────────────────────────────────────────
+trim() { # <string> — strip leading/trailing whitespace
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+add_tags() { # <comma-list> — accumulate -t/--tags selections
+  local IFS=',' t
+  for t in $1; do
+    t="$(trim "$t")"
+    [[ -z "$t" ]] && continue
+    TAGS_SEL+=("$t")
+  done
+}
+
+# Load tag definitions. Format: one tag per line,
+#   tag=pattern,pattern,...
+# Patterns match repo item paths (skills/<cat>/<name>, agents/<cat>/<name>.md,
+# plugins/<name>, commands/<name>.md) and may be shell globs / extglob
+# (@(a|b), !(a|b), ...). Same tag may appear on several lines; tags union.
+load_tags_conf() {
+  [[ -f "$TAGS_CONF" ]] || return 0
+  local line name pats p cleaned
+  declare -a parts=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"                       # strip comments
+    line="$(trim "$line")"
+    [[ -z "$line" ]] && continue
+    [[ "$line" == *=* ]] || die "$TAGS_CONF: expected 'tag=pattern,pattern,…' — got: $line"
+    name="$(trim "${line%%=*}")"
+    [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || die "$TAGS_CONF: bad tag name: '$name'"
+    [[ "$name" != "all" ]] || die "$TAGS_CONF: tag 'all' is reserved"
+    cleaned=""
+    IFS=',' read -ra parts <<<"${line#*=}"
+    for p in "${parts[@]}"; do
+      p="$(trim "$p")"
+      [[ -z "$p" ]] && continue
+      cleaned="${cleaned:+$cleaned,}$p"
+    done
+    [[ -n "$cleaned" ]] || die "$TAGS_CONF: tag '$name' has no patterns"
+    TAG_NAME+=("$name")
+    TAG_PATS+=("$cleaned")
+  done < "$TAGS_CONF"
+}
+
+known_tags() { # prints "a, b, " for the error message
+  local i out=""
+  for i in "${!TAG_NAME[@]}"; do
+    [[ ",$out," == *",${TAG_NAME[i]},"* ]] || out="${out:+$out, }${TAG_NAME[i]}"
+  done
+  printf '%s' "${out:+$out, }"
+}
+
+validate_tag_selection() {
+  local t i found
+  for t in "${TAGS_SEL[@]}"; do
+    [[ "$t" == "all" ]] && continue
+    if [[ ${#TAG_NAME[@]} -eq 0 ]]; then
+      die "unknown tag: $t — no tags defined in $TAGS_CONF"
+    fi
+    found=0
+    for i in "${!TAG_NAME[@]}"; do
+      [[ "${TAG_NAME[i]}" == "$t" ]] && found=1
+    done
+    if [[ $found -eq 0 ]]; then
+      die "unknown tag: $t (defined in $TAGS_CONF: $(known_tags)or 'all')"
+    fi
+  done
+}
+
+item_tags() { # <src> — prints comma-joined tags matching this repo item
+  local i pats p t out=""
+  for i in "${!TAG_NAME[@]}"; do
+    IFS=',' read -ra pats <<<"${TAG_PATS[i]}"
+    for p in "${pats[@]}"; do
+      [[ "$1" == $p ]] || continue
+      t="${TAG_NAME[i]}"
+      [[ ",$out," == *",$t,"* ]] || out="${out:+$out,}$t"
+    done
+  done
+  printf '%s' "$out"
+}
+
+item_selected() { # <src> — true when the item passes the tag filter
+  local t it
+  [[ ${#TAGS_SEL[@]} -eq 0 ]] && return 0
+  for t in "${TAGS_SEL[@]}"; do [[ "$t" == "all" ]] && return 0; done
+  it="$(item_tags "$1")"
+  [[ -n "$it" ]] || return 1
+  for t in "${TAGS_SEL[@]}"; do
+    [[ ",$it," == *",$t,"* ]] && return 0
+  done
+  return 1
+}
+
+# Warn about config patterns that match no repo item — usually a typo, and
+# it would silently drop items from a tagged deploy. Checks against ALL tops,
+# regardless of top/tag selection.
+warn_unused_patterns() {
+  local sel=("${TAGS_SEL[@]}") tops=("${TOP_LIST[@]}") src i pats p found
+  TAGS_SEL=(); TOP_LIST=("${TOPS[@]}")
+  local all_srcs=()
+  while IFS='|' read -r src rel; do all_srcs+=("$src"); done < <(enumerate_items)
+  TAGS_SEL=("${sel[@]}"); TOP_LIST=("${tops[@]}")
+  for i in "${!TAG_NAME[@]}"; do
+    IFS=',' read -ra pats <<<"${TAG_PATS[i]}"
+    for p in "${pats[@]}"; do
+      found=0
+      for src in "${all_srcs[@]}"; do
+        [[ "$src" == $p ]] && { found=1; break; }
+      done
+      [[ $found -eq 1 ]] || warn "tag pattern matches nothing: ${TAG_NAME[i]}=$p"
+    done
+  done
 }
 
 # ── arg parsing ──────────────────────────────────────────────────────────────
@@ -70,6 +197,10 @@ while [[ $# -gt 0 ]]; do
     -f|--force) FORCE=1; shift ;;
     -n|--dry-run) DRY=1; shift ;;
     -h|--help) usage; exit 0 ;;
+    -t|--tags)
+      [[ $# -ge 2 ]] || die "option $1 needs a value"
+      add_tags "$2"; shift 2 ;;
+    --tags=*) add_tags "${1#--tags=}"; shift ;;
     --*) usage; echo; die "unknown option: $1" ;;
     *)
       if [[ -z "$COMMAND" ]]; then
@@ -139,8 +270,14 @@ resolve_target() { # <arg: global|name|path|"">
 
 # ── item enumeration (flatten categories for skills/agents) ─────────────────
 # Prints "src|rel": src = repo-relative, rel = target-relative.
+# Only items passing the tag filter (item_selected) are emitted.
 enumerate_items() {
   local cat child name
+  emit_item() { # <src> <rel>
+    if item_selected "$1"; then
+      printf '%s|%s\n' "$1" "$2"
+    fi
+  }
   for top in "${TOP_LIST[@]}"; do
     case "$top" in
       skills)
@@ -148,7 +285,7 @@ enumerate_items() {
           [[ -d "$cat" ]] || continue
           for child in "$cat"/*; do
             [[ -d "$child" ]] || continue
-            printf 'skills/%s/%s|skills/%s\n' "$(basename "$cat")" "$(basename "$child")" "$(basename "$child")"
+            emit_item "skills/$(basename "$cat")/$(basename "$child")" "skills/$(basename "$child")"
           done
         done ;;
       agents)
@@ -156,7 +293,7 @@ enumerate_items() {
           [[ -d "$cat" ]] || continue
           for child in "$cat"/*.md; do
             [[ -f "$child" ]] || continue
-            printf 'agents/%s/%s|agents/%s\n' "$(basename "$cat")" "$(basename "$child")" "$(basename "$child")"
+            emit_item "agents/$(basename "$cat")/$(basename "$child")" "agents/$(basename "$child")"
           done
         done ;;
       plugins)
@@ -164,12 +301,12 @@ enumerate_items() {
           name="$(basename "$child")"
           [[ "$name" == "node_modules" || "$name" == "package.json" || "$name" == "bun.lock" ]] && continue
           [[ -e "$child" ]] || continue
-          printf 'plugins/%s|plugins/%s\n' "$name" "$name"
+          emit_item "plugins/$name" "plugins/$name"
         done ;;
       commands)
         for child in "$REPO/commands"/*.md; do
           [[ -f "$child" ]] || continue
-          printf 'commands/%s|commands/%s\n' "$(basename "$child")" "$(basename "$child")"
+          emit_item "commands/$(basename "$child")" "commands/$(basename "$child")"
         done ;;
     esac
   done
@@ -462,6 +599,7 @@ action_pull() {
   while IFS='|' read -r rel src sha; do
     [[ -n "$rel" && -n "$src" ]] || continue
     [[ " ${TOP_LIST[*]} " == *" ${rel%%/*} "* ]] || continue   # top filter
+    item_selected "$src" || continue           # tag filter
     [[ -e "$REPO/$src" ]] || continue          # only items the repo still ships
     if item_templated "$src"; then
       info "pull skipped $rel — templated (repo-owned: edit .agent-values, then push)"
@@ -513,6 +651,7 @@ action_remove() {
   [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to remove"; return; }
   while IFS='|' read -r rel src sha; do
     [[ -n "$rel" ]] || continue
+    item_selected "$src" || continue           # tag filter
     tgt="$target/$rel"
     if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
       info "already gone: $rel"
@@ -534,11 +673,17 @@ action_remove() {
   if [[ $DRY -eq 0 ]]; then
     for top in "${TOPS[@]}"; do rmdir "$target/$top" 2>/dev/null || true; done
     rmdir "$target" 2>/dev/null || true
-    manifest_drop_target "$target"
+    # a full remove clears the target's tracking; a tag-filtered remove only
+    # when nothing tracked remains for this target
+    if [[ ${#TAGS_SEL[@]} -eq 0 ]] || [[ -z "$(manifest_read_items "$target")" ]]; then
+      manifest_drop_target "$target"
+    fi
   fi
 }
 
 action_list() {
+  local sel=("${TAGS_SEL[@]}") tops=("${TOP_LIST[@]}")
+  TAGS_SEL=(); TOP_LIST=("${TOPS[@]}")       # list always shows the full picture
   echo "${B}Targets${R}"
   [[ -d "$GLOBAL_CFG" ]] && echo "  global -> $GLOBAL_CFG"
   for name in "${!TARGET_PATHS[@]}"; do echo "  $name -> ${TARGET_PATHS[$name]}"; done
@@ -555,6 +700,36 @@ EOF
   else
     echo "Nothing installed yet — run: ./sync.sh push -g"
   fi
+  echo
+  echo "${B}Tags${R} ($TAGS_CONF)"
+  if [[ ${#TAG_NAME[@]} -eq 0 ]]; then
+    echo "  none defined"
+  else
+    local all_srcs=() src seen="" i t items
+    local untagged=()
+    while IFS='|' read -r src rel; do all_srcs+=("$src"); done < <(enumerate_items)
+    for i in "${!TAG_NAME[@]}"; do
+      t="${TAG_NAME[i]}"
+      [[ ",$seen," == *",$t,"* ]] && continue
+      seen="${seen:+$seen,}$t"
+      items=""
+      for src in "${all_srcs[@]}"; do
+        [[ ",$(item_tags "$src")," == *",$t,"* ]] && items+="${items:+ }$src"
+      done
+      if [[ -z "$items" ]]; then
+        warn "tag '$t' matches no items"
+      else
+        echo "  $t: ${items// /, }"
+      fi
+    done
+    for src in "${all_srcs[@]}"; do
+      [[ -z "$(item_tags "$src")" ]] && untagged+=("$src")
+    done
+    if [[ ${#untagged[@]} -gt 0 ]]; then
+      warn "untagged (only pushed with no -t filter): ${untagged[*]}"
+    fi
+  fi
+  TAGS_SEL=("${sel[@]}"); TOP_LIST=("${tops[@]}")
 }
 
 # ── cross-target plugin guard ────────────────────────────────────────────────
@@ -601,6 +776,13 @@ shadow_advisory() {
 }
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
+load_tags_conf
+if [[ ${#TAGS_SEL[@]} -gt 0 ]]; then
+  validate_tag_selection
+  warn_unused_patterns
+  [[ "$COMMAND" == "list" ]] || info "tag filter: ${TAGS_SEL[*]}"   # list ignores filters
+fi
+
 if [[ "$COMMAND" == "list" ]]; then action_list; exit 0; fi
 
 if [[ "$COMMAND" == "all" ]]; then
