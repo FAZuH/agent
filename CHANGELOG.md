@@ -1,3 +1,10 @@
+## [0.6.8](https://github.com/FAZuH/agent/compare/v0.6.7...v0.6.8) (2026-09-01)
+
+
+### Features
+
+* **skill:** add ocv2-api and ocv2-fork, promote ocv2-findings/move/pluginhealth to public ([6f250b1](https://github.com/FAZuH/agent/commit/6f250b1e8da56fa13ca8f1aae5c5491297624a17))
+
 ## [0.6.7](https://github.com/FAZuH/agent/compare/v0.6.6...v0.6.7) (2026-08-31)
 
 
@@ -38,12 +45,4 @@
 ### Features
 
 * **script:** add --model flag to octask add --agent ([b40ffce](https://github.com/FAZuH/agent/commit/b40ffce22fbd0ba897dcdc65688345d1e6e3b951))
-
-## [0.6.3](https://github.com/FAZuH/agent/compare/v0.6.2...v0.6.3) (2026-08-30)
-
-
-### Features
-
-* **skill:** add fazuh-changelog skill ([656cc70](https://github.com/FAZuH/agent/commit/656cc70e2b33b39cbb891af55464b9919e28c770))
-* **skill:** add fazuh-readme skill ([7b69305](https://github.com/FAZuH/agent/commit/7b6930559bb3155df684760e4ff656eba785d8b5))
 
