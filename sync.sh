@@ -35,53 +35,31 @@ die()   { printf '%s✗ error:%s %s\n' "$RED" "$R" "$1" >&2; exit 1; }
 usage() {
   cat <<EOF
 ${B}agent — sync${R}
-Copies this repo's items (skills, agents, plugins, commands) into OpenCode
-config dirs. The repo is the source of truth; edits here apply where they are
-pushed, so run \`sync.sh push\` after changing repo content.
+Copy repo items (skills, agents, plugins, commands) into OpenCode config dirs.
+The repo is the source of truth — run push after editing repo content.
 
 ${B}Usage:${R}
-  sync.sh list                          show targets + what is installed
-  sync.sh push   [target] [top...]      copy repo -> target  (default: global)
-  sync.sh pull   [target] [top...]      copy owned+existing files back to repo
-  sync.sh diff   [target] [top...]      show what push/pull would change
-  sync.sh remove [target] [top...]      uninstall exactly what this repo pushed
-  sync.sh all [push|pull|diff|remove]   run a command across every target
+  sync.sh list
+  sync.sh push|pull|diff|remove [target] [top...]
+  sync.sh all [push|pull|diff|remove] [top...]
 
-  target   "global" (default), a name from $TARGETS_CONF, or a project dir
-           (installs into <dir>/.opencode). -g selects the global config.
-           A top in the target slot (e.g. \`sync.sh push skills\`) also means
-           global.
+${B}Args:${R}
+  target   global (default), a name from $TARGETS_CONF, or a project dir
+           (a top in the target slot, e.g. \`sync.sh push skills\`, means global)
   top      one or more of: ${TOPS[*]} (default: all)
 
 ${B}Options:${R}
-  -g                 global config (alias for ~/.config/opencode)
-  -f, --force        allow plugins installed in two targets that load together
+  -g                 global config (~/.config/opencode)
+  -f, --force        allow plugins installed in targets that load together
   -n, --dry-run      print what would change, change nothing
-  -h, --help         show this help
-
-${B}Notes:${R}
-  - skills/ and agents/ live in category subdirs in the repo
-    (skills/orchestration/..., agents/vision/...) but install FLAT into the
-    target (\`skills/<name>\`, \`agents/<name>.md\`): skill and agent IDs are
-    path-derived, and a flat target keeps them stable.
-  - Pushed files are tracked in .agent-sync.json (gitignored) with content
-    hashes. remove/pull only touch tracked items; files modified in the target
-    are reported and kept.
-  - Files may carry {{KEY}} placeholders (UPPER_SNAKE). push/diff substitute
-    values from .agent-values (gitignored; see .agent-values.example); an
-    undefined key fails the run, and pull skips templated files.
-  - Config roots shadow ~/.agents/skills: same-named copies there drift and
-    trip collision checks. push warns when it finds any.
-  - Do NOT also npx-install fazuh/agent: config copies would shadow the
-    ~/.agents/skills copies and be flagged as collisions.
+  -h, --help         this help
 
 ${B}Examples:${R}
-  sync.sh push -g                        # install globally
-  sync.sh push agents                    # global, only the agents top
-  sync.sh push ~/Projects/notes          # into ~/Projects/notes/.opencode
-  sync.sh push -g skills plugins         # only skills + plugins
-  sync.sh diff -g                        # drift preview
-  sync.sh all push                       # every target
+  sync.sh push -g                 install everything, globally
+  sync.sh diff -g                 preview drift (push + pull directions)
+  sync.sh list                    targets + installed items
+
+See README.md for manifest, templating ({{KEY}}), and collision details.
 EOF
 }
 
