@@ -92,7 +92,7 @@ Session message lists can exceed the shell tool's output limit (>250KB on long s
 
 ## Related
 
-- `ocv2-fork` — full fork→switch→verify→talk→wait flow
+- `ocv2-sessions` — full fork→switch→verify→talk→wait flow
 - `ocv2-move` — `POST /api/session/{id}/move` for changing project directory
 - `ocv2-pluginhealth` — `GET /api/plugin` diagnosis
 - `ocv2-findings` — durable log of live-verified v2 quirks

@@ -1,11 +1,11 @@
 ---
-name: ocv2-fork
+name: ocv2-sessions
 description: Fork an OpenCode v2 session and control the fork — switch agent & model, verify, send prompts, and wait blocking. Use when the user says "fork this session", "fork before this message", "switch the model/agent in the fork", or wants to verify a fork/model/agent change and talk to the new session.
 ---
 
 # Fork & control an OpenCode v2 session
 
-Fork creates a child session by copying projected history through or before a message boundary. The new session is independent — you then switch its agent/model, verify, and talk to it via the session API. All calls go through `opencode2 api` (handles auth to the background service).
+Fork creates a child session by copying projected history through or before a message boundary. The new session is independent — you then switch its agent/model, verify, and talk to it via the session API. All calls go through `opencode2 api` (handles auth to the background service) — see the `ocv2-api` skill for the CLI itself.
 
 ## 1. Resolve the source session
 
