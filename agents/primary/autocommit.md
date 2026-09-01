@@ -2,7 +2,7 @@
 description: Commits pending changes in the current repository, auto-discovering the repo's commit convention (docs/dev guides, .opencode/commits.md, or recent log style)
 model: {{AUTOCOMMIT_MODEL}}
 mode: primary
-steps: 30
+steps: 50
 permissions:
   - action: "*"
     resource: "*"
