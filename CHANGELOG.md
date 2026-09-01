@@ -1,3 +1,10 @@
+## [0.6.10](https://github.com/FAZuH/agent/compare/v0.6.9...v0.6.10) (2026-09-01)
+
+
+### Features
+
+* **skill:** octask list shows task name and description; accept full unit names ([923af0f](https://github.com/FAZuH/agent/commit/923af0f094852503349b36f0e369e5a07b38d187))
+
 ## [0.6.9](https://github.com/FAZuH/agent/compare/v0.6.8...v0.6.9) (2026-09-01)
 
 
@@ -36,13 +43,4 @@
 ### Bug Fixes
 
 * **agent:** make vision makers permissive-by-default for plugin tools ([17eac59](https://github.com/FAZuH/agent/commit/17eac59f8eaf3703476a042fd8742f5d7056c9ce))
-
-## [0.6.5](https://github.com/FAZuH/agent/compare/v0.6.4...v0.6.5) (2026-08-30)
-
-
-### Features
-
-* **skill:** add fazuh-scopes skill ([97b2df0](https://github.com/FAZuH/agent/commit/97b2df0719dda4f6f723c20f9fc7c8c4087a17a5))
-* **skill:** gate session-retro papercuts behind approval ([b8eb78b](https://github.com/FAZuH/agent/commit/b8eb78bc74d7930a73eacfea9f669f0fb3e66820))
-* **skill:** run gated retro and doctor from finish, offer sweep ([a86edd3](https://github.com/FAZuH/agent/commit/a86edd348932f6e04f4a478f787e88cbefa50e22))
 
