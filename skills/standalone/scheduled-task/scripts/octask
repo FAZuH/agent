@@ -52,6 +52,13 @@ units_exist() {
   [ -e "$UNIT_DIR/$PREFIX$1.service" ] || [ -e "$UNIT_DIR/$PREFIX$1.timer" ]
 }
 
+# Accept the bare <name> or a full unit name: octask-<name>[.timer|.service]
+norm_name() {
+  local n="$1"
+  n="${n%.timer}"; n="${n%.service}"
+  printf '%s' "${n#"$PREFIX"}"
+}
+
 # ---------------------------------------------------------------- add ----
 cmd_add() {
   local name="" oncalendar="" exec_cmd="" description="" workdir="" timeout=""
@@ -81,6 +88,7 @@ cmd_add() {
     esac
   done
 
+  name="$(norm_name "$name")"
   require_name "$name"
 
   # ---- mode dispatch -------------------------------------------------
@@ -151,7 +159,7 @@ cmd_add() {
     fi
     [ -n "$timeout" ] || timeout=600
     envs+=("PATH=/usr/local/bin:/usr/bin")
-    [ -n "$description" ] || description="$PREFIX$name: agent $agent_id in ${workdir/#$HOME/~}"
+    [ -n "$description" ] || description="agent $agent_id in ${workdir/#$HOME/~}"
     if [ -n "$model" ]; then
       description="$description [$model]"
     fi
@@ -159,7 +167,7 @@ cmd_add() {
     if [ -n "$model" ]; then
       echo "octask: warning: --model is ignored for --exec tasks" >&2
     fi
-    [ -n "$description" ] || description="$PREFIX$name job"
+    [ -n "$description" ] || description="$exec_cmd"
   fi
 
   # ---- refuse to clobber ------------------------------------------------
@@ -233,6 +241,7 @@ cmd_remove() {
       *)         [ -z "$name" ] || die "remove: unexpected argument: $1"; name="$1"; shift ;;
     esac
   done
+  name="$(norm_name "$name")"
   require_name "$name"
 
   local base="$UNIT_DIR/$PREFIX$name"
@@ -265,15 +274,22 @@ cmd_list() {
   systemctl --user list-timers "$PREFIX*" --all --no-pager 2>/dev/null || true
 
   echo ""
-  echo "== managed unit files =="
-  local found=0 f base tag workdir
+  echo "== managed tasks =="
+  local found=0 f base tag workdir desc name wd_short
   for f in "$UNIT_DIR"/"$PREFIX"*".timer"; do
     [ -e "$f" ] || continue
     found=1
     base="${f%.timer}"
+    name="$(basename "$base")"; name="${name#"$PREFIX"}"
     if grep -q -- '--agent' "$base.service" 2>/dev/null; then tag="agent"; else tag="task"; fi
     workdir="$(sed -n 's/^WorkingDirectory=//p' "$base.service" 2>/dev/null)"
-    printf '  [%s] %s%s\n' "$tag" "$(basename "$base")" "${workdir:+  (${workdir/#$HOME/~})}"
+    desc="$(sed -n 's/^Description=//p' "$base.service" 2>/dev/null)"
+    desc="${desc/#"$PREFIX$name": /}"   # drop legacy "octask-<name>: " prefix
+    desc="${desc//$HOME/\~}"            # ~-abbreviate for display
+    [ ${#desc} -gt 88 ] && desc="${desc:0:87}…"
+    wd_short="${workdir/#$HOME/\~}"     # \~ survives; plain ~ expands to $HOME
+    case " $desc " in *" $wd_short "*) wd_short="" ;; esac
+    printf '  [%s] %s — %s%s\n' "$tag" "$name" "${desc:-(no description)}" "${wd_short:+  ($wd_short)}"
   done
   if [ "$found" -eq 0 ]; then
     echo "  (none — nothing managed by octask yet)"
@@ -283,29 +299,32 @@ cmd_list() {
 # -------------------------------------------------------------- enable ----
 cmd_enable() {
   [ $# -eq 1 ] || { usage; die "enable: exactly one <name> required"; }
-  require_name "$1"
-  units_exist "$1" || die "enable: no units found for '$PREFIX$1' (octask list)"
+  local name; name="$(norm_name "$1")"
+  require_name "$name"
+  units_exist "$name" || die "enable: no units found for '$PREFIX$name' (octask list)"
   systemctl --user daemon-reload
-  systemctl --user enable --now "$PREFIX$1.timer"
+  systemctl --user enable --now "$PREFIX$name.timer"
   local next
-  next="$(systemctl --user show "$PREFIX$1.timer" --property=NextElapseUSecRealtime --value 2>/dev/null)"
-  echo "enabled $PREFIX$1.timer — next run: ${next:-unknown}"
+  next="$(systemctl --user show "$PREFIX$name.timer" --property=NextElapseUSecRealtime --value 2>/dev/null)"
+  echo "enabled $PREFIX$name.timer — next run: ${next:-unknown}"
 }
 
 # ------------------------------------------------------------- disable ----
 cmd_disable() {
   [ $# -eq 1 ] || { usage; die "disable: exactly one <name> required"; }
-  require_name "$1"
-  units_exist "$1" || die "disable: no units found for '$PREFIX$1' (octask list)"
-  systemctl --user disable --now "$PREFIX$1.timer"
-  echo "disabled $PREFIX$1.timer (units kept — re-enable with: octask enable $1)"
+  local name; name="$(norm_name "$1")"
+  require_name "$name"
+  units_exist "$name" || die "disable: no units found for '$PREFIX$name' (octask list)"
+  systemctl --user disable --now "$PREFIX$name.timer"
+  echo "disabled $PREFIX$name.timer (units kept — re-enable with: octask enable $name)"
 }
 
 # -------------------------------------------------------------- status ----
 cmd_status() {
   [ $# -eq 1 ] || { usage; die "status: exactly one <name> required"; }
-  require_name "$1"
-  systemctl --user status "$PREFIX$1.timer" "$PREFIX$1.service" --no-pager
+  local name; name="$(norm_name "$1")"
+  require_name "$name"
+  systemctl --user status "$PREFIX$name.timer" "$PREFIX$name.service" --no-pager
 }
 
 # ---------------------------------------------------------------- logs ----
@@ -318,6 +337,7 @@ cmd_logs() {
       *)  [ -z "$name" ] || die "logs: unexpected argument: $1"; name="$1"; shift ;;
     esac
   done
+  name="$(norm_name "$name")"
   require_name "$name"
   journalctl --user -u "$PREFIX$name.service" -n "$lines" --no-pager
 }
