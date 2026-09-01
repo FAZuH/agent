@@ -1,3 +1,5 @@
+## [0.6.11](https://github.com/FAZuH/agent/compare/v0.6.10...v0.6.11) (2026-09-01)
+
 ## [0.6.10](https://github.com/FAZuH/agent/compare/v0.6.9...v0.6.10) (2026-09-01)
 
 
@@ -27,20 +29,4 @@
 * **agent:** template agent model lines ([d671c8e](https://github.com/FAZuH/agent/commit/d671c8e6b6bc4400e66527203dc9ff0e7a28d838))
 * **script:** rewrite set-agent-model.sh as values-file wrapper ([6ca3ded](https://github.com/FAZuH/agent/commit/6ca3dedaf3db8af85c03f3d586db4fa294bffc2c))
 * **script:** substitute {{KEY}} placeholders from gitignored .agent-values on push ([a302ac1](https://github.com/FAZuH/agent/commit/a302ac174f9c7aba0df7b75e99caa737b82a9498))
-
-## [0.6.6](https://github.com/FAZuH/agent/compare/v0.6.5...v0.6.6) (2026-08-31)
-
-
-### Features
-
-* **agent:** switch build/review subagents to cline/z-ai/glm-5.3-flash ([42fad70](https://github.com/FAZuH/agent/commit/42fad70c4223ff30c8654ee1a13c2b08602436d9))
-* **command:** allow auto-prefixed finish arguments ([c723e3f](https://github.com/FAZuH/agent/commit/c723e3f52c9337d47c1ae53d91dd0e9e8ebd2af3))
-* **script:** add set-agent-model.sh to swap subagent models and push ([488b687](https://github.com/FAZuH/agent/commit/488b687026143ebc60b15c75e91950a2b58029c3))
-* **script:** default sync target to global when a top is given ([62afca6](https://github.com/FAZuH/agent/commit/62afca695508796c04e2e9685866c2034f83e065))
-* **skill:** grant finish orchestrator auto-commit via command wrapper ([cc9c3bf](https://github.com/FAZuH/agent/commit/cc9c3bffe06469ca868b1cb14d4ddeccf3c942d4))
-
-
-### Bug Fixes
-
-* **agent:** make vision makers permissive-by-default for plugin tools ([17eac59](https://github.com/FAZuH/agent/commit/17eac59f8eaf3703476a042fd8742f5d7056c9ce))
 
