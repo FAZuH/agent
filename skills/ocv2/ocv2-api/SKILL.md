@@ -74,6 +74,14 @@ curl -s -u "opencode:$PASSWORD" http://127.0.0.1:PORT/api/plugin
 
 Password is printed at `opencode2 serve` startup (`server password …`). Bearer/`x-opencode-password` return `401` with empty body — empty responses are usually auth/port, not missing data.
 
+## Large responses
+
+Session message lists can exceed the shell tool's output limit (>250KB on long sessions) — the JSON gets truncated mid-string and `python3 json.load` dies with `Unterminated string`. Never pipe a big `message` list into python. Instead:
+
+- `GET /api/session/{id}/message/{msgID}` — single message, always small
+- `grep -o '"id":"msg[^"]*"'` — extract just IDs from the list
+- `--param limit=N` on list endpoints to bound the page
+
 ## Gotchas
 
 1. **Service vs plain serve:** `GET /api/plugin` and `/api/command` are empty on a plain `serve` even when healthy; verify via the service (`opencode2 api …` without `--standalone`) or with `?location.directory=`.
