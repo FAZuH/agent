@@ -80,6 +80,14 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[oop](./skills/standalone/oop/SKILL.md)**: Standard OOP/architecture vocabulary — principles, smells, patterns, and metrics. Use when you want findings, reviews, or design discussions phrased in OOP terms ("use oop terms").
 - **[improve-architecture-oop](./skills/standalone/improve-architecture-oop/SKILL.md)**: OOP vocabulary overlay for `improve-codebase-architecture` findings and diagrams (loads `oop`).
 
+### OpenCode v2 (ocv2)
+
+- **[ocv2-api](./skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API and where its docs live.
+- **[ocv2-findings](./skills/ocv2/ocv2-findings/SKILL.md)**: Save and retrieve hard-won OpenCode v2 findings.
+- **[ocv2-fork](./skills/ocv2/ocv2-fork/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
+- **[ocv2-move](./skills/ocv2/ocv2-move/SKILL.md)**: Move a session to another project directory.
+- **[ocv2-pluginhealth](./skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin status and errors.
+
 ## Agents
 
 Agent definitions grouped by role in `agents/<category>/` (installed flat as
