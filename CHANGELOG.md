@@ -1,3 +1,10 @@
+## [0.6.9](https://github.com/FAZuH/agent/compare/v0.6.8...v0.6.9) (2026-09-01)
+
+
+### Features
+
+* **script:** selective deploys by tag via tags.conf ([1042a21](https://github.com/FAZuH/agent/commit/1042a2173f61ba771d9aa2a12e9bf31685b43926))
+
 ## [0.6.8](https://github.com/FAZuH/agent/compare/v0.6.7...v0.6.8) (2026-09-01)
 
 
@@ -38,11 +45,4 @@
 * **skill:** add fazuh-scopes skill ([97b2df0](https://github.com/FAZuH/agent/commit/97b2df0719dda4f6f723c20f9fc7c8c4087a17a5))
 * **skill:** gate session-retro papercuts behind approval ([b8eb78b](https://github.com/FAZuH/agent/commit/b8eb78bc74d7930a73eacfea9f669f0fb3e66820))
 * **skill:** run gated retro and doctor from finish, offer sweep ([a86edd3](https://github.com/FAZuH/agent/commit/a86edd348932f6e04f4a478f787e88cbefa50e22))
-
-## [0.6.4](https://github.com/FAZuH/agent/compare/v0.6.3...v0.6.4) (2026-08-30)
-
-
-### Features
-
-* **script:** add --model flag to octask add --agent ([b40ffce](https://github.com/FAZuH/agent/commit/b40ffce22fbd0ba897dcdc65688345d1e6e3b951))
 
