@@ -41,17 +41,19 @@ on a dedicated, descriptively named branch instead.
 Detect the default branch first (do not hardcode `main` — repos vary):
 
 ```bash
-# Primary: resolve the remote's HEAD ref, e.g. "refs/remotes/origin/main"
-git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null
-# Fallback A: the remote's advertised HEAD
-git remote show origin 2>/dev/null | grep "HEAD branch"
-# Fallback B: ask GitHub directly
+# Primary: ask GitHub directly — authoritative for PR base and merge behavior
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
+# Fallback A: resolve the remote's HEAD ref, e.g. "refs/remotes/origin/main"
+git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null
+# Fallback B: the remote's advertised HEAD
+git remote show origin 2>/dev/null | grep "HEAD branch"
 ```
 
 Strip `refs/remotes/origin/` from the `symbolic-ref` output to get the branch
-name. If there is no remote configured, fall back to checking for the common
-defaults (`main`, then `master`).
+name. If `gh` and the local `symbolic-ref` disagree, trust `gh` — the local
+ref is a stale cache (refresh it with `git remote set-head origin -a`). If
+there is no remote configured, fall back to checking for the common defaults
+(`main`, then `master`).
 
 Then check the current branch:
 
