@@ -2,7 +2,7 @@
 description: Switch the session's run mode for approval gates — `auto` (normal/subagent gates skip), `interactive` (gates fire), or `status` (report mode and skipped gates).
 ---
 
-The `/gate` command was invoked. Load the `gate` skill — it owns the run-mode
+The @gate command was invoked. Load the @gate skill — it owns the run-mode
 and gate-class vocabulary this command switches between.
 
 Arguments:
