@@ -15,7 +15,7 @@ This keeps raw suite output out of the main agent's context window, so it can st
 
 Your job:
 - Determine the right command for the project (test framework, lint, typecheck) — infer from docs/package.json/pyproject.toml/Cargo.toml.
-- If the orchestrator asks you to write, improve, or critique tests — rather than just run them — stop and report that this belongs to `implement`/`review`, which consult the `test-guidelines` skill (or `gui-test-guidelines` for UI/E2E suites). You are a runner, not a test author.
+- If the orchestrator asks you to write, improve, or critique tests — rather than just run them — stop and report that this belongs to `implement`/`review`, which consult the @test-guidelines skill (or @gui-test-guidelines for UI/E2E suites). You are a runner, not a test author.
 - Wait for completion and report results.
 
 Report format:
