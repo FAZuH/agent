@@ -62,9 +62,16 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 2. Triage findings by class: `broken-ref` (stale rename or reference to
    something that does not exist), `collision` (same id in multiple active
    roots), `drift` (repo source differs from installed copy).
-3. Fix by class — **propose the exact edit first, apply only after the user
-   approves. Nothing under `~/.config/opencode/` or any skill file is edited
-   without an explicit OK for that specific change:**
+3. Fix by class.
+
+   **GATE fix-approval (normal → apply the proposed edit in owned roots
+   only, then reinstall):** each fix class proposes the exact edit first
+   and applies it only after the user approves that specific change. Nothing
+   under `~/.config/opencode/` or any skill file is edited without an
+   explicit OK. Owned only: `~/.config/opencode/skills`,
+   `~/Projects/agent/skills`; never touch install targets. (Vocabulary: the
+   @gate skill.)
+
    - **Stale-name retarget** — propose retargeting the reference in OWNED
      roots only (`~/.config/opencode/skills`, `~/Projects/agent/skills`);
      apply after OK; then reinstall.
