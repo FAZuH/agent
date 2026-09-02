@@ -15,7 +15,7 @@ you to load it; it does not trigger by itself.
 
 ## When this applies
 
-- Only procedures that explicitly say to load the `following-procedures`
+- Only procedures that explicitly say to load the @following-procedures
   skill.
 - Never on its own. Do not apply narration or reporting to non-procedural
   work.

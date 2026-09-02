@@ -1,6 +1,6 @@
 ---
 name: worktree-finish
-description: Finish work in a git worktree by following the /finish and /pr-creator skills, checking the pull request for merge conflicts, resolving simple conflicts, and asking the user before behavior-changing or incompatible conflict resolutions. Use when the user wants to finish a worktree, prepare its PR for merge, or check whether a worktree PR is ready.
+description: Finish work in a git worktree by following the @finish and @pr-creator skills, checking the pull request for merge conflicts, resolving simple conflicts, and asking the user before behavior-changing or incompatible conflict resolutions. Use when the user wants to finish a worktree, prepare its PR for merge, or check whether a worktree PR is ready.
 ---
 
 # Worktree finish
@@ -8,7 +8,7 @@ description: Finish work in a git worktree by following the /finish and /pr-crea
 Finish a worktree's pull request safely. This skill coordinates PR creation or
 readiness work with conflict resolution; it does not silently change behavior.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Safety rules* section
 > at the bottom.
@@ -19,13 +19,13 @@ Run these steps in order.
 
 ### 1. Run the session finish workflow
 
-Read and follow the `finish` skill first. Complete its documentation, session-archive, summary, and commit
+Read and follow the @finish skill first. Complete its documentation, session-archive, summary, and commit
 proposal steps. The finish skill does not grant commit or push permission; keep
 its proposed commit groups available for the orchestrator.
 
 ### 2. Load the PR workflow
 
-Read and follow the `pr-creator` skill before creating, updating, or pushing the PR. Treat its branch-safety,
+Read and follow the @pr-creator skill before creating, updating, or pushing the PR. Treat its branch-safety,
 template, checks, and push rules as authoritative.
 
 ### 3. Identify the worktree and PR
@@ -38,7 +38,7 @@ git branch --show-current
 gh pr view --json number,url,state,baseRefName,headRefName,mergeable,mergeStateStatus
 ```
 
-If no PR exists, complete the applicable `/pr-creator` steps first. If the
+If no PR exists, complete the applicable @pr-creator steps first. If the
 current directory is the main tree rather than the feature worktree, locate the
 feature worktree from `git worktree list` and run worktree commands there.
 
@@ -47,7 +47,7 @@ feature worktree from `git worktree list` and run worktree commands there.
 Inspect the PR's mergeability and compare the feature branch with its current
 base branch. Refresh the base branch before testing when the repository's normal
 workflow permits it. Use the repository's standard PR or CI checks as described
-by `/pr-creator`.
+by @pr-creator.
 
 Treat these as conflict signals:
 
@@ -67,7 +67,7 @@ After each resolution:
 
 1. Inspect every resolved file and the staged diff.
 2. Search for conflict markers with `git diff --check` and a repository search.
-3. Run the repository's relevant checks from `/pr-creator`.
+3. Run the repository's relevant checks from @pr-creator.
 4. Commit the conflict resolution using the repository's commit convention.
 5. Push the feature branch and re-check the PR's mergeability.
 
@@ -87,7 +87,7 @@ user answers.
 ### 7. Finish the worktree
 
 When the PR is conflict-free and checks pass, report the PR URL, branch, checks,
-and whether the worktree is safe to remove. Follow the `worktree` skill's
+and whether the worktree is safe to remove. Follow the @worktree skill's
 cleanup rules if the user explicitly asks to remove the worktree:
 
 - Verify the branch is merged, or get explicit confirmation before discarding
@@ -110,6 +110,6 @@ cleanup rules if the user explicitly asks to remove the worktree:
 - Never resolve a semantic conflict by guessing.
 - Never force-remove a worktree with uncommitted or unmerged work without
   explicit user confirmation.
-- Never push the default branch; follow `/pr-creator` branch-safety rules.
+- Never push the default branch; follow @pr-creator branch-safety rules.
 - Never claim a PR is ready until mergeability and relevant checks have been
   verified after the final push.

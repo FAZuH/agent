@@ -23,7 +23,7 @@ metadata:
 This skill guides the creation of high-quality pull requests that follow the
 repository's own templates and standards.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Principles* section
 > at the bottom.

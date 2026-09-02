@@ -1,6 +1,6 @@
 # Feature implementation / bug fixes
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Gates* section at
 > the bottom.
@@ -31,10 +31,10 @@ START (user request: feature / ticket / bug fix)
 | # | State | Owner | Action |
 |---|---|---|---|
 | 1 | PLAN | you | Create a plan in Plan mode. |
-| 2 | GRILL | you | If the plan has gaps: `/grilling` or `/grill-with-docs`. If the plan is too large to hold in one session: `/wayfinder`. |
-| 3 | PERSIST | you | `grill-with-docs` leaves a `CONTEXT.md` glossary + `docs/adr/` paper trail; read them before implementation so names match the domain language. Persist the plan with `/session`. Log plan deviations with `/session` as they surface. |
-| 4 | RESEARCH | `research` (Mode 1) | Delegate a preliminary pass to map the relevant code and gather library/API facts, then read the files it points to. For a deeper external fact a decision waits on, invoke the `deep-research` skill (Mode 2) — it delegates back to `research` for a cited findings file. |
-| 5 | IMPLEMENT | `implement` | Delegates to `implement`; it drives `tdd` internally and delegates server/test running to `dev-server` / `test`. |
+| 2 | GRILL | you | If the plan has gaps: @grilling or @grill-with-docs. If the plan is too large to hold in one session: @wayfinder. |
+| 3 | PERSIST | you | @grill-with-docs leaves a `CONTEXT.md` glossary + `docs/adr/` paper trail; read them before implementation so names match the domain language. Persist the plan with @session. Log plan deviations with @session as they surface. |
+| 4 | RESEARCH | `research` (Mode 1) | Delegate a preliminary pass to map the relevant code and gather library/API facts, then read the files it points to. For a deeper external fact a decision waits on, invoke the @deep-research skill (Mode 2) — it delegates back to `research` for a cited findings file. |
+| 5 | IMPLEMENT | `implement` | Delegates to `implement`; it drives @tdd internally and delegates server/test running to `dev-server` / `test`. |
 | 6 | VERIFY | `test` | Test/lint/typecheck runs before review. If they fail, loop back to IMPLEMENT (step 5), RESUMING the same `implement` session via `task_id`. |
 | 7 | REVIEW | `review` | Delegates a review on the Standards + Spec axes. If it turns up fixes, loop steps 5–6 (IMPLEMENT then VERIFY again), RESUMING the same `implement`, `test`, and `review` sessions via `task_id` instead of spawning cold. |
 | 8 | FINISH | `finish` | Commit only when the user explicitly asks — delegate to `finish` to propose grouped commit messages, restate them to the user for approval, then run the `git add` + `git commit` yourself. |

@@ -8,7 +8,7 @@ compatibility: Optional opencode-pty plugin — when present, use pty_spawn + pt
 
 Watch a pull request's CI runs to completion, then merge it immediately if everything is green. This saves the user from babysitting the checks tab — you monitor progress and merge the moment CI passes.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Safety rules* section
 > at the bottom.

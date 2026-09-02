@@ -1,6 +1,6 @@
 ---
 name: papercut-sweep
-description: Run the agent self-improvement loop over the global papercuts store — file cross-project friction about skills/agents/tools (`papercuts -g add --tag self::…`), sweep open `self::` entries, draft and apply improvements to your own skills, agent definitions, and tooling per approval tiers. Use when the user says "self-improve", "improve your skills/agents", "anything to improve", "sweep the backlog", or when filing an agent-behavior lesson that outlives the current repo. For end-of-session proposals use `session-retro`; this skill acts on the backlog. NOT for repo-local code sanding (plain `papercuts add`) or for fixing the user's project source.
+description: Run the agent self-improvement loop over the global papercuts store — file cross-project friction about skills/agents/tools (`papercuts -g add --tag self::…`), sweep open `self::` entries, draft and apply improvements to your own skills, agent definitions, and tooling per approval tiers. Use when the user says "self-improve", "improve your skills/agents", "anything to improve", "sweep the backlog", or when filing an agent-behavior lesson that outlives the current repo. For end-of-session proposals use @session-retro; this skill acts on the backlog. NOT for repo-local code sanding (plain `papercuts add`) or for fixing the user's project source.
 ---
 
 # Papercut sweep
@@ -8,7 +8,7 @@ description: Run the agent self-improvement loop over the global papercuts store
 A feedback loop where the agent learns from its own friction: capture
 problems while working, then periodically convert them into concrete
 improvements to skills, agent definitions, tooling, and process.
-Proposals typically arrive here from `session-retro` (end-of-session)
+Proposals typically arrive here from @session-retro (end-of-session)
 or direct capture during work; this skill curates and applies them.
 
 Two stores, one rule:
@@ -69,7 +69,7 @@ Run top to bottom when invoked. Do not skip the user gates.
 6. **Close the loop** — for each applied or rejected proposal:
    `papercuts -g resolve <id> --note "adopted: <what landed>"` or
    `--note "rejected: <why>"`. Rejections must record the reason.
-7. **Validate** — load the `skill-doctor` skill and run it over every
+7. **Validate** — load the @skill-doctor skill and run it over every
    affected skill root; require a clean report (no broken links, stale refs,
    collisions, drift) before reporting done.
 

@@ -12,7 +12,7 @@ example on this machine: `notes-autocommit.timer` running the `autocommit`
 agent (see "Reference implementation").
 
 Everything scheduled uses the `octask-` prefix (same namespace as the
-`scheduled-task` skill) — `octask list`, `octask remove`, `octask
+@scheduled-task skill) — `octask list`, `octask remove`, `octask
 enable`/`disable`, and `octask logs` manage these runs too.
 
 ## Step 1 — write the restricted agent definition
@@ -89,7 +89,7 @@ Rules and gotchas:
   `normal`/`subagent` gates to skip (and note `always` gates still fire and
   will fail the action — configure the permissions to make that impossible
   instead). If you leave it out, that is a configuration problem on your
-  side, not something the run detects. See the `gate` skill.
+  side, not something the run detects. See the @gate skill.
 - **Binary selection matters**: the script prefers `~/.opencode/bin/opencode2`
   (the v2 beta that owns the service DB). Older builds (e.g. `/usr/bin/opencode`
   1.18.x) fail against the migrated DB with `no such column: project_id`. If

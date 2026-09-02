@@ -196,7 +196,7 @@ Dates live in frontmatter and dated section headers, never in filenames — date
 - **`PLAN.md`** — the durable artifact, updated in place across sessions. Unconditional truths, strands table with status, the current **colored DAG**, open gaps not yet taught. Contains *no* prose about the learner: evidence lives elsewhere, cited by reference (`0002-badges q3 ✓` — lesson number + slug prefix + question id).
 - **`NOTES.md`** — everything about him as a learner of this subject: misconception list (each entry states the wrong belief itself, never "missed Q3"), probe edge findings from Phase 1, protocol quirks and preferences.
 - **`RESOURCES.md`** — sources actually used (with what each contributed) plus a backlog of candidates.
-- **`lessons/<NNNN-slug>/session.md`** — today's live log, written as the session runs: what was motivated and established, sidetracks, node status flips. A running text mirror he can read mid-lesson without waiting for anything to be distilled.
+- **`lessons/<NNNN-slug>@session.md`** — today's live log, written as the session runs: what was motivated and established, sidetracks, node status flips. A running text mirror he can read mid-lesson without waiting for anything to be distilled.
 - **`lessons/<NNNN-slug>/quiz.md`** — per-question items: options, selection, his note, verdict, explanation.
 - Media lives in `<subject>/assets/` — shared pool for the whole subject; no per-lesson asset folders.
 

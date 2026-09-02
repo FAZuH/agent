@@ -45,7 +45,7 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   > **Agent runs are unattended.** The agent cannot answer permission prompts,
   > so it MUST be deny-all-by-default with a narrow allowlist (see
   > [permissions](https://opencode.ai/v2/docs/agents/#permissions)). Use the
-  > `scheduled-agent` skill to write the restricted agent definition before
+  > @scheduled-agent skill to write the restricted agent definition before
   > scheduling with `--agent`.
 
 ## First, discover what exists

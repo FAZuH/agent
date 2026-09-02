@@ -8,23 +8,23 @@ description: >-
   work is finished and needs archiving, or from any skill that completes a
   workspace (finish, session, worktree-close). The `.scratch/` mechanics —
   verifying the repo uses `.scratch/`, the slug format, and the layout — live
-  in the `scratch` skill; load that first if the workspace is unknown.
+  in the @scratch skill; load that first if the workspace is unknown.
 ---
 
 # Archive a completed `.scratch/` workspace
 
 This skill is the single home for the completion checklist and the archive
-steps of a `.scratch/` session workspace. Other skills (`finish`, `session`)
-and the `scratch` skill itself reference it instead of restating the steps.
+steps of a `.scratch/` session workspace. Other skills (`finish`, @session)
+and the @scratch skill itself reference it instead of restating the steps.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the gate in the *Completion checklist*
 > section below.
 
-## Load `scratch` for the mechanics
+## Load @scratch for the mechanics
 
-The `scratch` skill owns the `.scratch/` workspace mechanics — how to verify
+The @scratch skill owns the `.scratch/` workspace mechanics — how to verify
 the repo uses `.scratch/`, the slug format, and the directory layout. Load it
 first if you need any of that. This skill only covers finishing and archiving.
 
