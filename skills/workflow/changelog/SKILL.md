@@ -1,5 +1,5 @@
 ---
-name: fazuh-changelog
+name: changelog
 description: >-
   Create or update the changelog for the next version by comparing the current
   commit against the latest version, following the repo's own changelog docs.

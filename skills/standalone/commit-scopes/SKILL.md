@@ -1,13 +1,13 @@
 ---
-name: fazuh-scopes
+name: commit-scopes
 description: >-
   Create or update docs/dev/commit-scopes.md — the closed vocabulary for
   Conventional Commit scopes. Use when the user asks to create commit scopes,
   define scopes, set up commit-scopes.md, scaffold commit conventions, or
-  mentions fazuh-scopes.
+  mentions commit-scopes.
 ---
 
-# fazuh-scopes
+# commit-scopes
 
 Create `docs/dev/commit-scopes.md` — a closed vocabulary of scopes for
 `type(scope): subject`. Every commit picks a scope from this table or takes no
