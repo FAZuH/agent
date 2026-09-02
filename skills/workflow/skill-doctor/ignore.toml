@@ -42,4 +42,8 @@ tokens = [
   "pwr-bot",
   # scope examples and repo names referenced in commit-scopes (not skills/agents)
   "authentication-service", "faz-lab",
+  # gate ids: stable GATE-tag identifiers, not skills or agents (gate skill vocabulary)
+  "commit-approval", "papercut-file", "research-plan", "offer-sweep",
+  "sweep-apply-content", "sweep-apply-config", "template-pick",
+  "conflict-resolution", "new-scope",
 ]
