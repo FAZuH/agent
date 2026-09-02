@@ -1,8 +1,23 @@
 # agent
 
-My personal OpenCode setup as one repo: skills, agent definitions, plugins,
-and commands. The repo is the source of truth; copies are pushed into OpenCode
-config dirs with `sync.sh`, so each target has a real copy (no symlinks).
+My personal OpenCode setup: skills, agent definitions, plugins, and commands. Copies are pushed into OpenCode config dirs with `sync.sh`.
+
+## Install
+
+### Prerequisites
+
+- [creating-mermaid-diagrams](https://github.com/Agents365-ai/creating-mermaid-diagrams): For creating mermaid diagrams
+- [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering
+- [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
+
+```bash
+npx skills add Agents365-ai/mermaid-skill -g -a opencode -y
+npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -y
+npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -y
+cargo install --git https://github.com/FAZuH/papercuts
+```
+
+Then install [rsync](https://github.com/RsyncProject/rsync) from your package manager.
 
 ## Install
 
@@ -16,23 +31,37 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 # --dry-run to preview; needs restart after
 ```
 
-`sync.sh` copies `skills/ agents/ plugins/ commands/` (tracked in
-`.agent-sync.json`); files that are not ours are left alone. Items can be
-tagged in `tags.conf` (`tag=pattern,pattern` against repo paths) and deployed
-selectively: `./sync.sh push -g -t learn,dev` — no `-t` deploys everything,
-and `"all"` is reserved. Files may carry
-`{{KEY}}` placeholders — `sync.sh` substitutes values from the gitignored
-`.agent-values` at push time (template: `.agent-values.example`), an undefined
-key fails the run, and `pull` skips templated files. Because installs
-are copies, edits in the repo apply where they are pushed — run `./sync.sh push
--g` after changing anything. `pull` copies target edits back (existing files
-only), `remove` uninstalls exactly what was pushed, and `all` runs across every
-target in `targets.conf`.
+### What it syncs
 
-Config roots shadow `~/.agents/skills` — delete shadowed npx copies when
-`sync.sh` warns.
+Copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). Files that are not ours are left alone.
 
-Requires [`creating-mermaid-diagrams`](https://github.com/Agents365-ai/creating-mermaid-diagrams) (`npx skills add Agents365-ai/365-skills -g`) for diagram export; `mattpocock/skills` for engineering workflows (see `~/.config/opencode/scripts/setup-skills.sh`). `papercuts` optional: `cargo install papercuts`.
+### Tagging
+
+Items can be tagged in `tags.conf` (`tag=pattern,pattern` against repo paths) and deployed selectively:
+
+```bash
+./sync.sh push -g -t learn,dev
+```
+
+No `-t` deploys everything. `"all"` is reserved.
+
+### Templating
+
+Files may carry `{{KEY}}` placeholders. `sync.sh` substitutes values from the gitignored `.agent-values` at push time (template: `.agent-values.example`). An undefined key fails the run. `pull` skips templated files.
+
+### Editing workflow
+
+Installs are copies — edits in the repo apply only where they've been pushed. Run `./sync.sh push -g` after changing anything.
+
+### Other commands
+
+- `pull` — copies target edits back (existing files only)
+- `remove` — uninstalls exactly what was pushed
+- `all` — runs across every target in `targets.conf`
+
+### Caveat
+
+Config roots shadow `~/.agents/skills`. Delete shadowed npx copies when `sync.sh` warns.
 
 ## Skills
 
