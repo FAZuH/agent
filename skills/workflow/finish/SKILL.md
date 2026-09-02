@@ -14,8 +14,7 @@ End a working session: update the relevant docs, plan the commit grouping and pr
 
 ## Mode and commit permission
 
-**GATE commit-approval (normal → commit each group with the inferred
-conventional message):** staging and committing the session's logical groups
+**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups
 requires user approval. The `/finish` command wrapper grants that approval
 when its argument begins with `auto` — that is `auto` mode for this
 invocation (see the `gate` skill). In auto mode, the orchestrator may stage

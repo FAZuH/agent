@@ -26,11 +26,7 @@ Follow the `finish` skill's step 1 — discover and update the relevant docs, or
 
 ### 2. Commit changes
 
-Follow the `finish` skill's step 2: inspect git read-only, identify the files changed this session, split them into one commit per logical group, and propose one `type(scope): description` message per group.
-
-Commit permission rules:
-- If the user passed `auto` as an argument, you may commit each group without asking.
-- Otherwise (no argument or any other text), there is NO commit permission. Propose one message per group, then stop and wait for explicit user confirmation before running `git add`/`git commit`. Treat any non-`auto` argument as extra instructions for the whole workflow, committing interactively.
+Follow the `finish` skill's step 2: inspect git read-only, identify the files changed this session, split them into one commit per logical group, and propose one `type(scope): description` message per group. Commit permission is **GATE commit-approval (normal → commit each group with the inferred conventional message)** — see the `finish` skill / `gate` skill. The `/finish` wrapper grants the approval when its argument begins with `auto` (auto mode for this invocation); otherwise propose and wait for confirmation. Treat any non-`auto` argument as extra instructions, committing interactively.
 
 ### 3. Summarize the session
 
@@ -61,4 +57,4 @@ Follow the `worktree` skill's "Finishing / cleanup" steps:
 - Never remove a worktree that has uncommitted work or an unmerged branch unless the user explicitly confirms it's safe to discard.
 - Never delete the main tree or its untracked files.
 - Always run `git worktree remove`/`git branch -D` from the **main** tree, not from inside the worktree being removed.
-- Respect commit-permission semantics: only commit on your own when the user passed `auto`; otherwise propose and wait.
+- Respect GATE commit-approval: only commit on your own in auto mode (see `finish` skill); otherwise propose and wait.
