@@ -9,6 +9,7 @@ config dirs with `sync.sh`, so each target has a real copy (no symlinks).
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
 ./sync.sh push -g -t dev,ocv2    # only items tagged dev or ocv2 (tags.conf)
+./sync.sh push -g -t utils       # utility skills (scheduling, PDFs)
 ./sync.sh push agents            # same target (global), one top only
 ./sync.sh push ~/Notes           # project (<project>/.opencode)
 ./sync.sh diff -g                # preview drift (push + pull directions)
@@ -83,6 +84,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[issue-closeout](./skills/standalone/issue-closeout/SKILL.md)**: Link merged PRs to resolved issues — closeout comment with PR/SHA, close issues where `Closes #N` does not fire.
 - **[oop](./skills/standalone/oop/SKILL.md)**: Standard OOP/architecture vocabulary — principles, smells, patterns, and metrics. Use when you want findings, reviews, or design discussions phrased in OOP terms ("use oop terms").
 - **[improve-architecture-oop](./skills/standalone/improve-architecture-oop/SKILL.md)**: OOP vocabulary overlay for `improve-codebase-architecture` findings and diagrams (loads `oop`).
+- **[read-pdf](./skills/standalone/read-pdf/SKILL.md)**: Parse/read PDFs — decision tree over pdftotext, rga, pdfplumber, image rendering + vision, OCR; offers to install missing tools and records declined installs as approval gates in the project AGENTS.md.
 
 ### OpenCode v2 (ocv2)
 
