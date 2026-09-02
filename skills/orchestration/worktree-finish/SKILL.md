@@ -79,6 +79,7 @@ a conflict where either side changes behavior, public API, persisted data,
 compatibility, security, performance characteristics, or user-visible
 semantics — or where the correct side cannot be established from the existing
 code, tests, issue, or PR description — is the user's call, not yours.
+(Vocabulary: the @gate skill.)
 
 Explain the conflicting choices, the likely behavior or compatibility impact,
 and the files involved. Do not commit, push, or discard either choice until the

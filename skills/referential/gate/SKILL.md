@@ -4,11 +4,11 @@ description: >-
   The vocabulary for approval gates and the `auto` run mode: gate classes
   (`always` / `normal` / `subagent`), when each may be skipped, and how to
   declare one inside a procedure as a one-line `GATE` tag. Load this skill
-  ONLY when a skill or agent references it via a `GATE` tag, or when you are
-  authoring or retrofitting an approval gate. Never on its own — it is not a
-  general instruction. Approval gates only: verification checks (tests, CI,
-  checklists) and interaction gates (quizzes) are not covered and do not
-  reference this skill.
+  ONLY when a skill or agent references it via a `GATE` tag or an explicit
+  @gate mention, or when you are authoring or retrofitting an approval gate.
+  Never on its own — it is not a general instruction. Approval gates only:
+  verification checks (tests, CI, checklists) and interaction gates (quizzes)
+  are not covered and do not reference this skill.
 ---
 
 # gate

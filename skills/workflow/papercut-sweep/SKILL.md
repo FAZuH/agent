@@ -46,7 +46,7 @@ Run top to bottom when invoked. Do not skip the user gates.
    External skills under `~/.agents/skills/` are install targets — NEVER
    edit them; file upstream issues instead.
 3. **Gate by tier**, then apply — applying is always gated (drafting and
-   proposals are free):
+   proposals are free; vocabulary: the @gate skill):
    - Process notes in `.scratch/` and docs → not a gate; apply autonomously.
    - Skill content (`~/Projects/agent`, personal-global skills) → **GATE
      sweep-apply-content (normal → apply the approved diff)**: stage the

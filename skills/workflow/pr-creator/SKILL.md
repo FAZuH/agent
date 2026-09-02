@@ -97,7 +97,7 @@ Look for a pull request template in the repository:
 context and note the choice in the PR description):** when multiple templates
 exist, which one structures the PR is the user's call. Firing this gate beats
 silently guessing wrong; when it skips (auto mode), the selection rules and
-context decide, and the choice is reported.
+context decide, and the choice is reported. (Vocabulary: the @gate skill.)
 
 If **no template exists** in the repo, use the bundled generic template at
 `reference/pr-template.md` as the fallback so the PR still has structure.

@@ -52,7 +52,7 @@ Use `-g` only for global scope.
 **GATE papercut-file (normal → file all drafted proposals):** filing a
 papercut to a store requires user approval (filing is cheap and reversible;
 *applying* what was filed is a separate, still-gated decision owned by
-@papercut-sweep). Do not file immediately. Present the drafts and gate with
+@papercut-sweep). (Vocabulary: the @gate skill.) Do not file immediately. Present the drafts and gate with
 the user:
 
 1. Render a compact **proposal** table (no `id` yet — nothing filed):
