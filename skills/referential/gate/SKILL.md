@@ -4,11 +4,11 @@ description: >-
   The vocabulary for approval gates and the `auto` run mode: gate classes
   (`always` / `normal` / `subagent`), when each may be skipped, and how to
   declare one inside a procedure as a one-line `GATE` tag. Load this skill
-  ONLY when a skill or agent references it via a `GATE` tag, or when you are
-  authoring or retrofitting an approval gate. Never on its own — it is not a
-  general instruction. Approval gates only: verification checks (tests, CI,
-  checklists) and interaction gates (quizzes) are not covered and do not
-  reference this skill.
+  ONLY when a skill or agent references it via a `GATE` tag or an explicit
+  @gate mention, or when you are authoring or retrofitting an approval gate.
+  Never on its own — it is not a general instruction. Approval gates only:
+  verification checks (tests, CI, checklists) and interaction gates (quizzes)
+  are not covered and do not reference this skill.
 ---
 
 # gate
@@ -63,7 +63,7 @@ When in doubt, treat the run as interactive. An agent never self-grants auto.
 - `normal` — the default class. Skip in auto, and only in auto.
 - `subagent` — additionally skips when executing as an agent with
   `mode: subagent`, because the spawning context already holds the decision.
-  Use only when delegation itself implies the approval (the `deep-research`
+  Use only when delegation itself implies the approval (the @deep-research
   precedent: research's Mode 1 plan-approval is skipped by Mode 2 because
   the user already asked for the outcome).
 
@@ -127,7 +127,7 @@ approval is void if the action's scope grew after it was granted.
 Gate decisions go to a **dedicated `## Gate log` section** in the session
 workspace's `spec.md` — never the deviation log. A skipped gate in auto mode
 is expected behavior, not a deviation; mixing them buries real deviations in
-noise. The `session` skill owns the template for this section; this skill
+noise. The @session skill owns the template for this section; this skill
 owns its format.
 
 Entry format (append `- (none yet)` → entries):

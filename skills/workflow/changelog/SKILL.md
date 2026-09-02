@@ -15,7 +15,7 @@ description: >-
 Create or update `CHANGELOG.md` for the next release. Only do this when the
 repo supports manual changelog creation.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Rules* section at
 > the bottom.

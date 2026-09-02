@@ -23,7 +23,7 @@ metadata:
 This skill guides the creation of high-quality pull requests that follow the
 repository's own templates and standards.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Principles* section
 > at the bottom.
@@ -97,7 +97,7 @@ Look for a pull request template in the repository:
 context and note the choice in the PR description):** when multiple templates
 exist, which one structures the PR is the user's call. Firing this gate beats
 silently guessing wrong; when it skips (auto mode), the selection rules and
-context decide, and the choice is reported.
+context decide, and the choice is reported. (Vocabulary: the @gate skill.)
 
 If **no template exists** in the repo, use the bundled generic template at
 `reference/pr-template.md` as the fallback so the PR still has structure.

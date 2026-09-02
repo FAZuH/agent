@@ -106,7 +106,7 @@ subject and wait for explicit approval):** committing with a scope outside
 this closed vocabulary is a convention change — the gate fires in every run
 mode, including auto. When nothing fits, propose the new scope to the user
 with a one-line definition and **wait for explicit approval** before
-committing with it. (Vocabulary: the `gate` skill.)
+committing with it. (Vocabulary: the @gate skill.)
 
 Format: `type(scope): summary` or `type: summary`.
 

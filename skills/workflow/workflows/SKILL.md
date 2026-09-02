@@ -16,35 +16,35 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 
 | Task | Subagent | Notes |
 |---|---|---|
-| Implement a ticket/spec/plan | `implement` | Drives implement + `tdd` skills; no PTY |
+| Implement a ticket/spec/plan | `implement` | Drives implement + @tdd skills; no PTY |
 | Run test/lint/typecheck suites | `test` | Returns concise analysis only |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
-| Finish a session (docs + summary + proposed commits + gated retro + doctor; offers sweep) | `finish` | Uses the `finish` skill; proposes grouped commit messages, which you restate to the user for approval and then commit yourself, then runs gated `session-retro` + `skill-doctor` and offers `papercut-sweep` (never auto-runs it); only when the user explicitly asks |
+| Finish a session (docs + summary + proposed commits + gated retro + doctor; offers sweep) | `finish` | Uses the @finish skill; proposes grouped commit messages, which you restate to the user for approval and then commit yourself, then runs gated @session-retro + @skill-doctor and offers @papercut-sweep (never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `dev-server` | Owns PTY lifecycle |
 | Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
 | Read/transcribe image files | `image-viewer` | Vision, read-only |
 | Preliminary discovery (codebase + web) | `research` | Mode 1: presents its plan and waits for approval before running; read-only, returns `file:line` pointers |
-| Deep research (cited findings file) | `deep-research` skill → delegates to `research` | Mode 2: narrow question against primary sources, writes ONE cited findings `.md`, returns path |
+| Deep research (cited findings file) | @deep-research skill → delegates to `research` | Mode 2: narrow question against primary sources, writes ONE cited findings `.md`, returns path |
 | Explore codebase / research | `general` / `explore` | For investigation |
-| Sharpen a plan/design | `grilling` / `grill-with-docs` (skill) | Use yourself |
-| Diagnose a hard bug | `diagnosing-bugs` (skill) | Use yourself |
-| Oversized effort | `wayfinder` (skill) | Use yourself |
-| Cross-session context | `handoff` (skill) | Use yourself |
-| Persist plans / log deviations / pre-compaction checkpoints | `session` (skill) | Use yourself |
-| Pick the right workflow when unsure | `ask-matt` (skill) | Use yourself — router over the skills |
-| Maintain CONTEXT.md glossary + ADRs | `domain-modeling` (skill) | Use yourself; `grill-with-docs` runs it |
-| Turn a thread into a spec | `to-spec` (skill) | Use yourself after `grilling` |
-| Split a plan/spec into tracer tickets | `to-tickets` (skill) | Use yourself; per project once setup ran |
-| Triage incoming issues | `triage` (skill) | Use yourself for issues not created by you |
-| Design deep modules | `codebase-design` (skill) | Use yourself at seams |
-| Deepening survey | `improve-codebase-architecture` (skill) | Use yourself periodically; candidates only. Load `improve-architecture-oop` for output language |
-| Answer a design question cheaply | `prototype` (skill) | Use yourself; bridge via `handoff` |
-| User message didn't land | `wait-what` (skill) | Use yourself; re-pitch in CONTEXT.md vocab |
-| Human-only steps (infra/secrets/migration) | `wizard` (skill) | Use yourself |
-| Merge/rebase conflict | `resolving-merge-conflicts` (skill) | Use yourself; never --abort |
-| Writing AGENTS.md / SKILL.md | `writing-for-agents` (skill) | Use yourself |
-| Approval gate declared with a `GATE` tag, or authoring one | `gate` (skill) | Load for the run-mode/gate-class vocabulary; delegate prompts carry `RUN MODE: …` |
+| Sharpen a plan/design | @grilling / @grill-with-docs (skill) | Use yourself |
+| Diagnose a hard bug | @diagnosing-bugs (skill) | Use yourself |
+| Oversized effort | @wayfinder (skill) | Use yourself |
+| Cross-session context | @handoff (skill) | Use yourself |
+| Persist plans / log deviations / pre-compaction checkpoints | @session (skill) | Use yourself |
+| Pick the right workflow when unsure | @ask-matt (skill) | Use yourself — router over the skills |
+| Maintain CONTEXT.md glossary + ADRs | @domain-modeling (skill) | Use yourself; @grill-with-docs runs it |
+| Turn a thread into a spec | @to-spec (skill) | Use yourself after @grilling |
+| Split a plan/spec into tracer tickets | @to-tickets (skill) | Use yourself; per project once setup ran |
+| Triage incoming issues | @triage (skill) | Use yourself for issues not created by you |
+| Design deep modules | @codebase-design (skill) | Use yourself at seams |
+| Deepening survey | @improve-codebase-architecture (skill) | Use yourself periodically; candidates only. Load @improve-architecture-oop for output language |
+| Answer a design question cheaply | @prototype (skill) | Use yourself; bridge via @handoff |
+| User message didn't land | @wait-what (skill) | Use yourself; re-pitch in CONTEXT.md vocab |
+| Human-only steps (infra/secrets/migration) | @wizard (skill) | Use yourself |
+| Merge/rebase conflict | @resolving-merge-conflicts (skill) | Use yourself; never --abort |
+| Writing AGENTS.md / SKILL.md | @writing-for-agents (skill) | Use yourself |
+| Approval gate declared with a `GATE` tag, or authoring one | @gate (skill) | Load for the run-mode/gate-class vocabulary; delegate prompts carry `RUN MODE: …` |
 
 Delegation rules:
 - Once a subagent owns a task, do not duplicate its work. Wait for its report and act on it.
@@ -52,7 +52,7 @@ Delegation rules:
 - Delegate noisy or long-running work so raw output stays out of your context.
 - If a subagent reports a blocker (e.g. web-viewer found a broken dev server, test found a failing setup), re-route to the right owner (`dev-server`, `implement`, `test`) — do not try to work around it yourself.
 - Read subagent reports fully; a concise failure report is actionable, not a dead end.
-- State the run mode in every delegation prompt (`RUN MODE: auto — normal/subagent gates skip` / `RUN MODE: interactive — gates fire`); the `gate` skill owns the vocabulary and the mode comes only from the user.
+- State the run mode in every delegation prompt (`RUN MODE: auto — normal/subagent gates skip` / `RUN MODE: interactive — gates fire`); the @gate skill owns the vocabulary and the mode comes only from the user.
 
 ## Workflows at a glance
 

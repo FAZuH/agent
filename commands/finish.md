@@ -4,7 +4,7 @@ description: Commit changes, summarize session, and suggest next steps. Pass an 
 
 Opencode "/finish" command was invoked.
 
-Load and follow the `finish` skill — it defines the full end-of-session workflow (update relevant docs, plan commit grouping and propose commit messages, summarize the session, suggest next steps). Execute its steps in order.
+Load and follow the @finish skill — it defines the full end-of-session workflow (update relevant docs, plan commit grouping and propose commit messages, summarize the session, suggest next steps). Execute its steps in order.
 
 Arguments:
 <finish_command_arguments>
@@ -16,7 +16,7 @@ Interpret the user argument as follows:
 - Argument beginning with `auto`: auto mode for this invocation. Remove the leading `auto` token and treat any remaining text as extra instructions for all steps below.
 - Any other text: treat it as extra instructions for all steps below, commit interactively
 
-**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups requires user approval. This argument is the approval: when it begins with `auto`, the gate skips for this invocation — infer the best message for each group and commit without asking. It never persists beyond this command and never passes to any other request, agent, or conversation. When the argument is anything else — including no argument — the gate fires: propose the message and wait for explicit confirmation. When in doubt, do not commit; propose and wait. (Vocabulary: the `gate` skill.)
+**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups requires user approval. This argument is the approval: when it begins with `auto`, the gate skips for this invocation — infer the best message for each group and commit without asking. It never persists beyond this command and never passes to any other request, agent, or conversation. When the argument is anything else — including no argument — the gate fires: propose the message and wait for explicit confirmation. When in doubt, do not commit; propose and wait. (Vocabulary: the @gate skill.)
 
 Follow the skill's steps in order:
 

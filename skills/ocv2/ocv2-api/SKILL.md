@@ -43,7 +43,7 @@ Exit code `0` is success. `204` endpoints return empty body; `200` returns `{"da
   ```sh
   curl -s https://opencode.ai/v2/openapi.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['paths']['/api/session/{sessionID}/fork'], indent=2))"
   ```
-- **Local discovery:** `opencode2 api get /api/session` etc. are live-probed; `GET /api/plugin` on a plain `opencode2 serve` returns `data: []` even when plugins load (only the service supervisor populates it — see `ocv2-pluginhealth`).
+- **Local discovery:** `opencode2 api get /api/session` etc. are live-probed; `GET /api/plugin` on a plain `opencode2 serve` returns `data: []` even when plugins load (only the service supervisor populates it — see @ocv2-pluginhealth).
 
 ## Common session calls (all require `opencode2 api`)
 
@@ -92,7 +92,7 @@ Session message lists can exceed the shell tool's output limit (>250KB on long s
 
 ## Related
 
-- `ocv2-sessions` — full fork→switch→verify→talk→wait flow
-- `ocv2-move` — `POST /api/session/{id}/move` for changing project directory
-- `ocv2-pluginhealth` — `GET /api/plugin` diagnosis
-- `ocv2-findings` — durable log of live-verified v2 quirks
+- @ocv2-sessions — full fork→switch→verify→talk→wait flow
+- @ocv2-move — `POST /api/session/{id}/move` for changing project directory
+- @ocv2-pluginhealth — `GET /api/plugin` diagnosis
+- @ocv2-findings — durable log of live-verified v2 quirks

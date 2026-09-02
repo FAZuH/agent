@@ -1,6 +1,6 @@
 ---
 name: session-retro
-description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling and gates filing. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Proposes papercuts but files them only after explicit user approval — it does NOT auto-file and does NOT apply fixes (that is `papercut-sweep`) and does NOT touch repo-local code sanding.
+description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling and gates filing. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Proposes papercuts but files them only after explicit user approval — it does NOT auto-file and does NOT apply fixes (that is @papercut-sweep) and does NOT touch repo-local code sanding.
 ---
 
 # Session retro
@@ -8,11 +8,11 @@ description: End-of-session retrospective where the agent proposes improvements 
 Look back at the finished (or finishing) session and convert what happened
 into concrete, filed proposals for improving your own skills, agent
 definitions, tooling, and process. This skill only proposes; application
-belongs to `papercut-sweep`.
+belongs to @papercut-sweep.
 
 ## When
 
-- At session wrap-up — typically just before `/finish` or after the last
+- At session wrap-up — typically just before @finish or after the last
   commit lands.
 - Any time the user calls for a retro mid-session.
 - Especially valuable right before `/compact` or session end, while
@@ -52,7 +52,7 @@ Use `-g` only for global scope.
 **GATE papercut-file (normal → file all drafted proposals):** filing a
 papercut to a store requires user approval (filing is cheap and reversible;
 *applying* what was filed is a separate, still-gated decision owned by
-`papercut-sweep`). Do not file immediately. Present the drafts and gate with
+@papercut-sweep). (Vocabulary: the @gate skill.) Do not file immediately. Present the drafts and gate with
 the user:
 
 1. Render a compact **proposal** table (no `id` yet — nothing filed):
@@ -92,7 +92,7 @@ collect its `id`. Then report a compact **filed** table:
 
 - `#` is the same number from the proposal table — keep it stable.
 - Keep the `id` column: it is the store handle used for
-  `papercuts resolve` once the user approves application via `papercut-sweep`.
+  `papercuts resolve` once the user approves application via @papercut-sweep.
 - Mark which entries look immediately actionable versus needing thought.
 - When the user later says "apply papercut <N>" or "fix <N>", map N back to
   that row's `id` from this table before touching the store.
@@ -103,5 +103,5 @@ collect its `id`. Then report a compact **filed** table:
 - **Propose and gate.** The GATE papercut-file tag above binds: never file a
   papercut without explicit user approval in this session, and never edit
   skills, agent defs, or config from this skill. If the user wants immediate
-  application after filing, hand off explicitly to `papercut-sweep`.
+  application after filing, hand off explicitly to @papercut-sweep.
 - **Scope decides store.** Global scope → global store (`-g`); repo/project scope → local store (no `-g`). Do not use `-g` for repo-local fixes.

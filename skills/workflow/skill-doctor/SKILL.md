@@ -6,13 +6,23 @@ description: Investigate, validate, and fix relations between skills and agent d
 ## Purpose
 
 Investigate, validate, and fix how skills relate to each other and to agent
-definitions. The scanner (`scripts/build_graph.py`) reads four sources:
+definitions. The scanner (`scripts/build_graph.py`) reads three sources:
 
 - Skill roots, later-wins on duplicate ids: `~/.agents/skills` (installed),
   `~/.config/opencode/skills` (config), `~/Projects/agent/skills` (source repo, in
   category subdirs; copies are pushed into the config root by the repo's sync.sh).
 - Agent definitions: `~/.config/opencode/agents/*.md`.
 - Documented references: `~/.config/opencode/AGENTS.md`.
+
+From each SKILL.md body it extracts two reference forms:
+
+- `@name` — the canonical skill/agent invocation form. Every at-mention
+  must resolve to a skill id or an agent definition; anything else is a
+  `broken-ref` finding (high). There is no suppression list — a reference to
+  something that does not exist is always reported.
+- Backticked spans that exactly match an agent id — subagent delegation,
+  recorded as `routes` edges. Other backticked prose tokens are ambiguous by
+  design and produce nothing.
 
 OpenCode v2 discovers skills in: built-ins < `.claude` < `.agents` < `config`
 (`~/.config/opencode/skills`) < project `.opencode` < explicit skills-config;
@@ -45,7 +55,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 1. Run the doctor from the skill base dir and append history:
 
    ```bash
-   cd ~/.agents/skills/skill-doctor   # installed base dir of this skill
+   cd ~/.config/opencode/skills/skill-doctor   # installed (config) base dir of this skill
    mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
    ```
 
@@ -74,7 +84,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 
 ```bash
 # Run the doctor and append to history
-cd ~/.agents/skills/skill-doctor   # installed base dir of this skill && mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
+cd ~/.config/opencode/skills/skill-doctor   # installed (config) base dir of this skill && mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
 
 # Summary counts only (first JSONL line)
 python3 scripts/build_graph.py | head -1
@@ -82,8 +92,8 @@ python3 scripts/build_graph.py | head -1
 # High-severity findings only
 python3 scripts/build_graph.py | grep '"severity":"high"'
 
-# Noise suppressions live here ([noise] tokens; keep one comment line per group)
-$EDITOR ignore.toml
+# There is no suppression list — an unresolvable @-mention is a real finding.
+# To silence one, fix the reference or install the target.
 
 # File friction whose fix lives outside this repo
 papercuts -g add --tag self::skill "gui-test-guidelines references test-writing-guidelines, a name that no longer exists (renamed to test-guidelines)"
@@ -97,5 +107,6 @@ papercuts -g resolve pc_abc1234 --note "created local agent defs"
 ## Rules
 
 - Every run appends history: `findings.jsonl` is append-only, never truncate.
-- Suppressions need justification comments in `ignore.toml`; no bare token lists.
+- @-mentions are canonical: an unresolvable @-mention is a real finding — fix
+  the reference or install the target; never re-add a suppression file.
 - Never widen scope to project repos' `.opencode/` dirs unless asked.

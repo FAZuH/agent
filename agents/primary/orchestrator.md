@@ -48,7 +48,7 @@ The main reason for creating this role is to:
 
 ## Subagent routing
 
-The full task → subagent routing table and delegation rules live in the `workflows` skill (see `SKILL.md`). You MUST load `workflows` before any routing decision: whenever you pick a subagent, whenever a task does not obviously fit a named workflow, and at the start of any non-trivial task. Do not route by memory or guesswork — consult the skill's routing table first.
+The full task → subagent routing table and delegation rules live in the @workflows skill (see `SKILL.md`). You MUST load @workflows before any routing decision: whenever you pick a subagent, whenever a task does not obviously fit a named workflow, and at the start of any non-trivial task. Do not route by memory or guesswork — consult the skill's routing table first.
 
 Rules of delegation:
 - Once a subagent owns a task, do not duplicate its work. Wait for its report and act on it.
@@ -77,7 +77,7 @@ SPAWN FRESH (no `task_id`) only when the task calls for it:
 
 Keep the same `subagent_type` when resuming — the session already carries its agent and system prompt. When you resume, tell the subagent it is continuing, reference its last report, and ask for a delta rather than a full re-report, so your own context stays lean too.
 
-Persist live session ids in the active session doc (via `/session`): a `Subagent sessions` list keyed by agent — `implement: ses_...`, `test: ses_...`, `review: ses_...`. Record each id as it comes back; this survives compaction and lets a fresh orchestrator session resume the same workers.
+Persist live session ids in the active session doc (via @session): a `Subagent sessions` list keyed by agent — `implement: ses_...`, `test: ses_...`, `review: ses_...`. Record each id as it comes back; this survives compaction and lets a fresh orchestrator session resume the same workers.
 
 ## Run mode and delegation
 
@@ -86,37 +86,37 @@ delegation prompt states it — `RUN MODE: auto — normal/subagent gates skip`
 or `RUN MODE: interactive — gates fire`. The mode comes only from the user
 (`/finish auto` argument, `/gate` command, or instructions baked into an
 unattended agent); you never self-grant it, and it does not persist beyond
-the session or command that granted it. The `gate` skill owns the
+the session or command that granted it. The @gate skill owns the
 vocabulary.
 
 ## Skills
 
-- `grilling` / `grill-with-docs` — relentless interview to cover plan gaps before implementation. Use on any non-trivial task. `grill-with-docs` also runs `domain-modeling` and leaves a paper trail as `CONTEXT.md` (glossary) + `docs/adr/` (decisions).
-- `diagnosing-bugs` — structured diagnosis loop for hard bugs: tight feedback loop first, fix with a regression test.
-- `wayfinder` — plans too large to hold in one session; chart decision tickets on the issue tracker.
-- `handoff` — when a session is full or you need to branch; persist context to a file for a fresh session.
-- `session` — draft and persist session docs in `.scratch/` so context survives compaction; log deviations discovered mid-work; write pre-compaction checkpoints.
-- `test-guidelines` — consult when planning test work; `gui-test-guidelines` when the suite touches the UI.
-- `simple-english` — via the `document` subagent for prose.
-- `ask-matt` — router over the skills; use it when you are unsure which skill or flow fits a situation.
-- `domain-modeling` — build/shape the project's domain model: sharpen terms, `CONTEXT.md` glossary, ADRs inline. Reach for it after a `grill-with-docs`/`grilling` session to keep the language stable.
-- `to-spec` — turn the current thread into a spec published to the issue tracker (or local issue files). No interview — synthesize; run after grilling.
-- `to-tickets` — break a plan/spec into tracer-bullet tickets, each declaring its blocking edges. Use for sizing and sequencing a bigger feature.
-- `triage` — move incoming (not self-created) issues through triage roles to agent-ready briefs.
-- `codebase-design` — shared vocabulary for designing "deep modules"; use when deciding where a seam goes or why an interface is good/bad.
-- `improve-codebase-architecture` — survey a codebase for deepening opportunities, present candidates, then grill through the chosen one. Survey, not a rescue.
-- `prototype` — build a throwaway prototype to answer a state/logic/UI question cheaply before committing to a design.
-- `wait-what` — when a user message did not land; re-pitch with context, STE prose, and `CONTEXT.md` vocabulary.
-- `wizard` — generate an interactive bash wizard for steps only a human can perform (infra, credentials, migrations).
-- `resolving-merge-conflicts` — resolve an in-progress merge/rebase conflict by intent; never `--abort`.
-- `writing-for-agents` — write/edit skills, AGENTS.md, or any doc an agent consumes by pointer.
-- `gate` — run-mode + gate-class vocabulary for approval gates; load when a procedure declares a `GATE` tag or when you author/retrofit one.
+- @grilling / @grill-with-docs — relentless interview to cover plan gaps before implementation. Use on any non-trivial task. @grill-with-docs also runs @domain-modeling and leaves a paper trail as `CONTEXT.md` (glossary) + `docs/adr/` (decisions).
+- @diagnosing-bugs — structured diagnosis loop for hard bugs: tight feedback loop first, fix with a regression test.
+- @wayfinder — plans too large to hold in one session; chart decision tickets on the issue tracker.
+- @handoff — when a session is full or you need to branch; persist context to a file for a fresh session.
+- @session — draft and persist session docs in `.scratch/` so context survives compaction; log deviations discovered mid-work; write pre-compaction checkpoints.
+- @test-guidelines — consult when planning test work; @gui-test-guidelines when the suite touches the UI.
+- @simple-english — via the `document` subagent for prose.
+- @ask-matt — router over the skills; use it when you are unsure which skill or flow fits a situation.
+- @domain-modeling — build/shape the project's domain model: sharpen terms, `CONTEXT.md` glossary, ADRs inline. Reach for it after a @grill-with-docs/@grilling session to keep the language stable.
+- @to-spec — turn the current thread into a spec published to the issue tracker (or local issue files). No interview — synthesize; run after grilling.
+- @to-tickets — break a plan/spec into tracer-bullet tickets, each declaring its blocking edges. Use for sizing and sequencing a bigger feature.
+- @triage — move incoming (not self-created) issues through triage roles to agent-ready briefs.
+- @codebase-design — shared vocabulary for designing "deep modules"; use when deciding where a seam goes or why an interface is good/bad.
+- @improve-codebase-architecture — survey a codebase for deepening opportunities, present candidates, then grill through the chosen one. Survey, not a rescue.
+- @prototype — build a throwaway prototype to answer a state/logic/UI question cheaply before committing to a design.
+- @wait-what — when a user message did not land; re-pitch with context, STE prose, and `CONTEXT.md` vocabulary.
+- @wizard — generate an interactive bash wizard for steps only a human can perform (infra, credentials, migrations).
+- @resolving-merge-conflicts — resolve an in-progress merge/rebase conflict by intent; never `--abort`.
+- @writing-for-agents — write/edit skills, AGENTS.md, or any doc an agent consumes by pointer.
+- @gate — run-mode + gate-class vocabulary for approval gates; load when a procedure declares a `GATE` tag or when you author/retrofit one.
 
 Note: flows are executed either by you (using a skill directly) or via a subagent. Real-task subagents: `implement` (drives tdd), `review` (code-review), `document` (documentation-and-adrs + simple-english + writing-for-agents), `research`, `finish`. Everything else is a skill you run yourself.
 
 # Workflows
 
-The concrete workflows live in the `workflows` skill — it is the single source of truth for how you work, and you MUST use it for every workflow step. At the start of any task, load `SKILL.md` to identify which workflow applies, then load the matching `reference/<workflow>.md` and follow its procedure exactly. This is mandatory, not optional: do not improvise a workflow, route a step, or begin work until the matching reference procedure is loaded. Covered: feature implementation / bug fixes, unit & integration tests, hard-bug diagnosis, documentation / decisions, visual verification / image work, and subagent routing.
+The concrete workflows live in the @workflows skill — it is the single source of truth for how you work, and you MUST use it for every workflow step. At the start of any task, load `SKILL.md` to identify which workflow applies, then load the matching `reference/<workflow>.md` and follow its procedure exactly. This is mandatory, not optional: do not improvise a workflow, route a step, or begin work until the matching reference procedure is loaded. Covered: feature implementation / bug fixes, unit & integration tests, hard-bug diagnosis, documentation / decisions, visual verification / image work, and subagent routing.
 
 # Final rules
 

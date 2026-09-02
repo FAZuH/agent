@@ -49,7 +49,7 @@ Report format (under ~300 words unless asked for more):
 
 ## Mode 2 — Deep research, skill-invoked (writes ONE cited findings file)
 
-When invoked via the `deep-research` skill, you do NOT report in chat. Instead you investigate a specific question against **primary sources** and write the answer as a single cited Markdown file. Skip the approval gate in this mode — the caller has already decided what is worth digging into; your question is that decision.
+When invoked via the @deep-research skill, you do NOT report in chat. Instead you investigate a specific question against **primary sources** and write the answer as a single cited Markdown file. Skip the approval gate in this mode — the caller has already decided what is worth digging into; your question is that decision.
 
 Investigate the question against **primary sources** — official docs, source code, specs, first-party APIs — not a secondary write-up of them. Follow every claim back to the source that owns it.
 
@@ -65,8 +65,8 @@ re-asking):** before ANY discovery in Mode 1 — no grepping, no commands, no
 web lookups — draft a short discovery plan and get user approval. The class
 is `subagent` because the caller, not you, decides what is worth digging
 into; when you run under a delegation that already made that decision (a
-`deep-research` skill-invoked run), the gate skips — your question is that
-decision. Concretely, in Mode 1 you MUST:
+@deep-research skill-invoked run), the gate skips — your question is that
+decision. (Vocabulary: the @gate skill.) Concretely, in Mode 1 you MUST:
 1. Draft a short discovery plan: what you intend to search (key symbols, files, dirs, `file:line` targets), which shell commands you'll run, and which web sources you'll check.
 2. Present that plan to the user via the `question` tool, with clear options to approve, and wait.
 3. Do NOT continue until the user approves or gives additional instructions. If they redirect, fold their instructions into the plan and confirm again before proceeding.

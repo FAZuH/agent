@@ -9,7 +9,7 @@ description: >-
   compaction, logging deviations during execution, or drafting a spec and
   splitting it into tickets. The session doc is the single source of truth
   that keeps work consistent across sessions. The `.scratch/` workspace
-  mechanics (slug format, layout, lifecycle, archiving) live in the `scratch`
+  mechanics (slug format, layout, lifecycle, archiving) live in the @scratch
   skill.
 ---
 
@@ -21,12 +21,12 @@ session forks and context compactions, so any session can recover the full
 picture — decisions, file layout, deviations, status — from the workspace
 plus the code.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > skill's numbered procedures: point-and-call narration, live deviation
 > logging, and a post-run report. The `## Interrupted procedures` section it
 > defines lives in this workspace's `spec.md`.
 
-> **Load the `scratch` skill first.** It owns the `.scratch/` workspace
+> **Load the @scratch skill first.** It owns the `.scratch/` workspace
 > mechanics — the slug format, directory layout, lifecycle, and archiving of
 > completed features to `.scratch/complete/`. Follow its layout exactly when
 > you read or write `.scratch/` files.
@@ -83,7 +83,7 @@ recurring log text silently overwrite an existing entry.
 
 A procedure paused mid-run (a user interjection, or any halt that must be
 resumable) gets an entry in a `## Interrupted procedures` section in the same
-`spec.md`. The `following-procedures` skill owns the section format; keep it
+`spec.md`. The @following-procedures skill owns the section format; keep it
 alongside the deviation log and update it in place. One entry per interrupted
 procedure.
 
@@ -92,7 +92,7 @@ procedure.
 Approval-gate decisions (fired, skipped, failed) and run-mode switches
 (`/gate auto`) go to a dedicated `## Gate log` section in the same
 `spec.md` — never the deviation log: a gate skipped in auto mode is
-expected behavior, not a deviation. The `gate` skill owns the entry
+expected behavior, not a deviation. The @gate skill owns the entry
 format; the template above carries the empty section. Keep it alongside
 the deviation log and append in place.
 
@@ -110,12 +110,12 @@ The mattpocock skills use
 `<feature-slug>` as the directory name — on this machine the slug is always
 date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
 
-- **Spec** — [`to-spec`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
-- **Tickets** — [`to-tickets`](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
+- **Spec** — [@to-spec](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
+- **Tickets** — [@to-tickets](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
   `.scratch/<YYYY-MM-DD>_<feature-slug>/issues/<NN>-<slug>.md`, numbered from
   `01` in dependency order (blockers first). Each ticket has a `Blocked by:`
   line and a `Status:` line (`ready-for-agent` / `claimed` / `resolved`).
-- **Map** — [`wayfinder`](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
+- **Map** — [@wayfinder](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
   child ticket per decision. The **frontier** is the scan of
   `.scratch/<YYYY-MM-DD>_<effort>/issues/` for files that are open, unblocked,
   and unclaimed; first by number wins.
@@ -190,7 +190,7 @@ re-create the goal from the checkpoint, then continue from the next step.
 
 ## Completing a feature
 
-To archive a finished workspace, follow the `scratch-finish` skill: it owns
+To archive a finished workspace, follow the @scratch-finish skill: it owns
 the completion checklist and the archive steps — mark remaining items done,
 append an Outcome section, move the spec to `.scratch/complete/`, mark tickets
 resolved, and delete the stale checkpoint. Do not archive until the work ships

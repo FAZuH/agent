@@ -7,7 +7,7 @@ description: "End a working session — update the relevant docs, plan the commi
 
 End a working session: update the relevant docs, plan the commit grouping and propose one conventional message per group, summarize what you accomplished, suggest next steps, then run gated self-improvement (collect + validate) and offer the sweep. Do the steps in order.
 
-> **Load the `following-procedures` skill first.** It defines how you run this
+> **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Mode and commit
 > permission* section above.
@@ -17,7 +17,7 @@ End a working session: update the relevant docs, plan the commit grouping and pr
 **GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups
 requires user approval. The `/finish` command wrapper grants that approval
 when its argument begins with `auto` — that is `auto` mode for this
-invocation (see the `gate` skill). In auto mode, the orchestrator may stage
+invocation (see the @gate skill). In auto mode, the orchestrator may stage
 and commit each proposed logical group without asking. In all other modes,
 the orchestrator must propose the groups and wait for confirmation.
 
@@ -53,8 +53,8 @@ You have NO commit permission: you must NOT run `git add`, `git commit`, or `git
 
 ## 3 Archive a completed `.scratch/` workspace
 
-If the repo uses a `.scratch/` session workspace (see the `scratch` skill),
-load the `scratch-finish` skill and follow it. It owns the completion
+If the repo uses a `.scratch/` session workspace (see the @scratch skill),
+load the @scratch-finish skill and follow it. It owns the completion
 checklist and the archive steps — append an Outcome section to the spec, move
 it to `.scratch/complete/`, mark tickets resolved, and delete the stale
 checkpoint. Do not restate or duplicate those steps here.
@@ -81,13 +81,13 @@ Identify what remains to do. Prioritize the tasks in this order:
 This step is part of `finish` and runs after the summary/next-steps. It is
 gated and non-destructive — it never auto-applies fixes.
 
-1. **Collect — `session-retro` (gated).** Load the `session-retro` skill and
+1. **Collect — @session-retro (gated).** Load the @session-retro skill and
    follow it exactly: mine the session for friction / repeated corrections /
    skill gaps / wins, draft papercut proposals (do not file yet), render the
    proposal table, gate with `default.question` (File all / Pick individually /
    File none), and file only the approved subset. If the user picks none, file
    nothing and note it.
-2. **Validate — `skill-doctor`.** Load the `skill-doctor` skill and follow its
+2. **Validate — @skill-doctor.** Load the @skill-doctor skill and follow its
    Procedure §1 from the skill's base dir:
 
    ```bash
@@ -98,19 +98,19 @@ gated and non-destructive — it never auto-applies fixes.
 
    Report the run-summary line (`skills, agents, edges, broken, collisions,
    drift`). If `broken` or `drift` > 0, note them as follow-ups but do not
-   fix them here — fixing belongs to `papercut-sweep` or a dedicated follow-up.
+   fix them here — fixing belongs to @papercut-sweep or a dedicated follow-up.
 3. **Offer the sweep — do not run it.** **GATE offer-sweep (normal → do
    not run the sweep; note its availability in the report):** running
-   `papercut-sweep` is additional work offered, never auto-run. If
-   `session-retro` filed any papercuts, or `skill-doctor` reported
+   @papercut-sweep is additional work offered, never auto-run. If
+   @session-retro filed any papercuts, or @skill-doctor reported
    `broken`/`drift`, or `papercuts -g list --status open` shows open `self::`
    entries, tell the user:
 
    > Self-improvement backlog ready — `N` papercuts filed this session, `M`
-   > open total, doctor: `broken X / drift Y`. Run `papercut-sweep` now?
+   > open total, doctor: `broken X / drift Y`. Run @papercut-sweep now?
    > [y/N]
 
-   Do not run `papercut-sweep` without an explicit "yes". If the user says
+   Do not run @papercut-sweep without an explicit "yes". If the user says
    no, leave the backlog for a later sweep.
 
 ## Dependency graph

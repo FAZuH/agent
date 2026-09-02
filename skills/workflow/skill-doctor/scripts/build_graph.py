@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """skill-doctor graph builder: deterministic scanner of skill/agent relations.
 
-Scans skill roots + agent definitions, extracts kebab-case tokens from each
-SKILL.md body (backticked spans and /slash-command forms), classifies them as
-loads / routes / ignored / broken refs, checks collisions across active roots
-and repo-vs-installed drift, regenerates graph.mmd, and prints JSONL findings
-to stdout (first line = run summary).
+Scans skill roots + agent definitions, extracts references from each SKILL.md
+body: @-mentions (canonical skill/agent invocation form) and backticked
+agent-id spans (subagent delegation). @-mentions must resolve to a skill id or
+agent definition — anything else is a broken-ref finding (no suppression
+list). Also checks collisions across active roots and repo-vs-installed
+drift, regenerates graph.mmd, and prints JSONL findings to stdout (first line
+= run summary).
 """
 
 from __future__ import annotations
@@ -15,7 +17,6 @@ import json
 import os
 import re
 import sys
-import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,11 +39,17 @@ AGENTS_MD = HOME / ".config" / "opencode" / "AGENTS.md"
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share")
 OUT_DIR = DATA_HOME / "skill-doctor"
 GRAPH_PATH = OUT_DIR / "graph.mmd"
-IGNORE_TOML = Path(__file__).resolve().parent.parent / "ignore.toml"
 
-KEBAB_RE = re.compile(r"[a-z][a-z0-9]*(-[a-z0-9]+)+")
 BACKTICK_RE = re.compile(r"`([^`\n]+)`")
-SLASH_COMMAND_RE = re.compile(r"(?<![\w/-])/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)")
+# Canonical reference form. Lookbehind rejects word chars and @ (emails,
+# @@); lookahead rejects a following '/' (npm scopes like @scope/pkg) — a
+# skill id never continues with those.
+AT_MENTION_RE = re.compile(r"(?<![\w@])@([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?![\w/-])")
+# Code spans are literal text, not references: @-mentions inside fenced blocks
+# (JSDoc tags, bash examples) or backticks (npm specs like @scope/name@version)
+# are never invocation mentions.
+FENCE_RE = re.compile(r"(?:```|~~~).*?(?:```|~~~)", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*\n?", re.DOTALL)
 
 SEVERITY = {"broken-ref": "high", "collision": "medium", "drift": "medium"}
@@ -53,11 +60,16 @@ def strip_frontmatter(text: str) -> str:
     return text[match.end():] if match else text
 
 
-def extract_tokens(body: str) -> set[str]:
-    """Backticked spans that are exactly one kebab token + /slash-command names."""
-    tokens = {span.strip() for span in BACKTICK_RE.findall(body)}
-    tokens.update(SLASH_COMMAND_RE.findall(body))
-    return {t for t in tokens if KEBAB_RE.fullmatch(t)}
+def extract_mentions(body: str) -> set[str]:
+    """@-mention ids (canonical skill/agent references), outside code spans."""
+    text = FENCE_RE.sub("", body)
+    text = INLINE_CODE_RE.sub("", text)
+    return set(AT_MENTION_RE.findall(text))
+
+
+def extract_agent_refs(body: str, agent_ids: set[str]) -> set[str]:
+    """Backticked spans that are exactly an agent id (delegation references)."""
+    return {span.strip() for span in BACKTICK_RE.findall(body)} & agent_ids
 
 
 def sha256_file(path: Path) -> str:
@@ -81,15 +93,6 @@ def load_root_skills(root_path: Path) -> dict[str, Path]:
     return skills
 
 
-def load_ignore_tokens() -> set[str]:
-    try:
-        data = tomllib.loads(IGNORE_TOML.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError, KeyError):
-        return set()
-    noise = data.get("noise", {}).get("tokens", [])
-    return {str(t) for t in noise}
-
-
 def utc_ts_ms() -> str:
     now = datetime.now(timezone.utc)
     return f"{now.strftime('%Y-%m-%dT%H:%M:%S')}.{now.microsecond // 1000:03d}Z"
@@ -102,7 +105,7 @@ def mermaid_escape(label: str) -> str:
 def main() -> int:
     roots = {name: load_root_skills(path) for name, path in ROOTS}
     agent_ids = sorted(p.stem for p in AGENT_DEFS_DIR.glob("*.md")) if AGENT_DEFS_DIR.is_dir() else []
-    ignore_tokens = load_ignore_tokens()
+    agent_id_set = set(agent_ids)
 
     occurrences = sorted(
         (root_name, sid, path)
@@ -134,36 +137,49 @@ def main() -> int:
 
     for root_name, sid, skill_md in occurrences:
         body = strip_frontmatter(skill_md.read_text(encoding="utf-8", errors="replace"))
-        for token in sorted(extract_tokens(body)):
+        src_node = f"{root_name}_{sid}"
+        # @-mentions are the canonical reference form: every one must resolve
+        # to a skill id or an agent definition, else it is a broken-ref finding.
+        for token in sorted(extract_mentions(body)):
             if token == sid:
                 continue
-            src_node = f"{root_name}_{sid}"
             if token in all_skill_ids:
                 dst_node = resolve_skill_node(token)
                 if dst_node:
                     edges.add((src_node, dst_node, "loads"))
-            elif token in agent_ids:
+            elif token in agent_id_set:
                 edges.add((src_node, f"agent_{token}", "routes"))
-            elif token in ignore_tokens:
-                continue
             else:
                 missing_node = missing_nodes.setdefault(token, f"missing_{len(missing_nodes)}")
                 edges.add((src_node, missing_node, "missing"))
                 add_finding(
                     "broken-ref",
                     f"{sid} -> {token}",
-                    f"'{token}' quoted in {root_name}/{sid}/SKILL.md matches no skill id or agent "
+                    f"'@{token}' in {root_name}/{sid}/SKILL.md matches no skill id or agent "
                     "definition; stale name or reference to something that does not exist",
                 )
+        # Backticked agent ids express subagent delegation: routes edges only,
+        # never findings (prose tokens are ambiguous by design).
+        for token in sorted(extract_agent_refs(body, agent_id_set)):
+            if token != sid:
+                edges.add((src_node, f"agent_{token}", "routes"))
 
     documents_edges: set[tuple[str, str, str]] = set()
     if AGENTS_MD.is_file():
-        agents_md_tokens = extract_tokens(AGENTS_MD.read_text(encoding="utf-8", errors="replace"))
-        known_targets = all_skill_ids | set(agent_ids)
-        for token in sorted(agents_md_tokens & known_targets):
+        agents_md_text = AGENTS_MD.read_text(encoding="utf-8", errors="replace")
+        known_targets = all_skill_ids | agent_id_set
+        md_refs = extract_mentions(agents_md_text) | extract_agent_refs(agents_md_text, agent_id_set)
+        for token in sorted(md_refs & known_targets):
             dst_node = resolve_skill_node(token) if token in all_skill_ids else f"agent_{token}"
             if dst_node:
                 documents_edges.add(("agents_md", dst_node, "documents"))
+        for token in sorted(md_refs - known_targets):
+            add_finding(
+                "broken-ref",
+                f"AGENTS.md -> {token}",
+                f"'@{token}' in ~/.config/opencode/AGENTS.md matches no skill id or agent "
+                "definition; stale name or reference to something that does not exist",
+            )
 
     collision_roots: dict[str, list[str]] = {}
     for sid in sorted(all_skill_ids):
@@ -199,7 +215,7 @@ def main() -> int:
     lines: list[str] = [
         "%% skill-doctor relation graph - regenerated by scripts/build_graph.py; manual edits will be overwritten",
         "%% Legend: node(\"x\") rounded = skill dir with SKILL.md; node{{\"x\"}} hexagon = agent definition (~/.config/opencode/agents/*.md)",
-        "%% Edges: A -->|loads| B (body names another skill); A -->|routes| B (body names an agent); agents_md -.->|documents| (referenced in ~/.config/opencode/AGENTS.md)",
+        "%% Edges: A -->|loads| B (body @-mentions another skill); A -->|routes| B (body @-mentions or backticks an agent); agents_md -.->|documents| (referenced in ~/.config/opencode/AGENTS.md)",
         "%% Broken refs: dotted red edge to a virtual \"missing: X\" node (classDef missing)",
         "%% Subgraphs = scan roots; duplicate ids live per root; loads/routes targets point at the opencode-active copy (config > agents > repo)",
         "",

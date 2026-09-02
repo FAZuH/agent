@@ -8,9 +8,9 @@ description: Work on a feature/branch inside a separate git worktree so the main
 Work on a branch inside its own git worktree. The main working tree keeps the untracked project state, so creating or removing a worktree never touches `.scratch/`, `.papercuts.jsonl`, or other untracked files.
 
 > **Untracked main-tree state:** `.scratch/` (the session workspace; its
-> layout and lifecycle live in the `scratch` skill) and `.papercuts.jsonl` are
+> layout and lifecycle live in the @scratch skill) and `.papercuts.jsonl` are
 > untracked, so they live only in the main tree. This skill only needs to know
-> they must not be created or edited inside a worktree — see the `scratch`
+> they must not be created or edited inside a worktree — see the @scratch
 > skill for anything you actually need to do with `.scratch/`.
 
 ## Key idea

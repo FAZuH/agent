@@ -1,29 +1,29 @@
 ---
 name: improve-architecture-oop
-description: Standard OOP/architecture vocabulary for codebase analysis — loads `oop` for terminology. Load whenever running improve-codebase-architecture, reading or writing its HTML report, grilling its candidates, reviewing refactor proposals or module designs, or doing any architecture deep-dive — all findings are described in standard object-oriented terms instead of metaphor vocabulary.
+description: Standard OOP/architecture vocabulary for codebase analysis — loads @oop for terminology. Load whenever running improve-codebase-architecture, reading or writing its HTML report, grilling its candidates, reviewing refactor proposals or module designs, or doing any architecture deep-dive — all findings are described in standard object-oriented terms instead of metaphor vocabulary.
 ---
 
 # Improve architecture in OOP terms
 
-This skill loads the `oop` skill for its vocabulary. If you only need OOP terms without the report workflow, load `oop` directly ("use oop terms — read @oop").
+This skill loads the @oop skill for its vocabulary. If you only need OOP terms without the report workflow, load @oop directly ("use oop terms — read @oop").
 
 When this skill is loaded, every finding title, benefit statement, recommendation, and
 diagram label uses standard object-oriented and software-architecture terminology
-(from `oop`). Metaphor vocabulary — "deep/shallow module", "seam", "leverage",
+(from @oop). Metaphor vocabulary — "deep/shallow module", "seam", "leverage",
 "locality", "deletion test" — never appears in output. If a source document speaks in
 metaphors, restate its points silently in standard terms; do not quote the metaphors
 back.
 
 Precedence — this skill wins over the hosting workflow's style.
-`improve-codebase-architecture`'s `HTML-REPORT.md` requires metaphor vocabulary
+@improve-codebase-architecture's `HTML-REPORT.md` requires metaphor vocabulary
 (module/interface/depth/seam/leverage). When that document's tone section conflicts
 with this skill, this skill overrides it: use standard OOP vocabulary and standard-fit
 diagrams regardless; do not adopt its style sections.
 
 ## Rules
 
-- Lead each finding with the most specific applicable term from `oop`.
-- Do not coin new metaphor names. The `oop` lists are closed: if nothing fits exactly,
+- Lead each finding with the most specific applicable term from @oop.
+- Do not coin new metaphor names. The @oop lists are closed: if nothing fits exactly,
   use plain descriptive language ("this class mixes parsing and persistence"), never a
   new coinage.
 - Language only. The hosting workflow's steps remain authoritative — this skill changes
@@ -78,4 +78,4 @@ Constraints:
 
 ## Vocabulary
 
-See the `oop` skill for the closed term lists, definitions, and usage guidance (Principles, Structural smells, Boundaries & patterns, Testability & metrics). Load it with: Skill tool → `oop`.
+See the @oop skill for the closed term lists, definitions, and usage guidance (Principles, Structural smells, Boundaries & patterns, Testability & metrics). Load it with: Skill tool → @oop.

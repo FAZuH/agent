@@ -7,7 +7,7 @@ description: >-
   skill that needs the `.scratch/` mechanics (session, finish,
   prepare-compact, worktree). Covers the slug format, directory layout, and
   the spec → execute → archive lifecycle. The completion checklist and archive
-  steps for a finished feature live in the `scratch-finish` skill.
+  steps for a finished feature live in the @scratch-finish skill.
 ---
 
 # scratch
@@ -57,6 +57,6 @@ creation date (not the completion date); it never changes afterwards.
 ## Completing / archiving a feature
 
 When the work ships, archive the workspace. The completion checklist and the
-archive steps live in the `scratch-finish` skill — load and follow it. The
+archive steps live in the @scratch-finish skill — load and follow it. The
 workspace moves from `.scratch/<slug>/` to `.scratch/complete/<slug>.md`; do
 not duplicate those steps here.
