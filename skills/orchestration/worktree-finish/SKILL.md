@@ -73,11 +73,12 @@ After each resolution:
 
 ### 6. Ask before semantic resolution
 
-Stop and ask the user for a decision before resolving a conflict when either
-side changes behavior, public API, persisted data, compatibility, security,
-performance characteristics, or user-visible semantics. Also ask when the
-correct side cannot be established from the existing code, tests, issue, or PR
-description.
+**GATE conflict-resolution (normal → resolve by intent per this skill's
+conflict signals, flag every auto-resolved choice in the report):** resolving
+a conflict where either side changes behavior, public API, persisted data,
+compatibility, security, performance characteristics, or user-visible
+semantics — or where the correct side cannot be established from the existing
+code, tests, issue, or PR description — is the user's call, not yours.
 
 Explain the conflicting choices, the likely behavior or compatibility impact,
 and the files involved. Do not commit, push, or discard either choice until the

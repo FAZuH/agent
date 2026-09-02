@@ -93,6 +93,12 @@ Look for a pull request template in the repository:
   `feature.md`) — if multiple exist, ask the user which to use or select the
   most appropriate one based on the context.
 
+**GATE template-pick (normal → select the most appropriate template based on
+context and note the choice in the PR description):** when multiple templates
+exist, which one structures the PR is the user's call. Firing this gate beats
+silently guessing wrong; when it skips (auto mode), the selection rules and
+context decide, and the choice is reported.
+
 If **no template exists** in the repo, use the bundled generic template at
 `reference/pr-template.md` as the fallback so the PR still has structure.
 

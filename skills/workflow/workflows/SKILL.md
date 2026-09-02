@@ -44,6 +44,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Human-only steps (infra/secrets/migration) | `wizard` (skill) | Use yourself |
 | Merge/rebase conflict | `resolving-merge-conflicts` (skill) | Use yourself; never --abort |
 | Writing AGENTS.md / SKILL.md | `writing-for-agents` (skill) | Use yourself |
+| Approval gate declared with a `GATE` tag, or authoring one | `gate` (skill) | Load for the run-mode/gate-class vocabulary; delegate prompts carry `RUN MODE: …` |
 
 Delegation rules:
 - Once a subagent owns a task, do not duplicate its work. Wait for its report and act on it.
@@ -51,6 +52,7 @@ Delegation rules:
 - Delegate noisy or long-running work so raw output stays out of your context.
 - If a subagent reports a blocker (e.g. web-viewer found a broken dev server, test found a failing setup), re-route to the right owner (`dev-server`, `implement`, `test`) — do not try to work around it yourself.
 - Read subagent reports fully; a concise failure report is actionable, not a dead end.
+- State the run mode in every delegation prompt (`RUN MODE: auto — normal/subagent gates skip` / `RUN MODE: interactive — gates fire`); the `gate` skill owns the vocabulary and the mode comes only from the user.
 
 ## Workflows at a glance
 

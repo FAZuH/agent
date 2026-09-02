@@ -82,6 +82,14 @@ Rules and gotchas:
 - Deny destructive commands explicitly after the broad allow: `git push*`,
   `git reset*`, `git checkout*`, `git clean*`.
 - Keep the `model` cheap and `steps` low — unattended runs must fail cheap.
+- **Gates run in auto only if you configure it.** A headless run cannot
+  answer `question` forms — they get auto-dismissed, so any gate that fires
+  makes the gated action not happen. The run mode comes only from the user:
+  bake "run in auto mode" into the agent's system prompt when you want
+  `normal`/`subagent` gates to skip (and note `always` gates still fire and
+  will fail the action — configure the permissions to make that impossible
+  instead). If you leave it out, that is a configuration problem on your
+  side, not something the run detects. See the `gate` skill.
 - **Binary selection matters**: the script prefers `~/.opencode/bin/opencode2`
   (the v2 beta that owns the service DB). Older builds (e.g. `/usr/bin/opencode`
   1.18.x) fail against the migrated DB with `no such column: project_id`. If

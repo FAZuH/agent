@@ -49,7 +49,11 @@ Use `-g` only for global scope.
 
 ## Gate — ask before filing
 
-Do not file immediately. Present the drafts and gate with the user:
+**GATE papercut-file (normal → file all drafted proposals):** filing a
+papercut to a store requires user approval (filing is cheap and reversible;
+*applying* what was filed is a separate, still-gated decision owned by
+`papercut-sweep`). Do not file immediately. Present the drafts and gate with
+the user:
 
 1. Render a compact **proposal** table (no `id` yet — nothing filed):
 
@@ -96,8 +100,8 @@ collect its `id`. Then report a compact **filed** table:
 
 ## Boundary
 
-- **Propose and gate.** Never file a papercut without explicit user approval
-  in this session, and never edit skills, agent defs, or config from this
-  skill. If the user wants immediate application after filing, hand off
-  explicitly to `papercut-sweep`.
+- **Propose and gate.** The GATE papercut-file tag above binds: never file a
+  papercut without explicit user approval in this session, and never edit
+  skills, agent defs, or config from this skill. If the user wants immediate
+  application after filing, hand off explicitly to `papercut-sweep`.
 - **Scope decides store.** Global scope → global store (`-g`); repo/project scope → local store (no `-g`). Do not use `-g` for repo-local fixes.

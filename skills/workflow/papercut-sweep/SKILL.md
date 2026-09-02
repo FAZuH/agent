@@ -45,14 +45,16 @@ Run top to bottom when invoked. Do not skip the user gates.
    (personal-global); agent defs in `~/.config/opencode/agents/*.md`.
    External skills under `~/.agents/skills/` are install targets — NEVER
    edit them; file upstream issues instead.
-3. **Gate by tier**, then apply:
-   - Drafts and proposals are always free; **applying is gated**:
-   - Process notes in `.scratch/` and docs → apply autonomously.
-   - Skill content (`~/Projects/agent`, personal-global skills) → after
-     explicit OK on the exact diff.
+3. **Gate by tier**, then apply — applying is always gated (drafting and
+   proposals are free):
+   - Process notes in `.scratch/` and docs → not a gate; apply autonomously.
+   - Skill content (`~/Projects/agent`, personal-global skills) → **GATE
+     sweep-apply-content (normal → apply the approved diff)**: stage the
+     exact diff and get explicit OK before writing it.
    - **Any config artifact — agent defs, `opencode.json*`, `AGENTS.md`,
-     store configs (`*.toml`) → explicit OK every time. No autonomous
-     config edits, ever, even "obvious" ones.**
+     store configs (`*.toml`) → GATE sweep-apply-config (always → never
+     skips; propose, get explicit OK, wait)**. No autonomous config edits,
+     ever, even "obvious" ones.
    - Project source code → never through this loop; route to normal work.
 4. **Evidence** — when a change rewrites a skill *description*, OFFER to
      validate with the opencode-skill-creator eval tooling

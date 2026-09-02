@@ -14,11 +14,13 @@ End a working session: update the relevant docs, plan the commit grouping and pr
 
 ## Mode and commit permission
 
-The finish skill is executed by the orchestrator. The command wrapper grants
-commit permission when its argument begins with `auto`; the wrapper passes any
-remaining argument text as extra instructions. In that mode, the orchestrator
-may stage and commit each proposed logical group without asking. In all other
-modes, the orchestrator must propose the groups and wait for confirmation.
+**GATE commit-approval (normal → commit each group with the inferred
+conventional message):** staging and committing the session's logical groups
+requires user approval. The `/finish` command wrapper grants that approval
+when its argument begins with `auto` — that is `auto` mode for this
+invocation (see the `gate` skill). In auto mode, the orchestrator may stage
+and commit each proposed logical group without asking. In all other modes,
+the orchestrator must propose the groups and wait for confirmation.
 
 The finish subagent remains read-only with respect to commits: it never runs
 `git add`, `git commit`, or `git push`. It only proposes groups for the
@@ -98,10 +100,12 @@ gated and non-destructive — it never auto-applies fixes.
    Report the run-summary line (`skills, agents, edges, broken, collisions,
    drift`). If `broken` or `drift` > 0, note them as follow-ups but do not
    fix them here — fixing belongs to `papercut-sweep` or a dedicated follow-up.
-3. **Offer the sweep — do not run it.** If `session-retro` filed any
-   papercuts, or `skill-doctor` reported `broken`/`drift`, or
-   `papercuts -g list --status open` shows open `self::` entries, tell the
-   user:
+3. **Offer the sweep — do not run it.** **GATE offer-sweep (normal → do
+   not run the sweep; note its availability in the report):** running
+   `papercut-sweep` is additional work offered, never auto-run. If
+   `session-retro` filed any papercuts, or `skill-doctor` reported
+   `broken`/`drift`, or `papercuts -g list --status open` shows open `self::`
+   entries, tell the user:
 
    > Self-improvement backlog ready — `N` papercuts filed this session, `M`
    > open total, doctor: `broken X / drift Y`. Run `papercut-sweep` now?

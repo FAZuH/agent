@@ -67,6 +67,9 @@ The core approach in enough detail that a fresh agent could re-derive it.
 How to verify (tests, lint, build); which subagents to delegate to
 (dev-server, test-runner, web-viewer).
 
+## Gate log
+- (none yet)
+
 ## Deviation log
 - (none yet)
 ```
@@ -83,6 +86,15 @@ resumable) gets an entry in a `## Interrupted procedures` section in the same
 `spec.md`. The `following-procedures` skill owns the section format; keep it
 alongside the deviation log and update it in place. One entry per interrupted
 procedure.
+
+## Gate log
+
+Approval-gate decisions (fired, skipped, failed) and run-mode switches
+(`/gate auto`) go to a dedicated `## Gate log` section in the same
+`spec.md` — never the deviation log: a gate skipped in auto mode is
+expected behavior, not a deviation. The `gate` skill owns the entry
+format; the template above carries the empty section. Keep it alongside
+the deviation log and append in place.
 
 ## Tickets & specs (mattpocock)
 
