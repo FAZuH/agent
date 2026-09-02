@@ -13,12 +13,10 @@ $1
 
 Interpret the user argument as follows:
 - Not provided: commit interactively, no extra instructions
-- Argument beginning with `auto`: auto-commit. Remove the leading `auto` token and treat any remaining text as extra instructions for all steps below.
+- Argument beginning with `auto`: auto mode for this invocation. Remove the leading `auto` token and treat any remaining text as extra instructions for all steps below.
 - Any other text: treat it as extra instructions for all steps below, commit interactively
 
-The commit permission is granted by the argument, not by this command running. The permission is active when the argument begins with `auto`. If the argument is anything else — including no argument — there is NO commit permission: you may never run `git add` or `git commit` on your own, no matter what. You must always propose the message and wait for the user's explicit confirmation first.
-
-The permission also does not persist. It ends the moment this command finishes, and it does not pass to any other request in this conversation. When this command is not running, always propose the message and wait for explicit confirmation. Never assume the permission exists. When in doubt, do not commit; propose and wait.
+**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups requires user approval. This argument is the approval: when it begins with `auto`, the gate skips for this invocation — infer the best message for each group and commit without asking. It never persists beyond this command and never passes to any other request, agent, or conversation. When the argument is anything else — including no argument — the gate fires: propose the message and wait for explicit confirmation. When in doubt, do not commit; propose and wait. (Vocabulary: the `gate` skill.)
 
 Follow the skill's steps in order:
 
@@ -28,7 +26,7 @@ Follow the skill's step 1 exactly — discover and update the relevant docs, or 
 
 ## 2. Commit changes
 
-Follow the skill's step 2 exactly: inspect git read-only, identify the files changed this session, split the changes into one commit per logical group, and propose one `type(scope): description` message per group. You must NOT run `git add` or `git commit` on your own unless the argument begins with `auto` (see the permission rules above).
+Follow the skill's step 2 exactly: inspect git read-only, identify the files changed this session, split the changes into one commit per logical group, and propose one `type(scope): description` message per group. You must NOT run `git add` or `git commit` on your own unless the argument begins with `auto` (see GATE commit-approval above).
 
 - If auto-commit mode is active (argument begins with `auto`), infer the best message for each group. Commit each group without asking, passing the remaining argument text as extra instructions.
 - If interactive mode is active (argument does not begin with `auto`, including no argument), there is no commit permission. Propose one message for each group. Then stop and wait for the next message from the user. Do not run `git add` or `git commit` for that group until the user confirms it. If the user wants a change, propose the new message and wait again. Do not run any other group until the current one is resolved. Do not proceed to step 3 until the current group is resolved.
