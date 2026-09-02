@@ -161,11 +161,16 @@ Repeat this full loop per node — don't front-load all the foundations once at 
 
 If you catch yourself asserting a fact he'd have to take on faith — foundational or not — stop: either motivate it and confirm it lands, or ground it in something already established. Unmotivated, unconfirmed facts don't lock in — that's the whole point.
 
-## Lesson records — persist only where the workspace asks for it
+## Lesson records — resolve the learn dir before persisting
 
-Teaching leaves artifacts worth carrying forward, but persistence is opt-in per workspace: **check the project's AGENTS.md for a declared learn/lesson directory before writing anything anywhere. No declaration = persist nothing.** (If he asks mid-session to save something anyway, write wherever he points.)
+Teaching leaves artifacts worth carrying forward, but persistence is opt-in. **Resolve the learn dir before writing anything anywhere** — check in this order, stop at the first hit:
 
-When a learn dir IS declared, keep one folder per subject under it, ordinally numbered:
+1. **Declared** — the project's AGENTS.md declares a learn/lesson directory: use it.
+2. **Discovered** — no declaration: `ls` the project root. If one directory looks like a learn dir (subject folders, PLAN.md / NOTES.md, lessons/…), ask him whether to save this subject's learn stuff there; his yes makes it the learn dir.
+3. **None found** — ask him whether to create the base template at a `teach/` dir in the project. On yes: scaffold `teach/` (`LEARNER.md`; subject dirs appear per the tree below as subjects start) and document it as the learn dir in AGENTS.md — create AGENTS.md if it doesn't exist.
+4. Otherwise persist nothing. (If he asks mid-session to save something anyway, write wherever he points.)
+
+Once a learn dir is resolved, keep one folder per subject under it, ordinally numbered:
 
 ```
 <learn-dir>/
