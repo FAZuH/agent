@@ -8,6 +8,7 @@ flowchart TD
         following_procedures["following-procedures"]
         scratch["scratch"]
         worktree["worktree"]
+        gate["gate"]
 
         pr_to_close_r["pr-to-close"]
         worktree_new_r["worktree-new"]
@@ -40,6 +41,11 @@ flowchart TD
         prepare_compact_r --> scratch
         worktree --> scratch
         scratch --> scratch_finish_r
+
+        worktree_finish_r --> gate
+        pr_creator_r --> gate
+        finish_r --> gate
+        session_r --> gate
     end
 
     subgraph legend["Legend"]
@@ -53,6 +59,6 @@ flowchart TD
     classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
     classDef referential fill:#9DBB98,stroke:#7B9C76,color:#FFFFFF
 
-    class L_ref,following_procedures,scratch,worktree referential
+    class L_ref,following_procedures,scratch,worktree,gate referential
     class L_orch,pr_to_close_r,worktree_new_r,worktree_finish_r,worktree_close_r orchestration
     class L_work,pr_creator_r,pr_watchmerge_r,finish_r,session_r,scratch_finish_r,prepare_compact_r workflow

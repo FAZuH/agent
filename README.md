@@ -68,6 +68,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 
 ### Referential (loaded by other skills while they run)
 
+- **[gate](./skills/referential/gate/SKILL.md)**: Approval-gate vocabulary: gate classes (`always`/`normal`/`subagent`), the `auto` run mode, and the one-line `GATE` tag convention; owns the session doc's gate-log format.
 - **[following-procedures](./skills/referential/following-procedures/SKILL.md)**: How to run a numbered procedure without skipping steps: point-and-call narration, live deviation logging, and a post-run report. Every procedural skill above loads it first.
 - **[scratch](./skills/referential/scratch/SKILL.md)**: The `.scratch/` workspace mechanics: slug format, layout, lifecycle.
 - **[worktree](./skills/referential/worktree/SKILL.md)**: Work on a branch in a separate git worktree.
