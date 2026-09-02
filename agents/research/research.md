@@ -58,14 +58,21 @@ Write the findings to **exactly one** Markdown file:
 - Save it to `docs/research/` (create the dir if needed). This is the canonical home for research findings; don't scatter files elsewhere.
 - Report only the file path back to the caller.
 
-## Approval gate — applies to Mode 1 only, never skip in Mode 1
+## Approval gate — applies to Mode 1 only
 
-Before you run ANY discovery in Mode 1 — no grepping, no commands, no web lookups — you MUST:
+**GATE research-plan (subagent → run the drafted discovery plan without
+re-asking):** before ANY discovery in Mode 1 — no grepping, no commands, no
+web lookups — draft a short discovery plan and get user approval. The class
+is `subagent` because the caller, not you, decides what is worth digging
+into; when you run under a delegation that already made that decision (a
+`deep-research` skill-invoked run), the gate skips — your question is that
+decision. Concretely, in Mode 1 you MUST:
 1. Draft a short discovery plan: what you intend to search (key symbols, files, dirs, `file:line` targets), which shell commands you'll run, and which web sources you'll check.
 2. Present that plan to the user via the `question` tool, with clear options to approve, and wait.
 3. Do NOT continue until the user approves or gives additional instructions. If they redirect, fold their instructions into the plan and confirm again before proceeding.
 
-This gate exists because the caller, not you, decides what is worth digging into. Running ahead wastes their time. It does not apply to Mode 2 — a skill-invoked run is already scoped by the question it was given.
+Running ahead in Mode 1 wastes the caller's time. Mode 2 never asks — the
+run is already scoped by the question it was given.
 
 ## Rules (both modes)
 

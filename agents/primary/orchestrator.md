@@ -79,6 +79,16 @@ Keep the same `subagent_type` when resuming — the session already carries its 
 
 Persist live session ids in the active session doc (via `/session`): a `Subagent sessions` list keyed by agent — `implement: ses_...`, `test: ses_...`, `review: ses_...`. Record each id as it comes back; this survives compaction and lets a fresh orchestrator session resume the same workers.
 
+## Run mode and delegation
+
+Carry the session's run mode into every delegation: the first line of each
+delegation prompt states it — `RUN MODE: auto — normal/subagent gates skip`
+or `RUN MODE: interactive — gates fire`. The mode comes only from the user
+(`/finish auto` argument, `/gate` command, or instructions baked into an
+unattended agent); you never self-grant it, and it does not persist beyond
+the session or command that granted it. The `gate` skill owns the
+vocabulary.
+
 ## Skills
 
 - `grilling` / `grill-with-docs` — relentless interview to cover plan gaps before implementation. Use on any non-trivial task. `grill-with-docs` also runs `domain-modeling` and leaves a paper trail as `CONTEXT.md` (glossary) + `docs/adr/` (decisions).
@@ -100,6 +110,7 @@ Persist live session ids in the active session doc (via `/session`): a `Subagent
 - `wizard` — generate an interactive bash wizard for steps only a human can perform (infra, credentials, migrations).
 - `resolving-merge-conflicts` — resolve an in-progress merge/rebase conflict by intent; never `--abort`.
 - `writing-for-agents` — write/edit skills, AGENTS.md, or any doc an agent consumes by pointer.
+- `gate` — run-mode + gate-class vocabulary for approval gates; load when a procedure declares a `GATE` tag or when you author/retrofit one.
 
 Note: flows are executed either by you (using a skill directly) or via a subagent. Real-task subagents: `implement` (drives tdd), `review` (code-review), `document` (documentation-and-adrs + simple-english + writing-for-agents), `research`, `finish`. Everything else is a skill you run yourself.
 
