@@ -1,3 +1,11 @@
+## [0.7.1](https://github.com/FAZuH/agent/compare/v0.7.0...v0.7.1) (2026-09-02)
+
+
+### Features
+
+* **skill:** add rust-idioms skill — type-driven design patterns for Rust ([9ed01b6](https://github.com/FAZuH/agent/commit/9ed01b6bf90f8d9b1a4267e91affa127b1e2799e))
+* **skill:** declare fix-approval gate in skill-doctor ([938539e](https://github.com/FAZuH/agent/commit/938539e321fe3f5c44e07babe44cba9f927f7027))
+
 ## [0.7.0](https://github.com/FAZuH/agent/compare/v0.6.11...v0.7.0) (2026-09-02)
 
 
@@ -33,11 +41,4 @@
 ### Features
 
 * **script:** selective deploys by tag via tags.conf ([1042a21](https://github.com/FAZuH/agent/commit/1042a2173f61ba771d9aa2a12e9bf31685b43926))
-
-## [0.6.8](https://github.com/FAZuH/agent/compare/v0.6.7...v0.6.8) (2026-09-01)
-
-
-### Features
-
-* **skill:** add ocv2-api and ocv2-fork, promote ocv2-findings/move/pluginhealth to public ([6f250b1](https://github.com/FAZuH/agent/commit/6f250b1e8da56fa13ca8f1aae5c5491297624a17))
 
