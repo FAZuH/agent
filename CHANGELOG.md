@@ -1,3 +1,11 @@
+## [0.7.2](https://github.com/FAZuH/agent/compare/v0.7.1...v0.7.2) (2026-09-03)
+
+
+### Features
+
+* **skill:** add offload skill for remote builds, checks, and agent batches ([1bde961](https://github.com/FAZuH/agent/commit/1bde96163cddbd562b1cec0c5bcadd64fefa3893))
+* **skill:** extract commit and self-improve from finish, add retro new-skill candidates ([5b5d12b](https://github.com/FAZuH/agent/commit/5b5d12ba8f06484625f1f7d3c501b9fb7bbb16c1))
+
 ## [0.7.1](https://github.com/FAZuH/agent/compare/v0.7.0...v0.7.1) (2026-09-02)
 
 
@@ -34,11 +42,4 @@
 ### Features
 
 * **skill:** octask list shows task name and description; accept full unit names ([923af0f](https://github.com/FAZuH/agent/commit/923af0f094852503349b36f0e369e5a07b38d187))
-
-## [0.6.9](https://github.com/FAZuH/agent/compare/v0.6.8...v0.6.9) (2026-09-01)
-
-
-### Features
-
-* **script:** selective deploys by tag via tags.conf ([1042a21](https://github.com/FAZuH/agent/commit/1042a2173f61ba771d9aa2a12e9bf31685b43926))
 
