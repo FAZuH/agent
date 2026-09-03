@@ -1,6 +1,6 @@
 ---
 name: papercut-sweep
-description: Run the agent self-improvement loop over the global papercuts store — file cross-project friction about skills/agents/tools (`papercuts -g add --tag self::…`), sweep open `self::` entries, draft and apply improvements to your own skills, agent definitions, and tooling per approval tiers. Use when the user says "self-improve", "improve your skills/agents", "anything to improve", "sweep the backlog", or when filing an agent-behavior lesson that outlives the current repo. For end-of-session proposals use @session-retro; this skill acts on the backlog. NOT for repo-local code sanding (plain `papercuts add`) or for fixing the user's project source.
+description: Run the agent self-improvement loop over the global papercuts store — sweep open `self::` entries, draft and apply improvements to your own skills, agent definitions, and tooling per approval tiers. Use when the user says "sweep the backlog", "apply the papercuts", "improve your skills/agents", "anything to improve", or when filing an agent-behavior lesson that outlives the current repo. For end-of-session collect + validate use @self-improve; for proposals use @session-retro; this skill acts on the backlog. NOT for repo-local code sanding (plain `papercuts add`) or for fixing the user's project source.
 ---
 
 # Papercut sweep
@@ -27,7 +27,7 @@ Two stores, one rule:
   viewers) report friction in their output; the orchestrator files it with
   attribution. File and continue — never stop work to log.
 - **Tag namespace** (reserved prefix `self::`): `self::skill`,
-  `self::agent-def`, `self::tool`, `self::process`. Extra free-form tags are
+  `self::agent-def`, `self::tool`, `self::process`, `self::new-skill`. Extra free-form tags are
   welcome; sweeps filter on the `self::` prefix.
 - **Quality bar:** the text must carry a proposal seed, not just a complaint
   — what was tried, what got in the way, what would fix it.

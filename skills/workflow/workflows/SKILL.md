@@ -20,7 +20,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Run test/lint/typecheck suites | `test` | Returns concise analysis only |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
-| Finish a session (docs + summary + proposed commits + gated retro + doctor; offers sweep) | `finish` | Uses the @finish skill; proposes grouped commit messages, which you restate to the user for approval and then commit yourself, then runs gated @session-retro + @skill-doctor and offers @papercut-sweep (never auto-runs it); only when the user explicitly asks |
+| Finish a session (docs + archive + summary + delegates to @commit/@self-improve) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated @session-retro + @skill-doctor, offers @papercut-sweep, never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `dev-server` | Owns PTY lifecycle |
 | Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
 | Read/transcribe image files | `image-viewer` | Vision, read-only |
@@ -32,6 +32,8 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Oversized effort | @wayfinder (skill) | Use yourself |
 | Cross-session context | @handoff (skill) | Use yourself |
 | Persist plans / log deviations / pre-compaction checkpoints | @session (skill) | Use yourself |
+| Plan commit grouping + propose messages (no commit) | @commit (skill) | Use yourself; restate groups to the user for approval, then commit yourself |
+| Gated self-improvement check (retro + doctor, offers sweep) | @self-improve (skill) | Use yourself |
 | Pick the right workflow when unsure | @ask-matt (skill) | Use yourself — router over the skills |
 | Maintain CONTEXT.md glossary + ADRs | @domain-modeling (skill) | Use yourself; @grill-with-docs runs it |
 | Turn a thread into a spec | @to-spec (skill) | Use yourself after @grilling |
