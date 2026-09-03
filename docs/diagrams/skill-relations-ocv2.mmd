@@ -1,0 +1,29 @@
+---
+config:
+  theme: 'neutral'
+---
+flowchart LR
+    subgraph ocv2["OpenCode v2"]
+        ocv2_api["ocv2-api"]
+        ocv2_sessions["ocv2-sessions"]
+        ocv2_move["ocv2-move"]
+        ocv2_pluginhealth["ocv2-pluginhealth"]
+        ocv2_findings["ocv2-findings"]
+        ocv2_unfuck["ocv2-unfuck"]
+    end
+
+    %% ocv2-unfuck is intentionally isolated: top-level tool check, no skill deps
+    ocv2_api --> ocv2_sessions
+    ocv2_api --> ocv2_move
+    ocv2_api --> ocv2_pluginhealth
+    ocv2_api --> ocv2_findings
+    ocv2_sessions --> ocv2_api
+
+    subgraph legend["Legend"]
+        direction LR
+        L_ocv2["OpenCode v2"]
+    end
+
+    classDef ocv2 fill:#5BB8C5,stroke:#3A8A96,color:#FFFFFF
+
+    class L_ocv2,ocv2_api,ocv2_sessions,ocv2_move,ocv2_pluginhealth,ocv2_findings,ocv2_unfuck ocv2

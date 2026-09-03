@@ -1,0 +1,55 @@
+---
+config:
+  theme: 'neutral'
+---
+flowchart TD
+    subgraph standalone["Standalone"]
+        test_guidelines["test-guidelines"]
+        gui_test_guidelines["gui-test-guidelines"]
+        error_message["error-message"]
+        logging_guidelines["logging-guidelines"]
+        design_tradeoffs["design-tradeoffs"]
+        scheduled_task["scheduled-task"]
+        scheduled_agent["scheduled-agent"]
+        issue_closeout["issue-closeout"]
+        oop["oop"]
+        improve_architecture_oop["improve-architecture-oop"]
+        read_pdf["read-pdf"]
+        readme["readme"]
+        commit_scopes["commit-scopes"]
+        rust_idioms["rust-idioms"]
+        rust_tea["rust-tea"]
+    end
+    subgraph inbound["Workflow inbound"]
+        commit["commit"]
+        workflows["workflows"]
+    end
+    subgraph external_agents["External / agents"]
+        improve_codebase_architecture["improve-codebase-architecture (external)"]
+        agent_test["agent: test"]
+    end
+
+    gui_test_guidelines --> test_guidelines
+    improve_architecture_oop --> oop
+    improve_architecture_oop --> improve_codebase_architecture
+    rust_tea --> oop
+    scheduled_agent --> scheduled_task
+    scheduled_task --> scheduled_agent
+    commit --> commit_scopes
+    workflows --> improve_architecture_oop
+    commit_scopes --> agent_test
+
+    subgraph legend["Legend"]
+        direction LR
+        L_stand["Standalone"]
+        L_work["Workflow"]
+        L_ext["External / agent"]
+    end
+
+    classDef standalone fill:#A78BFA,stroke:#7E5FD0,color:#FFFFFF
+    classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
+    classDef external fill:#8FB4DE,stroke:#6C93C0,color:#FFFFFF
+
+    class L_stand,test_guidelines,gui_test_guidelines,error_message,logging_guidelines,design_tradeoffs,scheduled_task,scheduled_agent,issue_closeout,oop,improve_architecture_oop,read_pdf,readme,commit_scopes,rust_idioms,rust_tea standalone
+    class L_work,commit,workflows workflow
+    class L_ext,improve_codebase_architecture,agent_test external
