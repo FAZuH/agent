@@ -1,35 +1,23 @@
 ---
 name: finish
-description: "End a working session — update the relevant docs, plan the commit grouping and propose `type(scope): description` commit messages for each logical group, hand those proposals to the orchestrator to execute with the user, archive a completed `.scratch/` session workspace, summarize what was accomplished, suggest next steps, then run gated self-improvement (session-retro + skill-doctor) and offer papercut-sweep. Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
+description: "End a working session — update the relevant docs, archive a completed `.scratch/` session workspace, summarize what was accomplished, suggest next steps, then delegate to @commit (§2) and @self-improve (§6). Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
 ---
 
 # Finish a session
 
-End a working session: update the relevant docs, plan the commit grouping and propose one conventional message per group, summarize what you accomplished, suggest next steps, then run gated self-improvement (collect + validate) and offer the sweep. Do the steps in order.
+End a working session: update the relevant docs, delegate commit planning to @commit, archive the workspace, summarize what you accomplished, suggest next steps, then delegate self-improvement to @self-improve. Do the steps in order.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Mode and commit
-> permission* section above.
+> fixed post-run report.
 
-## Mode and commit permission
-
-**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups
-requires user approval. The `/finish` command wrapper grants that approval
-when its argument begins with `auto` — that is `auto` mode for this
-invocation (see the @gate skill). In auto mode, the orchestrator may stage
-and commit each proposed logical group without asking. In all other modes,
-the orchestrator must propose the groups and wait for confirmation.
-
-The finish subagent remains read-only with respect to commits: it never runs
-`git add`, `git commit`, or `git push`. It only proposes groups for the
-orchestrator.
-
-Your job in the commit step is only to PLAN the commit grouping and PROPOSE one `type(scope): description` message per logical group. Return the proposed group messages to the orchestrator. The orchestrator restates them to the user, the user can adjust them, and only the orchestrator runs the actual `git add` and `git commit`.
-
-The commit permission does not persist beyond the command invocation and does
-not pass to any other request or agent. When in doubt, do not commit; propose
-and hand off.
+Commit and self-improvement gates live in the delegated skills: GATE
+`commit-approval` in @commit, GATE `papercut-file` (via @session-retro) and
+GATE `offer-sweep` in @self-improve (vocabulary: the @gate skill). The
+`/finish` command wrapper grants `commit-approval` when its argument begins
+with `auto`. This skill declares no gates of its own and never runs `git
+add`, `git commit`, or `git push` — it only returns the delegated skills'
+proposals to the orchestrator.
 
 ## 1. Update relevant docs
 
@@ -39,17 +27,10 @@ Review the conversation. Identify the docs that the changes require. Update the 
 
 ## 2. Commit changes
 
-Check if this directory is a git repository (`git rev-parse --is-inside-work-tree`). If it is not a repository, skip all commit steps.
-
-Read the commit docs of the project, if any. Find and grep for commit docs before proposing commits: search for `CONTRIBUTING.md`, `docs/commits*`, any `COMMITTING.md`/`COMMIT*.md`, and the commit section of `AGENTS.md` or `CLAUDE.md`. Use glob and grep across the whole repo — including `docs/` — to locate them. Read the docs before you write a commit message. Check the last 10 commits with `git log --oneline -10`. Base the message on those docs. Do not invent conventions that the project does not have. If the docs are missing or poor, say so. Propose an addition when the change is not covered. One example is a new commit scope.
-
-Identify the files that you changed this session. Only those files belong in the commit groups you propose.
-
-Split the changes into separate commits. Use one commit per logical change. Do not combine unrelated changes in one commit. Do not write one message that lists several unrelated changes. Group the changed files by logical change first. Then commit each group separately. Do not stage everything and write one commit for it by default.
-
-If there is nothing to commit, say so. Then skip the rest of this section.
-
-You have NO commit permission: you must NOT run `git add`, `git commit`, or `git push` on your own, no matter what. Propose one message for each group. Use the format `type(scope): description`. Hand the proposed group messages to the orchestrator. The orchestrator restates them to the user for approval (the user can adjust the messages) and then runs the actual `git add` and `git commit` for each group. Do not run any other group or proceed to step 3 until you have handed off the full proposal.
+Load the @commit skill and follow it exactly. It owns the commit permission
+gate, the commit-docs lookup, the `git log` convention check, and the
+group-then-propose procedure. Return its proposed group messages to the
+orchestrator unchanged. Do not restate or duplicate its steps here.
 
 ## 3 Archive a completed `.scratch/` workspace
 
@@ -76,42 +57,11 @@ Identify what remains to do. Prioritize the tasks in this order:
 1. Tasks deferred on purpose. The examples are sub-tasks, unstarted phases of a plan, and postponed work.
 2. Natural follow-ups from the work. The examples are cleanup, testing, documentation, and adjacent features. Suggest 2 or 3 items at most.
 
-## 6. Run self-improvement (collect + validate) — then offer the sweep
+## 6. Run self-improvement
 
-This step is part of `finish` and runs after the summary/next-steps. It is
-gated and non-destructive — it never auto-applies fixes.
-
-1. **Collect — @session-retro (gated).** Load the @session-retro skill and
-   follow it exactly: mine the session for friction / repeated corrections /
-   skill gaps / wins, draft papercut proposals (do not file yet), render the
-   proposal table, gate with `default.question` (File all / Pick individually /
-   File none), and file only the approved subset. If the user picks none, file
-   nothing and note it.
-2. **Validate — @skill-doctor.** Load the @skill-doctor skill and follow its
-   Procedure §1 from the skill's base dir:
-
-   ```bash
-   cd ~/.config/opencode/skills/skill-doctor
-   mkdir -p ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor \
-     && python3 scripts/build_graph.py | tee -a ${XDG_DATA_HOME:-$HOME/.local/share}/skill-doctor/findings.jsonl
-   ```
-
-   Report the run-summary line (`skills, agents, edges, broken, collisions,
-   drift`). If `broken` or `drift` > 0, note them as follow-ups but do not
-   fix them here — fixing belongs to @papercut-sweep or a dedicated follow-up.
-3. **Offer the sweep — do not run it.** **GATE offer-sweep (normal → do
-   not run the sweep; note its availability in the report):** running
-   @papercut-sweep is additional work offered, never auto-run. If
-   @session-retro filed any papercuts, or @skill-doctor reported
-   `broken`/`drift`, or `papercuts -g list --status open` shows open `self::`
-   entries, tell the user:
-
-   > Self-improvement backlog ready — `N` papercuts filed this session, `M`
-   > open total, doctor: `broken X / drift Y`. Run @papercut-sweep now?
-   > [y/N]
-
-   Do not run @papercut-sweep without an explicit "yes". If the user says
-   no, leave the backlog for a later sweep.
+Load the @self-improve skill and follow it exactly. It owns the collect
+(@session-retro, gated) + validate (@skill-doctor) + offer-sweep (gated)
+sequence. Do not restate or duplicate those steps here.
 
 ## Dependency graph
 
@@ -120,6 +70,4 @@ gated and non-destructive — it never auto-applies fixes.
 - step3 -> step2
 - step4 -> step2, step3
 - step5 -> step4
-- step6a (retro) -> step5
-- step6b (doctor) -> step6a
-- step6c (offer sweep) -> step6b
+- step6 -> step5

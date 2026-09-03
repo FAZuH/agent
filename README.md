@@ -83,17 +83,21 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 
 - **[pr-creator](./skills/workflow/pr-creator/SKILL.md)**: Create PRs following the repo's own template and standards; never from the default branch.
 - **[pr-watchmerge](./skills/workflow/pr-watchmerge/SKILL.md)**: Watch a PR's CI checks and merge automatically once they pass.
-- **[finish](./skills/workflow/finish/SKILL.md)**: End a session: update docs, propose grouped commits, archive a completed `.scratch/` workspace, summarize.
+- **[finish](./skills/workflow/finish/SKILL.md)**: End a session: update docs, archive a completed `.scratch/` workspace, summarize — delegates commit planning to `@commit` and self-improvement to `@self-improve`.
+- **[commit](./skills/workflow/commit/SKILL.md)**: Plan commit grouping and propose one conventional message per logical group; orchestrator commits after approval (auto-commits in auto mode).
+- **[self-improve](./skills/workflow/self-improve/SKILL.md)**: Gated self-improvement check — collect via `@session-retro`, validate via `@skill-doctor`, offer `@papercut-sweep` (never auto-runs it).
 - **[session](./skills/workflow/session/SKILL.md)**: Manage a feature's session workspace: plan/spec doc, tickets, deviation log, checkpoints.
 - **[workflows](./skills/workflow/workflows/SKILL.md)**: The orchestrator's concrete workflows and subagent routing table; loaded before any routing decision.
 - **[scratch-finish](./skills/workflow/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps.
 - **[prepare-compact](./skills/workflow/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, then clear the goal. Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
 - **[deep-research](./skills/workflow/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via the `research` subagent.
 - **[papercut-sweep](./skills/workflow/papercut-sweep/SKILL.md)**: Sweep the global papercuts backlog (`self::` entries) and apply approved self-improvement drafts.
+- **[changelog](./skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version by comparing the current commit against the latest version.
 - **[session-retro](./skills/workflow/session-retro/SKILL.md)**: End-of-session retrospective — files `self::` proposals without touching code.
 - **[skill-doctor](./skills/workflow/skill-doctor/SKILL.md)**: Audit the skill/agent relation graph (`loads`/`routes`/`documents`), flag `broken-ref`/`collision`/`drift`, optionally render via `creating-mermaid-diagrams`.
 - **[teach](./skills/workflow/teach/SKILL.md)**: Teach anything so it locks in: graded quizzes probe your level, then a dependency map is taught node by node. Ported from [amosblomqvist/learn](https://github.com/amosblomqvist/learn).
 - **[visualize](./skills/workflow/visualize/SKILL.md)**: Adds a correct, minimal diagram to a lesson when an idea is clearer as a picture; briefs a maker subagent that renders and verifies the image.
+- **[offload](./skills/workflow/offload/SKILL.md)**: Offload builds, checks, or full agent batches to a remote machine over ssh; per-repo memory lives in gitignored `.opencode/offload.md`.
 
 ### Referential (loaded by other skills while they run)
 
@@ -115,6 +119,10 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[oop](./skills/standalone/oop/SKILL.md)**: Standard OOP/architecture vocabulary — principles, smells, patterns, and metrics. Use when you want findings, reviews, or design discussions phrased in OOP terms ("use oop terms").
 - **[improve-architecture-oop](./skills/standalone/improve-architecture-oop/SKILL.md)**: OOP vocabulary overlay for @improve-codebase-architecture findings and diagrams (loads @oop).
 - **[read-pdf](./skills/standalone/read-pdf/SKILL.md)**: Parse/read PDFs — decision tree over pdftotext, rga, pdfplumber, image rendering + vision, OCR; offers to install missing tools and records declined installs as approval gates in the project AGENTS.md.
+- **[readme](./skills/standalone/readme/SKILL.md)**: Standardize a README.md to house style: tagline, outline nav, Installation → Preview → Usage up top, Docs → License at bottom.
+- **[commit-scopes](./skills/standalone/commit-scopes/SKILL.md)**: Create or update the closed vocabulary for Conventional Commit scopes (`docs/dev/commit-scopes.md`).
+- **[rust-idioms](./skills/standalone/rust-idioms/SKILL.md)**: Type-driven Rust design patterns — newtype, typestate, sealed traits, RAII guards, error and dispatch design.
+- **[rust-tea](./skills/standalone/rust-tea/SKILL.md)**: Renderer-agnostic Elm Architecture (TEA/MVU) for Rust — Model/Message/Update/View/Effects for iced and ratatui apps.
 
 ### OpenCode v2 (ocv2)
 

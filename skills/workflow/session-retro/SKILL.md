@@ -1,6 +1,6 @@
 ---
 name: session-retro
-description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling and gates filing. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Proposes papercuts but files them only after explicit user approval — it does NOT auto-file and does NOT apply fixes (that is @papercut-sweep) and does NOT touch repo-local code sanding.
+description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling and proposes new skills when warranted, and gates filing. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Proposes papercuts but files them only after explicit user approval — it does NOT auto-file and does NOT apply fixes (that is @papercut-sweep) and does NOT touch repo-local code sanding.
 ---
 
 # Session retro
@@ -20,7 +20,7 @@ belongs to @papercut-sweep.
 
 ## Mine the session
 
-Walk back through the conversation and look for four things:
+Walk back through the conversation and look for five things:
 
 1. **Friction hit** — tool fights, dead ends, permission denials,
    workarounds used silently, retries that should not have been needed.
@@ -30,6 +30,12 @@ Walk back through the conversation and look for four things:
    docs, a procedure step that did not survive contact with reality.
 4. **Gold-standard wins** — something that went unusually well and is worth
    encoding as standing practice, not just luck.
+5. **New-skill candidate** — improvised multi-step workflow (3+ steps) worth
+   extracting as a new skill. High bar, do not force: it must be reusable
+   across sessions/repos, not covered by any existing skill in
+   `available_skills`, with transcript evidence (what was done, trigger
+   phrases, inputs/outputs). If none meets the bar, state `No new-skill
+   candidate.` and move on — that is a valid outcome.
 
 ## Propose (do not file yet)
 
@@ -41,9 +47,15 @@ For each finding, **draft** one entry but do not call `papercuts` yet:
 Use `-g` only for global scope.
 
 - Namespaces: `self::skill`, `self::agent-def`, `self::tool`,
-  `self::process`. Add free-form tags when a theme helps sweeps group.
+  `self::process`, `self::new-skill`. Add free-form tags when a theme helps sweeps group.
 - The text must carry a proposal seed: what was tried, what got in the way,
   what would fix it. A bare complaint fails the bar.
+- For `self::new-skill` candidates the text must carry: working name,
+  trigger (when it should fire), what the skill would do end-to-end, and
+  evidence (transcript excerpt + steps). Format:
+  `new-skill <working-name>: <trigger when> > <what it would do> > evidence: <excerpt>`.
+  `@papercut-sweep` picks these up by the `self::` prefix; creation itself
+  belongs to @opencode-skill-creator after explicit user approval, never here.
 - One finding per entry; overlapping findings get separate entries so the
   sweep can dedup.
 
@@ -102,6 +114,8 @@ collect its `id`. Then report a compact **filed** table:
 
 - **Propose and gate.** The GATE papercut-file tag above binds: never file a
   papercut without explicit user approval in this session, and never edit
-  skills, agent defs, or config from this skill. If the user wants immediate
+  skills, agent defs, or config from this skill. Never auto-create a new
+  skill here — if the user wants to pursue a `self::new-skill` candidate
+  after filing, hand off explicitly to @opencode-skill-creator. If the user wants immediate
   application after filing, hand off explicitly to @papercut-sweep.
 - **Scope decides store.** Global scope → global store (`-g`); repo/project scope → local store (no `-g`). Do not use `-g` for repo-local fixes.
