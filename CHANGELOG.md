@@ -1,3 +1,10 @@
+## [0.7.3](https://github.com/FAZuH/agent/compare/v0.7.2...v0.7.3) (2026-09-03)
+
+
+### Features
+
+* **skill:** add ocv2-unfuck skill for top-level tool availability check ([f4b0bcb](https://github.com/FAZuH/agent/commit/f4b0bcb4db361cd48a4b78bb39826d2c5ffd7f31))
+
 ## [0.7.2](https://github.com/FAZuH/agent/compare/v0.7.1...v0.7.2) (2026-09-03)
 
 
@@ -35,11 +42,4 @@
 * **skill:** trust gh over stale symbolic-ref for default branch ([547a466](https://github.com/FAZuH/agent/commit/547a4660451e7a1c39e26efe05d3e3e971f9e8b6))
 
 ## [0.6.11](https://github.com/FAZuH/agent/compare/v0.6.10...v0.6.11) (2026-09-01)
-
-## [0.6.10](https://github.com/FAZuH/agent/compare/v0.6.9...v0.6.10) (2026-09-01)
-
-
-### Features
-
-* **skill:** octask list shows task name and description; accept full unit names ([923af0f](https://github.com/FAZuH/agent/commit/923af0f094852503349b36f0e369e5a07b38d187))
 
