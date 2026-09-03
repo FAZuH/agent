@@ -131,6 +131,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[ocv2-sessions](./skills/ocv2/ocv2-sessions/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
 - **[ocv2-move](./skills/ocv2/ocv2-move/SKILL.md)**: Move a session to another project directory.
 - **[ocv2-pluginhealth](./skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin status and errors.
+- **[ocv2-unfuck](./skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.
 
 ## Agents
 
