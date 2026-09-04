@@ -93,8 +93,9 @@ vocabulary.
 
 ## Skills
 
-- @task-context — non-trivial ticket work: after research/design, create or refresh the `.scratch/` context packet and pass each worker its role-specific projection from it; refresh on public API/module-boundary/design changes. Do not create durable docs (`docs/dev/`) during ordinary feature work.
-- @setup-dev-docs — durable developer docs under `docs/dev/` (bootstrap, audit, update): user-invoked; fire only on an explicit docs/dev request.
+ - @task-context — non-trivial ticket work: after research/design, create or refresh the `.scratch/` context packet and pass each worker its role-specific projection from it; refresh on public API/module-boundary/design changes. Do not create durable docs (`docs/dev/`) during ordinary feature work.
+- @forkflow — warm per-ticket delegation: capability-probe once, then fork → switch agent → first prompt; fall back to a fresh spawn. Keep it execution-mode neutral and do not treat it as a replacement for @task-context.
+ - @setup-dev-docs — durable developer docs under `docs/dev/` (bootstrap, audit, update): user-invoked; fire only on an explicit docs/dev request.
 - @grilling / @grill-with-docs — relentless interview to cover plan gaps before implementation. Use on any non-trivial task. @grill-with-docs also runs @domain-modeling and leaves a paper trail as `CONTEXT.md` (glossary) + `docs/adr/` (decisions).
 - @diagnosing-bugs — structured diagnosis loop for hard bugs: tight feedback loop first, fix with a regression test.
 - @wayfinder — plans too large to hold in one session; chart decision tickets on the issue tracker.
