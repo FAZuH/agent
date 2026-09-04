@@ -1,6 +1,6 @@
 ---
 name: ocv2-sessions
-description: Fork an OpenCode v2 session and control the fork — switch agent & model, verify, send prompts, and wait blocking. Use when the user says "fork this session", "fork before this message", "switch the model/agent in the fork", or wants to verify a fork/model/agent change and talk to the new session.
+description: Fork an OpenCode v2 session and control the fork — switch agent & model, verify, send prompts, and poll the outcome. Use when the user says "fork this session", "fork before this message", "switch the model/agent in the fork", or wants to verify a fork/model/agent change and talk to the new session.
 ---
 
 # Fork & control an OpenCode v2 session
@@ -67,11 +67,12 @@ opencode2 api post /api/session/ses_NEW/prompt --data '{"text":"Hello from the f
 # 200 → {data:{id:msg_…,sessionID, type:user, delivery:steer|queue}}
 ```
 
-Then **wait blocking** (prefer over polling):
+Then wait for completion. The documented blocking endpoint may be unavailable
+on the deployed server, so poll the session outcome when it fails:
 
 ```sh
 opencode2 api post /api/session/ses_NEW/wait
-# POST /api/session/{sessionID}/wait — v2.session.wait, waits until agent loop is idle, 204 when done
+# If unavailable, poll GET /api/session/ses_NEW and read .data.outcome.
 ```
 
 After wait, read the reply:
@@ -91,3 +92,4 @@ If you need the message ID, it is the newest `type: assistant` after wait. In `c
 - Verify via `GET /api/session/{id}` is authoritative; `GET /api/project/current` may return `/` from a detached shell — rely on the system-update environment block after move.
 - Inbox: a prompt sent while the session is busy goes to `GET /api/session/{id}/inbox` with `delivery: steer|queue`. `queue` is the default after interrupt; `steer` is queued but waits for idle. Use `POST /api/session/{id}/interrupt` to abort a stuck `chat` shell loop, then `DELETE /api/session/{id}/inbox/{inboxID}` to drop a stuck queued item.
 - Resumed sessions do NOT notify the parent: when you RESUME a subagent session (steer/queue a prompt into an existing `ses_…`) instead of spawning a fresh one, the parent conversation does not get a completion notification when the resumed agent finishes. The `subagent` tool's "you will be notified when it completes" applies only to a newly-spawned session, not to a resumed one. To know when a resumed session is idle, **poll `GET /api/session/{sessionID}`** and read `.data.outcome` (and `.data.time.idle`); the outcome flips to `succeeded` / `failed` when the loop stops. Poll `outcome` in a loop rather than waiting on a notification. Resume whenever the same unit of work continues across a model/quota switch, then poll — do not rely on a parent callback.
+- For warm delegation policy and the required fork → switch → first-prompt order, use @forkflow.

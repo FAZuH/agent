@@ -16,6 +16,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 
 | Task | Subagent | Notes |
 |---|---|---|
+| Warm per-ticket delegation | `@forkflow` | Probe once, then fork → switch agent → first prompt; fall back to a fresh spawn |
 | Implement a ticket/spec/plan | `implement` | Drives implement + @tdd skills; no PTY |
 | Run test/lint/typecheck suites | `test` | Returns concise analysis only |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
@@ -32,6 +33,8 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Oversized effort | @wayfinder (skill) | Use yourself |
 | Cross-session context | @handoff (skill) | Use yourself |
 | Persist plans / log deviations / pre-compaction checkpoints | @session (skill) | Use yourself |
+| Create/refresh the per-ticket context packet | @task-context (skill) | Use yourself after research/design; pass role projections to workers |
+| Bootstrap/audit/update `docs/dev/` | @setup-dev-docs (skill) | Use yourself on an explicit user request only |
 | Plan commit grouping + propose messages (no commit) | @commit (skill) | Use yourself; restate groups to the user for approval, then commit yourself |
 | Gated self-improvement check (retro + doctor, offers sweep) | @self-improve (skill) | Use yourself |
 | Pick the right workflow when unsure | @ask-matt (skill) | Use yourself — router over the skills |
@@ -67,6 +70,12 @@ Delegation rules:
 | Visual verification | `web-viewer` for pages/UI, `image-viewer` for still images | UI or image needs visual judgment | `reference/visual-verification.md` |
 | Recover an interrupted subagent spawn | yourself | Spawn aborted / server restarted mid-task | `reference/interrupted-delegation.md` |
 | Batch of user requests needs validity check | yourself, before grilling | N items in, claims unverified | `reference/claim-audit-intake.md` |
+
+## Ticket context and durable docs
+
+- Non-trivial ticket work: after research/design synthesis, run @task-context — create or refresh the `.scratch/<date>_<task>/context-packet.md`, then pass each worker its role projection in the delegation prompt (`implement` / `review` / `test` / `research`), never raw research transcripts.
+- Durable developer docs (`docs/dev/`) change only through @setup-dev-docs, on an explicit user request; ordinary feature work writes task context instead.
+- Warm delegation: use @forkflow when its capability probe passes. This is an execution accelerator, not a replacement for the ticket spec or @task-context. The setup-dev-docs/task-context session orchestration remains deferred.
 
 ## Loading rules
 

@@ -3,50 +3,38 @@ config:
   theme: 'neutral'
 ---
 flowchart TD
-    subgraph refdeps["Referential dependencies"]
-        direction LR
-        following_procedures["following-procedures"]
-        scratch["scratch"]
-        worktree["worktree"]
-        gate["gate"]
-
-        pr_to_close_r["pr-to-close"]
+    subgraph loaders_orch["Orchestration"]
         worktree_new_r["worktree-new"]
         worktree_finish_r["worktree-finish"]
         worktree_close_r["worktree-close"]
-        pr_creator_r["pr-creator"]
-        pr_watchmerge_r["pr-watchmerge"]
+    end
+    subgraph loaders_workflow["Workflow"]
         finish_r["finish"]
         session_r["session"]
-        scratch_finish_r["scratch-finish"]
         prepare_compact_r["prepare-compact"]
-
-        pr_to_close_r --> following_procedures
-        worktree_new_r --> following_procedures
-        worktree_finish_r --> following_procedures
-        worktree_close_r --> following_procedures
-        pr_creator_r --> following_procedures
-        pr_watchmerge_r --> following_procedures
-        finish_r --> following_procedures
-        session_r --> following_procedures
-        scratch_finish_r --> following_procedures
-        prepare_compact_r --> following_procedures
-
-        worktree_new_r --> worktree
-        worktree_finish_r --> worktree
-        worktree_close_r --> worktree
-
-        finish_r --> scratch
-        session_r --> scratch
-        prepare_compact_r --> scratch
-        worktree --> scratch
-        scratch --> scratch_finish_r
-
-        worktree_finish_r --> gate
-        pr_creator_r --> gate
-        finish_r --> gate
-        session_r --> gate
+        scratch_finish_r["scratch-finish"]
+        task_context_r["task-context"]
     end
+    subgraph refdeps["Referential"]
+        scratch["scratch"]
+        worktree["worktree"]
+    end
+
+    %% following-procedures (14 loaders) and gate (12 loaders) omitted:
+    %% every procedural skill loads them, so the edges add no signal.
+    %% Full edge list lives in the skill-doctor graph.mmd.
+
+    worktree_new_r --> worktree
+    worktree_finish_r --> worktree
+    worktree_close_r --> worktree
+
+    finish_r --> scratch
+    session_r --> scratch
+    prepare_compact_r --> scratch
+    scratch_finish_r --> scratch
+    task_context_r --> scratch
+    worktree --> scratch
+    scratch --> scratch_finish_r
 
     subgraph legend["Legend"]
         direction LR
@@ -59,6 +47,6 @@ flowchart TD
     classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
     classDef referential fill:#9DBB98,stroke:#7B9C76,color:#FFFFFF
 
-    class L_ref,following_procedures,scratch,worktree,gate referential
-    class L_orch,pr_to_close_r,worktree_new_r,worktree_finish_r,worktree_close_r orchestration
-    class L_work,pr_creator_r,pr_watchmerge_r,finish_r,session_r,scratch_finish_r,prepare_compact_r workflow
+    class L_ref,scratch,worktree referential
+    class L_orch,worktree_new_r,worktree_finish_r,worktree_close_r orchestration
+    class L_work,finish_r,session_r,prepare_compact_r,scratch_finish_r,task_context_r workflow

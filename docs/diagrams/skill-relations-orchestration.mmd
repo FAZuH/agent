@@ -8,54 +8,84 @@ flowchart TD
         worktree_new["worktree-new"]
         worktree_finish["worktree-finish"]
         worktree_close["worktree-close"]
-        subgraph workflow["Workflow"]
-            pr_creator["pr-creator"]
-            pr_watchmerge["pr-watchmerge"]
-            finish["finish"]
-            session["session"]
-            scratch_finish["scratch-finish"]
-            prepare_compact["prepare-compact"]
-            codebase_design["codebase-design"]
-            improve_codebase_architecture["improve-codebase-architecture"]
-            subgraph self_improvement["Self-improvement"]
-                session_retro["session-retro"]
-                papercut_sweep["papercut-sweep"]
-                skill_doctor["skill-doctor"]
-                deep_research["deep-research"]
-            end
-            subgraph external["External / private helpers"]
-                to_spec["to-spec"]
-                to_tickets["to-tickets"]
-                wayfinder["wayfinder"]
-                setup_matt_pocock_skills["setup-matt-pocock-skills"]
-                grill_with_docs["grill-with-docs"]
-                creating_mermaid_diagrams["creating-mermaid-diagrams (external)"]
-            end
-        end
+    end
+    subgraph workflow_core["Workflow - core"]
+        pr_creator["pr-creator"]
+        pr_watchmerge["pr-watchmerge"]
+        finish["finish"]
+        commit["commit"]
+        session["session"]
+        scratch_finish["scratch-finish"]
+        prepare_compact["prepare-compact"]
+        changelog["changelog"]
+        offload["offload"]
+        teach["teach"]
+        visualize["visualize"]
+        workflows["workflows"]
+        deep_research["deep-research"]
+        forkflow["forkflow"]
+        task_context["task-context"]
+        setup_dev_docs["setup-dev-docs"]
+    end
+    subgraph self_improvement["Self-improvement"]
+        self_improve["self-improve"]
+        session_retro["session-retro"]
+        papercut_sweep["papercut-sweep"]
+        skill_doctor["skill-doctor"]
+    end
+    subgraph external["External skills"]
+        to_spec["to-spec"]
+        to_tickets["to-tickets"]
+        wayfinder["wayfinder"]
+        grilling["grilling"]
+        grill_with_docs["grill-with-docs"]
     end
 
-    pr_to_close --> pr_watchmerge
     pr_to_close --> pr_creator
+    pr_to_close --> pr_watchmerge
     pr_to_close --> worktree_close
-
-    worktree_finish --> pr_creator
+    worktree_new --> worktree_close
     worktree_finish --> finish
-
+    worktree_finish --> pr_creator
     worktree_close --> finish
-    session --> scratch_finish
+    worktree_close --> worktree_new
+
+    finish --> commit
+    finish --> self_improve
     finish --> scratch_finish
+    finish --> session_retro
+    finish --> skill_doctor
+    self_improve --> session_retro
+    self_improve --> papercut_sweep
+    self_improve --> skill_doctor
+    session_retro --> papercut_sweep
+    session_retro --> finish
+    papercut_sweep --> session_retro
+    papercut_sweep --> skill_doctor
+    session --> scratch_finish
     session --> to_spec
     session --> to_tickets
     session --> wayfinder
-    session --> setup_matt_pocock_skills
-
-    session_retro --> papercut_sweep
-    papercut_sweep --> session_retro
-    papercut_sweep --> skill_doctor
-    skill_doctor --> creating_mermaid_diagrams
     deep_research --> grill_with_docs
+    deep_research --> grilling
     deep_research --> to_spec
-    improve_codebase_architecture --> codebase_design
+    workflows --> finish
+    workflows --> commit
+    workflows --> session
+    workflows --> self_improve
+    workflows --> deep_research
+    workflows --> session_retro
+    workflows --> papercut_sweep
+    workflows --> skill_doctor
+    workflows --> forkflow
+    workflows --> task_context
+    workflows --> setup_dev_docs
+    task_context --> session
+    task_context --> scratch_finish
+    task_context --> prepare_compact
+    task_context --> setup_dev_docs
+    setup_dev_docs --> session
+    setup_dev_docs --> task_context
 
     subgraph legend["Legend"]
         direction LR
@@ -71,6 +101,6 @@ flowchart TD
     classDef selfimp fill:#7BC496,stroke:#5A9E73,color:#FFFFFF
 
     class L_orch,pr_to_close,worktree_new,worktree_finish,worktree_close orchestration
-    class L_work,pr_creator,pr_watchmerge,finish,session,scratch_finish,prepare_compact,codebase_design,improve_codebase_architecture workflow
-    class L_self,session_retro,papercut_sweep,skill_doctor,deep_research selfimp
-    class L_ext,to_spec,to_tickets,wayfinder,setup_matt_pocock_skills,grill_with_docs,creating_mermaid_diagrams external
+    class L_work,pr_creator,pr_watchmerge,finish,commit,session,scratch_finish,prepare_compact,changelog,offload,teach,visualize,workflows,deep_research,forkflow,task_context,setup_dev_docs workflow
+    class L_self,self_improve,session_retro,papercut_sweep,skill_doctor selfimp
+    class L_ext,to_spec,to_tickets,wayfinder,grilling,grill_with_docs external

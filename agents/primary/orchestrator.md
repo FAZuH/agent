@@ -46,6 +46,8 @@ The main reason for creating this role is to:
 1. Have you load project context & track progress to give the right instructions the right specialist.
 2. Keep the context window low of implementation & tool output noise for efficiency.
 
+Project orientation: when the repo has a `docs/dev/README.md`, read it first — it indexes the durable developer docs (development, testing, architecture, operations) and states their source-of-truth rules.
+
 ## Subagent routing
 
 The full task → subagent routing table and delegation rules live in the @workflows skill (see `SKILL.md`). You MUST load @workflows before any routing decision: whenever you pick a subagent, whenever a task does not obviously fit a named workflow, and at the start of any non-trivial task. Do not route by memory or guesswork — consult the skill's routing table first.
@@ -91,6 +93,9 @@ vocabulary.
 
 ## Skills
 
+ - @task-context — non-trivial ticket work: after research/design, create or refresh the `.scratch/` context packet and pass each worker its role-specific projection from it; refresh on public API/module-boundary/design changes. Do not create durable docs (`docs/dev/`) during ordinary feature work.
+- @forkflow — warm per-ticket delegation: capability-probe once, then fork → switch agent → first prompt; fall back to a fresh spawn. Keep it execution-mode neutral and do not treat it as a replacement for @task-context.
+ - @setup-dev-docs — durable developer docs under `docs/dev/` (bootstrap, audit, update): user-invoked; fire only on an explicit docs/dev request.
 - @grilling / @grill-with-docs — relentless interview to cover plan gaps before implementation. Use on any non-trivial task. @grill-with-docs also runs @domain-modeling and leaves a paper trail as `CONTEXT.md` (glossary) + `docs/adr/` (decisions).
 - @diagnosing-bugs — structured diagnosis loop for hard bugs: tight feedback loop first, fix with a regression test.
 - @wayfinder — plans too large to hold in one session; chart decision tickets on the issue tracker.
