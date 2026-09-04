@@ -16,6 +16,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 
 | Task | Subagent | Notes |
 |---|---|---|
+| Warm per-ticket delegation | `@forkflow` | Probe once, then fork → switch agent → first prompt; fall back to a fresh spawn |
 | Implement a ticket/spec/plan | `implement` | Drives implement + @tdd skills; no PTY |
 | Run test/lint/typecheck suites | `test` | Returns concise analysis only |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
@@ -74,6 +75,7 @@ Delegation rules:
 
 - Non-trivial ticket work: after research/design synthesis, run @task-context — create or refresh the `.scratch/<date>_<task>/context-packet.md`, then pass each worker its role projection in the delegation prompt (`implement` / `review` / `test` / `research`), never raw research transcripts.
 - Durable developer docs (`docs/dev/`) change only through @setup-dev-docs, on an explicit user request; ordinary feature work writes task context instead.
+- Warm delegation: use @forkflow when its capability probe passes. This is an execution accelerator, not a replacement for the ticket spec or @task-context. The setup-dev-docs/task-context session orchestration remains deferred.
 
 ## Loading rules
 
