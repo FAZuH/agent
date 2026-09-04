@@ -13,7 +13,7 @@ description: >-
 
 `forkflow` is the warm-delegation layer for the orchestration workflow. It
 uses the current ticket's session history as an accelerator. The ticket's
-durable contract remains its spec and, when used, its `@task-context` packet.
+durable contract remains its spec and, when used, its @task-context packet.
 
 ## Non-negotiable order
 
@@ -85,5 +85,5 @@ decisions in the active session's existing session record. `forkflow` does not
 create a second ticket-context or architecture-memory file. On fallback,
 record the failed probe and continue with ordinary delegation.
 
-Raw API mechanics live in `@ocv2-sessions`; this skill owns the orchestration
+Raw API mechanics live in @ocv2-sessions; this skill owns the orchestration
 policy and ordering constraints.
