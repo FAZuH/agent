@@ -13,6 +13,7 @@ flowchart TD
         session_r["session"]
         prepare_compact_r["prepare-compact"]
         scratch_finish_r["scratch-finish"]
+        task_context_r["task-context"]
     end
     subgraph refdeps["Referential"]
         scratch["scratch"]
@@ -31,6 +32,7 @@ flowchart TD
     session_r --> scratch
     prepare_compact_r --> scratch
     scratch_finish_r --> scratch
+    task_context_r --> scratch
     worktree --> scratch
     scratch --> scratch_finish_r
 
@@ -47,4 +49,4 @@ flowchart TD
 
     class L_ref,scratch,worktree referential
     class L_orch,worktree_new_r,worktree_finish_r,worktree_close_r orchestration
-    class L_work,finish_r,session_r,prepare_compact_r,scratch_finish_r workflow
+    class L_work,finish_r,session_r,prepare_compact_r,scratch_finish_r,task_context_r workflow

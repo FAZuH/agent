@@ -23,6 +23,9 @@ flowchart TD
         visualize["visualize"]
         workflows["workflows"]
         deep_research["deep-research"]
+        forkflow["forkflow"]
+        task_context["task-context"]
+        setup_dev_docs["setup-dev-docs"]
     end
     subgraph self_improvement["Self-improvement"]
         self_improve["self-improve"]
@@ -74,6 +77,15 @@ flowchart TD
     workflows --> session_retro
     workflows --> papercut_sweep
     workflows --> skill_doctor
+    workflows --> forkflow
+    workflows --> task_context
+    workflows --> setup_dev_docs
+    task_context --> session
+    task_context --> scratch_finish
+    task_context --> prepare_compact
+    task_context --> setup_dev_docs
+    setup_dev_docs --> session
+    setup_dev_docs --> task_context
 
     subgraph legend["Legend"]
         direction LR
@@ -89,6 +101,6 @@ flowchart TD
     classDef selfimp fill:#7BC496,stroke:#5A9E73,color:#FFFFFF
 
     class L_orch,pr_to_close,worktree_new,worktree_finish,worktree_close orchestration
-    class L_work,pr_creator,pr_watchmerge,finish,commit,session,scratch_finish,prepare_compact,changelog,offload,teach,visualize,workflows,deep_research workflow
+    class L_work,pr_creator,pr_watchmerge,finish,commit,session,scratch_finish,prepare_compact,changelog,offload,teach,visualize,workflows,deep_research,forkflow,task_context,setup_dev_docs workflow
     class L_self,self_improve,session_retro,papercut_sweep,skill_doctor selfimp
     class L_ext,to_spec,to_tickets,wayfinder,grilling,grill_with_docs external

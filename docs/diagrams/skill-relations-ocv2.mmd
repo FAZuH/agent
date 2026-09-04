@@ -11,6 +11,9 @@ flowchart LR
         ocv2_findings["ocv2-findings"]
         ocv2_unfuck["ocv2-unfuck"]
     end
+    subgraph external["Workflow skill"]
+        forkflow_o["forkflow"]
+    end
 
     %% ocv2-unfuck is intentionally isolated: top-level tool check, no skill deps
     ocv2_api --> ocv2_sessions
@@ -18,12 +21,17 @@ flowchart LR
     ocv2_api --> ocv2_pluginhealth
     ocv2_api --> ocv2_findings
     ocv2_sessions --> ocv2_api
+    forkflow_o --> ocv2_sessions
+    ocv2_sessions --> forkflow_o
 
     subgraph legend["Legend"]
         direction LR
         L_ocv2["OpenCode v2"]
+        L_ext["Workflow"]
     end
 
     classDef ocv2 fill:#5BB8C5,stroke:#3A8A96,color:#FFFFFF
+    classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
 
     class L_ocv2,ocv2_api,ocv2_sessions,ocv2_move,ocv2_pluginhealth,ocv2_findings,ocv2_unfuck ocv2
+    class L_ext,forkflow_o workflow
