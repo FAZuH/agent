@@ -158,6 +158,15 @@ export const mdLinkPlugin = {
   tui: true,
 
   setup: async (ctx: any) => {
+    // Process-global singleton: hot-reload never disposes old setup()
+    // closures, so every reload / location attach re-ran setup() and added
+    // ANOTHER setInterval — 7 leaked pollers were observed stampeding the
+    // service with concurrent `opencode2 api` subprocesses until it died.
+    // globalThis survives module re-evaluation, so clearing the previous
+    // timer here guarantees one poller per process, not per setup() call.
+    const g = globalThis as any
+    if (g.__mdLinkPollTimer) clearInterval(g.__mdLinkPollTimer)
+
     let busy = false
     let timer: ReturnType<typeof setInterval> | undefined
 
@@ -178,6 +187,7 @@ export const mdLinkPlugin = {
 
     setTimeout(tick, 500)
     timer = setInterval(tick, POLL_MS)
+    g.__mdLinkPollTimer = timer
 
     // ── Q&A capture ─────────────────────────────────────────────────────────
     // execute.before: write the question callout BEFORE the learner answers

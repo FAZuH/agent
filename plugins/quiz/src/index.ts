@@ -24,7 +24,8 @@
  */
 
 const DONT_KNOW = "__dont_know__"
-const POLL_MS = 400
+const POLL_MS = 1_000
+const MAX_BACKOFF_MS = 5_000
 const TIMEOUT_MS = 10 * 60_000
 
 interface QuizOption {
@@ -52,7 +53,12 @@ function api(method: string, path: string, body?: unknown): Promise<any> {
   const args = ["opencode2", "api", method, path]
   if (body !== undefined) args.push("-d", JSON.stringify(body))
   const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
+  // Hard 15s cap: a hung child (service mid-restart, port-race deadlock) must
+  // not stall the poll loop — one such hang froze quiz_ask for 15+ minutes
+  // and blew straight through the 10-minute answer window.
+  const timeout = setTimeout(() => proc.kill(), 15_000)
   return new Response(proc.stdout).text().then(async (out) => {
+    clearTimeout(timeout)
     await proc.exited
     try {
       return JSON.parse(out)
@@ -199,12 +205,32 @@ export default {
 
             const deadline = Date.now() + TIMEOUT_MS
             let state: any
+            let delay = POLL_MS
             while (Date.now() < deadline) {
-              await new Promise((r) => setTimeout(r, POLL_MS))
+              // An aborted/interrupted quiz_ask must stop spawning CLI
+              // subprocesses immediately — this loop used to run to its full
+              // 10-minute deadline after cancellation, amplifying every
+              // service restart into an api-spawn storm.
+              if (tctx?.abort?.aborted) break
+              await new Promise((r) => setTimeout(r, delay))
+              let body: any
               try {
-                state = (await api("get", `/api/session/${sessionID}/form/${formID}/state`))?.data
+                body = await api("get", `/api/session/${sessionID}/form/${formID}/state`)
               } catch {}
-              if (state && state.status !== "pending") break
+              if (body?.data !== undefined) {
+                state = body.data
+                delay = POLL_MS
+                if (state && state.status !== "pending") break
+              } else if (body?._tag) {
+                // API error envelope (e.g. {"_tag":"FormNotFoundError"} with no
+                // `data`): the form is gone for good (cancelled elsewhere,
+                // session compacted/ended) — polling cannot recover it.
+                break
+              } else {
+                // Transport failure (CLI spawn/parse error): back off instead
+                // of hammering a possibly-restarting service.
+                delay = Math.min(delay * 2, MAX_BACKOFF_MS)
+              }
             }
 
             if (!state || state.status === "pending") {
