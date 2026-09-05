@@ -2,12 +2,13 @@
 name: prepare-compact
 description: >-
   Prepare the current session for context compaction. Use when the user is
-  about to compact the session context window, asks to prepare for
-  compaction, says the context is getting full or running low, wants to
+  about to compact the session context window, asks to compact or prepare
+  for compaction, says the context is getting full or running low, wants to
   persist state before compacting, or wants a resume checkpoint so work
   survives a compaction. Persists the session/plan doc, deviations, decisions,
-  todo list, session-critical facts, and the active goal objective, then
-  clears the goal so it stops re-prompting after compaction.
+  todo list, session-critical facts, and the active goal objective, clears
+  the goal, then gates a compact offer — in auto mode it compacts
+  immediately.
 ---
 
 # prepare-compact
@@ -155,8 +156,31 @@ Give the user a concise report:
 - Anything that could NOT be persisted, so they know what will be lost on
   compaction.
 
-Do not commit or take any other side action. The user will compact or continue
-after reviewing your report.
+Do not commit or take any other side action. Step 9 offers the compaction
+itself; otherwise the user decides whether to compact or continue.
+
+## 9. Offer compaction
+
+**GATE compact-offer (normal → compact immediately):** after the report,
+offer to compact this session now. Skip this step entirely when the agent is
+not running in OpenCode — outside OpenCode there is no compaction to trigger,
+so the report in step 8 is the end of the procedure.
+
+Detect the OpenCode harness first:
+
+- **OpenCode v2** — the environment block carries `Current conversation
+  session ID: ses_…`. Compact with the @ocv2-compact skill's script, pointed
+  at that id: `scripts/oc-compact.sh ses_…`. The compaction is a steer: it
+  queues behind the current turn, so end the turn right after triggering it.
+- **OpenCode v1** — the `compact_context` tool is available. Call it.
+
+When the gate fires (interactive mode), ask with the @gate mechanics: state
+what was persisted and where (step 8), that compaction replaces the
+conversation with the summary, and offer Approve / Abort. Approve → run the
+compaction for the detected harness. Abort → stop; the persisted state stands
+either way.
+
+In auto mode, do not ask — run the compaction immediately after the report.
 
 ## Dependency graph
 
@@ -168,3 +192,4 @@ after reviewing your report.
 - step6 -> step2, step4
 - step7 -> step6
 - step8 -> step6, step7
+- step9 -> step8
