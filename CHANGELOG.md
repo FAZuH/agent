@@ -1,3 +1,13 @@
+## [0.8.4](https://github.com/FAZuH/agent/compare/v0.8.3...v0.8.4) (2026-09-05)
+
+
+### Features
+
+* **agent:** default subagent denials to ask ([50e234c](https://github.com/FAZuH/agent/commit/50e234ce9b1d0286f88781d51f5d87702d9c0899))
+* **skill:** add ocv2-compact and extend prepare-compact with compact offer ([5a72ef5](https://github.com/FAZuH/agent/commit/5a72ef5ce6c1171b05f8479948e1662e6321a056))
+* **skill:** add scripts for common ocv2 api calls ([e6f4b5f](https://github.com/FAZuH/agent/commit/e6f4b5fa5e678c539d54f7f30a549456d02c0e17))
+* **skill:** tool-free todo collection and self-compact timeout ([371928c](https://github.com/FAZuH/agent/commit/371928cb2e08d12b006df9ca41d76be628b239f9))
+
 ## [0.8.3](https://github.com/FAZuH/agent/compare/v0.8.2...v0.8.3) (2026-09-05)
 
 ## [0.8.2](https://github.com/FAZuH/agent/compare/v0.8.1...v0.8.2) (2026-09-05)
@@ -34,11 +44,4 @@
 
 * **skill:** record v2 fork findings and poll outcomes when wait is unavailable ([f051767](https://github.com/FAZuH/agent/commit/f051767349cee37ada800f7aa53f12243b6c6a16))
 * **skill:** un-backtick cross-references so the relation graph captures them ([ada6c8e](https://github.com/FAZuH/agent/commit/ada6c8ecda90309363d19edffca0bac8bc28ea1a))
-
-## [0.7.3](https://github.com/FAZuH/agent/compare/v0.7.2...v0.7.3) (2026-09-03)
-
-
-### Features
-
-* **skill:** add ocv2-unfuck skill for top-level tool availability check ([f4b0bcb](https://github.com/FAZuH/agent/commit/f4b0bcb4db361cd48a4b78bb39826d2c5ffd7f31))
 
