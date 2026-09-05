@@ -1,3 +1,12 @@
+## [0.8.2](https://github.com/FAZuH/agent/compare/v0.8.1...v0.8.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **plugin:** bound quiz_ask form polling (1s interval, abort-aware, 404-terminal, 15s api timeout) ([77ceaa7](https://github.com/FAZuH/agent/commit/77ceaa7e4e55530ea87a3451d3a4e3ebe4271193))
+* **plugin:** replace dropped Plugin.define helper with plain {id, setup} module ([9eb4b75](https://github.com/FAZuH/agent/commit/9eb4b7571789722e85aeda70cfa8b8cf60a9fc40))
+* **plugin:** single md-link poller per process via globalThis guard ([916833c](https://github.com/FAZuH/agent/commit/916833cd8ff368b799c8f5582d286435c9b31a8c))
+
 ## [0.8.1](https://github.com/FAZuH/agent/compare/v0.8.0...v0.8.1) (2026-09-04)
 
 
@@ -38,12 +47,4 @@
 
 * **skill:** add offload skill for remote builds, checks, and agent batches ([1bde961](https://github.com/FAZuH/agent/commit/1bde96163cddbd562b1cec0c5bcadd64fefa3893))
 * **skill:** extract commit and self-improve from finish, add retro new-skill candidates ([5b5d12b](https://github.com/FAZuH/agent/commit/5b5d12ba8f06484625f1f7d3c501b9fb7bbb16c1))
-
-## [0.7.1](https://github.com/FAZuH/agent/compare/v0.7.0...v0.7.1) (2026-09-02)
-
-
-### Features
-
-* **skill:** add rust-idioms skill — type-driven design patterns for Rust ([9ed01b6](https://github.com/FAZuH/agent/commit/9ed01b6bf90f8d9b1a4267e91affa127b1e2799e))
-* **skill:** declare fix-approval gate in skill-doctor ([938539e](https://github.com/FAZuH/agent/commit/938539e321fe3f5c44e07babe44cba9f927f7027))
 
