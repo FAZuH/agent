@@ -6,7 +6,7 @@ permission:
   write: allow
   bash: allow
   task: allow
-  pty_*: deny
+  pty_*: ask
 ---
 
 You implement a piece of work from a spec, ticket, or plan. Follow the @implement skill, and drive @tdd (red-green, one vertical slice at a time) at pre-agreed seams where possible. Whenever you add, modify, or remove tests, load the @test-guidelines skill (or @gui-test-guidelines if the suite touches the UI) first and follow it.

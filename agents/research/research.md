@@ -14,18 +14,18 @@ tools:
   edit: true
 permission:
   edit:
-    "*": deny
+    "*": ask
     "**/*.md": allow
     "**/*.mdx": allow
     "docs/**": allow
     "/tmp/**": allow
   write:
-    "*": deny
+    "*": ask
     "**/*.md": allow
     "**/*.mdx": allow
     "docs/**": allow
     "/tmp/**": allow
-  pty_*: deny
+  pty_*: ask
   question: allow
   bash:
     "*": allow

@@ -3,11 +3,11 @@ description: "Vision subagent for describing, transcribing, and analyzing image 
 mode: subagent
 permission:
   read: allow
-  edit: deny
-  write: deny
-  bash: deny
-  pty_*: deny
-  playwright_*: deny
+  edit: ask
+  write: ask
+  bash: ask
+  pty_*: ask
+  playwright_*: ask
 ---
 
 You analyze image files. Use the read tool on the given image paths, then describe or transcribe their content precisely.

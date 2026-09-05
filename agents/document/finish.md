@@ -3,7 +3,7 @@ description: "End-of-session subagent. Loads the finish skill to update the rele
 mode: subagent
 permission:
   edit:
-    "*": deny
+    "*": ask
     "**/*.md": allow
     "**/*.mdx": allow
     "**/*.rst": allow
@@ -18,7 +18,7 @@ permission:
     "CONTEXT.md": allow
     "CLAUDE.md": allow
   write:
-    "*": deny
+    "*": ask
     "**/*.md": allow
     "**/*.mdx": allow
     "**/*.rst": allow
@@ -33,7 +33,7 @@ permission:
     "CONTEXT.md": allow
     "CLAUDE.md": allow
   bash:
-    "*": deny
+    "*": ask
     "gh *": allow
     "git status*": allow
     "git diff*": allow
@@ -53,11 +53,11 @@ permission:
     "cargo clippy*": allow
     "cargo build*": allow
     "cargo check*": allow
-    # read-only listing (mutating find forms re-denied after, last-match-wins)
+    # read-only listing (mutating find forms re-asked after, last-match-wins)
     "ls*": allow
     "find *": allow
-    "find*-delete*": deny
-    "find*-exec*": deny
+    "find*-delete*": ask
+    "find*-exec*": ask
     # scratch-only mutations — never use `..` or absolute paths in rm/mv/mkdir targets
     "mkdir -p .scratch/*": allow
     "mkdir .scratch/*": allow
