@@ -1,3 +1,5 @@
+## [0.8.3](https://github.com/FAZuH/agent/compare/v0.8.2...v0.8.3) (2026-09-05)
+
 ## [0.8.2](https://github.com/FAZuH/agent/compare/v0.8.1...v0.8.2) (2026-09-05)
 
 
@@ -39,12 +41,4 @@
 ### Features
 
 * **skill:** add ocv2-unfuck skill for top-level tool availability check ([f4b0bcb](https://github.com/FAZuH/agent/commit/f4b0bcb4db361cd48a4b78bb39826d2c5ffd7f31))
-
-## [0.7.2](https://github.com/FAZuH/agent/compare/v0.7.1...v0.7.2) (2026-09-03)
-
-
-### Features
-
-* **skill:** add offload skill for remote builds, checks, and agent batches ([1bde961](https://github.com/FAZuH/agent/commit/1bde96163cddbd562b1cec0c5bcadd64fefa3893))
-* **skill:** extract commit and self-improve from finish, add retro new-skill candidates ([5b5d12b](https://github.com/FAZuH/agent/commit/5b5d12ba8f06484625f1f7d3c501b9fb7bbb16c1))
 
