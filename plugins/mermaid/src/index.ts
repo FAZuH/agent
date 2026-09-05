@@ -1,4 +1,3 @@
-import { Plugin } from "@opencode-ai/plugin"
 import { compile } from "./compile-core.ts"
 import { runDoctor } from "./doctor-core.ts"
 
@@ -6,7 +5,9 @@ import { runDoctor } from "./doctor-core.ts"
 // discover standalone files in ~/.config/opencode/tools/, but watched local
 // plugin files here DO hot-reload - this registration is what makes the
 // tools callable. Engines are shared siblings: compile-core / doctor-core.
-export default Plugin.define({
+// Modern plugin module shape (beta-19124 dropped the legacy `Plugin` helper
+// export from @opencode-ai/plugin — plain {id, setup} is the supported form).
+export default {
   id: "fazuh.mermaid",
   setup: async (ctx) => {
     const baseDir = ctx.worktree || ctx.directory
@@ -91,4 +92,4 @@ export default Plugin.define({
       })
     })
   },
-})
+}
