@@ -54,6 +54,9 @@ opencode2 api get /api/session/ses_XXXXXXXX/message/msg_XXXXXXXX
 - **Works on a running session.** The compact is a steer: it queues behind the
   current turn (`status: null` until the turn ends), then summarizes. An agent
   can steer a compaction into its own live session.
+- **Self-compact needs `--timeout 0`.** Your own turn holds the session, so a
+  synchronous wait can never see the queued steer start. Trigger, end the
+  turn, and the summarization runs while the session idles.
 - **Body `id` is an idempotency key** for the new compaction message — NOT a
   history boundary. Reusing an existing `msg_…` id returns `ConflictError:
   Compaction input ID conflicts with an existing durable record`.

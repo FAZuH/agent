@@ -72,13 +72,19 @@ Detect the repo's session-doc convention rather than assuming one:
   archived (`.scratch/complete/` when the repo uses `.scratch/`, or the
   repo's equivalent archive location).
 
-## 3. Sync the todo list
+## 3. Collect the todo list
 
-- Read the current todos (todowrite). Rewrite them so a fresh session can pick
-  them up: each pending or in-progress item must state what remains and how to
-  verify it.
-- Mark anything actually finished as completed. Merge duplicate items. Keep the
-  list short enough to be useful.
+Gather the todos from wherever they live and persist them into the resume
+checkpoint (step 6) so a fresh session can pick them up. Sources, in order:
+
+- The active goal objective (step 1) and anything it implies is still open.
+- Repo-tracked tickets (`.scratch/<feature-slug>/` tickets when the repo
+  uses `.scratch/`, or the repo's issue tracker).
+- Your own context: pending or in-progress items stated in the conversation.
+
+Write each item with what remains and how to verify it. Mark anything
+actually finished as completed. Merge duplicates. Keep the list short enough
+to be useful. If there are no todos, say so in the report and move on.
 
 ## 4. Persist session-critical facts
 
@@ -163,15 +169,16 @@ itself; otherwise the user decides whether to compact or continue.
 
 **GATE compact-offer (normal → compact immediately):** after the report,
 offer to compact this session now. Skip this step entirely when the agent is
-not running in OpenCode — outside OpenCode there is no compaction to trigger,
-so the report in step 8 is the end of the procedure.
+not running in OpenCode — the report in step 8 is the end of the procedure.
 
 Detect the OpenCode harness first:
 
 - **OpenCode v2** — the environment block carries `Current conversation
-  session ID: ses_…`. Compact with the @ocv2-compact skill's script, pointed
-  at that id: `scripts/oc-compact.sh ses_…`. The compaction is a steer: it
-  queues behind the current turn, so end the turn right after triggering it.
+  session ID: ses_…`. Compact with the @ocv2-compact skill: from that skill's
+  directory run `scripts/oc-compact.sh ses_… --timeout 0`, then end the turn.
+  The compaction is a steer: it queues behind the current turn and runs once
+  the session goes idle — waiting synchronously inside the turn always times
+  out.
 - **OpenCode v1** — the `compact_context` tool is available. Call it.
 
 When the gate fires (interactive mode), ask with the @gate mechanics: state
