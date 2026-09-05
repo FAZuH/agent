@@ -7,6 +7,23 @@ description: Fork an OpenCode v2 session and control the fork — switch agent &
 
 Fork creates a child session by copying projected history through or before a message boundary. The new session is independent — you then switch its agent/model, verify, and talk to it via the session API. All calls go through `opencode2 api` (handles auth to the background service) — see the @ocv2-api skill for the CLI itself.
 
+## Scripts (preferred)
+
+`scripts/` wraps every call below — use it instead of raw `opencode2 api`
+for consistency. stdout carries the result (safe for `$(...)`); progress
+goes to stderr. All scripts exit 0 on success and 2 on usage/API errors
+(`oc-wait` exits 1 on failed/timeout):
+
+- `oc-fork.sh SESSION [--through MSG | --before MSG]` → child `ses_…` (§2)
+- `oc-set.sh SESSION [--agent NAME] [--model PROVIDER/ID[:VARIANT]]` (§3)
+- `oc-status.sh SESSION` → one-line JSON: agent, model, outcome, tokens (§4)
+- `oc-msgs.sh SESSION [--last N] [--full MSG_ID]` → compact table or one message (§4)
+- `oc-prompt.sh SESSION TEXT | --file FILE` → user `msg_…` (§5)
+- `oc-wait.sh SESSION [--timeout SECS]` → polls `.data.outcome` (§5)
+
+Message-list responses go through a tempfile inside the scripts: piped
+`opencode2 api` output truncates at 256 KiB, which cuts any real history.
+
 ## 1. Resolve the source session
 
 Read `Current conversation session ID` from the environment block — `ses_…`. Ask if missing.

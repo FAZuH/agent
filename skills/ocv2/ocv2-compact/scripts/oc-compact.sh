@@ -4,7 +4,8 @@
 # Wraps POST /api/session/{id}/compact (v2.session.compact): triggers the
 # compaction, then polls the created compaction message until it leaves
 # "running". The summarization is a model call on the session's own model —
-# typically 10-60 s. See SKILL.md for the API details.
+# typically 10-60 s. Only --summary writes a file; everything else goes to
+# stderr so stdout stays clean. See SKILL.md for the API details.
 #
 # Exit codes: 0 completed · 1 timeout · 2 API error
 set -euo pipefail
@@ -54,23 +55,20 @@ if jq -e '._tag' >/dev/null <<<"$RESP" 2>/dev/null; then
 fi
 MSG=$(jq -r '.data.id // empty' <<<"$RESP")
 [[ "$MSG" == msg_* ]] || die "unexpected response: $RESP"
-printf 'compaction started: %s (session %s)\n' "$MSG" "$SESSION"
+printf 'compaction started: %s (session %s)\n' "$MSG" "$SESSION" >&2
 
 get_msg() { opencode2 api get "/api/session/$SESSION/message/$MSG" 2>/dev/null; }
 
-# "Nothing to compact yet" (compaction.unavailable) — the session has no new
-# history since the last completed compaction. Not an error condition for the
-# caller: the session is already compact. Treated as success with a note.
-EMPTY_MSG='{"error":{"type":"compaction.unavailable","message":"Nothing to compact yet"}}'
-
 if [[ "$TIMEOUT" -eq 0 ]]; then
   printf 'queued (delivery steer) — not waiting. Poll: GET /api/session/%s/message/%s\n' \
-    "$SESSION" "$MSG"
+    "$SESSION" "$MSG" >&2
   exit 0
 fi
 
 # 2. Poll. A steer into a running session stays status=null until that turn
-# ends, then flips to running; both cases keep waiting here.
+# ends, then flips to running; both cases keep waiting here. A "Nothing to
+# compact yet" failure means no new history since the last compaction — the
+# session is already compact, so that counts as success.
 deadline=$(( $(date +%s) + TIMEOUT ))
 STATUS="null"
 while :; do
@@ -82,7 +80,7 @@ while :; do
     failed)
       REASON=$(jq -r '.data.error | "\(.type): \(.message)"' <<<"$MSG_JSON" 2>/dev/null || echo 'unknown error')
       if [[ "$REASON" == *"Nothing to compact yet"* ]]; then
-        printf 'nothing to compact — no new history since the last compaction\n'
+        printf 'nothing to compact — no new history since the last compaction\n' >&2
         exit 0
       fi
       die "compaction failed: $REASON" ;;
@@ -99,8 +97,8 @@ done
 MSG_JSON=$(get_msg)
 printf 'compaction completed: summary %s chars, recent tail %s chars\n' \
   "$(jq -r '.data.summary | length' <<<"$MSG_JSON")" \
-  "$(jq -r '.data.recent | length' <<<"$MSG_JSON")"
+  "$(jq -r '.data.recent | length' <<<"$MSG_JSON")" >&2
 if [[ -n "$SUMMARY_FILE" ]]; then
   jq -r '.data.summary' <<<"$MSG_JSON" > "$SUMMARY_FILE"
-  printf 'summary written: %s\n' "$SUMMARY_FILE"
+  printf 'summary written: %s\n' "$SUMMARY_FILE" >&2
 fi
