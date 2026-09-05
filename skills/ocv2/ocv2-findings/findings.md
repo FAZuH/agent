@@ -39,12 +39,6 @@ source: live-test + upstream-code
 evidence: calling ctx.keymap.layer(...) directly in setup() loaded fine but the bind never fired; wrapping in ctx.ui.slot({append:"app", render: () => { ctx.keymap.layer(...); return null }}) made ctrl+alt+m and /md-link work (user-verified). Root cause per sst/opentui packages/keymap/src/solid/index.ts:107 — createLayer is useContext+createEffect scoped; outside a Solid owner it throws "Keymap.Provider is missing" which the plugin loader swallows.
 Layer factory shape that works: `{ mode: "global", priority, enabled, commands: [{ id, title, description, group, bind, palette, slash: {name}, run }] }`. `mode:"global"` keeps binds active while dialogs are open; omitting mode gates to base state. `slash.name` registers the prompt slash command from the same command entry. No legacy `api.command.register` exists in v2.
 
-## [2026-08-24] plugins: message.updated never fires; context hook is the only pre-dispatch text source
-status: confirmed (superseded in part — see [2026-08-25] turn-completion entry: session.idle no longer fires on beta-1805x, use session.text.ended)
-source: live-test
-evidence: debug log at /tmp/opencode/md-link-debug.log showed 0 message.updated events across a full session; Object.keys(ctx.session) = [hook,create,get,switchAgent,switchModel,prompt,generate,command,synthetic,interrupt,rename,wait] — no messages()/client surface. session.idle fired on turn end AT THE TIME and ctx.session.hook("context") exposes user text before model dispatch.
-For server-side plugins reacting to prompts/turns in this beta: enable-detect via `ctx.session.hook("context")`, mirror work by re-fetching messages (poll — see the external-events entry below). `noReply` on chat.message output is inert (upstream proposals unmerged).
-
 ## [2026-08-24] tui: plugin dialog API is promise-based (dialog.prompt/alert/confirm/select)
 status: confirmed (binary-extracted; live test pending)
 source: upstream-code
@@ -86,12 +80,6 @@ status: confirmed
 source: live-test + upstream-code + user-report
 evidence: after copying md-link.ts to ~/.config/opencode/plugins/ while the same-id copy still existed in project .opencode/plugins/, the TUI stopped loading its plugins; binary has `this.plugins.some((t)=>t.plugin.id===e.id) throw Error('Plugin with id "..." is already registered')`. Removing the project copies restored TUI loading; /api/plugin shows one active vault.md-link. SECOND MANIFESTATION (2026-08-25, user-reported): the learn repo installed globally via symlinks WHILE the same repo was also present as the working directory's .opencode — same ids reachable from two roots in one session; OpenCode hung instead of throwing cleanly. Removing the .opencode self-link fixed it.
 A plugin id must be unique across ALL discovery roots (global plugins/, project .opencode/plugins/, npm entries) — and that includes one repo symlinked into global AND used as a project's .opencode. When moving a plugin between roots, delete the old copy in the same step; installers should refuse the combination (learn's install.sh does).
-
-## [2026-08-25] tui: tui-plugins/ is NOT a scanned directory; TUI modules need explicit cli.json entry
-status: confirmed (SUPERSEDED 2026-09-05 — beta-19086 changed local-dir discovery to `<plugin-dir>/tui.ts`; see that entry)
-source: live-test
-evidence: "tui-plugins" appears 0 times in the opencode2 binary; ~/.config/opencode/tui-plugins/md-link-tui.ts loads only because it is listed in cli.json top-level "plugins". Server plugins in ~/.config/opencode/plugins/ load with NO config entry (vault.md-link is in no plugins list yet shows active via /api/plugin).
-Server-shaped plugins auto-load from the standard plugin dirs; TUI-shaped modules do not auto-load from anywhere — register them in cli.json "plugins". Do not move TUI modules into auto-scanned plugin dirs: their {id, setup} shape passes both loaders' validation, and a TUI module running under the server process would hook process exit handlers.
 
 ## [2026-08-25] api: local service auth is HTTP Basic with username "opencode" + password from service.json
 status: confirmed
