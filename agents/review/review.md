@@ -1,7 +1,6 @@
 ---
 description: Subagent that reviews a diff since a fixed point (commit, branch, merge-base) along two axes — Standards and Spec — using the code-review skill. Read-only plus git. Use for "review this branch/PR", "review since X". Never edits code or commits.
 mode: subagent
-model: {{REVIEW_MODEL}}
 permission:
   edit: deny
   write: deny

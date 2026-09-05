@@ -1,13 +1,11 @@
 ---
 description: Authors ONE hand-written SVG from a brief, renders it to a PNG, LOOKS at the result, iterates until it is correct and clean, publishes the PNG into the Obsidian vault, and returns the filename. For spatial/geometric visuals Mermaid can't express — coordinate geometry, number lines, vectors, function plots, physical layouts, custom shapes with exact positions.
 mode: subagent
-model: {{SVG_MAKER_MODEL}}
 # Permissive by default (verified 2026-08-31): deny-all wildcards hide plugin
 # custom tools (write/edit/render_*) from subagent sessions entirely — the
 # allows below did NOT resurrect them. Scope confinement is enforced by the
 # system prompt (maker loop only) instead of permission rules.
 # tools: write_svg, edit_svg, render_svg, read
-# model: anthropic/claude-sonnet-5
 # thinking: medium
 # system-prompt: append
 # auto-exit: true

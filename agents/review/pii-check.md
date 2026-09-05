@@ -1,7 +1,6 @@
 ---
 description: Scans repositories for PII and leaked secrets
 mode: subagent
-model: {{REVIEW_MODEL}}
 permissions:
   - action: "*"
     resource: "*"
