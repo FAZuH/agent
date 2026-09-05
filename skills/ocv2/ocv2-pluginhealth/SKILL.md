@@ -19,11 +19,15 @@ opencode2 api get /api/plugin
 Returns JSON: `{ location, data: [...] }` where each entry has:
 
 - `id` — plugin id (present for local/default-exported plugins; package
-  entries may show `source.package` instead)
-- `source` — `{ type: "builtin" | "local" | "package", path?/package? }`
-- `status` — `"active"` or `"failed"`
-- `error` — full error message WITH stack trace, only on failures
-- `tui` — whether it registers TUI extensions
+  entries carry `source.target` instead)
+- `source` — `{ type: "builtin" | "local" | "package", path?/target? }`
+- `state.status` — `"active"` or `"failed"`
+- `state.error` + `state.ref` — short failure message and an error reference,
+  only on failures (no stack trace via the API)
+- `features` — e.g. `{ server: true }`
+
+Prefer `scripts/oc-plugins.sh [--failed-only]` over the raw call — same
+table, and it exits 1 when any plugin failed so callers can gate on it.
 
 Failed plugins are listed alongside healthy ones — a bad plugin never blocks
 others from loading, so always scan the whole list rather than stopping at the

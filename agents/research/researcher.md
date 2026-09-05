@@ -1,11 +1,11 @@
 ---
 description: Web researcher — searches the web and synthesizes findings
 mode: subagent
-# Deny by default; last matching rule wins, so allows come after the wildcard.
+# Ask by default; last matching rule wins, so allows come after the wildcard.
 permissions:
   - action: "*"
     resource: "*"
-    effect: deny
+    effect: ask
   - action: websearch
     resource: "*"
     effect: allow

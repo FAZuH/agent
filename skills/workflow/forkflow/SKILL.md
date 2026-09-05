@@ -15,6 +15,21 @@ description: >-
 uses the current ticket's session history as an accelerator. The ticket's
 durable contract remains its spec and, when used, its @task-context packet.
 
+## One-shot
+
+`scripts/oc-delegate.sh` runs the whole delegation procedure in one call —
+fork → switch agent → first prompt → wait → print the reply:
+
+```sh
+scripts/oc-delegate.sh ses_SOURCE --agent implement \
+  --through msg_XXXXXXXX --prompt-file /tmp/brief.md
+```
+
+`--through`/`--before` (explicit boundary), `--agent`, and
+`--prompt`/`--prompt-file` are required; `--model` and `--timeout` optional.
+Exit 0 only when the child turn succeeds. It reuses the @ocv2-sessions
+scripts. The manual steps below stay as the fallback and the reference.
+
 ## Non-negotiable order
 
 For every child:

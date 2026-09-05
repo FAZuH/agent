@@ -2,10 +2,10 @@
 description: Vision-capable subagent for viewing and inspecting web pages via Playwright. Use when a task needs actual visual judgment — verifying a UI/CSS change rendered correctly, describing what an image or screenshot shows, checking layout/alignment/visual bugs — rather than just reading DOM/accessibility data. Also use to offload multi-step Playwright tool calls (navigation, snapshots, form filling) into a subagent session so the main context window isn't filled with raw tool call/response traffic.
 mode: subagent
 permission:
-  edit: deny
+  edit: ask
   playwright_*: allow
   bash:
-    "*": deny
+    "*": ask
     "sleep *": allow
 ---
 

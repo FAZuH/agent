@@ -92,7 +92,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[setup-dev-docs](./skills/workflow/setup-dev-docs/SKILL.md)**: Bootstrap, audit, or update the repo's durable developer docs under `docs/dev/` (index, development, testing, architecture, operations) — evidence-backed, preserve-existing, fix-stale only.
 - **[workflows](./skills/workflow/workflows/SKILL.md)**: The orchestrator's concrete workflows and subagent routing table; loaded before any routing decision.
 - **[scratch-finish](./skills/workflow/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps.
-- **[prepare-compact](./skills/workflow/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, then clear the goal. Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
+- **[prepare-compact](./skills/workflow/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, clear the goal, then offer the compaction (auto mode compacts immediately). Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
 - **[deep-research](./skills/workflow/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via the `research` subagent.
 - **[papercut-sweep](./skills/workflow/papercut-sweep/SKILL.md)**: Sweep the global papercuts backlog (`self::` entries) and apply approved self-improvement drafts.
 - **[changelog](./skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version by comparing the current commit against the latest version.
@@ -130,6 +130,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 ### OpenCode v2 (ocv2)
 
 - **[ocv2-api](./skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API and where its docs live.
+- **[ocv2-compact](./skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session via the API — trigger, poll the summary, nothing-to-compact and steer gotchas.
 - **[ocv2-findings](./skills/ocv2/ocv2-findings/SKILL.md)**: Save and retrieve hard-won OpenCode v2 findings.
 - **[ocv2-sessions](./skills/ocv2/ocv2-sessions/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
 - **[ocv2-move](./skills/ocv2/ocv2-move/SKILL.md)**: Move a session to another project directory.

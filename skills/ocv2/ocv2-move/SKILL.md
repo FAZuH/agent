@@ -16,7 +16,9 @@ working directory on the next turn. No restart, no handoff document needed.
 2. **Resolve the target directory** — use the directory the user named; expand
    `~` to an absolute path. Verify it exists and is the intended project root
    (for example it contains `.git` or the project files) before moving.
-3. **Call the move endpoint**:
+3. **Call the move endpoint** — prefer `scripts/oc-move.sh <sessionID>
+   <directory>`: it resolves `~`/relatives, checks the directory exists,
+   calls the endpoint, and reports `/api/project/current`. The raw call:
 
    ```sh
    opencode2 api post /api/session/<sessionID>/move \

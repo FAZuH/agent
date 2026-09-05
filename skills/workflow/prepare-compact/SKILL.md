@@ -2,12 +2,13 @@
 name: prepare-compact
 description: >-
   Prepare the current session for context compaction. Use when the user is
-  about to compact the session context window, asks to prepare for
-  compaction, says the context is getting full or running low, wants to
+  about to compact the session context window, asks to compact or prepare
+  for compaction, says the context is getting full or running low, wants to
   persist state before compacting, or wants a resume checkpoint so work
   survives a compaction. Persists the session/plan doc, deviations, decisions,
-  todo list, session-critical facts, and the active goal objective, then
-  clears the goal so it stops re-prompting after compaction.
+  todo list, session-critical facts, and the active goal objective, clears
+  the goal, then gates a compact offer — in auto mode it compacts
+  immediately.
 ---
 
 # prepare-compact
@@ -71,13 +72,19 @@ Detect the repo's session-doc convention rather than assuming one:
   archived (`.scratch/complete/` when the repo uses `.scratch/`, or the
   repo's equivalent archive location).
 
-## 3. Sync the todo list
+## 3. Collect the todo list
 
-- Read the current todos (todowrite). Rewrite them so a fresh session can pick
-  them up: each pending or in-progress item must state what remains and how to
-  verify it.
-- Mark anything actually finished as completed. Merge duplicate items. Keep the
-  list short enough to be useful.
+Gather the todos from wherever they live and persist them into the resume
+checkpoint (step 6) so a fresh session can pick them up. Sources, in order:
+
+- The active goal objective (step 1) and anything it implies is still open.
+- Repo-tracked tickets (`.scratch/<feature-slug>/` tickets when the repo
+  uses `.scratch/`, or the repo's issue tracker).
+- Your own context: pending or in-progress items stated in the conversation.
+
+Write each item with what remains and how to verify it. Mark anything
+actually finished as completed. Merge duplicates. Keep the list short enough
+to be useful. If there are no todos, say so in the report and move on.
 
 ## 4. Persist session-critical facts
 
@@ -155,8 +162,32 @@ Give the user a concise report:
 - Anything that could NOT be persisted, so they know what will be lost on
   compaction.
 
-Do not commit or take any other side action. The user will compact or continue
-after reviewing your report.
+Do not commit or take any other side action. Step 9 offers the compaction
+itself; otherwise the user decides whether to compact or continue.
+
+## 9. Offer compaction
+
+**GATE compact-offer (normal → compact immediately):** after the report,
+offer to compact this session now. Skip this step entirely when the agent is
+not running in OpenCode — the report in step 8 is the end of the procedure.
+
+Detect the OpenCode harness first:
+
+- **OpenCode v2** — the environment block carries `Current conversation
+  session ID: ses_…`. Compact with the @ocv2-compact skill: from that skill's
+  directory run `scripts/oc-compact.sh ses_… --timeout 0`, then end the turn.
+  The compaction is a steer: it queues behind the current turn and runs once
+  the session goes idle — waiting synchronously inside the turn always times
+  out.
+- **OpenCode v1** — the `compact_context` tool is available. Call it.
+
+When the gate fires (interactive mode), ask with the @gate mechanics: state
+what was persisted and where (step 8), that compaction replaces the
+conversation with the summary, and offer Approve / Abort. Approve → run the
+compaction for the detected harness. Abort → stop; the persisted state stands
+either way.
+
+In auto mode, do not ask — run the compaction immediately after the report.
 
 ## Dependency graph
 
@@ -168,3 +199,4 @@ after reviewing your report.
 - step6 -> step2, step4
 - step7 -> step6
 - step8 -> step6, step7
+- step9 -> step8

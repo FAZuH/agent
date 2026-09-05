@@ -3,7 +3,7 @@ description: Subagent that writes documentation — ADRs, glossary, runbooks, RE
 mode: subagent
 permission:
   edit:
-    "*": deny
+    "*": ask
     "*.md": allow
     "**/*.md": allow
     "**/*.mdx": allow
@@ -17,7 +17,7 @@ permission:
     "CHANGELOG*": allow
     "LICENSE*": allow
   write:
-    "*": deny
+    "*": ask
     "*.md": allow
     "**/*.md": allow
     "**/*.mdx": allow
@@ -31,7 +31,7 @@ permission:
     "CHANGELOG*": allow
     "LICENSE*": allow
   bash:
-    "*": deny
+    "*": ask
     "gh *": allow
     "git *": allow
     "sleep *": allow
