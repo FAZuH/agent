@@ -132,7 +132,10 @@ trimmed `PATH=/usr/local/bin:/usr/bin` and `WorkingDirectory`.
 
 1. One manual run: `systemctl --user start octask-<name>.service` — watch it:
    `octask logs <name> -f` (or `journalctl --user -u octask-<name>.service -n 50 -f`)
-2. Check the agent actually did the right thing (and nothing else).
+2. Check the agent actually did the right thing (and nothing else). A timer
+   reaching `Finished`, exit 0, or a clean tree can mask an instant failure
+   (e.g. `Invalid API key` when a contributor-free model needs interactive
+   auth) — read the run's output, not just the exit status.
 3. `octask list` → confirm the timer is enabled and note the NEXT run.
 4. Only then leave it enabled.
 

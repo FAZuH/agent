@@ -93,6 +93,9 @@ Memory template:
      local convention changes auto-apply remotely.
    - Store `check_override` ONLY when remote genuinely differs (extra
      feature flags, memory limits). Empty is the normal case.
+   - The check command must match CI exactly: in a cargo workspace use
+     `cargo test --workspace` — bare `cargo test` skips crate members and
+     false-greens a red run (both test and clippy).
    Done when a fresh agent could derive the exact remote command from
    `check_source` + `check_override` alone.
 5. **Write memory + gitignore**: write `.opencode/offload.md`, then ensure
