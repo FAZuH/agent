@@ -6,9 +6,11 @@ Contents:
 2. [Library errors: typed and matchable](#2-library-errors-typed-and-matchable)
 3. [Application errors: context chains](#3-application-errors-context-chains)
 4. [Error-as-data (fold-in)](#4-error-as-data-fold-in)
-5. [Rules](#5-rules)
-6. [When not to apply](#6-when-not-to-apply)
-7. [Review quick-checks](#7-review-quick-checks)
+5. [Panics — only on unrecoverable state](#5-panics--only-on-unrecoverable-state)
+6. [Wording](#6-wording)
+7. [Rules](#7-rules)
+8. [When not to apply](#8-when-not-to-apply)
+9. [Review quick-checks](#9-review-quick-checks)
 
 ## 1. The split
 
@@ -73,9 +75,8 @@ fn load_user_config() -> Result<Config> {
   *what*, the source is the *why*. Print with `{:?}` (anyhow renders
   the full chain) or iterate `error.chain()`.
 - Context strings are lowercase fragments, no trailing punctuation,
-  describing the *failed action*, not the emotion — wording rules live
-  in the `error-message` skill (this doc is about types, that one about
-  strings).
+  describing the *failed action*, not the emotion — full wording rules
+  in §6.
 - `anyhow::bail!` / `.with_context(|| ...)` for lazy formatting.
 
 ## 4. Error-as-data (fold-in)
@@ -109,7 +110,60 @@ This is the shape `rust-tea` effect results use: `Msg::TaskResult(`
 `Result<TaskOutput, TaskError>)` re-enters `update`, where the model —
 the only policy owner — decides what a failure means.
 
-## 5. Rules
+## 5. Panics — only on unrecoverable state
+
+A panic is a bug report, not an error channel. Panic only when an
+internal invariant is broken and continuing would corrupt state or
+silently produce wrong output. Everything else — I/O, network, user
+input, parsing — is a `Result`.
+
+| Situation | Response |
+|---|---|
+| Expected failure (I/O, input, network, parse) | `Result` / `Option` |
+| Broken internal invariant (impossible state reached) | `expect("invariant: …")` |
+| Truly unreachable arm of a match you fully own | `unreachable!("reason")` |
+| Throwaway prototype or scratch tool | `unwrap`; delete before it ships |
+
+Rules:
+
+- `expect("invariant: <what held>")` over bare `unwrap` — the message
+  names the invariant, not the emotion.
+- Never panic on data that crossed a trust boundary (user input,
+  network, file contents) — corrupt or hostile input becomes a remote
+  DoS. Validate instead; return a typed variant.
+- Libraries never panic on caller mistakes; offer `checked_*`/`try_*`
+  or return an error. A panic that *is* the contract (e.g. indexing)
+  is documented with a `# Panics` doc section.
+- Binaries may panic at startup edges (malformed config), but
+  `fn main() -> Result` is still preferred — it prints a context
+  chain, not a stack trace.
+- `unreachable!()` only behind exhaustiveness you own (a private
+  enum); on public or third-party types, return a variant instead.
+- A panic mid-operation is not transactional — use RAII guards
+  (`raii.md`); `Drop` must not panic.
+- `catch_unwind` is for thread/FFI boundaries, never to "handle" a
+  bug — it converts a crash into corruption. Choosing
+  `panic = "abort"` is a deployment decision per binary, not an
+  error strategy.
+
+Related: a wrong-state method that panics means the typestate failed
+(`typestate.md`); drop bombs panic deliberately as a guard
+(`raii.md`).
+
+## 6. Wording
+
+Error strings follow std-library conventions:
+
+- Lowercase, no trailing period: `"failed to read file"`.
+- Actions in past tense (`"failed to connect to database"`); states
+  as noun phrases (`"missing required field: name"`, `"empty input"`).
+  No imperatives (`"try again"`) and no `Error:` prefix — the `Err`
+  type already says it.
+- Include the relevant value, briefly: `"invalid port: {port}"`.
+- Don't repeat context the caller adds: inner `"file not found"`,
+  outer `.context("failed to load config")` joins the chain.
+
+## 7. Rules
 
 - No `unwrap`/`expect` on recoverable paths in library code; reserve
   them for invariant violations with a message explaining the
@@ -121,10 +175,9 @@ the only policy owner — decides what a failure means.
   erases matching.
 - Derive `Debug` (and consider `PartialEq` on payloads) — tests and
   `assert_eq!` on errors need them.
-- Error *type* design here; error *wording* in the `error-message`
-  skill.
+- Panic only on unrecoverable state (§5); wording rules in §6.
 
-## 6. When not to apply
+## 8. When not to apply
 
 - Small binaries with one failure story — `anyhow` end-to-end is the
   correct amount of design.
@@ -133,7 +186,7 @@ the only policy owner — decides what a failure means.
 - `thiserror` in a tiny internal module whose errors never escape the
   crate — `anyhow` internally, typed only at the public boundary.
 
-## 7. Review quick-checks
+## 9. Review quick-checks
 
 - Library returning `anyhow::Error` (or `String` errors) — callers
   cannot act on failures without string matching (Leaky abstraction).
@@ -144,4 +197,6 @@ the only policy owner — decides what a failure means.
 - Missing `#[source]`/`#[from]` where a cause exists — broken chain.
 - `unwrap` in library paths that handle external input — panic as
   error handling.
+- `catch_unwind` around ordinary bugs — a crash converted into
+  corruption.
 - One crate-wide god error enum — split per subsystem.
