@@ -31,10 +31,14 @@ Follow the skill's step 2 exactly: inspect git read-only, identify the files cha
 - If auto-commit mode is active (argument begins with `auto`), infer the best message for each group. Commit each group without asking, passing the remaining argument text as extra instructions.
 - If interactive mode is active (argument does not begin with `auto`, including no argument), there is no commit permission. Propose one message for each group. Then stop and wait for the next message from the user. Do not run `git add` or `git commit` for that group until the user confirms it. If the user wants a change, propose the new message and wait again. Do not run any other group until the current one is resolved. Do not proceed to step 3 until the current group is resolved.
 
-## 3. Summarize the session
+## 3. Archive the completed `.scratch/` workspace
 
-Follow the skill's step 3 exactly.
+Follow the skill's step 3 exactly — delegate the mechanics to @scratch-finish: verify the work is genuinely done, mark remaining checklist items, append the Outcome block, move the workspace to `.scratch/complete/`, and delete the stale checkpoint.
 
-## 4. Suggest next steps
+## 4. Summarize the session
 
 Follow the skill's step 4 exactly.
+
+## 5. Suggest next steps
+
+Follow the skill's step 5 exactly.

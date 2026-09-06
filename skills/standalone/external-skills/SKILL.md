@@ -47,6 +47,9 @@ npx skills remove <name> --global --agent opencode --yes
 
 - **Never hand-edit `~/.agents/skills/`.** Install target only. Fix by
   reinstalling/updating, or propose the change upstream.
+- **Never `install -g --all` on a multi-agent box.** `--all` copies symlink
+  farms into EVERY detected agent dir (~55 on this machine). Scope the
+  install with `--agent opencode`.
 - **Config roots shadow it.** If @skill-doctor flags a `collision` between
   `~/.config/opencode/skills/<name>` and `~/.agents/skills/<name>`, the
   config copy wins and the npx copy is dead weight — remove the shadowed

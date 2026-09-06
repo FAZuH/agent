@@ -55,7 +55,7 @@ command -v jq >/dev/null || die "jq not on PATH"
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SESS=""
-for cand in "$HERE/../../../ocv2/ocv2-sessions/scripts" "$HERE/../ocv2-sessions/scripts"; do
+for cand in "$HERE/../../../ocv2/ocv2-sessions/scripts" "$HERE/../../ocv2-sessions/scripts"; do
   if [[ -x "$cand/oc-fork.sh" ]]; then SESS="$cand"; break; fi
 done
 [[ -n "$SESS" ]] || die "ocv2-sessions scripts not found — sync the ocv2-sessions skill first"

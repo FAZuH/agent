@@ -45,6 +45,12 @@ Run top to bottom when invoked. Do not skip the user gates.
    (personal-global); agent defs in `~/.config/opencode/agents/*.md`.
    External skills under `~/.agents/skills/` are install targets — NEVER
    edit them; file upstream issues instead.
+
+   Present the proposal in three grouped sections before any gate:
+   **Content edits** (one table: target → change → cuts closed),
+   **Config artifacts** (a separate table, always-gated), and
+   **Kept open** (graduated tickets, deferred items, and fixes routed to
+   normal work — each with the reason it stays open).
 3. **Gate by tier**, then apply — applying is always gated (drafting and
    proposals are free; vocabulary: the @gate skill):
    - Process notes in `.scratch/` and docs → not a gate; apply autonomously.

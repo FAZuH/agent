@@ -70,6 +70,10 @@ Spec: `.scratch/<slug>/spec.md` — task truth lives there.
 
 ## Acceptance criteria
 - <checkable statement>
+- Every mechanism a plan prescribes (Cargo `[patch]`, npm overrides/aliases,
+  config keys) is validated against the package manager's manifest rules
+  before work is scheduled — a manifest-invalid mechanism invalidates every
+  ticket that assumes it.
 
 ## Verification commands
 - `<exact command>` — <what it proves> (verified against <config> <date>)
