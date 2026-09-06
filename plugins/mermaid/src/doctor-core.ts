@@ -1,4 +1,5 @@
 import { createRequire } from "module"
+import os from "os"
 import path from "path"
 import fs from "fs/promises"
 
@@ -175,11 +176,16 @@ async function extractDiagrams(files: string[]): Promise<Diagram[]> {
 
 function resolvePlaywright(extraDirs: string[]): { chromium: any; from: string } {
   const tried: string[] = []
+  const globalDirs = [
+    path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), "opencode", "node_modules"),
+    path.join(os.homedir(), ".bun", "install", "global", "node_modules"),
+  ]
   const dirs = [
     ...(process.env.MERMAID_DOCTOR_PLAYWRIGHT_PATH
       ? [path.resolve(process.env.MERMAID_DOCTOR_PLAYWRIGHT_PATH)]
       : []),
     ...extraDirs,
+    ...globalDirs,
     process.cwd(),
   ]
   for (const dir of [...new Set(dirs.filter(Boolean))]) {
