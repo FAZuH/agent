@@ -30,6 +30,9 @@ Then install [rsync](https://github.com/RsyncProject/rsync) from your package ma
 ./sync.sh diff -g                # preview drift (push + pull directions)
 # --dry-run to preview; needs restart after
 ```
+Submodule: `git submodule update --init` after cloning (the ponytail plugin
+nests its upstream checkout; an empty `plugins/ponytail/upstream/` pushes an
+empty dir).
 
 ### Extras
 
