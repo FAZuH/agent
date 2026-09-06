@@ -113,6 +113,22 @@ Add `--no-o --no-g` when the remote ssh user differs from the local uid
 (plain `-a` maps the uid through and the remote can reject the repo as
 dubiously owned). Done when the remote tree matches local modulo excludes.
 
+## Flaky links
+
+Some remote hosts (home LAN behind tailscale, laptop on wifi) stall long
+single-shot commands. On a flaky link:
+
+- Set ssh keepalives in `~/.ssh/config` for that host: `ServerAliveInterval
+  15` + `ServerAliveCountMax 4` (kill dead connections early) and
+  `ConnectTimeout 10` (fail fast on probes).
+- Probe before big work: `ssh -o BatchMode=yes <host> 'true'` — a 10s timeout
+  on the probe means the link is down right now, not that the host is.
+- Seed large trees with `git bundle` (single resumable file) or
+  `rsync --partial` (resumes an interrupted transfer) — never one long
+  transfer that restarts from zero on drop.
+- Keep long work detached in tmux on the remote (step 3), so an ssh drop
+  kills a connection, not the check.
+
 ## 3. Remote checks only (no agent)
 
 Long checks run detached so ssh drops cannot kill them:

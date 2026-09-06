@@ -14,7 +14,8 @@ Usage: oc-wait.sh SESSION [--timeout SECS]
   --timeout seconds to wait (default 600)
 
 Prints "outcome: <succeeded|failed> (<elapsed>s)".
-Exit codes: 0 turn succeeded · 1 turn failed or timeout · 2 usage/API error
+Exit codes: 0 turn succeeded · 1 turn failed · 3 timeout, session still
+running · 2 usage/API error
 EOF
   exit 2
 }
@@ -66,9 +67,9 @@ while :; do
     failed)    printf 'outcome: failed (%ss)\n' "$(( $(date +%s) - START ))"; exit 1 ;;
   esac
   if [[ $(date +%s) -ge $DEADLINE ]]; then
-    printf 'oc-wait: timeout after %ss — last outcome: %s\n' \
-      "$TIMEOUT" "${OUTCOME:-none}" >&2
-    exit 1
+    printf 'oc-wait: timeout after %ss — session %s still running (last outcome: %s); re-arm with: oc-wait.sh %s\n' \
+      "$TIMEOUT" "$SESSION" "${OUTCOME:-none}" "$SESSION" >&2
+    exit 3
   fi
   sleep 5
 done
