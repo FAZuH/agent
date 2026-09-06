@@ -1,15 +1,34 @@
 ---
 description: Subagent that reviews a diff since a fixed point (commit, branch, merge-base) along two axes — Standards and Spec — using the code-review skill. Read-only plus git. Use for "review this branch/PR", "review since X". Never edits code or commits.
 mode: subagent
-permission:
-  edit: ask
-  write: ask
-  bash:
-    "*": ask
-    "gh *": allow
-    "git *": allow
-    "sleep *": allow
-  task: allow
+permissions:
+  - action: "*"
+    resource: "*"
+    effect: ask
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: list
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "git *"
+    effect: allow
+  - action: shell
+    resource: "gh *"
+    effect: allow
+  - action: shell
+    resource: "sleep *"
+    effect: allow
+  - action: task
+    resource: "*"
+    effect: allow
 ---
 
 You review a diff since a fixed point (commit, branch, tag, or merge-base). Follow the @code-review skill: two axes run as parallel sub-agents, then you aggregate.
