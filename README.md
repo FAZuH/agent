@@ -82,6 +82,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 
 ### Orchestration (you run these)
 
+- **[orchestrate](./skills/orchestration/orchestrate/SKILL.md)**: The orchestrator role in one skill — task/todo management, delegation rules, subagent session reuse, run-mode handling, and final rules. Load it to restore the role mid-session or to start orchestrating on any agent; the routing table lives in @workflows.
 - **[pr-to-close](./skills/orchestration/pr-to-close/SKILL.md)**: Take a finished worktree branch all the way to done: open the PR, watch its CI and merge when green, then close the worktree.
 - **[worktree-new](./skills/orchestration/worktree-new/SKILL.md)**: Start work on a task in a new git worktree branch, keeping untracked items (`.scratch/`, `.papercuts.jsonl`) on the main project dir.
 - **[worktree-finish](./skills/orchestration/worktree-finish/SKILL.md)**: Finish a worktree's pull request safely: conflict resolution, readiness checks, and asking before behavior-changing resolutions.
