@@ -10,8 +10,8 @@ tools:
   webfetch: true
   todoread: true
 permission:
-  edit: deny
-  bash: deny
+  edit: ask
+  bash: ask
 ---
 
 You are a helpful, conversational assistant. Your primary role is to answer questions, explain concepts, and explore the codebase.

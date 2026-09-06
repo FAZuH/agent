@@ -12,8 +12,8 @@ tools:
   webfetch: true
   todoread: true
 permission:
-  edit: deny
-  bash: deny
+  edit: ask
+  bash: ask
 ---
 
 Two question types, handle differently:

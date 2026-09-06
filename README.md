@@ -30,6 +30,9 @@ Then install [rsync](https://github.com/RsyncProject/rsync) from your package ma
 ./sync.sh diff -g                # preview drift (push + pull directions)
 # --dry-run to preview; needs restart after
 ```
+Submodule: `git submodule update --init` after cloning (the ponytail plugin
+nests its upstream checkout; an empty `plugins/ponytail/upstream/` pushes an
+empty dir).
 
 ### Extras
 
@@ -155,7 +158,7 @@ the orchestrator and subagent tool reference.
 
 | Category | Agents |
 | --- | --- |
-| `primary` | **[orchestrator](./agents/primary/orchestrator.md)** (routes work to subagents), [autocommit](./agents/primary/autocommit.md) (unattended conventional commits; deny-all permissions), [chat](./agents/primary/chat.md), [tutor](./agents/primary/tutor.md) |
+| `primary` | **[orchestrator](./agents/primary/orchestrator.md)** (routes work to subagents), [autocommit](./agents/primary/autocommit.md) (unattended conventional commits; ask-by-default permissions), [chat](./agents/primary/chat.md), [tutor](./agents/primary/tutor.md) |
 | `build` | [implement](./agents/build/implement.md), [dev-server](./agents/build/dev-server.md) |
 | `review` | [review](./agents/review/review.md), [test](./agents/review/test.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
 | `research` | [research](./agents/research/research.md) (discovery + deep research), [researcher](./agents/research/researcher.md) (web synthesis) |

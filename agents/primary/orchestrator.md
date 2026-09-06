@@ -3,7 +3,7 @@ description: Primary orchestrator agent. Routes work between specialized subagen
 mode: primary
 permission:
   edit:
-    "*": deny
+    "*": ask
     "docs/**": allow
     ".scratch/**": allow
     "*.md": allow
@@ -12,7 +12,7 @@ permission:
     "**/*.toml": allow
     "/tmp/opencode/**": allow
   write:
-    "*": deny
+    "*": ask
     "docs/**": allow
     ".scratch/**": allow
     "*.md": allow
