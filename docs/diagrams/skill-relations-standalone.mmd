@@ -6,7 +6,6 @@ flowchart TD
     subgraph standalone["Standalone"]
         test_guidelines["test-guidelines"]
         gui_test_guidelines["gui-test-guidelines"]
-        error_message["error-message"]
         logging_guidelines["logging-guidelines"]
         design_tradeoffs["design-tradeoffs"]
         scheduled_task["scheduled-task"]
@@ -50,6 +49,6 @@ flowchart TD
     classDef workflow fill:#F2D077,stroke:#D1AD54,color:#3A2E14
     classDef external fill:#8FB4DE,stroke:#6C93C0,color:#FFFFFF
 
-    class L_stand,test_guidelines,gui_test_guidelines,error_message,logging_guidelines,design_tradeoffs,scheduled_task,scheduled_agent,issue_closeout,oop,improve_architecture_oop,read_pdf,readme,commit_scopes,rust_idioms,rust_tea standalone
+    class L_stand,test_guidelines,gui_test_guidelines,logging_guidelines,design_tradeoffs,scheduled_task,scheduled_agent,issue_closeout,oop,improve_architecture_oop,read_pdf,readme,commit_scopes,rust_idioms,rust_tea standalone
     class L_work,commit,workflows workflow
     class L_ext,improve_codebase_architecture,agent_test external
