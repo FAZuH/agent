@@ -206,3 +206,21 @@ status: confirmed
 source: live-test
 evidence: rewrote plugins/mermaid/src/index.ts and touched the entry index.ts → service re-logged `loading plugin` with a fresh entry `?mtime=` yet STILL failed with the pre-fix `Plugin not found` error; only killing the port-holder service (cold restart) picked up the nested change. Same staleness reproduced reasoning for quiz deploy.
 After editing any file a plugin imports BELOW its entry, cold-restart the service — touching the entry file is not enough.
+
+## [2026-09-06] plugins: beta-19157 session.prompt requires attachment arrays — coerce omitted files/agents/skills to []
+status: confirmed
+source: live-test
+evidence: POST /api/session/:id/command {command:"goal",text:"probe"} (no attachments) reproduced `CommandExecutionError: Expected array at ["files"]` (opencode.log `command execution failed`); temp file-probe in execute showed live input.prompt={text} only; after `?? []` coercion in plugins/opencode-goal-plugin/src/server.ts + cold restart, the same call queued the goal-template prompt with zero new failures and the turn started normally.
+On beta-19157 the server-side session.prompt schema rejects omitted attachment fields (plugin SDK 18593 types still mark them optional — trust the server over the .d.ts). Any plugin that spreads input.prompt into session.prompt must default files/agents/skills to []. Same class of failure explains the earlier user-facing `Expected array at ["skills"]` (TUI sends files/agents as [] but omits skills).
+
+## [2026-09-06] plugins: context hook system parts need {type:"text",text} — a malformed part breaks EVERY session drain
+status: confirmed
+source: live-test
+evidence: ponytail shim pushed {text} (per build/plugins docs example) → opencode.log `Failed to drain Session` SchemaError `MissingKey "type"` at ["system"][4] against `LLM.SystemPart` (requires type Literal "text") on every model dispatch, killing all turns in touched sessions; after `{type:"text",text}` + hot-reload, injection verified end-to-end (free model's reasoning quoted "PONYTAIL MODE ACTIVE — level: lite").
+The docs example `event.system.push({ text: ... })` is wrong on beta-19187 — SystemPart needs `{type:"text", text}`. Worse failure mode than a dead plugin: the part passes the hook and fails schema validation later at dispatch, so sessions fail to drain instead of the plugin showing failed. Also confirmed: a NEW plugin dir under ~/.config/opencode/plugins/ hot-loads mid-session with no restart (user-confirmed; agrees with 2026-08-24 entry).
+
+## [2026-09-06] api: switch session model via POST /api/session/:id/model — prompt-body providerID/modelID keys are ignored
+status: confirmed
+source: live-test
+evidence: POST /api/session/:sid/prompt {"text","providerID":"litellm","modelID":"free-pro-vision"} still dispatched gpt-6-astra (three 402s); POST /api/session/:sid/model {"model":{"providerID":"litellm","id":"free-pro-vision"}} returned 204, GET /api/session/:sid shows model switched, next prompt ran on litellm/free-pro-vision (finish stop).
+Model is per-session and sticky from creation; change it with POST /api/session/:id/model (204, body {"model":{providerID,id[,variant]}}) — e.g. to dodge 402 "Insufficient account funds". ocv2-sessions scripts/oc-set.sh wraps it.
