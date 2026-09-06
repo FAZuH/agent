@@ -18,6 +18,7 @@ Format: `type(scope): summary` or `type: summary`.
 | --------- | --------------------------------------------------- |
 | `agent`    | `agents/**`                                          |
 | `skill`    | `skills/**`                                          |
+| `ocv2`     | `skills/ocv2/**`                                     |
 | `plugin`   | `plugins/**`                                         |
 | `command`  | `commands/**`                                        |
 | `script`   | `sync.sh`, `set-agent-model.sh`, `.agent-values.example`, `targets.conf`, `tags.conf`, `.agent-sync.json`, `.gitignore` entries about them |
@@ -30,6 +31,7 @@ that genuinely spans several components.
 
 - Types: `feat`, `fix`, `refactor`, `docs`, `chore`.
 - Pick the scope by WHAT changed, not by why.
+- Most specific scope wins: `skills/ocv2/**` is `ocv2`, not `skill`.
 - One logical change per commit. A change spanning two scopes becomes two
   commits; only fall back to no scope when splitting is impossible.
 - New scopes require user approval first: propose name + definition + example
