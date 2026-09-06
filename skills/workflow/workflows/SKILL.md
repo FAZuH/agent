@@ -16,6 +16,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 
 | Task | Subagent | Notes |
 |---|---|---|
+| Orchestrator role: manage tasks, delegate, restore the role | @orchestrate | Load first when acting as orchestrator, or when the role needs restating |
 | Warm per-ticket delegation | `@forkflow` | Probe once, then fork → switch agent → first prompt; fall back to a fresh spawn |
 | Implement a ticket/spec/plan | `implement` | Drives implement + @tdd skills; no PTY |
 | Run test/lint/typecheck suites | `test` | Returns concise analysis only |
@@ -51,13 +52,9 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Writing AGENTS.md / SKILL.md | @writing-for-agents (skill) | Use yourself |
 | Approval gate declared with a `GATE` tag, or authoring one | @gate (skill) | Load for the run-mode/gate-class vocabulary; delegate prompts carry `RUN MODE: …` |
 
-Delegation rules:
-- Once a subagent owns a task, do not duplicate its work. Wait for its report and act on it.
-- Prefer resuming an existing session for the same unit of work over spawning cold.
-- Delegate noisy or long-running work so raw output stays out of your context.
-- If a subagent reports a blocker (e.g. web-viewer found a broken dev server, test found a failing setup), re-route to the right owner (`dev-server`, `implement`, `test`) — do not try to work around it yourself.
-- Read subagent reports fully; a concise failure report is actionable, not a dead end.
-- State the run mode in every delegation prompt (`RUN MODE: auto — normal/subagent gates skip` / `RUN MODE: interactive — gates fire`); the @gate skill owns the vocabulary and the mode comes only from the user.
+Delegation rules live in @orchestrate (no-duplication, resume over spawn,
+blocker re-routing, run mode in every prompt). This table only picks the
+subagent.
 
 ## Workflows at a glance
 
@@ -80,4 +77,4 @@ Delegation rules:
 ## Loading rules
 
 - Load the reference file for the workflow you are about to run and follow its procedure.
-- When a workflow hands a step to a subagent, do not duplicate its work — wait for its report and act on it. Prefer resuming the same subagent session (`task_id`) over spawning cold.
+- When a workflow hands a step to a subagent, follow the @orchestrate delegation rules (no duplication, resume with `task_id`).
