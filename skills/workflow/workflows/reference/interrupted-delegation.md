@@ -1,8 +1,23 @@
 # Interrupted delegation recovery
 
 Use when a subagent spawn returns aborted — "Tool execution interrupted",
-"Endpoint is unavailable", or the server restarts mid-flight. Work the
-procedure top to bottom; never re-spawn blindly.
+"Endpoint is unavailable", or the server restarts mid-flight. Never re-spawn
+blindly — but first check the transient signatures below: one retry there;
+the wreckage procedure only if the retry fails too.
+
+## Transient signatures (retry the dispatch once, then classify)
+
+- `Agent not found: <name>` right after a server restart while the agent
+  file exists on disk (`~/.config/opencode/agents/<name>.md`) → registry not
+  reloaded yet; retry the spawn once before calling it a routing error.
+- Dispatch dies with `context deadline exceeded` or
+  `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → transient provider hop; retry
+  the dispatch once.
+- Any DNS-signed failure (`ENOTFOUND llm.internal.fazuh.com`) → the litellm
+  router lives behind tailscale; check tailscale is up before anything else.
+- NOT transient: litellm `BadRequest` deserialize on a large prompt (shrink
+  the prompt), and a resumed session carrying images into a text-only model
+  (use a vision model or a fresh session).
 
 ## Procedure
 
