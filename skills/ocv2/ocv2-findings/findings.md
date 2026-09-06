@@ -230,3 +230,21 @@ status: confirmed
 source: live-test
 evidence: bp overnight run — an external bash heartbeat (plain `opencode2 api post /api/session/<sid>/prompt`) woke an idle orchestrator session on every event for ~14 h; POSTs that landed while a turn was running were not lost — they queued and delivered in order when the session went idle (5 keep-alive wakes queued behind slow turns arrived as one burst on resume).
 To keep a session "never 100% stopped", run the watchdog OUTSIDE the session (the harness reaps in-session background jobs; bgrun units die with the service) and wake it with POST /prompt (steer delivery). A wake prompt must be self-contained — wake reason + standing rules re-injected + "act, log, end turn" — the session may read it with fresh context after compaction. Expect queued wakes to batch: suppress keep-alive wakes while a previous one is still pending (check GET /api/session/<id>/inbox); keep event-driven wakes unthrottled.
+
+## [2026-09-06] skills: v2 skill loader ignores `disable-model-invocation` — user-invoked-only is impossible
+status: confirmed
+source: papercut pc_4e930243b40e (writing-for-agents SKILL-MECHANICS advice vs live loader)
+evidence: `packages/opencode/src/skill/index.ts` `isSkillFrontmatter` reads only `name`+`description`; upstream docs state unknown frontmatter fields are ignored; a skill with the flag set stayed model-visible.
+OpenCode v2 has no user-invoked-only skills. `disable-model-invocation: true` is decorative. Control model visibility through description wording (trigger phrases), not frontmatter flags.
+
+## [2026-09-06] api: a fork can accept prompts (200) but never generate when the default model is rate-limited
+status: confirmed
+source: papercut pc_1e04a2adf3c7 (BP fleet, 2026-09-05)
+evidence: forked child accepted `POST /prompt` with 200 but token counts stayed frozen; interrupt + steer did not revive generation.
+When the default model is rate-limited, do not fork for work. Spawn a subagent and give it a working model via `POST /api/session/<sid>/model` (per-session, sticky — see @ocv2-models). A frozen fork has no recovery: abandon it.
+
+## [2026-09-06] service: restarting `opencode2 serve` aborts in-flight tool calls and Task spawns
+status: confirmed
+source: papercuts pc_126fb1c80a0e, pc_f240d7aa25d6
+evidence: `pkill opencode2 serve` mid-session aborted the agent's own in-flight tool calls (the orchestrator session runs inside the service); a Task spawn returned `aborted` with a sessionID and no recovery hint; resuming the SAME session via task_id with a resume-brief worked — warm cache survives on disk.
+Stand-down order before a service restart: stop children, let current tool calls finish, then restart. Recovery after an abort: assess disk state (`git status` + fast check), then resume the same session with a resume-brief (procedure: workflows/reference/interrupted-delegation.md).

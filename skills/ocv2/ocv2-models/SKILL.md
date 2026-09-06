@@ -55,3 +55,8 @@ Headless: `opencode2 run -m litellm/free-pro-vision "..."` (flag format `provide
 ## 5. 402 recovery
 
 `Upstream request failed: Insufficient account funds` (402) repeated on assistant messages = the session model's provider account is dry — not a plugin or harness bug. Switch (step 4) and re-prompt; failed messages stay in history with `finish: error`.
+
+## 6. Other model failures
+
+- `opencode2 auth list` can hang with "Model catalog initialization timed out" regardless of version — do not use it for discovery; `opencode2 models` (step 2) works.
+- A child session on a free tier can hit the daily-limit 429 mid-run. Switch that child's model live (`POST /api/session/<sid>/model`, step 4 — per-session and sticky) instead of restarting the work.
