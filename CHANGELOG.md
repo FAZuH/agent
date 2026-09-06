@@ -1,3 +1,10 @@
+## [0.8.8](https://github.com/FAZuH/agent/compare/v0.8.7...v0.8.8) (2026-09-06)
+
+
+### Features
+
+* **skill:** add orchestrate skill owning the orchestrator role ([ca5711e](https://github.com/FAZuH/agent/commit/ca5711eeda58bdd2ff7b37afb44635b96eaefcd5))
+
 ## [0.8.7](https://github.com/FAZuH/agent/compare/v0.8.6...v0.8.7) (2026-09-06)
 
 ## [0.8.6](https://github.com/FAZuH/agent/compare/v0.8.5...v0.8.6) (2026-09-06)
@@ -28,6 +35,4 @@
 * **skill:** add ocv2-compact and extend prepare-compact with compact offer ([5a72ef5](https://github.com/FAZuH/agent/commit/5a72ef5ce6c1171b05f8479948e1662e6321a056))
 * **skill:** add scripts for common ocv2 api calls ([e6f4b5f](https://github.com/FAZuH/agent/commit/e6f4b5fa5e678c539d54f7f30a549456d02c0e17))
 * **skill:** tool-free todo collection and self-compact timeout ([371928c](https://github.com/FAZuH/agent/commit/371928cb2e08d12b006df9ca41d76be628b239f9))
-
-## [0.8.3](https://github.com/FAZuH/agent/compare/v0.8.2...v0.8.3) (2026-09-05)
 
