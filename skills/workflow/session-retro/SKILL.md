@@ -10,6 +10,8 @@ into concrete, filed proposals for improving your own skills, agent
 definitions, tooling, and process. This skill only proposes; application
 belongs to @papercut-sweep.
 
+Always follow the rules in the *Rules* section at the bottom.
+
 ## When
 
 - At session wrap-up — typically just before @finish or after the last
@@ -18,7 +20,7 @@ belongs to @papercut-sweep.
 - Especially valuable right before `/compact` or session end, while
   context is still fresh.
 
-## Mine the session
+## 1. Mine the session
 
 Walk back through the conversation and look for five things:
 
@@ -37,7 +39,7 @@ Walk back through the conversation and look for five things:
    phrases, inputs/outputs). If none meets the bar, state `No new-skill
    candidate.` and move on — that is a valid outcome.
 
-## Propose (do not file yet)
+## 2. Propose (do not file yet)
 
 For each finding, **draft** one entry but do not call `papercuts` yet:
 
@@ -59,7 +61,7 @@ Use `-g` only for global scope.
 - One finding per entry; overlapping findings get separate entries so the
   sweep can dedup.
 
-## Gate — ask before filing
+## 3. Gate — ask before filing
 
 **GATE papercut-file (normal → file all drafted proposals):** filing a
 papercut to a store requires user approval (filing is cheap and reversible;
@@ -95,7 +97,7 @@ the user:
 3. Only after an explicit answer, file the approved subset and nothing else.
    If the user says "none" or does not approve, file nothing and report that.
 
-## File only approved and present
+## 4. File only approved and present
 
 For each approved proposal, run the corresponding `papercuts` command and
 collect its `id`. Then report a compact **filed** table:
@@ -119,3 +121,18 @@ collect its `id`. Then report a compact **filed** table:
   after filing, hand off explicitly to @opencode-skill-creator. If the user wants immediate
   application after filing, hand off explicitly to @papercut-sweep.
 - **Scope decides store.** Global scope → global store (`-g`); repo/project scope → local store (no `-g`). Do not use `-g` for repo-local fixes.
+
+## Rules
+
+- Filing requires the step-3 user approval (GATE papercut-file, `normal`
+  gate — skips only in auto mode; vocabulary: @gate).
+- In a restricted/read-only agent (e.g. Plan mode): keep the deviation log
+  in working notes, defer filing to a write-capable mode, and state the
+  deferral in the report.
+
+## Dependency graph
+
+- step1
+- step2 -> step1
+- step3 -> step2
+- step4 -> step3
