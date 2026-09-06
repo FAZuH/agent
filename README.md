@@ -12,14 +12,14 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 
 ```bash
 npx skills add Agents365-ai/mermaid-skill -g -a opencode -y
-npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -y
-npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -y
+npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
+npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
 cargo install --git https://github.com/FAZuH/papercuts
 ```
 
 Then install [rsync](https://github.com/RsyncProject/rsync) from your package manager.
 
-## Install
+### Install
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
@@ -30,6 +30,14 @@ Then install [rsync](https://github.com/RsyncProject/rsync) from your package ma
 ./sync.sh diff -g                # preview drift (push + pull directions)
 # --dry-run to preview; needs restart after
 ```
+
+### Extras
+
+```
+npx skills add kajisho5/ffmpeg-skill --global --agent opencode --yes
+python3 ~/.agents/skills/ffmpeg-skill/scripts/_contract.py doctor  # all capabilities should be `available`
+```
+If the CLI reports `YAML parse error … No valid skills found` (unquoted colons in upstream's frontmatter), fall back to the manual clone+copy in @external-skills. Until upstream quotes the description, invoke it by name.
 
 ### What it syncs
 
@@ -126,6 +134,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[commit-scopes](./skills/standalone/commit-scopes/SKILL.md)**: Create or update the closed vocabulary for Conventional Commit scopes (`docs/dev/commit-scopes.md`).
 - **[rust-idioms](./skills/standalone/rust-idioms/SKILL.md)**: Type-driven Rust design patterns — newtype, typestate, sealed traits, RAII guards, error and dispatch design.
 - **[rust-tea](./skills/standalone/rust-tea/SKILL.md)**: Renderer-agnostic Elm Architecture (TEA/MVU) for Rust — Model/Message/Update/View/Effects for iced and ratatui apps.
+- **[external-skills](./skills/standalone/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned (External class) skills via the `skills` CLI — check `npx skills --help` first, install with `--global --agent opencode --yes`, manual clone+copy fallback when the CLI rejects a repo.
 
 ### OpenCode v2 (ocv2)
 
