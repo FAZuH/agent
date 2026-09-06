@@ -12,14 +12,14 @@ skill only collects and validates; application belongs to @papercut-sweep.
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report.
 
-This check is gated and non-destructive — it never auto-applies fixes.
+Always follow the rules in the *Rules* section at the bottom.
 
 1. **Collect — @session-retro (gated).** Load the @session-retro skill and
    follow it exactly: mine the session for friction / repeated corrections /
-   skill gaps / wins / new-skill candidates, draft papercut proposals (do not file yet), render the
-   proposal table, gate with `default.question` (File all / Pick individually /
-   File none), and file only the approved subset. If the user picks none, file
-   nothing and note it.
+   skill gaps / wins / new-skill candidates, draft papercut proposals (do not
+   file yet), render the proposal table, gate with `default.question` (File
+   all / Pick individually / File none), and file only the approved subset.
+   If the user picks none, file nothing and note it.
 2. **Validate — @skill-doctor.** Load the @skill-doctor skill and follow its
    Procedure §1 from the skill's base dir:
 
@@ -46,3 +46,22 @@ This check is gated and non-destructive — it never auto-applies fixes.
 
    Do not run @papercut-sweep without an explicit "yes". If the user says
    no, leave the backlog for a later sweep.
+
+## Rules
+
+- This skill never edits skills, agent definitions, or config, and never
+  applies fixes — application belongs to @papercut-sweep, creation to
+  @opencode-skill-creator.
+- Both gates (`papercut-file` in step 1, `offer-sweep` in step 3) are
+  `normal` gates: explicit user approval required; they skip only in auto
+  mode (vocabulary: @gate).
+- In a restricted/read-only agent (e.g. Plan mode): keep the deviation log
+  in working notes, run diagnostics without persistence (skip the `tee -a`
+  append), defer filing to a write-capable mode, and state all of it in the
+  run report.
+
+## Dependency graph
+
+- step1
+- step2
+- step3 -> step1, step2
