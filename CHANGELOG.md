@@ -1,3 +1,5 @@
+## [0.8.7](https://github.com/FAZuH/agent/compare/v0.8.6...v0.8.7) (2026-09-06)
+
 ## [0.8.6](https://github.com/FAZuH/agent/compare/v0.8.5...v0.8.6) (2026-09-06)
 
 
@@ -28,13 +30,4 @@
 * **skill:** tool-free todo collection and self-compact timeout ([371928c](https://github.com/FAZuH/agent/commit/371928cb2e08d12b006df9ca41d76be628b239f9))
 
 ## [0.8.3](https://github.com/FAZuH/agent/compare/v0.8.2...v0.8.3) (2026-09-05)
-
-## [0.8.2](https://github.com/FAZuH/agent/compare/v0.8.1...v0.8.2) (2026-09-05)
-
-
-### Bug Fixes
-
-* **plugin:** bound quiz_ask form polling (1s interval, abort-aware, 404-terminal, 15s api timeout) ([77ceaa7](https://github.com/FAZuH/agent/commit/77ceaa7e4e55530ea87a3451d3a4e3ebe4271193))
-* **plugin:** replace dropped Plugin.define helper with plain {id, setup} module ([9eb4b75](https://github.com/FAZuH/agent/commit/9eb4b7571789722e85aeda70cfa8b8cf60a9fc40))
-* **plugin:** single md-link poller per process via globalThis guard ([916833c](https://github.com/FAZuH/agent/commit/916833cd8ff368b799c8f5582d286435c9b31a8c))
 
