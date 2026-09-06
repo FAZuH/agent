@@ -1,3 +1,13 @@
+## [0.8.6](https://github.com/FAZuH/agent/compare/v0.8.5...v0.8.6) (2026-09-06)
+
+
+### Bug Fixes
+
+* **agent:** convert document, review, image-viewer defs to v2 permissions arrays ([be90505](https://github.com/FAZuH/agent/commit/be90505b0cc022b6431afb0bf332903196251642))
+* **command:** add the .scratch archive step to the /finish procedure ([65b4eaa](https://github.com/FAZuH/agent/commit/65b4eaab75e1eeeee88d1bf1c1fd15657d87f08b))
+* **plugin:** mermaid-doctor resolves playwright from global node_modules ([fd843c6](https://github.com/FAZuH/agent/commit/fd843c66b244d2973e58814a1818b24bb6660d72))
+* **skill:** oc-delegate resolves ocv2-sessions in the flat deploy layout ([0c049aa](https://github.com/FAZuH/agent/commit/0c049aa18408d25173cf96f96b15a4ba32eb5796))
+
 ## [0.8.5](https://github.com/FAZuH/agent/compare/v0.8.4...v0.8.5) (2026-09-06)
 
 
@@ -27,11 +37,4 @@
 * **plugin:** bound quiz_ask form polling (1s interval, abort-aware, 404-terminal, 15s api timeout) ([77ceaa7](https://github.com/FAZuH/agent/commit/77ceaa7e4e55530ea87a3451d3a4e3ebe4271193))
 * **plugin:** replace dropped Plugin.define helper with plain {id, setup} module ([9eb4b75](https://github.com/FAZuH/agent/commit/9eb4b7571789722e85aeda70cfa8b8cf60a9fc40))
 * **plugin:** single md-link poller per process via globalThis guard ([916833c](https://github.com/FAZuH/agent/commit/916833cd8ff368b799c8f5582d286435c9b31a8c))
-
-## [0.8.1](https://github.com/FAZuH/agent/compare/v0.8.0...v0.8.1) (2026-09-04)
-
-
-### Bug Fixes
-
-* **plugin:** add root tui.ts entrypoints for beta-19086 local dir discovery ([6a87111](https://github.com/FAZuH/agent/commit/6a87111d35c5f478c69255cd03c9c3d7033b4894))
 
