@@ -1,6 +1,6 @@
 ---
 name: rust-idioms
-description: Type-driven design patterns for Rust — newtype and smart constructors (parse, don't validate), acceptance traits, typestate, capability tokens, extension traits, sealed traits and closed vocabularies, RAII guards and drop bombs, error type design (thiserror/anyhow), and dispatch design (generics vs dyn vs enum). Use whenever the user mentions any of these patterns, asks to design Rust types or a Rust API, or wants a Rust code review — even if they never say "idioms". Findings should lead with the most specific term from the oop skill.
+description: Type-driven design patterns for Rust — newtype and smart constructors (parse, don't validate), acceptance traits, typestate, capability tokens, extension traits, sealed traits and closed vocabularies, RAII guards and drop bombs, error design (thiserror/anyhow, error-as-data, panic-only-on-unrecoverable-state policy and message wording), and dispatch design (generics vs dyn vs enum). Use whenever the user mentions any of these patterns, asks to design Rust types or a Rust API, or wants a Rust code review — even if they never say "idioms". Findings should lead with the most specific term from the oop skill.
 ---
 
 # Rust idioms — encode the domain in types
@@ -48,6 +48,7 @@ vocabularies, ports are capabilities, effect payloads are error-as-data.
 | The compiler should drive a refactor | exhaustive enums as closed vocabularies | `references/sealed-traits.md` |
 | A resource must be released or rolled back on every path | RAII guard / drop bomb | `references/raii.md` |
 | Error types sprawl, context is lost, or errors are strings | thiserror/anyhow split, error-as-data | `references/errors.md` |
+| Panics used as error handling, or unclear when `unwrap` is legal | panic-only-on-unrecoverable-state policy | `references/errors.md` |
 | Choosing between generics, `dyn Trait`, and enums for polymorphism | dispatch decision table | `references/dispatch.md` |
 
 ## When not to apply
@@ -71,7 +72,7 @@ vocabularies, ports are capabilities, effect payloads are error-as-data.
 | Extension traits, import hygiene, upstream-collision risk | `references/extension-traits.md` |
 | Sealed traits, closed vocabularies, `#[non_exhaustive]` | `references/sealed-traits.md` |
 | RAII guards, drop bombs, Drop rules | `references/raii.md` |
-| thiserror vs anyhow, source chains, error-as-data | `references/errors.md` |
+| thiserror vs anyhow, source chains, error-as-data, panics, wording | `references/errors.md` |
 | Generics vs `dyn` vs enum dispatch, object safety | `references/dispatch.md` |
 
 Read only what the task needs. `SKILL.md` + the decision table cover most
