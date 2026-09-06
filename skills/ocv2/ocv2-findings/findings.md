@@ -111,11 +111,11 @@ source: live-test
 evidence: md-link.ts edits at 00:39 kept producing old-handler log lines (inbox.delivered) at 00:44 under the same service; /api/plugin showed the new source path as active while the stale loop ran. Only after killing `opencode2 serve --service` (auto-respawned by next client run) did fresh setup entries appear and new handlers take effect.
 "Hot-reload" re-registers the module for NEW contexts but never disposes old setup() closures with running subscriptions. After changing server-plugin behavior, restart the background service (kill it; clients respawn it).
 
-## [2026-08-25] api: GET /api/session/<sid>/message — newest-first, cap 50, two text shapes
+## [2026-09-06] api: GET /api/session/<sid>/message — newest-first, cap 50, two text shapes
 status: confirmed
 source: live-test
-evidence: opencode2 api get /api/session/<sid>/message returned items[0].time.created > items[-1] (newest-first) with exactly 50 items on a long session; message objects vary — some {type:"assistant", text:"..."} flat, others {type:"assistant", content:[{type:"text"|"reasoning", text}]} — both seen within one session.
-Consumers must handle both shapes and iterate from index 0 for "latest". Works without auth hassle via `opencode2 api get <path>` (handles port discovery + basic auth itself); plain Bun.spawn of that CLI is a reliable bridge for TUI plugins that lack a working client surface.
+evidence: opencode2 api get /api/session/<sid>/message returned items[0].time.created > items[-1] (newest-first) with exactly 50 items on a long session; message objects vary — some {type:"assistant", text:"..."} flat, others {type:"assistant", content:[{type:"text"|"reasoning", text}]} — both seen within one session. Reconfirmed 2026-09-06 while polling 5 forked fleet children.
+Consumers must handle both shapes and iterate from index 0 for "latest". Works without auth hassle via `opencode2 api get <path>` (handles port discovery + basic auth itself); plain Bun.spawn of that CLI is a reliable bridge for TUI plugins that lack a working client surface. Fleet-poll recipe: a forked child's list mixes the parent's orchestrator messages with the child's own — filter `agent != orchestrator` before taking "latest", sort by `time.created` explicitly when voices interleave, and save large responses to a file before parsing (the api CLI has no `-o` flag).
 
 ## [2026-08-25] plugins: external server plugins receive NO session events on beta-1805x — poll the HTTP API instead
 status: confirmed
@@ -224,3 +224,9 @@ status: confirmed
 source: live-test
 evidence: POST /api/session/:sid/prompt {"text","providerID":"litellm","modelID":"free-pro-vision"} still dispatched gpt-6-astra (three 402s); POST /api/session/:sid/model {"model":{"providerID":"litellm","id":"free-pro-vision"}} returned 204, GET /api/session/:sid shows model switched, next prompt ran on litellm/free-pro-vision (finish stop).
 Model is per-session and sticky from creation; change it with POST /api/session/:id/model (204, body {"model":{providerID,id[,variant]}}) — e.g. to dodge 402 "Insufficient account funds". ocv2-sessions scripts/oc-set.sh wraps it.
+
+## [2026-09-06] api: steer-delivery prompts are the wake path for idle sessions — queued wakes batch behind a busy turn
+status: confirmed
+source: live-test
+evidence: bp overnight run — an external bash heartbeat (plain `opencode2 api post /api/session/<sid>/prompt`) woke an idle orchestrator session on every event for ~14 h; POSTs that landed while a turn was running were not lost — they queued and delivered in order when the session went idle (5 keep-alive wakes queued behind slow turns arrived as one burst on resume).
+To keep a session "never 100% stopped", run the watchdog OUTSIDE the session (the harness reaps in-session background jobs; bgrun units die with the service) and wake it with POST /prompt (steer delivery). A wake prompt must be self-contained — wake reason + standing rules re-injected + "act, log, end turn" — the session may read it with fresh context after compaction. Expect queued wakes to batch: suppress keep-alive wakes while a previous one is still pending (check GET /api/session/<id>/inbox); keep event-driven wakes unthrottled.

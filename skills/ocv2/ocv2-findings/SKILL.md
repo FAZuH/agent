@@ -12,9 +12,13 @@ after every verified discovery.
 
 ## Where findings live
 
-All entries live in `findings.md` beside this file — one flat markdown file,
-newest at the bottom. It is the single source of truth; this SKILL.md only
-defines how to read and write it.
+All entries live in `findings.md` in the skills repo —
+`~/Projects/agent/skills/ocv2/ocv2-findings/findings.md` — one flat markdown
+file, newest at the bottom. It is the single source of truth; this SKILL.md
+only defines how to read and write it. Capture there, never beside the
+installed copy: `./sync.sh push` deploys the repo one-way with `--delete`
+and no backup, so an installed-only edit is lost on the next push (verified
+hazard, 2026-09-06).
 
 ## Capture
 
