@@ -124,6 +124,14 @@ worker reads the full packet only when it needs more.
 Raw research transcripts stay in their findings file (`docs/research/`); the
 packet carries the distilled facts, and prompts carry the projection.
 
+### Fleet dispatches
+
+When dispatching N>1 children from one packet, pre-render one projection
+file per child into the workspace (`projections/<role>.md`) and pass the
+file path in each dispatch prompt instead of pasting the projection inline.
+Hand-maintained inline briefs drift apart across children; files stay
+comparable and diffable, and a re-dispatch reuses the file unchanged.
+
 ## Completion criteria
 
 - The packet exists at `.scratch/<slug>/context-packet.md`; every field is
