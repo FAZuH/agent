@@ -99,6 +99,8 @@ In this fixed order, in your final message:
 3. **Hiccups** — every logged hiccup.
 4. **Failed / skipped** — failed steps, and steps skipped because of them,
    with reasons.
+5. **Next** — what to do next: the concrete follow-ups this run leaves open,
+   or `none`.
 
 The run report is a final message to the user. It is not session state; do not
 write it to the session record.
