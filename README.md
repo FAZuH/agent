@@ -141,6 +141,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[ocv2-api](./skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API and where its docs live.
 - **[ocv2-compact](./skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session via the API — trigger, poll the summary, nothing-to-compact and steer gotchas.
 - **[ocv2-findings](./skills/ocv2/ocv2-findings/SKILL.md)**: Save and retrieve hard-won OpenCode v2 findings.
+- **[ocv2-models](./skills/ocv2/ocv2-models/SKILL.md)**: Pick a free model when the default account is dry — list with `opencode2 models | rg -i free`, switch the live session via the model endpoint.
 - **[ocv2-sessions](./skills/ocv2/ocv2-sessions/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
 - **[ocv2-move](./skills/ocv2/ocv2-move/SKILL.md)**: Move a session to another project directory.
 - **[ocv2-pluginhealth](./skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin status and errors.
