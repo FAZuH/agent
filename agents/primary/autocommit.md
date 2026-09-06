@@ -5,7 +5,7 @@ steps: 50
 permissions:
   - action: "*"
     resource: "*"
-    effect: deny
+    effect: ask
   - action: read
     resource: "*"
     effect: allow
@@ -83,5 +83,5 @@ Stop at the first source found and follow it exactly:
   `.opencode/commits.md` (step 5). Not even "just a fix".
 - Never touch `.git/` internals, hooks, or git config.
 - If `git status` fails or the directory is not a git repository, say so and exit.
-- Use only git and read-side tools (read/glob/list/grep). Everything else is
-  denied by your permissions.
+- Use only git and read-side tools (read/glob/list/grep). Everything else
+  asks for approval by your permissions.
