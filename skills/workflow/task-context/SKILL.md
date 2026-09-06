@@ -77,6 +77,8 @@ Spec: `.scratch/<slug>/spec.md` — task truth lives there.
 
 ## Verification commands
 - `<exact command>` — <what it proves> (verified against <config> <date>)
+  - depends on an ephemeral artifact (`/tmp` download, running server)? name
+    it and put the recreate step beside the command
 
 ## Known failures
 - <failing check or dead end + why, so no worker rediscovers it> — or `(none)`
