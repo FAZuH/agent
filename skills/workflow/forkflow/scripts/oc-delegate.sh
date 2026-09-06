@@ -24,7 +24,8 @@ Usage: oc-delegate.sh SOURCE --agent NAME (--through MSG | --before MSG)
 
 Fork → switch agent → first prompt, in that order; then wait and print the
 child's reply. Exit 0 only when the child turn succeeds.
-Exit codes: 0 succeeded · 1 child failed/timed out · 2 usage or API error
+Exit codes: 0 succeeded · 1 child failed · 3 wait budget expired, child
+still running (re-arm: oc-wait.sh CHILD) · 2 usage or API error
 EOF
   exit 2
 }
@@ -75,7 +76,17 @@ else
   "$SESS/oc-prompt.sh" "$CHILD" "$PTEXT" >&2 || exit 2
 fi
 
-"$SESS/oc-wait.sh" "$CHILD" --timeout "$TIMEOUT" >&2 || exit 1
+set +e
+"$SESS/oc-wait.sh" "$CHILD" --timeout "$TIMEOUT" >&2
+RC=$?
+set -e
+if [[ $RC -eq 3 ]]; then
+  printf 'oc-delegate: timed out — child %s still running; re-arm with: oc-wait.sh %s\n' \
+    "$CHILD" "$CHILD" >&2
+  exit 3
+elif [[ $RC -ne 0 ]]; then
+  exit 1
+fi
 
 MSG_TMP=$(mktemp) || die "mktemp failed"
 trap 'rm -f "$MSG_TMP"' EXIT
