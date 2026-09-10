@@ -4,17 +4,18 @@
 # Usage:
 #   octask add <name> --exec "<cmd>" [--oncalendar "<expr>"]
 #              [--description "..."] [--workdir <dir>] [--timeout <sec>]
-#              [--env "KEY=VALUE"] [--delay "<span>"] [--persistent]
-#              [--no-enable] [--force]
+#              [--env "KEY=VALUE"] [--credential NAME:PATH] [--delay "<span>"]
+#              [--persistent] [--no-enable] [--force]
 #   octask add <name> --agent <agent-id> --prompt "<text>" --workdir <dir>
 #              [--model <provider/model>] [--oncalendar "<expr>"]
 #              [--description "..."] [--persistent] [--dirty-only]
-#              [--timeout <sec>] [--delay "<span>"] [--no-enable] [--force]
+#              [--credential NAME:PATH] [--timeout <sec>] [--delay "<span>"]
+#              [--no-enable] [--force]
 #   octask edit <name> [--model <p/m> | --no-model] [--prompt "<text>"]
 #              [--agent <id>] [--oncalendar "<expr>"] [--description "..."]
 #              [--workdir <dir>] [--timeout <sec>]
 #              [--delay "<span>" | --no-delay] [--persistent | --no-persistent]
-#              [--dry-run]
+#              [--credential NAME:PATH] [--clear-credentials] [--dry-run]
 #   octask show <name>
 #   octask remove <name> [--dry-run]
 #   octask list
@@ -30,7 +31,7 @@ PREFIX="octask-"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 die() { echo "octask: $*" >&2; exit 1; }
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # single-quote a string for systemd ExecStart (no $ expansion inside)
 sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -74,7 +75,7 @@ cmd_add() {
   local name="" oncalendar="" exec_cmd="" description="" workdir="" timeout=""
   local delay="" persistent=0 no_enable=0 force=0 dirty_only=0
   local agent_id="" prompt="" model=""
-  local -a envs=()
+  local -a envs=() creds=()
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -88,6 +89,7 @@ cmd_add() {
       --workdir)     workdir="$2"; shift 2 ;;
       --timeout)     timeout="$2"; shift 2 ;;
       --env)         envs+=("$2"); shift 2 ;;
+      --credential)  creds+=("$2"); shift 2 ;;
       --delay)       delay="$2"; shift 2 ;;
       --persistent)  persistent=1; shift ;;
       --no-enable)   no_enable=1; shift ;;
@@ -125,6 +127,16 @@ cmd_add() {
   if [ -n "$delay" ] && ! systemd-analyze timespan "$delay" >/dev/null 2>&1; then
     die "add: invalid --delay timespan: $delay"
   fi
+  local c cname cpath
+  for c in ${creds[@]+"${creds[@]}"}; do
+    case "$c" in *:*) ;;
+      *) die "add: --credential must be NAME:PATH, got: $c" ;;
+    esac
+    cname="${c%%:*}"; cpath="${c#*:}"
+    printf '%s' "$cname" | grep -Eq '^[A-Za-z0-9_.-]+$' \
+      || die "add: bad credential name '$cname' (use [A-Za-z0-9_.-])"
+    [ -e "$cpath" ] || die "add: credential source does not exist: $cpath"
+  done
 
   # ---- agent-mode pre-flights -----------------------------------------
   local oc_bin=""
@@ -200,6 +212,7 @@ cmd_add() {
     [ -n "$workdir" ] && echo "WorkingDirectory=$workdir"
     local e
     for e in "${envs[@]+"${envs[@]}"}"; do echo "Environment=$e"; done
+    for e in "${creds[@]+"${creds[@]}"}"; do echo "LoadCredential=$e"; done
     [ -n "$timeout" ] && echo "TimeoutStartSec=$timeout"
     echo "ExecStart=/usr/bin/bash -c $(sq "$exec_cmd")"
   } > "$base.service"
@@ -358,7 +371,7 @@ load_task() {
   cur_is_agent=0 cur_agent="" cur_model="" cur_prompt="" cur_dirty=0
   cur_workdir="" cur_timeout="" cur_oncalendar="" cur_delay=""
   cur_persistent=0 cur_description="" cur_exec=""
-  cur_envs=()
+  cur_envs=() cur_creds=()
 
   local name="$1" base="$UNIT_DIR/$PREFIX$1"
   [ -e "$base.service" ] || die "edit: no service unit for '$PREFIX$1' (octask list)"
@@ -369,6 +382,7 @@ load_task() {
   cur_timeout="$(sed -n 's/^TimeoutStartSec=//p' "$base.service" | head -n 1)"
   local line
   while IFS= read -r line; do cur_envs+=("$line"); done < <(sed -n 's/^Environment=//p' "$base.service")
+  while IFS= read -r line; do cur_creds+=("$line"); done < <(sed -n 's/^LoadCredential=//p' "$base.service")
 
   local execstart outer inner
   execstart="$(sed -n 's/^ExecStart=//p' "$base.service" | head -n 1)"
@@ -435,6 +449,7 @@ cmd_show() {
   echo "description: $cur_description"
   local e
   for e in ${cur_envs[@]+"${cur_envs[@]}"}; do echo "env: $e"; done
+  for e in ${cur_creds[@]+"${cur_creds[@]}"}; do echo "credential: $e"; done
   local next
   next="$(systemctl --user show "$PREFIX$name.timer" --property=NextElapseUSecRealtime --value 2>/dev/null)" || true
   [ -n "$next" ] && echo "next run: $next"
@@ -445,6 +460,8 @@ cmd_edit() {
   local name="" o_model="" o_model_set=0 o_no_model=0 o_prompt="" o_agent=""
   local o_oncalendar="" o_description="" o_desc_set=0 o_workdir="" o_timeout=""
   local o_delay="" o_delay_changed=0 o_persist=-1 dry_run=0
+  local -a o_creds=()
+  local o_clear_creds=0
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -460,6 +477,8 @@ cmd_edit() {
       --no-delay)      o_delay=""; o_delay_changed=1; shift ;;
       --persistent)    o_persist=1; shift ;;
       --no-persistent) o_persist=0; shift ;;
+      --credential)    o_creds+=("$2"); shift 2 ;;
+      --clear-credentials) o_clear_creds=1; shift ;;
       --dry-run)       dry_run=1; shift ;;
       -h|--help)       usage; exit 0 ;;
       -*)              die "edit: unknown option: $1" ;;
@@ -540,6 +559,20 @@ cmd_edit() {
   [ -n "$new_delay" ] && add_args+=(--delay "$new_delay")
   [ "$new_persist" -eq 1 ] && add_args+=(--persistent)
   for keep in ${keep_envs[@]+"${keep_envs[@]}"}; do add_args+=(--env "$keep"); done
+  # Credentials: keep existing unless cleared, append new ones (same name wins).
+  local -a keep_creds=()
+  if [ "$o_clear_creds" -eq 0 ]; then
+    keep_creds=(${cur_creds[@]+"${cur_creds[@]}"})
+  fi
+  local nc
+  for nc in ${o_creds[@]+"${o_creds[@]}"}; do
+    local nn="${nc%%:*}" i
+    for i in ${!keep_creds[@]}; do
+      [ "${keep_creds[$i]%%:*}" = "$nn" ] && unset 'keep_creds[$i]'
+    done
+    keep_creds+=("$nc")
+  done
+  for keep in ${keep_creds[@]+"${keep_creds[@]}"}; do add_args+=(--credential "$keep"); done
   [ "$was_enabled" -eq 0 ] && add_args+=(--no-enable)
 
   if [ "$dry_run" -eq 1 ]; then

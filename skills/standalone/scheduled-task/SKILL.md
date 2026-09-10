@@ -29,10 +29,12 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   octask add <name> --agent <id> --prompt "..." --workdir <dir>
              [--model <provider/model>] [--oncalendar "<expr>"]
              [--persistent] [--dirty-only] [--timeout <sec>]
-             [--delay "<span>"] [--no-enable] [--force]
+             [--credential NAME:PATH] [--delay "<span>"]
+             [--no-enable] [--force]
   octask edit <name> [--model <p/m> | --no-model] [--prompt "..."]
              [--agent <id>] [--oncalendar "<expr>"] [--description "..."]
              [--workdir <dir>] [--timeout <sec>]
+             [--credential NAME:PATH | --clear-credentials]
              [--delay "<span>" | --no-delay] [--persistent | --no-persistent]
              [--dry-run]
   octask show <name>
