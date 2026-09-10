@@ -30,6 +30,12 @@ Everything this skill manages uses the shared prefix **`octask-`**:
              [--model <provider/model>] [--oncalendar "<expr>"]
              [--persistent] [--dirty-only] [--timeout <sec>]
              [--delay "<span>"] [--no-enable] [--force]
+  octask edit <name> [--model <p/m> | --no-model] [--prompt "..."]
+             [--agent <id>] [--oncalendar "<expr>"] [--description "..."]
+             [--workdir <dir>] [--timeout <sec>]
+             [--delay "<span>" | --no-delay] [--persistent | --no-persistent]
+             [--dry-run]
+  octask show <name>
   octask remove <name> [--dry-run]
   octask list
   octask enable <name> | disable <name>
@@ -91,9 +97,14 @@ every N hours). For "once per 12 hours with a stagger" use
   reloads the daemon. Use `--dry-run` first for anything you are unsure about.
 - Pause: `octask disable <name>` — stops and disables the timer but keeps the
   units; re-enable later with `octask enable <name>`.
-- Edit: simplest is remove + re-add with the new options. Direct unit-file
-  edits are fine for one-line changes, but always `systemctl --user
-  daemon-reload` after and verify with `octask list`.
+- Inspect: `octask show <name>` — parsed task values (agent, model, prompt,
+  schedule, …) plus next run.
+- Edit: `octask edit <name> [options]` — changes agent flags (`--model`,
+  `--no-model`, `--prompt`, `--agent`), schedule (`--oncalendar`, `--delay` /
+  `--no-delay`, `--persistent` / `--no-persistent`), `--description`,
+  `--workdir`, `--timeout`; common fields also work on `--exec` tasks.
+  Preserves custom `--env`, `--dirty-only`, and the timer's enabled state.
+  Use `--dry-run` first to diff without writing.
 
 ## Troubleshooting
 

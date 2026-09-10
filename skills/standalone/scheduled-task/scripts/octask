@@ -10,12 +10,16 @@
 #              [--model <provider/model>] [--oncalendar "<expr>"]
 #              [--description "..."] [--persistent] [--dirty-only]
 #              [--timeout <sec>] [--delay "<span>"] [--no-enable] [--force]
+#   octask edit <name> [--model <p/m> | --no-model] [--prompt "<text>"]
+#              [--agent <id>] [--oncalendar "<expr>"] [--description "..."]
+#              [--workdir <dir>] [--timeout <sec>]
+#              [--delay "<span>" | --no-delay] [--persistent | --no-persistent]
+#              [--dry-run]
+#   octask show <name>
 #   octask remove <name> [--dry-run]
 #   octask list
-#   octask enable <name>
-#   octask disable <name>
-#   octask status <name>
-#   octask logs <name> [-n <lines>]
+#   octask enable <name> | disable <name>
+#   octask status <name> | logs <name> [-n <lines>]
 #
 # Manages ~/.config/systemd/user/octask-<name>.{service,timer}.
 # `add --agent` schedules unattended `opencode run --agent <id>` runs and
@@ -26,7 +30,7 @@ PREFIX="octask-"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 die() { echo "octask: $*" >&2; exit 1; }
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # single-quote a string for systemd ExecStart (no $ expansion inside)
 sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -37,6 +41,12 @@ sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 bq() {
   # shellcheck disable=SC2016  # sed patterns intentionally use literal $
   printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\$/\\$/g' -e 's/`/\\`/g')"
+}
+
+# inverse of bq(): undo the inner-bash escaping (reverse order of bq so an
+# original backslash-quote restores correctly)
+unbq() {
+  printf '%s' "$1" | sed -e 's/\\`/`/g' -e 's/\\\$/$/g' -e 's/\\"/"/g' -e 's/\\\\/\\/g'
 }
 
 valid_name() {
@@ -342,6 +352,219 @@ cmd_logs() {
   journalctl --user -u "$PREFIX$name.service" -n "$lines" --no-pager
 }
 
+# Load a task's units into cur_* globals. Dies if a unit is missing or
+# unparsable. Agent detection uses the same `--agent` heuristic as list.
+load_task() {
+  cur_is_agent=0 cur_agent="" cur_model="" cur_prompt="" cur_dirty=0
+  cur_workdir="" cur_timeout="" cur_oncalendar="" cur_delay=""
+  cur_persistent=0 cur_description="" cur_exec=""
+  cur_envs=()
+
+  local name="$1" base="$UNIT_DIR/$PREFIX$1"
+  [ -e "$base.service" ] || die "edit: no service unit for '$PREFIX$1' (octask list)"
+  [ -e "$base.timer" ] || die "edit: no timer unit for '$PREFIX$1' (re-add the task)"
+
+  cur_description="$(sed -n 's/^Description=//p' "$base.service" | head -n 1)"
+  cur_workdir="$(sed -n 's/^WorkingDirectory=//p' "$base.service" | head -n 1)"
+  cur_timeout="$(sed -n 's/^TimeoutStartSec=//p' "$base.service" | head -n 1)"
+  local line
+  while IFS= read -r line; do cur_envs+=("$line"); done < <(sed -n 's/^Environment=//p' "$base.service")
+
+  local execstart outer inner
+  execstart="$(sed -n 's/^ExecStart=//p' "$base.service" | head -n 1)"
+  [ -n "$execstart" ] || die "edit: $base.service has no ExecStart (re-add the task)"
+  case "$execstart" in "/usr/bin/bash -c '"*) ;;
+    *) die "edit: unexpected ExecStart format (re-add the task)" ;;
+  esac
+  outer="${execstart#/usr/bin/bash -c }"
+  inner="${outer#\'}"
+  inner="${inner%\'}"
+  # ponytail: manual sq-decode; eval on a unit file would execute it
+  inner="$(printf '%s' "$inner" | sed "s/'\\\\''/'/g")"
+
+  case "$inner" in
+    *" run --agent "*|*" run --model "*) cur_is_agent=1 ;;
+  esac
+
+  if [ "$cur_is_agent" -eq 1 ]; then
+    local dirty_prefix='if [ -z "$(git status --porcelain)" ]; then exit 0; fi; exec '
+    case "$inner" in
+      "$dirty_prefix"*) cur_dirty=1; inner="${inner#"$dirty_prefix"}" ;;
+    esac
+    case "$inner" in
+      *" --model "*) cur_model="$(printf '%s' "$inner" | sed -n 's/.* --model \([^ ][^ ]*\).*/\1/p')" ;;
+    esac
+    cur_agent="$(printf '%s' "$inner" | sed -n 's/.* --agent \([^ ][^ ]*\).*/\1/p')"
+    [ -n "$cur_agent" ] || die "edit: could not parse --agent (re-add the task)"
+    local tmp="${inner#*\"}"
+    [ "$tmp" != "$inner" ] || die "edit: could not parse prompt (re-add the task)"
+    tmp="${tmp%\"*}"
+    cur_prompt="$(unbq "$tmp")"
+  else
+    cur_exec="$inner"
+  fi
+
+  cur_oncalendar="$(sed -n 's/^OnCalendar=//p' "$base.timer" | head -n 1)"
+  [ -n "$cur_oncalendar" ] || die "edit: $base.timer has no OnCalendar (re-add the task)"
+  cur_delay="$(sed -n 's/^RandomizedDelaySec=//p' "$base.timer" | head -n 1)"
+  if grep -q '^Persistent=true' "$base.timer" 2>/dev/null; then cur_persistent=1; fi
+}
+
+# ---------------------------------------------------------------- show ----
+cmd_show() {
+  [ $# -eq 1 ] || { usage; die "show: exactly one <name> required"; }
+  local name; name="$(norm_name "$1")"
+  require_name "$name"
+  units_exist "$name" || die "show: no units found for '$PREFIX$name' (octask list)"
+  load_task "$name"
+  if [ "$cur_is_agent" -eq 1 ]; then
+    echo "task: $name (agent)"
+    echo "agent: $cur_agent"
+    echo "model: ${cur_model:-(default)}"
+    printf 'prompt: %s\n' "$cur_prompt"
+  else
+    echo "task: $name (exec)"
+    printf 'exec: %s\n' "$cur_exec"
+  fi
+  [ -n "$cur_workdir" ] && echo "workdir: $cur_workdir"
+  echo "oncalendar: $cur_oncalendar"
+  [ -n "$cur_delay" ] && echo "delay: $cur_delay"
+  echo "persistent: $cur_persistent"
+  [ -n "$cur_timeout" ] && echo "timeout: $cur_timeout"
+  [ "$cur_dirty" -eq 1 ] && echo "dirty-only: 1"
+  echo "description: $cur_description"
+  local e
+  for e in ${cur_envs[@]+"${cur_envs[@]}"}; do echo "env: $e"; done
+  local next
+  next="$(systemctl --user show "$PREFIX$name.timer" --property=NextElapseUSecRealtime --value 2>/dev/null)" || true
+  [ -n "$next" ] && echo "next run: $next"
+}
+
+# ---------------------------------------------------------------- edit ----
+cmd_edit() {
+  local name="" o_model="" o_model_set=0 o_no_model=0 o_prompt="" o_agent=""
+  local o_oncalendar="" o_description="" o_desc_set=0 o_workdir="" o_timeout=""
+  local o_delay="" o_delay_changed=0 o_persist=-1 dry_run=0
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --model)         o_model="$2"; o_model_set=1; shift 2 ;;
+      --no-model)      o_no_model=1; shift ;;
+      --prompt)        o_prompt="$2"; shift 2 ;;
+      --agent)         o_agent="$2"; shift 2 ;;
+      --oncalendar)    o_oncalendar="$2"; shift 2 ;;
+      --description)   o_description="$2"; o_desc_set=1; shift 2 ;;
+      --workdir)       o_workdir="$2"; shift 2 ;;
+      --timeout)       o_timeout="$2"; shift 2 ;;
+      --delay)         o_delay="$2"; o_delay_changed=1; shift 2 ;;
+      --no-delay)      o_delay=""; o_delay_changed=1; shift ;;
+      --persistent)    o_persist=1; shift ;;
+      --no-persistent) o_persist=0; shift ;;
+      --dry-run)       dry_run=1; shift ;;
+      -h|--help)       usage; exit 0 ;;
+      -*)              die "edit: unknown option: $1" ;;
+      *)               [ -z "$name" ] || die "edit: unexpected argument: $1"; name="$1"; shift ;;
+    esac
+  done
+
+  [ "$o_model_set" -eq 0 ] || [ "$o_no_model" -eq 0 ] || die "edit: --model and --no-model conflict"
+  name="$(norm_name "${name:-}")"
+  require_name "$name"
+  units_exist "$name" || die "edit: no units found for '$PREFIX$name' (octask list)"
+  load_task "$name"
+
+  if [ "$cur_is_agent" -eq 0 ]; then
+    { [ -z "$o_prompt" ] && [ -z "$o_agent" ] && [ "$o_model_set" -eq 0 ] && [ "$o_no_model" -eq 0 ]; } \
+      || die "edit: --prompt/--agent/--model apply only to agent tasks ('$name' is an --exec task)"
+  fi
+
+  # ---- merge overrides onto current values -------------------------------
+  local new_agent="${o_agent:-$cur_agent}" new_prompt="${o_prompt:-$cur_prompt}"
+  local new_workdir="${o_workdir:-$cur_workdir}" new_oncalendar="${o_oncalendar:-$cur_oncalendar}"
+  local new_timeout="${o_timeout:-$cur_timeout}" new_model="$cur_model"
+  [ "$o_model_set" -eq 1 ] && new_model="$o_model"
+  [ "$o_no_model" -eq 1 ] && new_model=""
+  local new_delay="$cur_delay"
+  [ "$o_delay_changed" -eq 1 ] && new_delay="$o_delay"
+  local new_persist="$cur_persistent"
+  [ "$o_persist" -ge 0 ] && new_persist="$o_persist"
+
+  # Description handed to add (which appends [model] itself): strip the old
+  # suffix, or drop it entirely when it was auto-generated so add rebuilds it
+  # from the new agent/workdir.
+  local desc_arg=""
+  if [ "$o_desc_set" -eq 1 ]; then
+    desc_arg="$o_description"
+  elif [ "$cur_is_agent" -eq 1 ]; then
+    local base="$cur_description" suffix=""
+    [ -n "$cur_model" ] && suffix=" [$cur_model]"
+    if [ -n "$suffix" ]; then
+      case "$base" in *"$suffix") base="${base%"$suffix"}" ;; esac
+    fi
+    local auto="agent $cur_agent in ${cur_workdir/#$HOME/~}"
+    if [ "$base" = "$auto" ]; then
+      desc_arg=""
+    else
+      desc_arg="$base"
+    fi
+  else
+    desc_arg="$cur_description"
+  fi
+
+  # Envs: keep custom ones; add re-adds its PATH line for agent tasks.
+  local -a keep_envs=()
+  local keep
+  for keep in ${cur_envs[@]+"${cur_envs[@]}"}; do
+    if [ "$keep" = "PATH=/usr/local/bin:/usr/bin" ] && [ "$cur_is_agent" -eq 1 ]; then
+      continue
+    fi
+    keep_envs+=("$keep")
+  done
+
+  # Enabled state: add always enables, so remember to preserve a disabled timer.
+  local was_enabled=0
+  if systemctl --user is-enabled "$PREFIX$name.timer" >/dev/null 2>&1; then was_enabled=1; fi
+
+  local -a add_args=("$name" --force)
+  if [ "$cur_is_agent" -eq 1 ]; then
+    add_args+=(--agent "$new_agent" --prompt "$new_prompt" --workdir "$new_workdir")
+    [ -n "$new_model" ] && add_args+=(--model "$new_model")
+    [ "$cur_dirty" -eq 1 ] && add_args+=(--dirty-only)
+  else
+    add_args+=(--exec "$cur_exec")
+    [ -n "$new_workdir" ] && add_args+=(--workdir "$new_workdir")
+  fi
+  [ -n "$desc_arg" ] && add_args+=(--description "$desc_arg")
+  add_args+=(--oncalendar "$new_oncalendar")
+  [ -n "$new_timeout" ] && add_args+=(--timeout "$new_timeout")
+  [ -n "$new_delay" ] && add_args+=(--delay "$new_delay")
+  [ "$new_persist" -eq 1 ] && add_args+=(--persistent)
+  for keep in ${keep_envs[@]+"${keep_envs[@]}"}; do add_args+=(--env "$keep"); done
+  [ "$was_enabled" -eq 0 ] && add_args+=(--no-enable)
+
+  if [ "$dry_run" -eq 1 ]; then
+    local real_dir="$UNIT_DIR" tmpdir
+    mkdir -p /tmp/opencode
+    tmpdir="$(mktemp -d /tmp/opencode/octask-edit.XXXXXX)"
+    # shellcheck disable=SC2064  # $tmpdir is set; trap must capture it now
+    trap "rm -rf '$tmpdir'" EXIT
+    UNIT_DIR="$tmpdir"
+    # NOTE: add still runs daemon-reload + verify; reload is a no-op here and
+    # verify usefully checks the merged units before the diff.
+    cmd_add "${add_args[@]}" --no-enable >/dev/null
+    UNIT_DIR="$real_dir"
+    diff -u "$real_dir/$PREFIX$name.service" "$tmpdir/$PREFIX$name.service" || true
+    diff -u "$real_dir/$PREFIX$name.timer" "$tmpdir/$PREFIX$name.timer" || true
+    rm -rf "$tmpdir"
+    trap - EXIT
+    echo "dry-run: no changes written"
+    return 0
+  fi
+
+  cmd_add "${add_args[@]}"
+  echo "edited $PREFIX$name"
+}
+
 # -------------------------------------------------------------- dispatcher
 cmd="${1:-}"
 [ -n "$cmd" ] || { usage; exit 1; }
@@ -349,6 +572,8 @@ shift
 
 case "$cmd" in
   add)     cmd_add "$@" ;;
+  edit)    cmd_edit "$@" ;;
+  show)    cmd_show "$@" ;;
   remove)  cmd_remove "$@" ;;
   list)    cmd_list "$@" ;;
   enable)  cmd_enable "$@" ;;
