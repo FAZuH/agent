@@ -18,9 +18,11 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   `octask-<name>.timer` (the schedule).
 - Discovery: `systemctl --user list-timers 'octask-*' --all` — the prefix is
   the discovery mechanism; never create manually named timer pairs.
-- Helper script: **`octask`** — installed on `$PATH` as
-  `~/.local/bin/octask` → `~/.config/opencode/skills/scheduled-task/scripts/octask`
-  (also runnable by full path from this skill's base directory):
+- Helper CLI: **`octask`** — a Rust binary, canonical source at
+  `~/Projects/octask` (GitHub `FAZuH/octask`), installed on `$PATH` as
+  `~/.local/bin/octask` (prebuilt binary from the repo's releases; build with
+  `cargo install --git https://github.com/FAZuH/octask`). The legacy bash
+  implementation stays at `scripts/octask` in this skill as a fallback:
 
   ```bash
   octask add <name> --exec "<cmd>" [--oncalendar "<expr>"] [--persistent]

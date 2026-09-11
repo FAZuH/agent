@@ -99,8 +99,9 @@ Rules and gotchas:
 
 ## Step 2 — schedule the run
 
-Use the unified `octask` CLI (on `$PATH` as `~/.local/bin/octask`, or from
-`~/.config/opencode/skills/scheduled-task/scripts/octask`):
+Use the unified `octask` CLI (Rust binary on `$PATH` as `~/.local/bin/octask`;
+canonical source `~/Projects/octask`, legacy bash fallback in the
+scheduled-task skill's `scripts/octask`):
 
 ```bash
 octask add <name> \
