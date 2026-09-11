@@ -19,7 +19,7 @@ Prebuilt Linux binaries are attached to each release:
 
 ```sh
 curl -fsSL -o /usr/local/bin/octask \
-  https://github.com/FAZuH/octask/releases/latest/download/octask-linux-x64
+  https://github.com/FAZuH/octask/releases/latest/download/octask
 chmod +x /usr/local/bin/octask
 ```
 

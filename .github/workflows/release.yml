@@ -15,6 +15,7 @@ jobs:
     uses: ./.github/workflows/_release.yml
     with:
       binary-name: octask
+      artifact-pattern: octask
       platforms: linux
       publish-crates: false
     secrets: inherit
