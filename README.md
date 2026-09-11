@@ -9,12 +9,14 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 - [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): For creating mermaid diagrams
 - [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering
 - [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
+- [octask](https://github.com/FAZuH/octask): CLI for the `octask-*` systemd user timers used by the scheduled-task and scheduled-agent skills
 
 ```bash
 npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
 cargo install --git https://github.com/FAZuH/papercuts
+cargo install --git https://github.com/FAZuH/octask
 ```
 
 Then install [rsync](https://github.com/RsyncProject/rsync) from your package manager.
