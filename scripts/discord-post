@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# discord-post — post stdin (or $1) as one Discord message via the stored webhook.
+# The webhook URL never leaves this script; agents calling it need no secrets.
+set -euo pipefail
+msg="${1:-$(cat)}"
+[ -n "$msg" ] || { echo "discord-post: empty message" >&2; exit 1; }
+webhook="$(sed -n '1p' {{USER_HOME}}/.secrets/discord/notify.key)"
+[ -n "$webhook" ] || { echo "discord-post: no webhook configured" >&2; exit 1; }
+jq -n --arg content "$msg" '{content: $content}' | \
+  curl -s -o /dev/null -w '%{http_code}\n' -H "Content-Type: application/json" -d @- "$webhook"
