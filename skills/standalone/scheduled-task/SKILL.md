@@ -18,9 +18,10 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   `octask-<name>.timer` (the schedule).
 - Discovery: `systemctl --user list-timers 'octask-*' --all` — the prefix is
   the discovery mechanism; never create manually named timer pairs.
-- Helper script: **`octask`** — installed on `$PATH` as
-  `~/.local/bin/octask` → `~/.config/opencode/skills/scheduled-task/scripts/octask`
-  (also runnable by full path from this skill's base directory):
+- Helper CLI: **`octask`** — a Rust binary, canonical source at
+  `~/Projects/octask` (GitHub `FAZuH/octask`); install with
+  `cargo install --git https://github.com/FAZuH/octask` (lands on `$PATH` as
+  `~/.cargo/bin/octask`):
 
   ```bash
   octask add <name> --exec "<cmd>" [--oncalendar "<expr>"] [--persistent]
@@ -29,9 +30,19 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   octask add <name> --agent <id> --prompt "..." --workdir <dir>
              [--model <provider/model>] [--oncalendar "<expr>"]
              [--persistent] [--dirty-only] [--timeout <sec>]
-             [--delay "<span>"] [--no-enable] [--force]
+             [--credential NAME:PATH] [--delay "<span>"]
+             [--no-enable] [--force]
+  octask edit <name> [--model <p/m> | --no-model] [--prompt "..."]
+             [--agent <id>] [--oncalendar "<expr>"] [--description "..."]
+             [--workdir <dir>] [--timeout <sec>]
+             [--credential NAME:PATH | --clear-credentials]
+             [--delay "<span>" | --no-delay] [--persistent | --no-persistent]
+             [--dry-run]
+  octask show <name>
   octask remove <name> [--dry-run]
   octask list
+  octask export [name ...] [--file <path>]
+  octask import [--file <path>] [--force] [--no-enable]
   octask enable <name> | disable <name>
   octask status <name> | logs <name> [-n <lines>]
   ```
@@ -91,9 +102,23 @@ every N hours). For "once per 12 hours with a stagger" use
   reloads the daemon. Use `--dry-run` first for anything you are unsure about.
 - Pause: `octask disable <name>` — stops and disables the timer but keeps the
   units; re-enable later with `octask enable <name>`.
-- Edit: simplest is remove + re-add with the new options. Direct unit-file
-  edits are fine for one-line changes, but always `systemctl --user
-  daemon-reload` after and verify with `octask list`.
+- Inspect: `octask show <name>` — parsed task values (agent, model, prompt,
+  schedule, …) plus next run.
+- Edit: `octask edit <name> [options]` — changes agent flags (`--model`,
+  `--no-model`, `--prompt`, `--agent`), schedule (`--oncalendar`, `--delay` /
+  `--no-delay`, `--persistent` / `--no-persistent`), `--description`,
+  `--workdir`, `--timeout`; common fields also work on `--exec` tasks.
+  Preserves custom `--env`, `--dirty-only`, and the timer's enabled state.
+  Use `--dry-run` first to diff without writing.
+
+## Export / import
+
+- `octask export [name ...] [--file <path>]` — JSON backup of one, several,
+  or all tasks (no names = all) to stdout, or `--file` for a file.
+- `octask import [--file <path>] [--force] [--no-enable]` — recreate tasks
+  from exported JSON (`--file` or stdin); replays through `octask add` so
+  all validation still applies. Refuses to overwrite without `--force`;
+  preserves the exported enabled state unless `--no-enable`.
 
 ## Troubleshooting
 

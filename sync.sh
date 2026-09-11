@@ -12,6 +12,8 @@ VALUES_FILE="${AGENT_VALUES:-$REPO/.agent-values}"
 TARGETS_CONF="$REPO/targets.conf"
 TAGS_CONF="$REPO/tags.conf"
 AGENTS_SKILLS="$HOME/.agents/skills"
+# Machine-global install root for repo scripts/ (overridable for tests).
+BIN_DIR="${AGENT_BIN_DIR:-$HOME/.local/bin}"
 TOPS=(skills agents plugins commands)
 
 DRY=0
@@ -65,6 +67,7 @@ ${B}Options:${R}
 
 ${B}Examples:${R}
   sync.sh push -g                 install everything, globally
+                                  (incl. scripts/ → ~/.local/bin, copy never symlink)
   sync.sh push -g -t dev,ocv2     install only dev + ocv2 items
   sync.sh list                    targets, tags, installed items
 
@@ -410,6 +413,7 @@ preflight_placeholders() {
   while IFS='|' read -r src rel; do
     [[ -n "$src" ]] && srcs+=("$REPO/$src")
   done < <(enumerate_items)
+  [[ -d "$REPO/scripts" ]] && srcs+=("$REPO/scripts")
   [[ ${#srcs[@]} -gt 0 ]] || return 0
   python3 - "$VALUES_FILE" "$REPO" "${srcs[@]}" <<'PYEOF'
 import os, re, sys
@@ -681,6 +685,165 @@ action_remove() {
   fi
 }
 
+# ── bin scripts (scripts/ → ~/.local/bin, copy never symlink) ─────────────
+# Machine-global and flat: repo scripts/<name> installs to $BIN_DIR/<name>.
+# Files sync never installed are left alone (adopted only when identical or
+# with --force); anything else in $BIN_DIR is out of scope.
+
+# Prints repo-relative script paths passing the tag filter.
+enumerate_bin() {
+  local f name
+  [[ -d "$REPO/scripts" ]] || return 0
+  for f in "$REPO/scripts"/*; do
+    [[ -f "$f" ]] || continue
+    name="$(basename "$f")"
+    item_selected "scripts/$name" && printf 'scripts/%s\n' "$name"
+  done
+}
+
+bin_push() {
+  local src name tgt rec
+  step "Bin → $BIN_DIR"
+  [[ -d "$REPO/scripts" ]] || { info "no scripts/ directory — nothing to install"; return; }
+  mkdir -p "$BIN_DIR"
+  while IFS= read -r src; do
+    [[ -n "$src" ]] || continue
+    name="${src#scripts/}"
+    stage_item "$src"
+    tgt="$BIN_DIR/$name"
+    if [[ -L "$tgt" ]]; then
+      warn "$name skipped — target path is a symlink (remove it first: rm $tgt)"
+      continue
+    fi
+    if [[ -e "$tgt" ]]; then
+      rec="$(manifest_read_items "$BIN_DIR" | grep -F -e "$name|" || true)"
+      if [[ -z "$rec" ]]; then
+        if [[ "$(tree_sha "$tgt")" == "$(tree_sha "$STAGED_PATH")" ]]; then
+          [[ $DRY -eq 1 ]] || manifest_set_item "$BIN_DIR" "$name" "$src" "$(tree_sha "$tgt")"
+          info "$name already in sync — tracking"
+          continue
+        fi
+        [[ $FORCE -eq 1 ]] || { warn "$name kept — not installed by sync (pass --force to adopt)"; continue; }
+      fi
+    fi
+    if [[ $DRY -eq 1 ]]; then
+      would "push $name"
+      continue
+    fi
+    cp -p "$STAGED_PATH" "$tgt"
+    chmod +x "$tgt"
+    manifest_set_item "$BIN_DIR" "$name" "$src" "$(tree_sha "$tgt")"
+    ok "pushed $name"
+  done < <(enumerate_bin)
+
+  # stale prune: tracked scripts no longer shipped — same rule as action_push.
+  if [[ -f "$MANIFEST" ]]; then
+    local rel sha current
+    while IFS='|' read -r rel src sha; do
+      [[ -n "$rel" ]] || continue
+      [[ -e "$REPO/$src" ]] && continue
+      tgt="$BIN_DIR/$rel"
+      if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
+        info "stale $rel already gone"
+        manifest_del_item "$BIN_DIR" "$rel"
+        continue
+      fi
+      current="$(tree_sha "$tgt" 2>/dev/null || true)"
+      if [[ "$current" == "$sha" ]]; then
+        if [[ $DRY -eq 1 ]]; then
+          would "remove stale $rel"
+        else
+          rm -f "$tgt"; ok "removed stale $rel"
+          manifest_del_item "$BIN_DIR" "$rel"
+        fi
+      else
+        warn "$rel kept — no longer in repo and modified in target"
+      fi
+    done < <(manifest_read_items "$BIN_DIR")
+  fi
+}
+
+bin_pull() {
+  local rel src sha tgt
+  step "Pull ← $BIN_DIR"
+  [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to pull"; return; }
+  while IFS='|' read -r rel src sha; do
+    [[ -n "$rel" && -n "$src" ]] || continue
+    item_selected "$src" || continue
+    [[ -e "$REPO/$src" ]] || continue
+    if item_templated "$src"; then
+      info "pull skipped $rel — templated (repo-owned: edit .agent-values, then push)"
+      continue
+    fi
+    tgt="$BIN_DIR/$rel"
+    [[ -e "$tgt" ]] || continue
+    if [[ $DRY -eq 1 ]]; then
+      would "pull $rel"
+    else
+      cp -p "$tgt" "$REPO/$src"
+      manifest_set_item "$BIN_DIR" "$rel" "$src" "$(tree_sha "$tgt")"
+      ok "pulled $rel"
+    fi
+  done < <(manifest_read_items "$BIN_DIR")
+}
+
+bin_diff() {
+  local src name item tgt
+  step "Diff $BIN_DIR"
+  [[ -d "$REPO/scripts" ]] || { info "no scripts/ directory"; return; }
+  preflight_placeholders
+  while IFS= read -r src; do
+    [[ -n "$src" ]] || continue
+    name="${src#scripts/}"
+    stage_item "$src"
+    item="$STAGED_PATH"; tgt="$BIN_DIR/$name"
+    if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
+      would "push $name (not installed)"
+    elif [[ "$(tree_sha "$tgt")" == "$(tree_sha "$item")" ]]; then
+      info "$name in sync"
+    else
+      warn "$name differs"
+    fi
+  done < <(enumerate_bin)
+}
+
+bin_remove() {
+  local rel src sha tgt current
+  step "Remove ← $BIN_DIR"
+  [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to remove"; return; }
+  while IFS='|' read -r rel src sha; do
+    [[ -n "$rel" ]] || continue
+    item_selected "$src" || continue
+    tgt="$BIN_DIR/$rel"
+    if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
+      info "already gone: $rel"
+      manifest_del_item "$BIN_DIR" "$rel"
+      continue
+    fi
+    current="$(tree_sha "$tgt" 2>/dev/null || true)"
+    if [[ -n "$sha" && "$current" == "$sha" ]]; then
+      if [[ $DRY -eq 1 ]]; then
+        would "remove $rel"
+      else
+        rm -f "$tgt"; ok "removed $rel"
+        manifest_del_item "$BIN_DIR" "$rel"
+      fi
+    else
+      warn "$rel kept — modified in target (content differs from what we pushed); remove manually if unwanted"
+    fi
+  done < <(manifest_read_items "$BIN_DIR")
+}
+
+# Bin scripts are machine-global: sync them only for the global target and
+# only when no top filter scopes the run (scripts/ is not a top).
+maybe_bin() { # <push|pull|diff|remove>
+  [[ "$TARGET" == "$GLOBAL_CFG" ]] || return 0
+  [[ ${#TOPS_SEL[@]} -eq 0 ]] || return 0
+  case "$1" in
+    push) bin_push ;; pull) bin_pull ;; diff) bin_diff ;; remove) bin_remove ;;
+  esac
+}
+
 action_list() {
   local sel=("${TAGS_SEL[@]}") tops=("${TOP_LIST[@]}")
   TAGS_SEL=(); TOP_LIST=("${TOPS[@]}")       # list always shows the full picture
@@ -798,6 +961,7 @@ if [[ "$COMMAND" == "all" ]]; then
       diff)   action_diff "$TARGET" ;;
       remove) action_remove "$TARGET" ;;
     esac
+    maybe_bin "$SUB_CMD"
   }
   run_target global
   for name in "${!TARGET_PATHS[@]}"; do run_target "$name"; done
@@ -809,10 +973,10 @@ resolve_target "$TARGET_NAME"
 [[ $DRY -eq 1 ]] && info "dry run — nothing will be changed"
 
 case "$COMMAND" in
-  push)   plugin_guard "$TARGET"; action_push "$TARGET"; shadow_advisory ;;
-  pull)   action_pull "$TARGET" ;;
-  diff)   action_diff "$TARGET" ;;
-  remove) action_remove "$TARGET" ;;
+  push)   plugin_guard "$TARGET"; action_push "$TARGET"; shadow_advisory; maybe_bin push ;;
+  pull)   action_pull "$TARGET"; maybe_bin pull ;;
+  diff)   action_diff "$TARGET"; maybe_bin diff ;;
+  remove) action_remove "$TARGET"; maybe_bin remove ;;
 esac
 
 step "Next steps"

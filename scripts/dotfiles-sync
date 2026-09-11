@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# dotfiles-sync [--dry-run] — snapshot live config into ~/Work/dotfiles.
+# Only files chezmoi already manages are updated (`re-add` never adopts new
+# files); the repo's .chezmoiignore and encrypted_* rules apply as usual.
+# Refuses to commit when re-add leaks untracked files or stages anything
+# resembling a secret outside encrypted_*.asc files. Never pushes.
+set -euo pipefail
+SRC={{USER_HOME}}/Work/dotfiles
+
+if [ "${1:-}" = "--dry-run" ]; then
+  chezmoi status 2>/dev/null
+  exit 0
+fi
+
+chezmoi re-add 2>/dev/null
+
+[ -n "$(git -C "$SRC" status --porcelain)" ] || {
+  echo "dotfiles-sync: clean, nothing to commit"
+  exit 0
+}
+
+if git -C "$SRC" status --porcelain | grep -q '^??'; then
+  echo "dotfiles-sync: REFUSING — untracked files present after re-add:" >&2
+  git -C "$SRC" status --porcelain | grep '^??' >&2
+  exit 1
+fi
+
+mapfile -t staged < <(git -C "$SRC" diff --name-only | grep -v 'encrypted_' || true)
+if [ "${#staged[@]}" -gt 0 ]; then
+  if git -C "$SRC" grep -n -iE \
+    -e 'PRIVATE KEY-----' \
+    -e 'ghp_[A-Za-z0-9]{20,}' -e 'github_pat_' -e 'AKIA[0-9A-Z]{16}' \
+    -e 'xox[bpras]-[A-Za-z0-9-]+' -e 'sk-live-' -e 'age-secret-key-' \
+    -- "${staged[@]}"; then
+    echo "dotfiles-sync: REFUSING — possible secret staged (see above)" >&2
+    exit 1
+  fi
+fi
+
+git -C "$SRC" add -A
+git -C "$SRC" commit -q -m "chore(dotfiles): snapshot $(date +%F)"
+git -C "$SRC" show --stat HEAD | head -25

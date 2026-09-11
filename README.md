@@ -6,12 +6,12 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 
 ### Prerequisites
 
-- [creating-mermaid-diagrams](https://github.com/Agents365-ai/creating-mermaid-diagrams): For creating mermaid diagrams
+- [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): For creating mermaid diagrams
 - [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering
 - [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
 
 ```bash
-npx skills add Agents365-ai/mermaid-skill -g -a opencode -y
+npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
 cargo install --git https://github.com/FAZuH/papercuts
@@ -36,11 +36,22 @@ empty dir).
 
 ### Extras
 
+`kajisho5/ffmpeg-skill` — local FFmpeg video/audio editing. The CLI
+rejects it (`YAML parse error` — unquoted colons in upstream's
+frontmatter), so install via the @external-skills manual fallback:
+
+```bash
+git clone --depth 1 https://github.com/kajisho5/ffmpeg-skill /tmp/opencode/ffmpeg-skill
+mkdir -p ~/.agents/skills/ffmpeg-skill
+cp /tmp/opencode/ffmpeg-skill/SKILL.md ~/.agents/skills/ffmpeg-skill/
+cp -r /tmp/opencode/ffmpeg-skill/{scripts,references,docs,package.json} ~/.agents/skills/ffmpeg-skill/
+python3 ~/.agents/skills/ffmpeg-skill/scripts/_contract.py doctor  # missing required: none
 ```
-npx skills add kajisho5/ffmpeg-skill --global --agent opencode --yes
-python3 ~/.agents/skills/ffmpeg-skill/scripts/_contract.py doctor  # all capabilities should be `available`
-```
-If the CLI reports `YAML parse error … No valid skills found` (unquoted colons in upstream's frontmatter), fall back to the manual clone+copy in @external-skills. Until upstream quotes the description, invoke it by name.
+
+Manual copy is invisible to `npx skills list/update` — re-run the CLI
+install once upstream quotes the description. Until then, invoke it by
+name (OpenCode drops the unparseable `description`, so it may not
+auto-trigger on mention).
 
 ### What it syncs
 
@@ -109,7 +120,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[papercut-sweep](./skills/workflow/papercut-sweep/SKILL.md)**: Sweep the global papercuts backlog (`self::` entries) and apply approved self-improvement drafts.
 - **[changelog](./skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version by comparing the current commit against the latest version.
 - **[session-retro](./skills/workflow/session-retro/SKILL.md)**: End-of-session retrospective — files `self::` proposals without touching code.
-- **[skill-doctor](./skills/workflow/skill-doctor/SKILL.md)**: Audit the skill/agent relation graph (`loads`/`routes`/`documents`), flag `broken-ref`/`collision`/`drift`, optionally render via `creating-mermaid-diagrams`.
+- **[skill-doctor](./skills/workflow/skill-doctor/SKILL.md)**: Audit the skill/agent relation graph (`loads`/`routes`/`documents`), flag `broken-ref`/`collision`/`drift`, optionally render via `mermaid-skill`.
 - **[teach](./skills/workflow/teach/SKILL.md)**: Teach anything so it locks in: graded quizzes probe your level, then a dependency map is taught node by node. Ported from [amosblomqvist/learn](https://github.com/amosblomqvist/learn).
 - **[visualize](./skills/workflow/visualize/SKILL.md)**: Adds a correct, minimal diagram to a lesson when an idea is clearer as a picture; briefs a maker subagent that renders and verifies the image.
 - **[offload](./skills/workflow/offload/SKILL.md)**: Offload builds, checks, or full agent batches to a remote machine over ssh; per-repo memory lives in gitignored `.opencode/offload.md`.

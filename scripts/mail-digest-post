@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Build the mail digest from agent-supplied data and post it to Discord.
+
+Usage: mail-digest-post '<json>'
+  {"items": [{"account": str, "sender": str, "subject": str,
+              "gist": str, "tier": "urgent|notable|routine"}],
+   "errors": {alias: str}}
+
+The agent only supplies DATA. This script owns the entire output: grouped
+by receiver account, tiers ordered urgent → notable → routine inside each
+account, field truncation, mass-mention neutralization. Unknown tiers
+become routine. Short digests post inline; anything over budget goes up
+as a markdown file attachment with a per-account summary line.
+"""
+import datetime
+import json
+import os
+import sys
+import urllib.request
+import uuid
+
+MAX_INLINE = 1800
+TIERS = (
+    ("urgent", "🔴 Needs attention"),
+    ("notable", "🟡 Notable"),
+    ("routine", "⚪ Routine"),
+)
+FIELD_CAPS = {"account": 30, "sender": 60, "subject": 80, "gist": 140}
+
+
+def clean(text, cap):
+    text = " ".join(str(text).split())[:cap]
+    return text.replace("@everyone", "at-everyone").replace("@here", "at-here")
+
+
+def post_json(webhook, payload):
+    req = urllib.request.Request(
+        webhook,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "octask-mail-digest/1.0",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.status
+
+
+def post_file(webhook, summary, filename, content):
+    boundary = uuid.uuid4().hex
+    body = []
+    body.append(f"--{boundary}\r\n".encode())
+    body.append(
+        b'Content-Disposition: form-data; name="payload_json"\r\n\r\n'
+        + json.dumps({"content": summary}).encode()
+        + b"\r\n"
+    )
+    body.append(f"--{boundary}\r\n".encode())
+    body.append(
+        f'Content-Disposition: form-data; name="files[0]"; filename="{filename}"\r\n'
+        "Content-Type: text/markdown\r\n\r\n".encode() + content.encode() + b"\r\n"
+    )
+    body.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(
+        webhook,
+        data=b"".join(body),
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": "octask-mail-digest/1.0",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.status
+
+
+def webhook_url():
+    """Digest webhook: systemd credential dir when present
+    (LoadCredential=discord:<dir>), else the on-disk store."""
+    cred = os.environ.get("CREDENTIALS_DIRECTORY", "")
+    cand = os.path.join(cred, "discord", "mail-digest.key") if cred else ""
+    if cand and os.path.isfile(cand):
+        path = cand
+    else:
+        path = "{{USER_HOME}}/.secrets/discord/mail-digest.key"
+    with open(path) as f:
+        return f.readline().strip()
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("usage: mail-digest-post '<json>'", file=sys.stderr)
+        return 2
+    try:
+        data = json.loads(sys.argv[1])
+        assert isinstance(data, dict)
+    except Exception:
+        print("mail-digest-post: argument must be a JSON object", file=sys.stderr)
+        return 1
+    items = data.get("items", []) if isinstance(data.get("items", []), list) else []
+    errors = data.get("errors", {}) if isinstance(data.get("errors", {}), dict) else {}
+
+    accounts = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        tier = it.get("tier") if it.get("tier") in ("urgent", "notable", "routine") else "routine"
+        item = {k: clean(it.get(k, ""), c) for k, c in FIELD_CAPS.items()}
+        accounts.setdefault(item["account"] or "(unknown)", []).append(
+            (tier, item)
+        )
+    for mail in accounts.values():
+        order = {"urgent": 0, "notable": 1, "routine": 2}
+        mail.sort(key=lambda t: order[t[0]])
+    err_lines = [f"⚠️ {clean(a, 30)}: {clean(e, 100)}" for a, e in errors.items()]
+
+    today = datetime.date.today().isoformat()
+    n = sum(len(v) for v in accounts.values())
+
+    def account_block(mail):
+        lines = []
+        last_tier = None
+        last_sender = None
+        for tier, i in mail:
+            if tier != last_tier:
+                title = dict(TIERS)[tier]
+                lines.append(f"**{title}**")
+                last_tier = tier
+                last_sender = None
+            if i["sender"] == last_sender:
+                lines.append(f"  ↳ {i['subject']} ({i['gist']})")
+            else:
+                lines.append(f"• {i['sender']} — {i['subject']} ({i['gist']})")
+                last_sender = i["sender"]
+        return lines
+
+    def full_text():
+        lines = [f"# 📬 Mail digest {today} — {n} mails across {len(accounts)} accounts"]
+        for account in sorted(accounts):
+            lines.append(f"\n## {account} ({len(accounts[account])})")
+            lines.extend(account_block(accounts[account]))
+        if err_lines:
+            lines.append("\n## Errors")
+            lines.extend(f"- {e}" for e in err_lines)
+        return "\n".join(lines)
+
+    try:
+        webhook = webhook_url()
+        if n == 0 and not errors:
+            status = post_json(
+                webhook, {"content": f"📬 Mail digest {today} — no mail in the last 24h."}
+            )
+            print(f"posted inline, http {status}")
+        else:
+            text = full_text()
+            if len(text) <= MAX_INLINE:
+                status = post_json(webhook, {"content": text})
+                print(f"posted inline {len(text)} chars, http {status}")
+            else:
+                counts = ", ".join(
+                    f"{a} ({len(accounts[a])})" for a in sorted(accounts)
+                )
+                summary = (
+                    f"📬 Mail digest {today} — {n} mails across "
+                    f"{len(accounts)} accounts (full digest attached): {counts}"
+                )
+                if err_lines:
+                    summary += "\n" + "\n".join(err_lines)
+                status = post_file(
+                    webhook, summary[:MAX_INLINE], f"mail-digest-{today}.md", text
+                )
+                print(f"posted file {len(text)} chars, http {status}")
+    except Exception as e:  # noqa: BLE001 — operator reads the log
+        print(f"mail-digest-post: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
