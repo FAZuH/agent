@@ -99,9 +99,8 @@ Rules and gotchas:
 
 ## Step 2 — schedule the run
 
-Use the unified `octask` CLI (Rust binary on `$PATH` as `~/.local/bin/octask`;
-canonical source `~/Projects/octask`, legacy bash fallback in the
-scheduled-task skill's `scripts/octask`):
+Use the unified `octask` CLI (Rust binary, `cargo install --git
+https://github.com/FAZuH/octask` if missing; source `~/Projects/octask`):
 
 ```bash
 octask add <name> \
