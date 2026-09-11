@@ -15,7 +15,7 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
-cargo install --git https://github.com/FAZuH/papercuts --branch fazuh
+cargo install --git https://github.com/FAZuH/papercuts
 cargo install --git https://github.com/FAZuH/octask
 ```
 
