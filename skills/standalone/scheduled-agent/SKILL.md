@@ -100,7 +100,7 @@ Rules and gotchas:
 ## Step 2 — schedule the run
 
 Use the unified `octask` CLI (Rust binary, `cargo install --git
-https://github.com/FAZuH/octask` if missing; source `~/Projects/octask`):
+https://github.com/FAZuH/agent` if missing; source `~/Projects/agent`):
 
 ```bash
 octask add <name> \
