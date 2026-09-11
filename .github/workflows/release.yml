@@ -1,4 +1,4 @@
-name: Release
+name: Release & Deploy
 
 on:
   push:
@@ -7,13 +7,15 @@ on:
 
 permissions:
   contents: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  packages: write
 
 jobs:
   release:
-    name: Release (changelog + commit)
+    name: Release
     uses: ./.github/workflows/_release.yml
+    with:
+      binary-name: octask
+      artifact-pattern: octask
+      platforms: linux
+      publish-crates: false
     secrets: inherit

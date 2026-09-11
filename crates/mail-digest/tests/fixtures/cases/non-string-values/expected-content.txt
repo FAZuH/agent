@@ -1,0 +1,10 @@
+# Mail digest — 3 mails across 2 accounts
+<t:1770000000:R>
+## 123
+• 🟢 None — 42
+## x
+• 🟡 s — G
+• 🟢 t — G2
+## ⚠️ errors
+• k: None
+• n: 42

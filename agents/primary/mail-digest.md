@@ -7,7 +7,7 @@ permissions:
     resource: "*"
     effect: deny
   - action: external_directory
-    resource: "{{USER_HOME}}/.local/bin/*"
+    resource: "{{USER_HOME}}/.cargo/bin/*"
     effect: allow
   - action: shell
     resource: "himalaya * envelope *"
@@ -22,7 +22,7 @@ permissions:
     resource: "himalaya * mailbox list*"
     effect: allow
   - action: shell
-    resource: "{{USER_HOME}}/.local/bin/mail-digest-post *"
+    resource: "{{USER_HOME}}/.cargo/bin/mail-digest *"
     effect: allow
 ---
 
@@ -73,7 +73,7 @@ e.g. `verification code received (expires soon)` instead.
 
 Call once (single-quoted JSON, never use `'` inside — rephrase or use
 `’` so the argument never breaks):
-`{{USER_HOME}}/.local/bin/mail-digest-post '<json>'`
+`{{USER_HOME}}/.cargo/bin/mail-digest '<json>'`
 `{"items": [{"account": "<alias>", "sender": "<from>",
 "subject": "<subject>", "gist": "<one line>", "tier": "<tier>"}],
 "errors": {<alias>: "<error>"}}`

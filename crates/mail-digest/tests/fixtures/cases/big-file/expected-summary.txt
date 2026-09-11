@@ -1,0 +1,5 @@
+# Mail digest — 14 mails across 3 accounts (full digest attached): gmail (10), work (2), école (2)
+<t:1770000000:R>
+## ⚠️ errors
+• smtp: queue backed up
+• rules: 2 rejects

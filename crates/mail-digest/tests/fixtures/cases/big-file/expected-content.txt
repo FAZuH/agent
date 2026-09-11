@@ -1,0 +1,29 @@
+# 📬 Mail digest 2026-09-12 — 14 mails across 3 accounts
+
+## gmail (10)
+**🔴 Needs attention**
+• Sender 0 <s0@mail.example> — Long subject line number 0 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 0 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+• Sender 3 <s3@mail.example> — Long subject line number 3 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 3 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+• Sender 6 <s6@mail.example> — Long subject line number 6 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 6 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+**⚪ Routine**
+• Digest Bot — Digest part 0 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
+  ↳ Digest part 1 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
+  ↳ Digest part 2 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
+  ↳ Digest part 3 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
+  ↳ Digest part 4 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
+  ↳ Digest part 5 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
+  ↳ Digest repeated (tail)
+
+## work (2)
+**🟡 Notable**
+• Sender 1 <s1@mail.example> — Long subject line number 1 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 1 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+• Sender 4 <s4@mail.example> — Long subject line number 4 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 4 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+
+## école (2)
+**⚪ Routine**
+• Sender 2 <s2@mail.example> — Long subject line number 2 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 2 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+• Sender 5 <s5@mail.example> — Long subject line number 5 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 5 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+
+## Errors
+- ⚠️ smtp: queue backed up
+- ⚠️ rules: 2 rejects

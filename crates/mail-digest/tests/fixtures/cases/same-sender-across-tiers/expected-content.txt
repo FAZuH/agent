@@ -1,0 +1,8 @@
+# Mail digest — 5 mails across 1 accounts
+<t:1770000000:R>
+## a@b.c
+• 🔴 News — issue 9
+↳ 🟡 News — correction
+↳ 🟡 News — oops
+• 🟢 Other — hello
+• 🟢 News — again

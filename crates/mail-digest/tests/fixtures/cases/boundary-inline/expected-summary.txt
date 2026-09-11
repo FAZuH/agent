@@ -1,0 +1,4 @@
+# Mail digest — 150 mails across 1 accounts (full digest attached): gmail (150)
+<t:1770000000:R>
+## ⚠️ errors
+• imap: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
