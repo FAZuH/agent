@@ -1,0 +1,17 @@
+[package]
+name = "mail-digest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = "0.4"
+serde_json = { workspace = true, features = ["preserve_order"] }
+ureq = { version = "3", default-features = false, features = ["rustls", "multipart"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tiny_http = "0.12"
+
+[lints]
+workspace = true

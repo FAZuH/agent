@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::IsTerminal;
 
 use anyhow::Result;
@@ -35,8 +36,24 @@ pub struct ImportArgs {
     pub no_enable: bool,
 }
 
+// serde_json::Map is insertion-ordered whenever preserve_order is unified in
+// the build, so rebuild objects through a BTreeMap to pin sorted export keys.
+fn sorted(v: Value) -> Value {
+    match v {
+        Value::Object(m) => Value::Object(
+            m.into_iter()
+                .map(|(k, v)| (k, sorted(v)))
+                .collect::<BTreeMap<_, _>>()
+                .into_iter()
+                .collect(),
+        ),
+        Value::Array(a) => Value::Array(a.into_iter().map(sorted).collect()),
+        other => other,
+    }
+}
+
 pub fn task_to_json(t: &Task, enabled: bool) -> Value {
-    json!({
+    sorted(json!({
         "name": t.name,
         "type": if t.is_agent { "agent" } else { "exec" },
         "agent": t.agent,
@@ -53,7 +70,7 @@ pub fn task_to_json(t: &Task, enabled: bool) -> Value {
         "env": t.envs,
         "credentials": t.creds,
         "enabled": enabled,
-    })
+    }))
 }
 
 pub fn export(args: &ExportArgs) -> Result<()> {
@@ -88,7 +105,7 @@ pub fn export(args: &ExportArgs) -> Result<()> {
         tasks.push(task_to_json(&t, enabled));
     }
 
-    let doc = json!({ "version": 1, "tasks": tasks });
+    let doc = sorted(json!({ "version": 1, "tasks": tasks }));
     let body = serde_json::to_string_pretty(&doc)?;
     match &args.file {
         Some(f) => {

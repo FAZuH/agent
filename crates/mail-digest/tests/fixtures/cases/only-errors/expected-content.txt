@@ -1,0 +1,5 @@
+# Mail digest — 0 mails across 0 accounts
+<t:1770000000:R>
+## ⚠️ errors
+• a: x
+• b: y

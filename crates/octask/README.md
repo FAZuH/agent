@@ -19,14 +19,14 @@ Prebuilt Linux binaries are attached to each release:
 
 ```sh
 curl -fsSL -o /usr/local/bin/octask \
-  https://github.com/FAZuH/octask/releases/latest/download/octask
+  https://github.com/FAZuH/agent/releases/latest/download/octask
 chmod +x /usr/local/bin/octask
 ```
 
 Or build from source:
 
 ```sh
-cargo install --git https://github.com/FAZuH/octask
+cargo install --git https://github.com/FAZuH/agent
 ```
 
 ## Usage

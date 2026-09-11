@@ -1,0 +1,20 @@
+[package]
+name = "phone-digest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+chrono = "0.4"
+tiny_http = "0.12"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+subtle = "2"
+form_urlencoded = "1"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

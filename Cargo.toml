@@ -1,0 +1,32 @@
+[package]
+name = "agent"
+# Version will be updated by CI in `release` branch.
+version = "0.9.2"
+edition = "2024"
+description = "FAZuH agent workspace: octask CLI plus the phone/mail digest binaries"
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+# Members opt in with `dep = { workspace = true }`.
+[workspace.dependencies]
+octask = { path = "crates/octask" }
+phone-digest = { path = "crates/phone-digest" }
+mail-digest = { path = "crates/mail-digest" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+
+[workspace.lints.clippy]
+uninlined_format_args = "warn"
+new_without_default = "allow"
+
+[dependencies]
+octask = { workspace = true }
+phone-digest = { workspace = true }
+mail-digest = { workspace = true }
+
+[lints]
+workspace = true
