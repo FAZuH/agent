@@ -1,0 +1,10 @@
+# Mail digest — 7 mails across 1 accounts
+<t:1770000000:R>
+## gmail
+• 🔴 A — g
+↳ 🔴 A — g
+• 🟡 B — g
+• 🟢 C — g
+↳ 🟢 C — g
+• 🟢 D — g
+• 🟢 B — g

@@ -1,0 +1,1 @@
+{"items": [{"account": 123, "sender": null, "subject": true, "gist": 42, "tier": "routine"}, {"account": "x", "sender": "s", "subject": "S", "gist": "G", "tier": "notable"}, {"account": "x", "sender": "t", "subject": "T", "gist": "G2", "tier": 42}], "errors": {"k": null, "n": 42}}

@@ -1,0 +1,25 @@
+[package]
+name = "octask"
+# Version will be updated by CI in `release` branch.
+# Avoid modifying version manually or it will break CI
+
+
+version = "0.1.0"
+
+
+edition = "2024"
+authors = ["FAZuH <mail@fazuh.com>"]
+description = "CLI for managed octask-* systemd user timers (exec + agent runs)"
+license = "MIT"
+repository = "https://github.com/FAZuH/octask"
+keywords = ["systemd", "timers", "cli", "scheduling"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

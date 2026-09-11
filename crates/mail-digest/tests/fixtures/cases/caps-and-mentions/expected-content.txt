@@ -1,0 +1,9 @@
+# Mail digest — 3 mails across 2 accounts
+<t:1770000000:R>
+## (unknown)
+• 🟢  — no account
+• 🟢 A — G
+## aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+• 🟢 at-everyone xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx — zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+## ⚠️ errors
+• alias-with-at-everyone: at-here !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
