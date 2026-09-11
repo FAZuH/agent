@@ -1,3 +1,12 @@
+## [0.9.3](https://github.com/FAZuH/agent/compare/v0.9.2...v0.9.3) (2026-09-11)
+
+
+### Features
+
+* cargo workspace — octask subtree, phone-digest and mail-digest crates ([9576e9a](https://github.com/FAZuH/agent/commit/9576e9ae374ed0e92bb607a0d59d86f7a621e126))
+* cutover digest tooling onto the workspace binaries ([f72ac71](https://github.com/FAZuH/agent/commit/f72ac7157fe921ba1df3ec98676891777b47e25c))
+* port octask CLI to Rust ([a8a4190](https://github.com/FAZuH/agent/commit/a8a419071ce7960ad3e28bed0b4a5d169253909b))
+
 ## [0.9.2](https://github.com/FAZuH/agent/compare/v0.9.1...v0.9.2) (2026-09-11)
 
 
@@ -38,6 +47,4 @@
 ### Features
 
 * **skill:** add orchestrate skill owning the orchestrator role ([ca5711e](https://github.com/FAZuH/agent/commit/ca5711eeda58bdd2ff7b37afb44635b96eaefcd5))
-
-## [0.8.7](https://github.com/FAZuH/agent/compare/v0.8.6...v0.8.7) (2026-09-06)
 
