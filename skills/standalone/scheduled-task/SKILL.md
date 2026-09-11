@@ -40,6 +40,8 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   octask show <name>
   octask remove <name> [--dry-run]
   octask list
+  octask export [name ...] [--file <path>]
+  octask import [--file <path>] [--force] [--no-enable]
   octask enable <name> | disable <name>
   octask status <name> | logs <name> [-n <lines>]
   ```
@@ -107,6 +109,15 @@ every N hours). For "once per 12 hours with a stagger" use
   `--workdir`, `--timeout`; common fields also work on `--exec` tasks.
   Preserves custom `--env`, `--dirty-only`, and the timer's enabled state.
   Use `--dry-run` first to diff without writing.
+
+## Export / import
+
+- `octask export [name ...] [--file <path>]` — JSON backup of one, several,
+  or all tasks (no names = all) to stdout, or `--file` for a file.
+- `octask import [--file <path>] [--force] [--no-enable]` — recreate tasks
+  from exported JSON (`--file` or stdin); replays through `octask add` so
+  all validation still applies. Refuses to overwrite without `--force`;
+  preserves the exported enabled state unless `--no-enable`.
 
 ## Troubleshooting
 

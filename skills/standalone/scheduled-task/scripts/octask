@@ -19,6 +19,8 @@
 #   octask show <name>
 #   octask remove <name> [--dry-run]
 #   octask list
+#   octask export [name ...] [--file <path>]
+#   octask import [--file <path>] [--force] [--no-enable]
 #   octask enable <name> | disable <name>
 #   octask status <name> | logs <name> [-n <lines>]
 #
@@ -31,7 +33,7 @@ PREFIX="octask-"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 die() { echo "octask: $*" >&2; exit 1; }
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # single-quote a string for systemd ExecStart (no $ expansion inside)
 sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -598,6 +600,236 @@ cmd_edit() {
   echo "edited $PREFIX$name"
 }
 
+# Wrap one-compact-JSON-per-line ($1) into the export document on stdout.
+wrap_tasks() {
+  python3 - "$1" <<'EOF'
+import json, sys
+tasks = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+json.dump({"version": 1, "tasks": tasks}, sys.stdout, indent=2)
+sys.stdout.write("\n")
+EOF
+}
+
+# -------------------------------------------------------------- export ----
+# JSON backup of one, several, or all tasks (no names = all) to stdout or
+# --file. Import replays the values through cmd_add, so add stays the only
+# writer of unit files.
+cmd_export() {
+  local file=""
+  local -a names=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --file) file="$2"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      -*) die "export: unknown option: $1" ;;
+      *) names+=("$1"); shift ;;
+    esac
+  done
+
+  if [ "${#names[@]}" -eq 0 ]; then
+    local f n
+    for f in "$UNIT_DIR"/"$PREFIX"*".timer"; do
+      [ -e "$f" ] || continue
+      n="$(basename "$f")"; n="${n#"$PREFIX"}"; n="${n%.timer}"
+      names+=("$n")
+    done
+  fi
+  [ "${#names[@]}" -gt 0 ] || die "export: no tasks found (octask list)"
+
+  mkdir -p /tmp/opencode
+  local lines
+  lines="$(mktemp /tmp/opencode/octask-export.XXXXXX)"
+  # shellcheck disable=SC2064  # $lines is set; trap must capture it now
+  trap "rm -f '$lines'" EXIT
+
+  local seen=() n name enabled type env_blob="" cred_blob=""
+  for n in "${names[@]}"; do
+    name="$(norm_name "$n")"
+    require_name "$name"
+    case " ${seen[*]} " in *" $name "*) continue ;; esac
+    seen+=("$name")
+    units_exist "$name" || die "export: no units found for '$PREFIX$name' (octask list)"
+    load_task "$name"
+    enabled=0
+    if systemctl --user is-enabled "$PREFIX$name.timer" >/dev/null 2>&1; then enabled=1; fi
+    if [ "$cur_is_agent" -eq 1 ]; then type="agent"; else type="exec"; fi
+    env_blob=""; cred_blob=""
+    [ "${#cur_envs[@]}" -gt 0 ] && env_blob="$(printf '%s\n' "${cur_envs[@]}")"
+    [ "${#cur_creds[@]}" -gt 0 ] && cred_blob="$(printf '%s\n' "${cur_creds[@]}")"
+    OCTASK_ENVS="$env_blob" OCTASK_CREDS="$cred_blob" \
+    python3 - "$name" "$type" "$cur_agent" "$cur_model" "$cur_prompt" \
+      "$cur_exec" "$cur_workdir" "$cur_oncalendar" "$cur_delay" \
+      "$cur_persistent" "$cur_timeout" "$cur_description" \
+      "$cur_dirty" "$enabled" >>"$lines" <<'EOF'
+import json, os, sys
+(name, type_, agent, model, prompt, exec_, workdir, oncal, delay,
+ persist, timeout, desc, dirty, enabled) = sys.argv[1:15]
+def rows(key):
+    v = os.environ.get(key, "")
+    return v.split("\n") if v else []
+print(json.dumps({
+    "name": name, "type": type_,
+    "agent": agent, "model": model, "prompt": prompt, "dirty_only": dirty == "1",
+    "exec": exec_, "workdir": workdir, "oncalendar": oncal, "delay": delay,
+    "persistent": persist == "1", "timeout": timeout, "description": desc,
+    "env": rows("OCTASK_ENVS"), "credentials": rows("OCTASK_CREDS"),
+    "enabled": enabled == "1",
+}, sort_keys=True))
+EOF
+  done
+
+  if [ -n "$file" ]; then
+    wrap_tasks "$lines" >"$file"
+    echo "exported ${#seen[@]} task(s) -> $file"
+  else
+    wrap_tasks "$lines"
+  fi
+  rm -f "$lines"
+  trap - EXIT
+}
+
+# Replay one exported task (compact JSON in $1) through cmd_add ($2=force,
+# $3=no_enable).
+import_one() {
+  local line="$1" force="$2" no_enable="$3"
+  local -a f=()
+  mapfile -d '' -t f < <(python3 - "$line" <<'EOF'
+import json, sys
+t = json.loads(sys.argv[1])
+def s(k):
+    v = t.get(k)
+    return "" if v is None else str(v)
+def b(k):
+    return "1" if t.get(k) else ""
+out = [s("name"), s("type") or "exec", s("agent"), s("model"), s("prompt"),
+       s("exec"), s("workdir"), s("oncalendar"), s("delay"), b("persistent"),
+       s("timeout"), s("description"), b("dirty_only"), b("enabled")]
+sys.stdout.write("\0".join(out) + "\0")
+for k in ("env", "credentials"):
+    vals = t.get(k) or []
+    isinstance(vals, list) or sys.exit("import: '%s' must be a list" % k)
+    sys.stdout.write(str(len(vals)) + "\0")
+    for v in vals:
+        sys.stdout.write(str(v) + "\0")
+EOF
+)
+  local name="${f[0]}" type="${f[1]}" agent="${f[2]}" model="${f[3]}"
+  local prompt="${f[4]}" exec_cmd="${f[5]}" workdir="${f[6]}"
+  local oncalendar="${f[7]}" delay="${f[8]}" persist="${f[9]}"
+  local timeout="${f[10]}" desc="${f[11]}" dirty="${f[12]}" enabled="${f[13]}"
+  local idx=14
+  local nenv="${f[$idx]}" i e
+  local -a envs=()
+  for ((i = 0; i < nenv; i++)); do envs+=("${f[$((idx + 1 + i))]}"); done
+  idx=$((idx + 1 + nenv))
+  local ncred="${f[$idx]}"
+  local -a creds=()
+  for ((i = 0; i < ncred; i++)); do creds+=("${f[$((idx + 1 + i))]}"); done
+
+  name="$(norm_name "$name")"
+  local -a add_args=("$name")
+  [ "$force" -eq 1 ] && add_args+=(--force)
+  if [ "$type" = "agent" ]; then
+    add_args+=(--agent "$agent" --prompt "$prompt" --workdir "$workdir")
+    [ -n "$model" ] && add_args+=(--model "$model")
+    [ "$dirty" = "1" ] && add_args+=(--dirty-only)
+  else
+    [ "$type" = "exec" ] || die "import: task '$name' has unknown type '$type'"
+    add_args+=(--exec "$exec_cmd")
+    [ -n "$workdir" ] && add_args+=(--workdir "$workdir")
+  fi
+  # Description handed to add (which appends [model] itself): strip the old
+  # suffix the same way edit does, so the round-trip is exact.
+  if [ "$type" = "agent" ] && [ -n "$model" ]; then
+    case "$desc" in *" [$model]") desc="${desc%" [$model]"}" ;; esac
+  fi
+  [ -n "$desc" ] && add_args+=(--description "$desc")
+  [ -n "$oncalendar" ] && add_args+=(--oncalendar "$oncalendar")
+  [ -n "$timeout" ] && add_args+=(--timeout "$timeout")
+  [ -n "$delay" ] && add_args+=(--delay "$delay")
+  [ "$persist" = "1" ] && add_args+=(--persistent)
+  # Envs: add re-adds its PATH line for agent tasks.
+  for e in ${envs[@]+"${envs[@]}"}; do
+    if [ "$e" = "PATH=/usr/local/bin:/usr/bin" ] && [ "$type" = "agent" ]; then
+      continue
+    fi
+    add_args+=(--env "$e")
+  done
+  for e in ${creds[@]+"${creds[@]}"}; do add_args+=(--credential "$e"); done
+  if [ "$no_enable" -eq 1 ] || [ "$enabled" != "1" ]; then
+    add_args+=(--no-enable)
+  fi
+  cmd_add "${add_args[@]}"
+}
+
+# --------------------------------------------------------------- import ----
+# Recreate tasks from `octask export` JSON (--file or stdin). Refuses to
+# overwrite without --force; preserves the exported enabled state unless
+# --no-enable is given.
+cmd_import() {
+  local file="" force=0 no_enable=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --file) file="$2"; shift 2 ;;
+      --force) force=1; shift ;;
+      --no-enable) no_enable=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      -*) die "import: unknown option: $1" ;;
+      *) die "import: unexpected argument: $1 (tasks come from --file or stdin)" ;;
+    esac
+  done
+
+  local src="$file" raw=""
+  if [ -z "$src" ]; then
+    [ -t 0 ] && { usage; die "import: no --file and stdin is a terminal (pipe JSON or pass --file)"; }
+    # Slurp stdin first: python below reads its script from stdin, so
+    # /dev/stdin would give it the script instead of the JSON.
+    raw="$(mktemp /tmp/opencode/octask-import-raw.XXXXXX)"
+    cat >"$raw"
+    src="$raw"
+  fi
+  [ -e "$src" ] || die "import: file not found: $src"
+
+  mkdir -p /tmp/opencode
+  local tasks
+  tasks="$(mktemp /tmp/opencode/octask-import.XXXXXX)"
+  # shellcheck disable=SC2064  # $tasks/$raw are set; trap must capture them now
+  trap "rm -f '$tasks' ${raw:+"'$raw'"}" EXIT
+  python3 - "$src" >"$tasks" <<'EOF' || die "import: invalid JSON in '$src'"
+import json, sys
+doc = json.load(open(sys.argv[1]))
+tasks = doc.get("tasks", doc) if isinstance(doc, dict) else doc
+isinstance(tasks, list) or sys.exit("import: expected {\"version\": 1, \"tasks\": [...]}")
+for t in tasks:
+    (isinstance(t, dict) and t.get("name")) or sys.exit("import: every task needs a name")
+    print(json.dumps(t))
+EOF
+  [ -s "$tasks" ] || die "import: no tasks in '$src'"
+
+  # Refuse to clobber before writing anything.
+  local line iname
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    iname="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("name",""))' "$line")"
+    iname="$(norm_name "$iname")"
+    require_name "$iname"
+    if units_exist "$iname" && [ "$force" -ne 1 ]; then
+      die "import: $UNIT_DIR/$PREFIX$iname.service already exists (use --force to overwrite)"
+    fi
+  done <"$tasks"
+
+  local count=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    import_one "$line" "$force" "$no_enable"
+    count=$((count + 1))
+  done <"$tasks"
+  rm -f "$tasks"
+  [ -n "$raw" ] && rm -f "$raw"
+  trap - EXIT
+  echo "imported $count task(s)"
+}
+
 # -------------------------------------------------------------- dispatcher
 cmd="${1:-}"
 [ -n "$cmd" ] || { usage; exit 1; }
@@ -609,6 +841,8 @@ case "$cmd" in
   show)    cmd_show "$@" ;;
   remove)  cmd_remove "$@" ;;
   list)    cmd_list "$@" ;;
+  export)  cmd_export "$@" ;;
+  import)  cmd_import "$@" ;;
   enable)  cmd_enable "$@" ;;
   disable) cmd_disable "$@" ;;
   status)  cmd_status "$@" ;;
