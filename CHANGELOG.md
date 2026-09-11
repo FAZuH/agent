@@ -1,3 +1,22 @@
+## [0.9.2](https://github.com/FAZuH/agent/compare/v0.9.1...v0.9.2) (2026-09-11)
+
+
+### Features
+
+* **agent:** add mail-digest daily email digest agent ([9e353d8](https://github.com/FAZuH/agent/commit/9e353d8548ea54bdaaba52c55dd4a734d2175e82))
+* **agent:** improve malware-check agent ([449441e](https://github.com/FAZuH/agent/commit/449441e7c7af56cd8ee9cc3d487f9002865e649d))
+* **script:** track bin scripts in scripts/ and install via sync ([b3ddc5b](https://github.com/FAZuH/agent/commit/b3ddc5be5fbd4426a2bdfcda962a51cea217faa6))
+* **skill:** add comments skill ([e3c5f25](https://github.com/FAZuH/agent/commit/e3c5f2576a48ece8600942830a3ef015126d607b))
+* **skill:** add octask credential support ([64a42d0](https://github.com/FAZuH/agent/commit/64a42d012e67a992e0ab2712d81298e4c6624306))
+* **skill:** add octask edit and show subcommands ([ec63f76](https://github.com/FAZuH/agent/commit/ec63f76f9ac986aabe70dce8311dab5d7e782d16))
+* **skill:** add octask export/import commands ([140bd9d](https://github.com/FAZuH/agent/commit/140bd9d9a7b7ab31eccb03b1d1580d5c47ca1b53))
+* **skill:** add plan-confirm skill ([0a0d8e6](https://github.com/FAZuH/agent/commit/0a0d8e6755448260ee4f02b45f3f35106e585ff3))
+
+
+### Bug Fixes
+
+* **agent:** malware-check single-command shell rule and bare dir allows ([824f5ca](https://github.com/FAZuH/agent/commit/824f5ca4e7a3fbe8fe2ca6890db7021586dea419))
+
 ## [0.9.1](https://github.com/FAZuH/agent/compare/v0.9.0...v0.9.1) (2026-09-06)
 
 
@@ -21,14 +40,4 @@
 * **skill:** add orchestrate skill owning the orchestrator role ([ca5711e](https://github.com/FAZuH/agent/commit/ca5711eeda58bdd2ff7b37afb44635b96eaefcd5))
 
 ## [0.8.7](https://github.com/FAZuH/agent/compare/v0.8.6...v0.8.7) (2026-09-06)
-
-## [0.8.6](https://github.com/FAZuH/agent/compare/v0.8.5...v0.8.6) (2026-09-06)
-
-
-### Bug Fixes
-
-* **agent:** convert document, review, image-viewer defs to v2 permissions arrays ([be90505](https://github.com/FAZuH/agent/commit/be90505b0cc022b6431afb0bf332903196251642))
-* **command:** add the .scratch archive step to the /finish procedure ([65b4eaa](https://github.com/FAZuH/agent/commit/65b4eaab75e1eeeee88d1bf1c1fd15657d87f08b))
-* **plugin:** mermaid-doctor resolves playwright from global node_modules ([fd843c6](https://github.com/FAZuH/agent/commit/fd843c66b244d2973e58814a1818b24bb6660d72))
-* **skill:** oc-delegate resolves ocv2-sessions in the flat deploy layout ([0c049aa](https://github.com/FAZuH/agent/commit/0c049aa18408d25173cf96f96b15a4ba32eb5796))
 
