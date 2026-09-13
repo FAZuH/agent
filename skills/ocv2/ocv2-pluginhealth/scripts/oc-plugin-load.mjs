@@ -14,8 +14,9 @@
 // Exit codes: 0 all loaded clean · 1 a plugin failed to load/register, or a
 // source still reads ctx.worktree / ctx.directory.
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 // Shape captured from a live v2.0.3 setup ctx (2026-09-13). Anything the
 // plugin reaches for that this fake does not model is recorded and answered
@@ -74,10 +75,11 @@ const FAKE_CTX = () => {
 const BAD_IDIOM = /\b(?:t?ctx)(\?)?\.(worktree|directory)\b/;
 
 // Comments talk about the idiom ("ctx.worktree is {} in v2") far more often
-// than code does, so strip them before scanning.
+// than code does, so strip them before scanning — blanking each block comment
+// in place, since deleting it would shift every line number after it.
 const stripComments = (src) =>
   src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ""))
     .split("\n")
     .map((l) => (l.trimStart().startsWith("*") || l.trimStart().startsWith("//") ? "" : l.replace(/\/\/.*$/, "")))
     .join("\n");
@@ -94,6 +96,46 @@ function sources(dir) {
   };
   walk(dir);
   return out;
+}
+
+/** Files under scanDir whose code — not comments — still reads the v1 idiom. */
+function idiomHitsIn(scanDir, relBase) {
+  return sources(scanDir)
+    .filter((s) => !s.endsWith("oc-plugin-load.mjs"))
+    .flatMap((s) =>
+      stripComments(readFileSync(s, "utf8"))
+        .split("\n")
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => BAD_IDIOM.test(l))
+        .map(({ l, i }) => `${s.slice(relBase.length + 1)}:${i + 1}`),
+    );
+}
+
+// The scanner's own check: the hit below sits under a seven-line block
+// comment, so a comment stripper that deletes the comment reports it early.
+const FIXTURE = `/**
+ * doc comment mentioning ctx.worktree and ctx.directory, which must not be
+ * reported, and long enough that
+ * shifting
+ * line
+ * numbers
+ */
+export default {
+  id: "fixture",
+  setup: async (ctx) => ctx.worktree || ctx.directory,
+}`;
+
+if (process.argv[2] === "--self-test") {
+  const dir = mkdtempSync(join(tmpdir(), "ocpl-"));
+  const plugin = join(dir, "fixture");
+  mkdirSync(plugin);
+  writeFileSync(join(plugin, "index.js"), FIXTURE);
+  const got = idiomHitsIn(plugin, dir);
+  const want = ["fixture/index.js:10"];
+  const pass = got.join() === want.join();
+  console.log(`${pass ? "PASS" : "FAIL"} ${got.join(", ") || "(no hits)"}${pass ? "" : ` — want ${want.join(", ")}`}`);
+  rmSync(dir, { recursive: true, force: true });
+  process.exit(pass ? 0 : 1);
 }
 
 const root = resolve(process.argv[2] ?? ".");
@@ -119,15 +161,10 @@ const entries = readdirSync(root)
 
 let bad = 0;
 for (const { name, file } of entries) {
-  const idiomHits = sources(name === file.split("/").pop() ? root : join(root, name))
-    .filter((s) => !s.includes("oc-plugin-load"))
-    .flatMap((s) =>
-      stripComments(readFileSync(s, "utf8"))
-        .split("\n")
-        .map((l, i) => ({ l, i }))
-        .filter(({ l }) => BAD_IDIOM.test(l))
-        .map(({ l, i }) => `${s.replace(root + "/", "")}:${i + 1}`),
-    );
+  const idiomHits = idiomHitsIn(
+    name === file.split("/").pop() ? root : join(root, name),
+    root,
+  );
 
   let mod;
   try {
