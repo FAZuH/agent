@@ -221,9 +221,10 @@ async function resolvePlaywright(
     }
   }
   throw new Error(
-    `playwright not resolvable.\n  tried: ${tried.join(", ")}\n  reasons:\n    ${reasons
-      .filter((r) => !r.endsWith(": absent"))
-      .join("\n    ") || "(every candidate was absent — install playwright, or set MERMAID_DOCTOR_PLAYWRIGHT_PATH to a node_modules dir containing it)"}`,
+    `playwright not resolvable.\n  tried: ${tried.join(", ")}\n  reasons:\n    ${
+      reasons.filter((r) => !r.endsWith(": absent")).join("\n    ") ||
+      `(every candidate was absent. Install playwright in one of those dirs — the first is ${globalDirs[0]}, and a symlink there works too — or set MERMAID_DOCTOR_PLAYWRIGHT_PATH in the environment that launches the opencode2 service. It does NOT belong in opencode.json: that config has no "env" key, and the entry is ignored (verified 2026-09-13: the service process env never saw it).`
+    }`,
   )
 }
 
