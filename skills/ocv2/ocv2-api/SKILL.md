@@ -84,8 +84,8 @@ Session message lists can exceed the shell tool's output limit (>250KB on long s
 
 ## Gotchas
 
-1. **Service vs plain serve:** `GET /api/plugin` and `/api/command` are empty on a plain `serve` even when healthy; verify via the service (`opencode2 api …` without `--standalone`) or with `?location.directory=`.
-2. **Project discovery needs git:** without `.git` at/above CWD, location resolves to `project: global` and project config is skipped silently — check `location.project.directory` in `/api/plugin` responses.
+1. **Service vs plain serve:** `GET /api/plugin` and `/api/command` are empty on a plain `serve` even when healthy; verify via the service (`opencode2 api …` without `--standalone`).
+2. **Project discovery needs git:** without `.git` at/above CWD, location resolves to `project: global` and project config is skipped silently. Note these endpoints report the SERVICE's default location regardless of your cwd, and `?location.directory=` / `--param location.directory=` are accepted but IGNORED (v2.0.3, live-verified on `/api/plugin`, `/api/command`, `/api/agent` — byte-identical results). So a project's `.opencode/` plugins, commands, and agents never show up here; use the server log or `opencode2 debug agents|config` from inside the project.
 3. **Config key `plugins`:** v1 `plugin` is auto-translated; new entries should use `"plugins"`; both may coexist.
 4. **Boundary forms:** `POST /api/session/{id}/fork` requires `{"boundary":{"type":"through"}}` or `{"type":"before","messageID":"msg_…"}`. `through` without `messageID` is valid — server fills the last message (live-verified). `before` without `messageID` is `InvalidRequestError`.
 5. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}` — `variant` optional, `id`+`providerID` required.
