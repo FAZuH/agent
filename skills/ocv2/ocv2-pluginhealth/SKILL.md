@@ -79,9 +79,18 @@ wrong-port, not missing data.
 4. **Config key is `plugins`.** v1's singular `plugin` key is auto-translated,
    but new entries should use `"plugins": [{ "package": "..." }]` (strings
    also work). Both keys present is allowed.
-5. **Hot-reload scope.** Files under watched dirs (`.opencode/plugin(s)/`)
-   hot-reload on change. Config-entry and npm-installed plugins do NOT —
-   changing them requires a restart.
+5. **Hot-reload scope is the whole plugin dir, nested files included.** On
+   v2.0.3 an edit to `plugins/<name>/src/<file>.ts` — not the entry — was live
+   after `sync.sh push` with no restart (proved by a marker string appearing in
+   the tool's own output). Each changed file fires its own `msg="loading plugin"`.
+   What does NOT hot-reload: config-entry (`"plugins": [...]`) and
+   npm-installed plugins — those need a restart. So when a push seems to have
+   done nothing, suspect a stale installed copy (`sync.sh diff -g plugins`), a
+   cached session tool catalog, or config that is inert (opencode.json has no
+   top-level `env` key: a var set there never reaches the plugin host — verify
+   with `tr '\0' '\n' < /proc/$(pgrep -f "opencode2 serve"|head -1)/environ`),
+   not module caching. Prove which build is live with a behaviour marker rather
+   than trusting a log line.
 
 ## Verifying a plugin actually ran its setup
 
@@ -115,7 +124,9 @@ that the fake did not model, and any use of the `ctx.worktree` /
 `ctx.directory` idiom (not strings in v2 — they yield `[object Object]` paths
 or `The "paths[0]" property must be of type string, got object`). Exits
 non-zero on a failed import/setup or on that idiom. No service, no restart, no
-side effects — the registered callbacks are never invoked.
+side effects — the registered callbacks are never invoked. `--self-test` checks
+the scanner's own line reporting against a fixture whose hit hides under a block
+comment.
 
 ## Diagnosis workflow
 
