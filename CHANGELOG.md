@@ -1,3 +1,11 @@
+## [0.9.4](https://github.com/FAZuH/agent/compare/v0.9.3...v0.9.4) (2026-09-13)
+
+
+### Features
+
+* **agent:** approval-gated shell for malware-check ([6206a81](https://github.com/FAZuH/agent/commit/6206a81eb573df60eb3a24df9b1ce704c97b993b))
+* **skill:** add omarchy-plugin-install with mandatory malware-check delegation ([a38754d](https://github.com/FAZuH/agent/commit/a38754da45b44c9aa4b37e1b204f6f730bc7e28e))
+
 ## [0.9.3](https://github.com/FAZuH/agent/compare/v0.9.2...v0.9.3) (2026-09-11)
 
 
@@ -40,11 +48,4 @@
 ### Features
 
 * **plugin:** version-control ponytail shim with nested upstream submodule ([6ce11b6](https://github.com/FAZuH/agent/commit/6ce11b62d43cdc7b20a241dcc3fdaf398b4086bc))
-
-## [0.8.8](https://github.com/FAZuH/agent/compare/v0.8.7...v0.8.8) (2026-09-06)
-
-
-### Features
-
-* **skill:** add orchestrate skill owning the orchestrator role ([ca5711e](https://github.com/FAZuH/agent/commit/ca5711eeda58bdd2ff7b37afb44635b96eaefcd5))
 
