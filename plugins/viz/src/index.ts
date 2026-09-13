@@ -55,7 +55,13 @@ export default {
     // defaultDir (viz-state.json, md-link-style) overrides all of that;
     // empty means publish into the session's project.
     const VIZ_STATE_FILE = join(homedir(), ".config", "opencode", "viz-state.json")
-    const fallbackBase = ctx.worktree || ctx.directory || process.cwd()
+    // Last-resort publish base: setup ctx has no string project path for a
+    // global load (ctx.worktree is an empty object, ctx.directory undefined),
+    // so the per-call session lookup below is what normally wins.
+    const fallbackBase =
+      typeof ctx.location?.directory === "string" && ctx.location.directory
+        ? ctx.location.directory
+        : process.cwd()
 
     function apiGet(path: string): Promise<any> {
       const proc = Bun.spawn(["opencode2", "api", "get", path], { stdout: "pipe", stderr: "pipe" })
@@ -71,8 +77,8 @@ export default {
 
     async function publishBase(tctx: any): Promise<string> {
       const sessionBase = (async () => {
-        const direct = tctx?.worktree || tctx?.directory
-        if (direct) return direct
+        // No per-call path on tctx (keys are sessionID/agent/messageID/id/
+        // progress) — the session API is the only per-project source.
         const sid = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
         if (sid) {
           try {
