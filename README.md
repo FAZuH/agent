@@ -6,10 +6,12 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 
 ### Prerequisites
 
-- [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): For creating mermaid diagrams
-- [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering
+- [OpenCode v2](https://opencode.ai/v2/docs): Agent harness
+- [rsync](https://github.com/RsyncProject/rsync): For synchronizing configs
+- [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): Skill for creating mermaid diagrams
+- [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering skills
 - [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
-- [octask](https://github.com/FAZuH/agent): CLI for the `octask-*` systemd user timers used by the scheduled-task and scheduled-agent skills (part of this repo's Rust workspace, alongside the `phone-digest` and `mail-digest` binaries)
+- [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html): For installing Rust packages
 
 ```bash
 npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
@@ -19,9 +21,19 @@ cargo install --git https://github.com/FAZuH/papercuts
 cargo install --git https://github.com/FAZuH/agent
 ```
 
-Then install [rsync](https://github.com/RsyncProject/rsync) from your package manager.
-
 ### Install
+
+Make sure you're in the project root directory.
+
+Initialize submodules in this repository `git submodule update --init` after cloning (an empty `plugins/ponytail/upstream/` pushes an empty dir).
+
+First, install Rust packages in this repo:
+
+```bash
+cargo install --path .
+```
+
+Then, push agent configurations to your OpenCode v2 config with `sync.sh`. See examples below:
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
@@ -30,13 +42,14 @@ Then install [rsync](https://github.com/RsyncProject/rsync) from your package ma
 ./sync.sh push agents            # same target (global), one top only
 ./sync.sh push ~/Notes           # project (<project>/.opencode)
 ./sync.sh diff -g                # preview drift (push + pull directions)
-# --dry-run to preview; needs restart after
+# --dry-run to preview
 ```
-Submodule: `git submodule update --init` after cloning (the ponytail plugin
-nests its upstream checkout; an empty `plugins/ponytail/upstream/` pushes an
-empty dir).
+
+This script copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). Files that are not ours are left alone.
 
 ### Extras
+
+Some other useful skills I use, but not required for this setup.
 
 `kajisho5/ffmpeg-skill` — local FFmpeg video/audio editing. The CLI
 rejects it (`YAML parse error` — unquoted colons in upstream's
@@ -55,10 +68,6 @@ install once upstream quotes the description. Until then, invoke it by
 name (OpenCode drops the unparseable `description`, so it may not
 auto-trigger on mention).
 
-### What it syncs
-
-Copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). Files that are not ours are left alone.
-
 ### Tagging
 
 Items can be tagged in `tags.conf` (`tag=pattern,pattern` against repo paths) and deployed selectively:
@@ -76,16 +85,6 @@ Files may carry `{{KEY}}` placeholders. `sync.sh` substitutes values from the gi
 ### Editing workflow
 
 Installs are copies — edits in the repo apply only where they've been pushed. Run `./sync.sh push -g` after changing anything.
-
-### Other commands
-
-- `pull` — copies target edits back (existing files only)
-- `remove` — uninstalls exactly what was pushed
-- `all` — runs across every target in `targets.conf`
-
-### Caveat
-
-Config roots shadow `~/.agents/skills`. Delete shadowed npx copies when `sync.sh` warns.
 
 ## Skills
 
