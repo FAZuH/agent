@@ -99,6 +99,24 @@ lists a PROJECT plugin's commands either (gotcha 2) — the reliable proof a
 project plugin's `setup()` ran is its own side effect: the tool appearing in
 the session's catalog, a file it writes, or a log line it emits.
 
+## Loading a plugin outside the service
+
+A plugin can be loaded, listed as healthy, and still fail on every call —
+nothing in `/api/plugin` executes `setup()`. Run the loader probe:
+
+```bash
+bun ~/.config/opencode/skills/ocv2/ocv2-pluginhealth/scripts/oc-plugin-load.mjs \
+  ~/Projects/agent/plugins                 # or: <repo>/.opencode/plugins my-tool.ts
+```
+
+It imports each entry and calls `setup()` against a recorded v2.0.3 ctx, then
+prints the tools/commands/hooks registered, which ctx keys the plugin wanted
+that the fake did not model, and any use of the `ctx.worktree` /
+`ctx.directory` idiom (not strings in v2 — they yield `[object Object]` paths
+or `The "paths[0]" property must be of type string, got object`). Exits
+non-zero on a failed import/setup or on that idiom. No service, no restart, no
+side effects — the registered callbacks are never invoked.
+
 ## Diagnosis workflow
 
 1. Global plugins: run `opencode2 api get /api/plugin`; scan every entry's
