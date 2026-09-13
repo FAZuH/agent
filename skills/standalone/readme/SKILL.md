@@ -1,8 +1,8 @@
 ---
 name: readme
 description: >-
-  Standardize a README.md to FAZuH's house style: top tagline + hr + centered
-  outline nav, section ordering of Installation → Preview → Usage at the top and
+  Standardize a README.md to FAZuH's house style: centered title + tagline + hr +
+  centered outline nav, section ordering of Installation → Preview → Usage at the top and
   Docs → License at the bottom, and proper placement of user vs developer
   documentation. Use when the user asks to improve a README, mentions README.md,
   asks for README structure, or wants the FAZuH readme style. Also use when
@@ -16,13 +16,17 @@ and in the same shape as every other `FAZuH/*` repo.
 
 ## Top pattern (exact)
 
-Every README starts with this exact header block, including the tagline, rule,
-and centered outline. The tagline is bold and repo-specific.
+Every README starts with this exact header block, including the centered title and
+tagline, rule, and centered outline. The tagline is bold and repo-specific.
 
 ```md
+<div align="center">
+
 # <repo>
 
 **<One-line pitch — what it is, for whom, in plain language.>**
+
+</div>
 
 <hr>
 
@@ -45,6 +49,7 @@ Rules for the outline:
 - Each entry starts with `● ` (U+25CF BLACK CIRCLE + SPACE) followed by an `<a href="#slug">Title</a>`.
 - Keep the outline on as few lines as needed; wrap with `<br>` only if there are more than ~4 entries. The reference style (e.g. `pwr-bot`) uses: `Features · Discord Setup · Installation & Usage` on line 1, `Configuration · Command Registration · Notes and Tips` on line 2, `Bug Reports and Feature Requests · License` on line 3 — adapt line breaks to the repo's actual sections.
 - Link `href` must match the heading's GitHub-generated slug (lowercase, spaces → `-`). Only list headings that actually exist — do not keep a `Preview` link when the section is omitted, and add `Setup` only when you add the section.
+- The title and tagline live in their own `<div align="center">` with a blank line after the opening `<div>` and before `</div>` — GitHub renders markdown inside HTML only when blank lines separate it. Keep `# <repo>` as a markdown heading (not `<h1 align="center">`) so GitHub still generates its anchor.
 
 Example adapted from `pwr-bot`:
 
@@ -156,7 +161,7 @@ The **Docs** section is a tight link hub, grouped but not verbose:
 
 ## Checklist before committing
 
-- [ ] Header block matches the top pattern exactly (tagline bold, `<hr>`, centered outline with ` ﻿ ` + `● `).
+- [ ] Header block matches the top pattern exactly (centered title + bold tagline, `<hr>`, centered outline with ` ﻿ ` + `● `).
 - [ ] Outline links resolve to real headings; slugs are correct — no stale `Preview` link when empty, `Setup` link present only when the section exists.
 - [ ] Sections follow Installation → [Setup] → [Preview] → Usage → … → Docs → License (Setup only if long, Preview omitted when empty).
 - [ ] Installation contains only download & install; long setup lives in `Setup` or as a one-line `docs/` pointer.
