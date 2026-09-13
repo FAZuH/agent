@@ -62,8 +62,13 @@ wrong-port, not missing data.
    project's `.opencode/plugins/` entries NEVER appear in `/api/plugin` (0 of
    91), and project agents are absent from `/api/agent`, so a clean
    "0 failed" says nothing about a project plugin. Grep the server log instead:
-   `~/.local/share/opencode/log/opencode.log` for
-   `msg="loading plugin" id=<path>` / `failed to load plugin target=<path>`.
+   (`~/.local/share/opencode/log/opencode.log`) — the success line is
+   `msg="loading plugin" id=<path>`, and the field is **`msg=`** while every
+   other line uses `message=`: `message="failed to load plugin" target=<path>`
+   (with the cause), `message="watcher subscribe" path=<…>/src/index.ts` proves
+   nested files were read, `message="plugin reconciliation started|completed"`
+   brackets each reload. `grep 'message="loading plugin"'` finds nothing and
+   reads like a plugin that never loaded.
    For project agents, `opencode2 debug agents` IS cwd-scoped and lists them.
 3. **Project discovery needs git.** Without a `.git` at/above the working
    directory, opencode2 resolves the location to `project: global` and skips
