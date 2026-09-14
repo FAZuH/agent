@@ -30,7 +30,9 @@ use tiny_http::StatusCode;
 
 use crate::drain;
 
-pub const DEFAULT_ADDR: &str = "100.64.0.3:8788";
+/// Default bind address. The host this listener is reachable at comes from
+/// `PHONE_INGEST_ADDR` (or `--addr`), never from the source.
+pub const DEFAULT_ADDR: &str = "127.0.0.1:8788";
 
 const MAX_BODY_BYTES: u64 = 64_000;
 const ROTATE_AFTER_BYTES: u64 = 2_000_000;
@@ -327,6 +329,12 @@ mod tests {
     use super::is_echo;
     use super::json_line;
     use super::token_ok;
+
+    #[test]
+    fn default_addr_binds_loopback() {
+        // A published default that names a host leaks this machine's address.
+        assert!(super::DEFAULT_ADDR.starts_with("127."));
+    }
 
     #[test]
     fn cap_collapses_whitespace_then_truncates() {
