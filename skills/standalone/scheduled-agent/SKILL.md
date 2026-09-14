@@ -143,7 +143,7 @@ trimmed `PATH=/usr/local/bin:/usr/bin` and `WorkingDirectory`.
 
 `~/.config/systemd/user/notes-autocommit.{timer,service}` runs the
 `autocommit` agent (defined in `~/.config/opencode/agents/autocommit.md`)
-against `~/Workspaces/Notes` every 12 hours with `--dirty-only` semantics:
+against `~/Projects/notes` every 12 hours with `--dirty-only` semantics:
 skip when `git status --porcelain` is empty, otherwise commit pending changes.
 Use it as the pattern for new autocommit-style schedules.
 
@@ -159,7 +159,7 @@ Use it as the pattern for new autocommit-style schedules.
 ## Report
 
 ```
-Scheduled octask-notes-commit: agent autocommit in ~/Workspaces/Notes,
+Scheduled octask-notes-commit: agent autocommit in ~/Projects/notes,
 OnCalendar=*-*-* 00/12:00:00 +30min stagger, Persistent, dirty-only.
 Manual run OK (1 commit created). Next run: 2026-08-31 00:07 WIT.
 ```
