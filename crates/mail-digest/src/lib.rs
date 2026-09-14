@@ -25,7 +25,13 @@ use ureq::unversioned::multipart::Part;
 
 const MAX_INLINE: usize = 1800;
 const USER_AGENT: &str = "octask-mail-digest/1.0";
-const FALLBACK_KEY: &str = "/home/fazuh/.secrets/discord/mail-digest.key";
+/// Fallback credential dir when `CREDENTIALS_DIRECTORY` is unset:
+/// `~/.secrets/discord` (same lookup order as phone-digest).
+fn home_secrets_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .map(|home| PathBuf::from(home).join(".secrets/discord"))
+}
 const TIER_TITLES: [(&str, &str); 3] = [
     ("urgent", "🔴 Needs attention"),
     ("notable", "🟡 Notable"),
@@ -306,7 +312,9 @@ fn webhook_url() -> Result<String> {
         }
         _ => None,
     };
-    let path = candidate.unwrap_or_else(|| PathBuf::from(FALLBACK_KEY));
+    let path = candidate
+        .or_else(|| home_secrets_dir().map(|dir| dir.join("mail-digest.key")))
+        .ok_or_else(|| anyhow!("no webhook key file: set CREDENTIALS_DIRECTORY or HOME"))?;
     let content = std::fs::read_to_string(&path)?;
     Ok(content
         .lines()
@@ -314,6 +322,18 @@ fn webhook_url() -> Result<String> {
         .ok_or_else(|| anyhow!("empty webhook key file {}", path.display()))?
         .trim()
         .to_string())
+}
+
+/// Discord user id to ping (`--ping`): line 2 of `notify.key`, next to the
+/// webhook key file. `None` when the file or the line is missing.
+pub fn ping_user_id() -> Option<String> {
+    let path = env::var_os("CREDENTIALS_DIRECTORY")
+        .map(PathBuf::from)
+        .map(|dir| dir.join("discord").join("notify.key"))
+        .or_else(|| home_secrets_dir().map(|dir| dir.join("notify.key")))?;
+    let content = std::fs::read_to_string(path).ok()?;
+    let id = content.lines().nth(1)?.trim();
+    (!id.is_empty()).then(|| id.to_string())
 }
 
 fn post_json(webhook: &str, content: &str, secs: u64) -> Result<u16> {
@@ -348,18 +368,19 @@ fn post_file(webhook: &str, summary: &str, filename: &str, text: &str) -> Result
 }
 
 /// Render and post, returning how it went. Split out so tests can pin the
-/// date, the generation epoch, and point the webhook at a sink.
-pub fn execute(arg: &str, today: &str, epoch: i64) -> Result<Posted> {
+/// date, the generation epoch, and point the webhook at a sink. `ping`
+/// prepends a `<@id>` mention to the posted content/summary.
+pub fn execute(arg: &str, today: &str, epoch: i64, ping: bool) -> Result<Posted> {
     let rendered = render(arg, today, epoch)?;
     let webhook = webhook_url()?;
     let chars = rendered.char_count();
     let posted = match &rendered {
         Rendered::Notice(text) => Posted::Notice {
-            status: post_json(&webhook, text, 30)?,
+            status: post_json(&webhook, &prefix_ping(text, ping)?, 30)?,
         },
         Rendered::Inline(text) => Posted::Inline {
             chars,
-            status: post_json(&webhook, text, 30)?,
+            status: post_json(&webhook, &prefix_ping(text, ping)?, 30)?,
         },
         Rendered::File {
             summary,
@@ -367,18 +388,28 @@ pub fn execute(arg: &str, today: &str, epoch: i64) -> Result<Posted> {
             text,
         } => Posted::File {
             chars,
-            status: post_file(&webhook, summary, filename, text)?,
+            status: post_file(&webhook, &prefix_ping(summary, ping)?, filename, text)?,
         },
     };
     Ok(posted)
 }
 
+/// Prepend the Discord mention when pinging; pass the text through when not.
+fn prefix_ping(text: &str, ping: bool) -> Result<String> {
+    if !ping {
+        return Ok(text.to_string());
+    }
+    let id = ping_user_id()
+        .ok_or_else(|| anyhow!("no Discord user id to ping (line 2 of notify.key)"))?;
+    Ok(format!("<@{id}>\n{text}"))
+}
+
 /// The `mail-digest` entry point: render with the current date and generation
-/// instant, post, log.
-pub fn run(arg: &str) -> Result<()> {
+/// instant, post, log. `ping` prepends a user mention (agent-originated mail).
+pub fn run(arg: &str, ping: bool) -> Result<()> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let epoch = chrono::Utc::now().timestamp();
-    let posted = execute(arg, &today, epoch)?;
+    let posted = execute(arg, &today, epoch, ping)?;
     println!("{}", posted.log_line());
     Ok(())
 }
