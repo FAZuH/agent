@@ -56,7 +56,7 @@ wrong-port, not missing data.
    instead (see /api/command below).
 2. **The endpoints are global-location-only.** `/api/plugin`, `/api/command`
    and `/api/agent` always report the *service's* default location
-   (`location.directory` was `/home/fazuh` on every call, whatever the cwd).
+   (`location.directory` was `/home/<user>` on every call, whatever the cwd).
    `?location.directory=<project>` and `--param location.directory=<project>`
    are accepted and IGNORED — byte-identical results (2026-09-13, v2.0.3). A
    project's `.opencode/plugins/` entries NEVER appear in `/api/plugin` (0 of
