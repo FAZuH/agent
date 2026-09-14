@@ -10,6 +10,7 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 - [rsync](https://github.com/RsyncProject/rsync): For synchronizing configs
 - [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): Skill for creating mermaid diagrams
 - [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering skills
+- [simple-english](https://github.com/AminBlg/SimpleEnglish): ASD-STE100 plain-English writing, referenced by `AGENTS.md` and the `document` agent
 - [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
 - [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html): For installing Rust packages
 
@@ -17,6 +18,7 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
+npx skills add AminBlg/SimpleEnglish -g -a opencode -s simple-english -y
 cargo install --git https://github.com/FAZuH/papercuts
 cargo install --git https://github.com/FAZuH/agent
 ```
