@@ -1,6 +1,6 @@
 ---
 name: self-improve
-description: Run gated self-improvement — collect proposals via session-retro, validate via skill-doctor, offer the papercut-sweep. Use when the user says "self-improve", asks for a retro/doctor check, wants to run self-improvement without finishing the session, or asks what is in the improvement backlog. Gated and non-destructive — never auto-applies fixes, never auto-runs the sweep.
+description: Run gated self-improvement — collect proposals via session-retro, validate via skill-doctor, offer the papercut-sweep. Use when the user says "self-improve", asks for a retro/doctor check, wants to run self-improvement without finishing the session, or asks what is in the improvement backlog.
 ---
 
 # Self-improve

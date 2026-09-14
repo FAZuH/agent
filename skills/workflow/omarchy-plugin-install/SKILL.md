@@ -8,6 +8,12 @@ description: Install an Omarchy shell plugin end-to-end — clone-first malware 
 Full procedure for installing an Omarchy plugin from a third-party repo URL.
 Run phases in order; phase 1 gates everything (anything but CLEAN stops the run).
 
+Requires [Omarchy](https://omarchy.org) (Hyprland + the `omarchy` CLI).
+
+Machine-specific paths (your Hyprland keybind file, your dotfiles repo and how
+it tracks files) are stated in `AGENTS.md`. Read it before phases 4-6 and use
+those values instead of any example path below.
+
 ## Phase 1 — Malware audit (DELEGATE — never audit in the main session)
 
 **Spawn the `malware-check` subagent. Do not perform this audit yourself.**
@@ -64,20 +70,20 @@ Verify in `~/.config/omarchy/shell.json` (hot-reloads on save, no restart needed
 - If the plugin has a panel "Install" button for a helper script, the equivalent is
   `cp <plugin>/scripts/<script> ~/.local/bin/ && chmod +x` — then prove it with
   `cmp <plugin>/scripts/<script> ~/.local/bin/<script>`.
-- Keybinds go in the user's own Hyprland keybind file (this setup:
-  `~/.config/hypr/fazuh.lua`), never in stock `bindings.lua`.
+- Keybinds go in your own Hyprland keybind file (`AGENTS.md` names it on this
+  machine), never in the stock `bindings.lua`.
 - Conflict-check first: `hyprctl binds -j | jq -r '.[] | select(.description | test("<keyword>"))'`.
 - After editing: `hyprctl reload` must be followed by empty `hyprctl configerrors`.
 
 ## Phase 5 — Retire replaced tools
 
 Removing an old tool means all three: delete the bind (phase 4), delete the live
-script (`~/.local/bin/`, `~/.local/share/bin/`), and `git rm` its repo twin
-(chezmoi twin, e.g. `private_dot_local/bin/executable_*`).
+script (`~/.local/bin/`, `~/.local/share/bin/`), and remove its twin in the
+dotfiles repo.
 
 ## Phase 6 — Persist (dotfiles sync loop)
 
-Per `AGENTS.md`: `cp` live files over their repo twins (e.g. the keybind file →
-its chezmoi twin under `dot_config/hypr/`), one concern per commit per
-`docs/dev/commit-scopes.md`, push `origin main`. `shell.json` plugin entries:
-commit only once placement is settled.
+Copy the live files over their twins in the dotfiles repo — the keybind file,
+`~/.config/omarchy/shell.json`, and any helper script under `~/.local/bin/`.
+Commit one concern per commit using that repo's commit scopes, and push.
+`shell.json` plugin entries: commit only once placement is settled.

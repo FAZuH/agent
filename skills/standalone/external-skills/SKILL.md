@@ -5,7 +5,7 @@ description: Install, update, list, or remove upstream-owned (External class) ag
 
 # External Skills
 
-Manage upstream-owned skills (the External class in @fazuh-agent): install,
+Manage upstream-owned skills: install,
 update, list, remove. These live in `~/.agents/skills/` and are owned
 upstream — updated through the CLI, never hand-edited.
 

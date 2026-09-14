@@ -11,7 +11,7 @@ REVIEW_MODEL=cline/z-ai/glm-5.3-flash
 # agents/primary/autocommit
 AUTOCOMMIT_MODEL=opencode/muse-spark-1.2-contributor-free
 # {{USER_HOME}} in agents/primary/mail-digest.md, skills, scripts/*
-USER_HOME=/home/fazuh
+USER_HOME=/home/you
 # agents/vision/mermaid-maker
 MERMAID_MAKER_MODEL=opencode/muse-spark-1.2-contributor-free
 # agents/vision/svg-maker

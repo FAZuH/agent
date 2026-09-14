@@ -1,6 +1,7 @@
-import { createRequire } from "module"
+import { existsSync } from "node:fs"
 import os from "os"
 import path from "path"
+import { pathToFileURL } from "node:url"
 import fs from "fs/promises"
 
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
@@ -174,8 +175,19 @@ async function extractDiagrams(files: string[]): Promise<Diagram[]> {
   return out.map((d, i) => ({ ...d, index: i }))
 }
 
-function resolvePlaywright(extraDirs: string[]): { chromium: any; from: string } {
+/**
+ * Resolve playwright. Inside the compiled opencode2 binary a dynamic
+ * createRequire() from an arbitrary directory does not see packages that a
+ * plain `node` process resolves fine, so candidates are probed by absolute
+ * entry path through import() — the same loader the plugin system itself uses.
+ * Every rejection is reported; a silent catch here turns a config problem into
+ * an unfalsifiable "not resolvable".
+ */
+async function resolvePlaywright(
+  extraDirs: string[],
+): Promise<{ chromium: any; from: string }> {
   const tried: string[] = []
+  const reasons: string[] = []
   const globalDirs = [
     path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), "opencode", "node_modules"),
     path.join(os.homedir(), ".bun", "install", "global", "node_modules"),
@@ -190,14 +202,29 @@ function resolvePlaywright(extraDirs: string[]): { chromium: any; from: string }
   ]
   for (const dir of [...new Set(dirs.filter(Boolean))]) {
     tried.push(dir)
-    try {
-      const req = createRequire(path.join(dir, "__doctor__.js"))
-      return { chromium: req("playwright").chromium, from: dir }
-    } catch {}
+    for (const entry of [
+      path.join(dir, "playwright", "index.mjs"),
+      path.join(dir, "playwright", "index.js"),
+    ]) {
+      if (!existsSync(entry)) {
+        reasons.push(`${entry}: absent`)
+        continue
+      }
+      try {
+        const mod: any = await import(pathToFileURL(entry).href)
+        const chromium = mod?.chromium ?? mod?.default?.chromium
+        if (chromium) return { chromium, from: dir }
+        reasons.push(`${entry}: loaded but exports no chromium`)
+      } catch (e) {
+        reasons.push(`${entry}: ${String((e as Error)?.message ?? e).split("\n")[0]}`)
+      }
+    }
   }
   throw new Error(
-    `playwright not resolvable. Tried (in order): ${tried.join(", ")}. ` +
-      `Fix: install playwright in the project (npm i playwright), or point MERMAID_DOCTOR_PLAYWRIGHT_PATH at a node_modules dir containing playwright.`,
+    `playwright not resolvable.\n  tried: ${tried.join(", ")}\n  reasons:\n    ${
+      reasons.filter((r) => !r.endsWith(": absent")).join("\n    ") ||
+      `(every candidate was absent. Install playwright in one of those dirs — the first is ${globalDirs[0]}, and a symlink there works too — or set MERMAID_DOCTOR_PLAYWRIGHT_PATH in the environment that launches the opencode2 service. It does NOT belong in opencode.json: that config has no "env" key, and the entry is ignored (verified 2026-09-13: the service process env never saw it).`
+    }`,
   )
 }
 
@@ -259,7 +286,7 @@ export async function runDoctor(
   const failures: Failure[] = []
 
   try {
-    const pw = resolvePlaywright(opts?.extraDirs ?? [])
+    const pw = await resolvePlaywright(opts?.extraDirs ?? [])
     engineFrom = pw.from
     browser = await pw.chromium.launch({ headless: true })
     page = await browser.newPage()

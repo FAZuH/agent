@@ -47,10 +47,15 @@ what would confirm it.
 ## Query
 
 1. Grep `findings.md` for the topic; read the matching entries whole.
-2. When a question touches broken tooling or friction, also check the
+2. When the question is a plugin API *shape* (TUI dialog props, command-entry
+   fields, theme keys), read the installed typings before anything else:
+   `~/.config/opencode/node_modules/@opencode-ai/plugin/dist/tui.d.ts` for the
+   TUI plugin API, `index.d.ts` in the same dir for server-plugin types. The
+   two are not interchangeable — TUI dialog props appear only in `tui.d.ts`.
+3. When a question touches broken tooling or friction, also check the
    global papercuts store (`papercuts -g list --tag self::tool`) — some
    opencode-internals lessons live there with resolution notes.
-3. Answer citing each entry's date and status. When two entries conflict,
+4. Answer citing each entry's date and status. When two entries conflict,
    the newer date wins and you say so explicitly.
 
 ## Rules

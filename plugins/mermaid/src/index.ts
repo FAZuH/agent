@@ -10,8 +10,36 @@ import { runDoctor } from "./doctor-core.ts"
 export default {
   id: "fazuh.mermaid",
   setup: async (ctx) => {
-    const baseDir = ctx.worktree || ctx.directory
-    const extraDirs = [ctx.worktree, ctx.directory].filter(Boolean)
+    // This plugin loads globally, so its own setup ctx has no string project
+    // path (ctx.worktree is an empty object, ctx.directory undefined) — the
+    // calling session's project is resolved per call instead. The lookup must
+    // stay async: a synchronous call back into this same server deadlocks.
+    const setupBase =
+      typeof ctx.location?.directory === "string" && ctx.location.directory
+        ? ctx.location.directory
+        : process.cwd()
+    const projectDirs = new Map()
+
+    async function projectDir(tctx) {
+      const sid = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
+      if (!sid) return setupBase
+      const hit = projectDirs.get(sid)
+      if (hit) return hit
+      let dir = setupBase
+      try {
+        const proc = Bun.spawn(["opencode2", "api", "get", `/api/session/${sid}`], {
+          stdout: "pipe",
+          stderr: "ignore",
+        })
+        const out = await new Response(proc.stdout).text()
+        await proc.exited
+        const found = JSON.parse(out)?.data?.location?.directory
+        if (typeof found === "string" && found) dir = found
+      } catch {}
+      projectDirs.set(sid, dir)
+      return dir
+    }
+
     await ctx.tool.transform((tools) => {
       tools.add({
         name: "mermaid-compile",
@@ -31,8 +59,9 @@ export default {
           required: ["mmdPath"],
           additionalProperties: false,
         },
-        execute: async (input) => {
+        execute: async (input, tctx) => {
           try {
+            const baseDir = await projectDir(tctx)
             const report = await compile(
               {
                 ...(typeof input.mmdPath === "string" ? { mmdPath: input.mmdPath } : {}),
@@ -68,7 +97,7 @@ export default {
           },
           additionalProperties: false,
         },
-        execute: async (input) => {
+        execute: async (input, tctx) => {
           try {
             const paths = Array.isArray(input.paths) ? input.paths.map(String).filter(Boolean) : undefined
             const raw = input.raw !== undefined && input.raw !== null ? String(input.raw) : undefined
@@ -81,7 +110,9 @@ export default {
               ...(typeof input.render === "boolean" ? { render: input.render } : {}),
               ...(typeof input.timeout_ms === "number" ? { timeout_ms: input.timeout_ms } : {}),
             }
-            const { report } = await runDoctor(args, { baseDir, extraDirs })
+            const { report } = await runDoctor(args, {
+              baseDir: await projectDir(tctx),
+            })
             return { content: report }
           } catch (error) {
             return {

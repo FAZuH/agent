@@ -7,8 +7,14 @@
  * Runtime dialog API: await ctx.ui.dialog.prompt({...}) → string | undefined.
  *
  * Commands (all purely client-side — nothing is ever sent to the LLM):
- *   ctrl+alt:m / /md-link [dir]   toggle mirroring for the focused session;
- *                                 ON backfills the newest completed reply
+ *   ctrl+alt:n / /md-link [dir]   toggle mirroring for the focused session;
+ *                                 ON backfills the newest completed reply,
+ *                                 and opens the mirror if auto-open is ON
+ *   ctrl+alt:o / /md-link-open    open this session's mirror with the opener
+ *   /md-link-open-with            set the opener command template
+ *   /md-link-auto-open [on|off]   toggle open-on-enable (default ON)
+ *   /md-link-sessions             list mirrored sessions; delete a mirror
+ *                                 (file + state entry) behind a confirm
  *   /md-link-dir                  set the default output directory
  *   /md-link-keep                 keep only the N newest replies (empty = all);
  *                                 existing mirrors are trimmed immediately
@@ -26,15 +32,21 @@ import { isAbsolute, join, normalize } from "path"
 import { homedir } from "os"
 import {
   appendMessage,
+  DEFAULT_OPENER,
   disableSession,
   isEnabled,
+  isSafeName,
   loadState,
   messageText,
   mirrorFile,
+  openArgs,
   pruneMirror,
+  resolveMirrorName,
+  sanitizeTitle,
   saveState,
   touchMirror,
 } from "./core.ts"
+import type { MdLinkState } from "./core.ts"
 
 type DirResult = { ok: true; abs: string } | { ok: false; error: string }
 
@@ -71,6 +83,44 @@ function extractArg(input: unknown): string {
     }
   }
   return ""
+}
+
+/** One row of the /md-link-sessions menu: the dialog.select option shape
+ * (`title`/`value`/`description` — not `label`, the list truncates `title`)
+ * plus `mtime` for sorting. "(file missing)" marks stale state entries.
+ * Exported for tests; the menu sorts rows by `mtime`, newest first. */
+export function sessionRow(st: MdLinkState, sid: string): { title: string; value: string; description: string; mtime: number } {
+  const dir = st.sessions[sid] ?? ""
+  const rec = st.files?.[sid]
+  const name = isSafeName(rec) ? rec : `${sid}_link.md`
+  const file = join(dir || ".", name)
+  let mtime = 0
+  let when = "(file missing)"
+  try {
+    const d = new Date((mtime = statSync(file).mtimeMs))
+    const pad = (n: number) => String(n).padStart(2, "0")
+    when = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {}
+  return { title: st.titles?.[sid] || sid, value: sid, description: `${file} · ${when}`, mtime }
+}
+
+/** Fetch the session title once (GET /api/session/<sid> → data.title).
+ * Null when unfetchable — the caller falls back to the session ID. */
+async function fetchSessionTitle(sessionID: string): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(["opencode2", "api", "get", `/api/session/${sessionID}`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const timeout = setTimeout(() => proc.kill(), 10_000)
+    const out = await new Response(proc.stdout).text()
+    clearTimeout(timeout)
+    await proc.exited
+    const title = JSON.parse(out)?.data?.title
+    return typeof title === "string" && title.trim() ? title : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -155,19 +205,47 @@ export default {
         }
         if (arg) st.defaultDir = res.abs // remember explicitly requested dirs
 
-        const file = join(res.abs, `${sessionID}_link.md`)
         if (isEnabled(st, sessionID)) {
           const oldDir = st.sessions[sessionID]
+          const name = st.files?.[sessionID]
+          const legacy = `${sessionID}_link.md`
           disableSession(st, sessionID)
           for (const dir of new Set([oldDir, res.abs])) {
-            try { rmSync(join(dir ?? "", `${sessionID}_link.md`), { force: true }) } catch {}
+            for (const n of new Set([name, legacy])) {
+              if (!isSafeName(n)) continue
+              try { rmSync(join(dir ?? "", n), { force: true }) } catch {}
+            }
           }
-          toast(`Live mirror OFF (${short(sessionID)})`, "warning")
+          toast(`Live mirror OFF (${short(name ?? sessionID)})`, "warning")
           return
         }
 
+        // Title fixed at enable time (recorded in state) so later renames
+        // never orphan content. TUI router may already know it; else one API call.
+        const curTitle = cur?.title ?? cur?.sessionTitle ?? cur?.session?.title
+        const fetched = typeof curTitle === "string" && curTitle.trim()
+          ? curTitle
+          : await fetchSessionTitle(sessionID)
+        const title = sanitizeTitle(fetched) || sessionID
+        // Unique within this dir: other enabled sessions' recorded names,
+        // plus anything already on disk (never clobber a user note).
+        const taken = new Set<string>()
+        for (const [id, f] of Object.entries(st.files ?? {})) {
+          if (id === sessionID || !f) continue
+          const d = st.sessions[id] ?? ""
+          if ((d || st.defaultDir || "") === res.abs) taken.add(f)
+        }
+        let name = resolveMirrorName(title, sessionID, taken)
+        while (existsSync(join(res.abs, name))) {
+          taken.add(name)
+          name = resolveMirrorName(title, sessionID, taken)
+        }
+
         st.sessions[sessionID] = res.abs
+        ;(st.titles ??= {})[sessionID] = title
+        ;(st.files ??= {})[sessionID] = name
         saveState(st)
+        const file = join(res.abs, name)
         touchMirror(file)
         const backfilled = await backfillLatestTurn(sessionID, file, st.keep, Date.now())
         const tag = st.persist ? " (persistent)" : ""
@@ -176,6 +254,10 @@ export default {
             ? `Live mirror ON, latest reply backfilled → ${short(file)}${tag}`
             : `Live mirror ON → ${file}${tag}`,
         )
+        if (st.openOnEnable) {
+          const res = await launchOpener(st, file)
+          if (res !== true) toast(`Open failed: ${res}`, "error") // success is its own feedback
+        }
       } catch (e: any) {
         toast(`Failed: ${e?.message ?? e}`, "error")
       }
@@ -269,6 +351,123 @@ export default {
       }
     }
 
+    // ——— opener (Obsidian by default, template-overridable) ———
+
+    /** Launch the configured opener for a mirror file. True, or an error line. */
+    async function launchOpener(st: MdLinkState, file: string): Promise<true | string> {
+      try {
+        const argv = openArgs(st.openWith, file)
+        const proc = Bun.spawn(argv, { stdout: "ignore", stderr: "pipe", stdin: "ignore" })
+        const err = (await new Response(proc.stderr).text()).trim().split("\n")[0] ?? ""
+        const code = await proc.exited
+        return code === 0 ? true : `exit ${code}${err ? `: ${err}` : ""}`
+      } catch (e: any) {
+        return e?.message ?? String(e)
+      }
+    }
+
+    /** ctrl+alt:o / /md-link-open — open the focused session's mirror. */
+    async function openMirror(): Promise<void> {
+      const cur = ctx?.ui?.router?.current?.()
+      const sessionID = cur?.sessionID ?? cur?.params?.sessionID
+      const st = loadState()
+      const file = sessionID && typeof sessionID === "string" ? mirrorFile(st, sessionID, pwd()) : null
+      if (!file || !isEnabled(st, sessionID as string) || !existsSync(file)) {
+        toast("No mirror for this session — toggle it ON first (ctrl+alt+n)", "warning")
+        return
+      }
+      const res = await launchOpener(st, file)
+      if (res !== true) toast(`Open failed (${short(file)}): ${res}`, "error")
+      else toast(`Opened in viewer → ${short(file)}`)
+    }
+
+    /** /md-link-open-with — set the opener template; empty = Obsidian default. */
+    async function openWithDialog(): Promise<void> {
+      try {
+        const cur = loadState().openWith ?? DEFAULT_OPENER
+        const v = await ctx.ui.dialog.prompt({
+          title: "md-link: opener command",
+          description: 'argv template; {path} = mirror file, {uri} = its percent-encoded form',
+          placeholder: DEFAULT_OPENER,
+          value: cur,
+        })
+        if (typeof v !== "string") return // cancelled
+        const st = loadState()
+        const t = v.trim()
+        st.openWith = t === "" || t === DEFAULT_OPENER ? undefined : t
+        saveState(st)
+        toast(t ? `Opener → ${t}` : "Opener reset to Obsidian (default)")
+      } catch (e: any) {
+        toast(`Cannot open dialog: ${e?.message ?? e}`, "error")
+      }
+    }
+
+    /** /md-link-auto-open [on|off] — open the mirror when toggled ON. */
+    async function toggleAutoOpen(input?: unknown): Promise<void> {
+      try {
+        const st = loadState()
+        const arg = extractArg(input).trim().toLowerCase()
+        if (arg === "on" || arg === "true" || arg === "1") st.openOnEnable = true
+        else if (arg === "off" || arg === "false" || arg === "0") st.openOnEnable = false
+        else st.openOnEnable = st.openOnEnable === false
+        saveState(st)
+        toast(
+          st.openOnEnable ? "Auto-open ON — mirrors open on toggle" : "Auto-open OFF — open with ctrl+alt+o",
+          st.openOnEnable ? "info" : "warning",
+        )
+      } catch (e: any) {
+        toast(`Failed: ${e?.message ?? e}`, "error")
+      }
+    }
+
+    // ——— mirrored-sessions menu ———
+
+    /** /md-link-sessions — list every mirrored session from state and delete
+     * its mirror (file + state entry) behind a confirm, re-showing until the
+     * user cancels. Only derived mirror data is touched, never the session. */
+    async function sessionsMenu(): Promise<void> {
+      for (;;) {
+        const st = loadState()
+        const rows = Object.keys(st.sessions)
+          .map((sid) => sessionRow(st, sid))
+          .sort((a, b) => b.mtime - a.mtime)
+        if (rows.length === 0) {
+          toast("No mirrored sessions — toggle one ON with ctrl+alt+n")
+          return
+        }
+        const fail = (e: any) => toast(`Cannot open dialog: ${e?.message ?? e}`, "error")
+        let picked: string | undefined
+        try {
+          picked = await ctx.ui.dialog.select({
+            title: `Mirrored sessions (${rows.length}) — delete which?`,
+            placeholder: "esc cancels",
+            options: rows.map(({ title, value, description }) => ({ title, value, description })),
+          })
+        } catch (e: any) {
+          return fail(e)
+        }
+        if (!picked) return // cancelled
+        const row = rows.find((r) => r.value === picked)
+        let ok: boolean | undefined
+        try {
+          ok = await ctx.ui.dialog.confirm({
+            title: "Delete this mirror?",
+            message: `${row?.title ?? picked}\n${row?.description ?? ""}\n\nThe session itself is untouched; only the mirror file and its state entry go away.`,
+          })
+        } catch (e: any) {
+          return fail(e)
+        }
+        if (!ok) continue // back to the list
+        const cur = loadState() // state can move while the dialogs are open
+        for (const n of new Set([cur.files?.[picked], `${picked}_link.md`])) {
+          if (!isSafeName(n)) continue
+          try { rmSync(join(cur.sessions[picked] || ".", n), { force: true }) } catch {}
+        }
+        disableSession(cur, picked)
+        toast(`Mirror deleted → ${short(row?.title ?? picked)}`)
+      }
+    }
+
     // ——— startup notice for persistent mirrors ———
 
     try {
@@ -287,11 +486,18 @@ export default {
         const root = pwd()
         const st = loadState()
         if (st.persist) return // persistent mode: keep files + entries, resume next launch
-        for (const [sid, dir] of Object.entries(st.sessions)) {
+        for (const sid of Object.keys(st.sessions)) {
+          const dir = st.sessions[sid]
           // only remove mirrors owned by THIS project — other TUIs keep theirs
           if (root && !dir.startsWith(root)) continue
-          try { rmSync(join(dir || ".", `${sid}_link.md`), { force: true }) } catch {}
+          const names = new Set([st.files?.[sid], `${sid}_link.md`])
+          for (const n of names) {
+            if (!isSafeName(n)) continue
+            try { rmSync(join(dir || ".", n), { force: true }) } catch {}
+          }
           delete st.sessions[sid]
+          if (st.titles) delete st.titles[sid]
+          if (st.files) delete st.files[sid]
         }
         saveState(st)
       } catch {}
@@ -314,14 +520,47 @@ export default {
               id: "md-link.toggle",
               title: "Live mirror",
               group: "md-link",
-              bind: "ctrl+alt+m",
+              bind: "ctrl+alt+n",
               palette: true,
               slash: { name: "md-link" },
               run,
             },
             {
+              id: "md-link.open",
+              title: "Open mirror in viewer",
+              group: "md-link",
+              bind: "ctrl+alt+o",
+              palette: true,
+              slash: { name: "md-link-open" },
+              run: () => openMirror(),
+            },
+            {
+              id: "md-link.opener",
+              title: "Opener command",
+              group: "md-link",
+              palette: true,
+              slash: { name: "md-link-open-with" },
+              run: () => openWithDialog(),
+            },
+            {
+              id: "md-link.autoopen",
+              title: "Auto-open on toggle",
+              group: "md-link",
+              palette: true,
+              slash: { name: "md-link-auto-open" },
+              run: (input?: unknown) => toggleAutoOpen(input),
+            },
+            {
+              id: "md-link.sessions",
+              title: "Mirrored sessions",
+              group: "md-link",
+              palette: true,
+              slash: { name: "md-link-sessions" },
+              run: () => sessionsMenu(),
+            },
+            {
               id: "md-link.setdir",
-              title: "Output directory…",
+              title: "Output directory",
               group: "md-link",
               palette: true,
               slash: { name: "md-link-dir" },

@@ -13,6 +13,9 @@ Usage: oc-plugins.sh [--failed-only]
   --failed-only  show only failed plugins, with the head of each error
 
 Table columns: status, id (or source package/path), source type.
+Scope: the service's DEFAULT (global) location only — project .opencode
+plugins are never listed, so "none failed" is not a clean bill of health for
+a project plugin.
 Exit codes: 0 all active (or nothing listed) · 1 a plugin failed ·
             2 usage or API error
 EOF
@@ -48,6 +51,9 @@ else
 fi
 
 FAILED=$(jq '[.data[] | select(.state.status == "failed")] | length' <<<"$RESP")
-[[ "$FAILED" -eq 0 ]] && exit 0
+if [[ "$FAILED" -eq 0 ]]; then
+  printf 'all listed plugins active — but this list is the SERVICE default location only; project .opencode plugins never appear here (check the server log for those)\n' >&2
+  exit 0
+fi
 printf '%s plugin(s) failed\n' "$FAILED" >&2
 exit 1

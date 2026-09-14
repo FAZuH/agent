@@ -10,6 +10,7 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 - [rsync](https://github.com/RsyncProject/rsync): For synchronizing configs
 - [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): Skill for creating mermaid diagrams
 - [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering skills
+- [simple-english](https://github.com/AminBlg/SimpleEnglish): ASD-STE100 plain-English writing, referenced by `AGENTS.md` and the `document` agent
 - [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
 - [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html): For installing Rust packages
 
@@ -17,6 +18,7 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
 npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
+npx skills add AminBlg/SimpleEnglish -g -a opencode -s simple-english -y
 cargo install --git https://github.com/FAZuH/papercuts
 cargo install --git https://github.com/FAZuH/agent
 ```
@@ -125,6 +127,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[teach](./skills/workflow/teach/SKILL.md)**: Teach anything so it locks in: graded quizzes probe your level, then a dependency map is taught node by node. Ported from [amosblomqvist/learn](https://github.com/amosblomqvist/learn).
 - **[visualize](./skills/workflow/visualize/SKILL.md)**: Adds a correct, minimal diagram to a lesson when an idea is clearer as a picture; briefs a maker subagent that renders and verifies the image.
 - **[offload](./skills/workflow/offload/SKILL.md)**: Offload builds, checks, or full agent batches to a remote machine over ssh; per-repo memory lives in gitignored `.opencode/offload.md`.
+- **[omarchy-plugin-install](./skills/workflow/omarchy-plugin-install/SKILL.md)**: Install an Omarchy shell plugin end-to-end — mandatory clone-first malware audit via the `malware-check` subagent, then plugin add, bar placement, script/keybind setup, retiring the replaced tool, and dotfiles persistence. Machine paths come from `AGENTS.md`.
 
 ### Referential (loaded by other skills while they run)
 

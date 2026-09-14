@@ -2,15 +2,25 @@
 //! wire request matches the golden fixtures (new-format expectations, with
 //! the generation epoch pinned).
 //!
-//! These read the environment, the filesystem and loopback, so everything that
-//! depends on `CREDENTIALS_DIRECTORY` runs sequentially inside one test.
+//! These read the environment, the filesystem and loopback, so every test
+//! that depends on `CREDENTIALS_DIRECTORY` takes the ENV lock — it serializes
+//! process-global env writes against the other env tests in this binary.
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
 use std::sync::mpsc;
 
 use mail_digest::execute;
 use serde_json::Value;
+
+static ENV: Mutex<()> = Mutex::new(());
+
+/// Serialize every test that sets CREDENTIALS_DIRECTORY (process-global).
+fn env_lock() -> MutexGuard<'static, ()> {
+    ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 const TODAY: &str = "2026-09-12";
 const EPOCH: i64 = 1770000000;
@@ -115,12 +125,13 @@ fn multipart(body: &[u8], boundary: &str) -> Vec<(Vec<String>, Vec<u8>)> {
 
 #[test]
 fn posts_match_expected_fixtures() {
+    let _env = env_lock();
     let temp = tempfile::tempdir().unwrap();
     let credentials = temp.path().join("credentials");
     let key = credentials.join("discord").join("mail-digest.key");
     fs::create_dir_all(key.parent().unwrap()).unwrap();
-    // SAFETY: the only code in this binary that reads CREDENTIALS_DIRECTORY is
-    // the loop below, and it is sequential. No other test here posts.
+    // SAFETY: held env lock serializes this CREDENTIALS_DIRECTORY write
+    // against every other env-writing test in this binary.
     unsafe { std::env::set_var("CREDENTIALS_DIRECTORY", &credentials) };
 
     for dir in fixture_dirs() {
@@ -133,7 +144,8 @@ fn posts_match_expected_fixtures() {
         let (url, rx) = spawn_sink(204);
         fs::write(&key, format!("{url}\nsecond line is not the webhook\n")).unwrap();
 
-        let posted = execute(&input, TODAY, EPOCH).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+        let posted =
+            execute(&input, TODAY, EPOCH, false).unwrap_or_else(|e| panic!("{name}: {e:#}"));
         assert_eq!(
             posted.log_line(),
             expected_stdout.trim_end_matches('\n'),
@@ -205,11 +217,74 @@ fn posts_match_expected_fixtures() {
     let (url, _rx) = spawn_sink(500);
     fs::write(&key, format!("{url}\n")).unwrap();
     let input = r#"{"items":[{"account":"gmail","sender":"S","subject":"U","gist":"G"}]}"#;
-    let Err(error) = execute(input, TODAY, EPOCH) else {
+    let Err(error) = execute(input, TODAY, EPOCH, false) else {
         panic!("a 500 response must fail the post");
     };
     assert!(
         !error.to_string().is_empty(),
         "the failure must carry a reason"
+    );
+}
+
+#[test]
+fn ping_prefixes_the_mention_to_the_posted_content() {
+    let _env = env_lock();
+    let temp = tempfile::tempdir().unwrap();
+    let credentials = temp.path().join("credentials");
+    let key = credentials.join("discord").join("mail-digest.key");
+    let notify = credentials.join("discord").join("notify.key");
+    fs::create_dir_all(key.parent().unwrap()).unwrap();
+    // SAFETY: held env lock serializes this CREDENTIALS_DIRECTORY write
+    // against every other env-writing test in this binary.
+    unsafe { std::env::set_var("CREDENTIALS_DIRECTORY", &credentials) };
+
+    let (url, rx) = spawn_sink(204);
+    fs::write(&key, format!("{url}\n")).unwrap();
+    fs::write(&notify, "https://discord.com/api/webhooks/x\n424242\n").unwrap();
+    let input =
+        r#"{"items":[{"account":"gmail","sender":"S","subject":"U","gist":"G","tier":"urgent"}]}"#;
+    execute(input, TODAY, EPOCH, true).expect("ping post");
+
+    let request = rx.recv().unwrap();
+    let payload: Value = serde_json::from_slice(&request.body).unwrap();
+    assert_eq!(
+        payload["content"].as_str().unwrap(),
+        "<@424242>\n# Mail digest — 1 mails across 1 accounts\n<t:1770000000:R>\n## gmail\n• 🔴 S — G"
+    );
+
+    // without the flag, no mention
+    let (url, rx) = spawn_sink(204);
+    fs::write(&key, format!("{url}\n")).unwrap();
+    execute(input, TODAY, EPOCH, false).expect("plain post");
+    let request = rx.recv().unwrap();
+    let payload: Value = serde_json::from_slice(&request.body).unwrap();
+    assert!(
+        !payload["content"].as_str().unwrap().starts_with("<@"),
+        "no mention without --ping"
+    );
+}
+
+#[test]
+fn ping_without_a_user_id_fails_with_a_reason() {
+    let _env = env_lock();
+    let temp = tempfile::tempdir().unwrap();
+    let credentials = temp.path().join("credentials");
+    let key = credentials.join("discord").join("mail-digest.key");
+    fs::create_dir_all(key.parent().unwrap()).unwrap();
+    // notify.key exists but has no second line
+    fs::write(credentials.join("discord").join("notify.key"), "url\n").unwrap();
+    // SAFETY: held env lock serializes this CREDENTIALS_DIRECTORY write
+    // against every other env-writing test in this binary.
+    unsafe { std::env::set_var("CREDENTIALS_DIRECTORY", &credentials) };
+
+    let (url, _rx) = spawn_sink(204);
+    fs::write(&key, format!("{url}\n")).unwrap();
+    let input = r#"{"items":[{"account":"gmail","sender":"S","subject":"U","gist":"G"}]}"#;
+    let Err(error) = execute(input, TODAY, EPOCH, true) else {
+        panic!("ping without an id must fail the post");
+    };
+    assert!(
+        error.to_string().contains("notify.key"),
+        "the failure must name the missing id source: {error}"
     );
 }

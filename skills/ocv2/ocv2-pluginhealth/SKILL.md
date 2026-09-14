@@ -54,17 +54,43 @@ wrong-port, not missing data.
    Only the background service supervisor (`--service`) populates the list.
    An empty list proves nothing either way — verify through side effects
    instead (see /api/command below).
-2. **Project discovery needs git.** Without a `.git` at/above the working
+2. **The endpoints are global-location-only.** `/api/plugin`, `/api/command`
+   and `/api/agent` always report the *service's* default location
+   (`location.directory` was `/home/<user>` on every call, whatever the cwd).
+   `?location.directory=<project>` and `--param location.directory=<project>`
+   are accepted and IGNORED — byte-identical results (2026-09-13, v2.0.3). A
+   project's `.opencode/plugins/` entries NEVER appear in `/api/plugin` (0 of
+   91), and project agents are absent from `/api/agent`, so a clean
+   "0 failed" says nothing about a project plugin. Grep the server log instead:
+   (`~/.local/share/opencode/log/opencode.log`) — the success line is
+   `msg="loading plugin" id=<path>`, and the field is **`msg=`** while every
+   other line uses `message=`: `message="failed to load plugin" target=<path>`
+   (with the cause), `message="watcher subscribe" path=<…>/src/index.ts` proves
+   nested files were read, `message="plugin reconciliation started|completed"`
+   brackets each reload. `grep 'message="loading plugin"'` finds nothing and
+   reads like a plugin that never loaded.
+   For project agents, `opencode2 debug agents` IS cwd-scoped and lists them.
+3. **Project discovery needs git.** Without a `.git` at/above the working
    directory, opencode2 resolves the location to `project: global` and skips
-   project-local config and `.opencode/` dirs entirely — silently. If a
-   project's plugins refuse to load, check the response's
-   `location.project.directory`: if it says `/`, that's why.
-3. **Config key is `plugins`.** v1's singular `plugin` key is auto-translated,
+   project-local config and `.opencode/` dirs entirely — silently. Since the
+   service endpoints report their own location (gotcha 2), check the *plugin's
+   behaviour* or `opencode2 debug config` from inside the project, not the
+   response's `location.project.directory`.
+4. **Config key is `plugins`.** v1's singular `plugin` key is auto-translated,
    but new entries should use `"plugins": [{ "package": "..." }]` (strings
    also work). Both keys present is allowed.
-4. **Hot-reload scope.** Files under watched dirs (`.opencode/plugin(s)/`)
-   hot-reload on change. Config-entry and npm-installed plugins do NOT —
-   changing them requires a restart.
+5. **Hot-reload scope is the whole plugin dir, nested files included.** On
+   v2.0.3 an edit to `plugins/<name>/src/<file>.ts` — not the entry — was live
+   after `sync.sh push` with no restart (proved by a marker string appearing in
+   the tool's own output). Each changed file fires its own `msg="loading plugin"`.
+   What does NOT hot-reload: config-entry (`"plugins": [...]`) and
+   npm-installed plugins — those need a restart. So when a push seems to have
+   done nothing, suspect a stale installed copy (`sync.sh diff -g plugins`), a
+   cached session tool catalog, or config that is inert (opencode.json has no
+   top-level `env` key: a var set there never reaches the plugin host — verify
+   with `tr '\0' '\n' < /proc/$(pgrep -f "opencode2 serve"|head -1)/environ`),
+   not module caching. Prove which build is live with a behaviour marker rather
+   than trusting a log line.
 
 ## Verifying a plugin actually ran its setup
 
@@ -77,13 +103,40 @@ opencode2 api get /api/command
 
 Commands registered via `ctx.command.transform(commands.update(...))` appear
 by name (note: draft `update()` is upsert — it creates unknown names).
-Empty `/api/command` on plain serve means nothing (gotcha 1); on the service,
-or with an explicit `?location.directory=<project>`, registered names are
-your ground truth.
+Empty `/api/command` on plain serve means nothing (gotcha 1), and it never
+lists a PROJECT plugin's commands either (gotcha 2) — the reliable proof a
+project plugin's `setup()` ran is its own side effect: the tool appearing in
+the session's catalog, a file it writes, or a log line it emits. Note that a tool
+missing from the *top-level* tool list proves nothing either: with Code Mode
+active, plugin tools are reached through that catalog (`tools["quiz_ask"](…)`),
+and a top-level call answers `No tool named "quiz_ask" is currently available`
+while the plugin is perfectly loaded (2026-09-13, v2.0.3).
+
+## Loading a plugin outside the service
+
+A plugin can be loaded, listed as healthy, and still fail on every call —
+nothing in `/api/plugin` executes `setup()`. Run the loader probe:
+
+```bash
+bun ~/.config/opencode/skills/ocv2/ocv2-pluginhealth/scripts/oc-plugin-load.mjs \
+  ~/Projects/agent/plugins                 # or: <repo>/.opencode/plugins my-tool.ts
+```
+
+It imports each entry and calls `setup()` against a recorded v2.0.3 ctx, then
+prints the tools/commands/hooks registered, which ctx keys the plugin wanted
+that the fake did not model, and any use of the `ctx.worktree` /
+`ctx.directory` idiom (not strings in v2 — they yield `[object Object]` paths
+or `The "paths[0]" property must be of type string, got object`). Exits
+non-zero on a failed import/setup or on that idiom. No service, no restart, no
+side effects — the registered callbacks are never invoked. `--self-test` checks
+the scanner's own line reporting against a fixture whose hit hides under a block
+comment.
 
 ## Diagnosis workflow
 
-1. Run `opencode2 api get /api/plugin`; scan every entry's status.
+1. Global plugins: run `opencode2 api get /api/plugin`; scan every entry's
+   status. Project plugins are absent there — for those, grep the server log
+   for `loading plugin` / `failed to load plugin` with the plugin's path.
 2. For any `failed` entry, read `error` — the first line usually names the
    contract violation (e.g. `SchemaError: Expected object at ["default"]`
    = default export doesn't match `{id, setup}`; `ResolveMessage: Cannot
@@ -92,4 +145,5 @@ your ground truth.
    (`~/.config/opencode/opencode.json`) AND project (`.opencode/`, which may
    be a dev leftover like `"plugin": ["../index.ts"]` pointing at renamed
    files).
-4. After fixing, re-run step 1 (service mode) or verify via `/api/command`.
+4. After fixing, re-run step 1 (service mode) or verify via `/api/command` —
+   remembering both see only the global location.
