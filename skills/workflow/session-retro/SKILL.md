@@ -1,6 +1,6 @@
 ---
 name: session-retro
-description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling and proposes new skills when warranted, and gates filing. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Proposes papercuts but files them only after explicit user approval — it does NOT auto-file and does NOT apply fixes (that is @papercut-sweep) and does NOT touch repo-local code sanding.
+description: End-of-session retrospective where the agent proposes improvements to its own skills, agent definitions, and tooling — global and repo-local (project AGENTS.md, repo agents/plugins) — and proposes new skills when warranted, and gates filing. Use when the user asks for a retro/retrospective, "how did this session go", "what did we learn", "propose improvements", or when wrapping up a session and capturing lessons before finishing. Proposes papercuts but files them only after explicit user approval — it does NOT auto-file and does NOT apply fixes (that is @papercut-sweep) and does NOT touch repo-local code sanding.
 ---
 
 # Session retro
@@ -20,9 +20,10 @@ Always follow the rules in the *Rules* section at the bottom.
 - Especially valuable right before `/compact` or session end, while
   context is still fresh.
 
-## 1. Mine the session
+## 1. Mine the session and its config
 
-Walk back through the conversation and look for five things:
+Walk back through the conversation, then through the config it ran under, and
+look for five things:
 
 1. **Friction hit** — tool fights, dead ends, permission denials,
    workarounds used silently, retries that should not have been needed.
@@ -39,12 +40,25 @@ Walk back through the conversation and look for five things:
    phrases, inputs/outputs). If none meets the bar, state `No new-skill
    candidate.` and move on — that is a valid outcome.
 
+Mine both config levels, so a finding lands on the surface that can actually
+hold it:
+
+- **Global**: `~/.config/opencode/{skills,agents,plugins}`, `opencode.json`.
+- **Repo-local**: the repository's own agent configuration — `AGENTS.md` /
+  `CLAUDE.md`, the repo's `agents/`, `skills/` and `plugins/`, its project
+  `opencode.json`, `.opencode/`, and `docs/dev/*`.
+
+A lesson that only holds in this repo belongs in its `AGENTS.md` or repo
+skill; a general one belongs on a global surface. Re-read the repo-local files
+before proposing — a fix already documented there is a no-op finding, and a
+missing one is the cheapest proposal you can file.
+
 ## 2. Propose (do not file yet)
 
 For each finding, **draft** one entry but do not call `papercuts` yet:
 
-- For global scope (global skills/tools/agents): `papercuts -g add --tag self::<namespace> "<friction observed > proposed fix>"`
-- For repo/project scope (fix lives inside the current repo): `papercuts add --tag self::<namespace> "<friction observed > proposed fix>"` — no `-g`
+- For global scope (a global skill, agent def, plugin or `opencode.json`): `papercuts -g add --tag self::<namespace> "<friction observed > proposed fix>"`
+- For repo/project scope (the fix lands in this repo — its `AGENTS.md`, `agents/`, `plugins/` or code): `papercuts add --tag self::<namespace> "<friction observed > proposed fix>"` — no `-g`
 
 Use `-g` only for global scope.
 
