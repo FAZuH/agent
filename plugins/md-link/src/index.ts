@@ -1,7 +1,7 @@
 /**
  * md-link — Obsidian live-mirror (server side).
  *
- * Mirrors a session to `<dir>/<sessionID>_link.md` for sessions enabled in
+ * Mirrors a session to `<dir>/link_<Title>.md` for sessions enabled in
  * the state file (see core.ts for the contracts). Sessions are toggled
  * exclusively by the TUI plugin — this plugin never enables anything.
  *
@@ -29,12 +29,16 @@ import {
   loadState,
   mirrorFile,
   messageText,
+  removeBlock,
   touchMirror,
+  upsertTailBlock,
 } from "./core.ts"
 
 const POLL_MS = 2_500
 /** Cap on how many historical messages a single sync may backfill. */
 const MAX_CATCHUP = 10
+/** Marker key of the live "agent is thinking" block (msg_* / qa-* never clash). */
+const THINKING = "thinking"
 
 async function fetchMessages(sessionID: string): Promise<any[]> {
   const proc = Bun.spawn(["opencode2", "api", "get", `/api/session/${sessionID}/message`], {
@@ -46,6 +50,46 @@ async function fetchMessages(sessionID: string): Promise<any[]> {
   const parsed = JSON.parse(out)
   const items = Array.isArray(parsed) ? parsed : parsed?.data
   return Array.isArray(items) ? items : [] // newest-first
+}
+
+/** Sessions the service currently reports as running, or null when the probe
+ * failed — callers then leave existing indicators as they are rather than
+ * stripping them on a transient error. One call covers every session. */
+async function fetchActive(): Promise<Set<string> | null> {
+  try {
+    const proc = Bun.spawn(["opencode2", "api", "get", "/api/session/active"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const out = await new Response(proc.stdout).text()
+    await proc.exited
+    const data = JSON.parse(out)?.data
+    if (!data || typeof data !== "object") return null
+    return new Set(Object.keys(data))
+  } catch {
+    return null
+  }
+}
+
+/** Phase label for a running session, from the newest message's LAST part
+ * (parts persist once finished, so recency — not presence — is the signal):
+ * open tool call → streaming reasoning → streaming text → fallback. */
+export function phaseOf(messages: any[]): string {
+  const m = messages.find((x) => x?.type === "assistant")
+  const parts = Array.isArray(m?.content) ? m.content : []
+  if (!m || m.time?.completed) return "Working…" // between turns / next msg not created
+  const last = [...parts]
+    .reverse()
+    .find((p: any) => p?.type === "tool" || (typeof p?.text === "string" && p.text.trim()))
+  if (!last) return "Working…"
+  if (last.type === "tool") {
+    if (last.state?.status === "running" || last.state?.status === "streaming") {
+      return `Running tool: ${last.name}`
+    }
+    return "Working…" // tool done, next part not started
+  }
+  if (last.type === "reasoning") return "Thinking…"
+  return "Writing…"
 }
 
 /** Skill declarations are system-injected context, not learner prose. */
@@ -62,7 +106,7 @@ function callout(type: string, title: string, bodyLines: string[]): string {
   return lines.join("\n")
 }
 
-async function syncSession(sessionID: string): Promise<void> {
+async function syncSession(sessionID: string, running: boolean | null): Promise<void> {
   const st = loadState()
   if (!isEnabled(st, sessionID)) return
   // Fallback chain: recorded dir → config defaultDir → cwd (no hardcoded paths).
@@ -73,8 +117,9 @@ async function syncSession(sessionID: string): Promise<void> {
 
   // Walk newest → oldest, collecting until we hit an already-mirrored
   // message; then append oldest-first so chronology is preserved.
+  const msgs = await fetchMessages(sessionID)
   const pending: { id: string; text: string }[] = []
-  for (const m of await fetchMessages(sessionID)) {
+  for (const m of msgs) {
     if (m?.type !== "assistant" && m?.type !== "user") continue
     let text = messageText(m)
     if (!text) continue
@@ -89,6 +134,16 @@ async function syncSession(sessionID: string): Promise<void> {
   }
   for (let i = pending.length - 1; i >= 0; i--) {
     appendMessage(file, { text: pending[i].text, markerKey: pending[i].id, replace: true }, st.keep)
+  }
+
+  // Live indicator: upserted at the tail while the session runs, removed when
+  // it goes idle. null (probe failed) leaves any existing block untouched.
+  if (running === null) return
+  if (running) {
+    const res = upsertTailBlock(file, { text: callout("info", `⏳ ${phaseOf(msgs)}`, []), markerKey: THINKING }, st.keep)
+    if (res === "failed") console.error("[md-link] thinking upsert failed:", sessionID)
+  } else {
+    removeBlock(file, THINKING)
   }
 }
 
@@ -106,6 +161,19 @@ function appendQa(file: string, markerKey: string, text: string, keep: number | 
   const res = appendMessage(file, { text, markerKey, replace: true }, keep)
   // "duplicate" is the expected steady state on service restarts / re-reads.
   if (res === "failed") console.error("[md-link] qa append failed:", markerKey)
+}
+
+/** Display labels for a quiz_ask mirror callout, in the exact order the quiz
+ * form shows them: same empty-label filter as quiz `normalizeOptions`, same
+ * plain-codepoint sort as quiz `displayOrder` (keep in sync with
+ * plugins/quiz/src/index.ts). `shuffle === false` preserves input order.
+ * Caller appends the trailing "I don't know" option. */
+export function quizDisplayLabels(raw: any, shuffle?: boolean): string[] {
+  const labels = (Array.isArray(raw) ? raw : [])
+    .map((o) => String(o?.label ?? "").trim())
+    .filter((l) => l.length > 0)
+  if (shuffle === false) return labels
+  return labels.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }
 
 function questionCallout(label: string, question: string, details: string | undefined, options: any[]): string {
@@ -175,9 +243,11 @@ export const mdLinkPlugin = {
       busy = true
       try {
         const st = loadState()
+        const active = await fetchActive()
         for (const sid of Object.keys(st.sessions)) {
+          const running = active === null ? null : active.has(sid)
           try {
-            await syncSession(sid)
+            await syncSession(sid, running)
           } catch {} // one failing session must not starve the others
         }
       } finally {
@@ -200,7 +270,9 @@ export const mdLinkPlugin = {
         const { keep } = loadState()
         if (event.tool === "quiz_ask") {
           const input = event.input ?? {}
-          const block = questionCallout("Quiz", input.question, input.details, input.options)
+          const labels = quizDisplayLabels(input.options, input.shuffle)
+          const mirrorOpts = [...labels.map((l) => ({ label: l })), { label: "I don't know" }]
+          const block = questionCallout("Quiz", input.question, input.details, mirrorOpts)
           appendQa(file, `qa-ask-${event.id}`, block, keep)
         } else if (event.tool === "question") {
           const q = event.input?.questions?.[0] ?? {}
