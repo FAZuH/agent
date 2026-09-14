@@ -39,7 +39,7 @@ interface PendingQuiz {
   question: string
   details?: string
   mode: "single-select" | "multi-select"
-  /** Display order (post-shuffle), 1-based. */
+  /** Display order (post-displayOrder), 1-based. */
   options: QuizOption[]
   status: "answered" | "cancelled" | "timeout"
   selectedIndices: number[]
@@ -83,13 +83,13 @@ function normalizeOptions(raw: any): QuizOption[] {
   return out
 }
 
-function shuffleOptions(options: QuizOption[]): QuizOption[] {
-  const out = [...options]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
+/** Deterministic display order (replaces the old random shuffle): stable sort
+ * by label with a plain codepoint comparator — locale-free so the quiz form
+ * and the md-link mirror (which only sees pre-execution input) compute the
+ * identical order. Keep in sync with `quizDisplayLabels` in
+ * plugins/md-link/src/index.ts. */
+export function displayOrder(options: QuizOption[]): QuizOption[] {
+  return [...options].sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0))
 }
 
 /** Multi-select correctAnswer sometimes arrives JSON-stringified; coerce. */
@@ -154,7 +154,7 @@ export default {
                 "The answer options (2 or more). Give each a stable `value`. Never add your own 'I don't know' option — it is added automatically.",
             },
             multiSelect: { type: "boolean", description: "Set to true when more than one option is correct and the user must select all of them." },
-            shuffle: { type: "boolean", description: "Default true: options are reordered before display. Set false only when order is meaningful." },
+            shuffle: { type: "boolean", description: "Default true: options are sorted alphabetically by label before display to avoid position bias. Set false only when order is meaningful." },
           },
           required: ["question", "options"],
           additionalProperties: false,
@@ -177,7 +177,7 @@ export default {
             }
             if (options.length < 2) return { content: "quiz_ask failed: at least two options are required." }
 
-            if (input.shuffle !== false) options = shuffleOptions(options)
+            if (input.shuffle !== false) options = displayOrder(options)
 
             // Form payload: question only — nothing answer-revealing.
             const displayOptions = options.map((o, i) => ({
