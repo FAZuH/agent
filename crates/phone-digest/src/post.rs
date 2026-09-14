@@ -1,5 +1,6 @@
 //! Discord digest poster. The agent supplies DATA only; ordering, truncation,
-//! mention neutralization and chunking live here.
+//! mention neutralization and chunking live here. `--ping` prepends a user
+//! mention to the first chunk (id from `notify.key` line 2).
 
 use std::env;
 use std::fs;
@@ -174,6 +175,22 @@ pub fn webhook_roots(credentials_dir: Option<&Path>, home: &Path) -> Vec<PathBuf
     roots
 }
 
+/// Discord user id to ping (`--ping`): line 2 of `notify.key` under the
+/// same roots as the webhook (the webhook itself may come from
+/// `phone-digest.key`). None when no `notify.key` carries an id.
+pub fn ping_user_id(credentials_dir: Option<&Path>, home: &Path) -> Option<String> {
+    for root in webhook_roots(credentials_dir, home) {
+        let Ok(content) = fs::read_to_string(root.join("notify.key")) else {
+            continue;
+        };
+        let id = content.lines().nth(1)?.trim();
+        if !id.is_empty() {
+            return Some(id.to_string());
+        }
+    }
+    None
+}
+
 fn webhook_url() -> Result<String> {
     let credentials = env::var_os("CREDENTIALS_DIRECTORY");
     for root in webhook_roots(credentials.as_deref().map(Path::new), &crate::home_dir()?) {
@@ -191,7 +208,7 @@ fn webhook_url() -> Result<String> {
     ))
 }
 
-pub fn post(payload: &str) -> Result<()> {
+pub fn post(payload: &str, ping: bool) -> Result<()> {
     let items = parse_items(payload)?;
     if items.is_empty() {
         println!("no items, nothing posted");
@@ -199,7 +216,13 @@ pub fn post(payload: &str) -> Result<()> {
     }
 
     let epoch = chrono::Utc::now().timestamp();
-    let chunks = render_chunks(&items, epoch);
+    let mut chunks = render_chunks(&items, epoch);
+    if ping {
+        let credentials = env::var_os("CREDENTIALS_DIRECTORY");
+        let id = ping_user_id(credentials.as_deref().map(Path::new), &crate::home_dir()?)
+            .ok_or_else(|| Error::msg("no Discord user id to ping (line 2 of notify.key)"))?;
+        chunks[0] = format!("<@{id}>\n{}", chunks[0]);
+    }
     let webhook = webhook_url()?;
     let agent: Agent = Agent::config_builder()
         .timeout_global(Some(POST_TIMEOUT))
@@ -225,6 +248,7 @@ fn send_chunk(agent: &Agent, webhook: &str, content: &str) -> Result<u16> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::Path;
     use std::path::PathBuf;
 
@@ -234,6 +258,7 @@ mod tests {
     use super::WEBHOOK_NAMES;
     use super::clean;
     use super::parse_items;
+    use super::ping_user_id;
     use super::render_chunks;
     use super::webhook_roots;
 
@@ -494,10 +519,10 @@ mod tests {
 
     #[test]
     fn webhook_roots_are_searched_in_python_order() {
-        let home = Path::new("/home/fazuh");
+        let home = Path::new("/home/tester");
         assert_eq!(
             webhook_roots(None, home),
-            vec![PathBuf::from("/home/fazuh/.secrets/discord")]
+            vec![PathBuf::from("/home/tester/.secrets/discord")]
         );
         assert_eq!(
             webhook_roots(
@@ -506,10 +531,46 @@ mod tests {
             ),
             vec![
                 PathBuf::from("/run/credentials/phone-digest.service/discord"),
-                PathBuf::from("/home/fazuh/.secrets/discord"),
+                PathBuf::from("/home/tester/.secrets/discord"),
             ]
         );
         // same names, same order
         assert_eq!(WEBHOOK_NAMES, ["phone-digest.key", "notify.key"]);
+    }
+
+    #[test]
+    fn ping_user_id_reads_line_2_of_notify_key() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let home = dir.path();
+        fs::create_dir_all(home.join(".secrets/discord"))?;
+        fs::write(
+            home.join(".secrets/discord/notify.key"),
+            "https://discord.com/api/webhooks/a\n123456789\ngarbage\n",
+        )?;
+        assert_eq!(
+            ping_user_id(None, home),
+            Some("123456789".to_string()),
+            "no credentials dir: home notify.key line 2"
+        );
+        assert_eq!(ping_user_id(None, Path::new("/nonexistent")), None);
+
+        // first root with a non-empty id wins
+        let creds = dir.path().join("creds");
+        fs::create_dir_all(creds.join("discord"))?;
+        fs::write(creds.join("discord/notify.key"), "url\n987654321\n")?;
+        assert_eq!(
+            ping_user_id(Some(&creds), home),
+            Some("987654321".to_string())
+        );
+
+        // an empty line-2 id falls through to the next root
+        let empty = dir.path().join("empty");
+        fs::create_dir_all(empty.join("discord"))?;
+        fs::write(empty.join("discord/notify.key"), "url\n   \n")?;
+        assert_eq!(
+            ping_user_id(Some(&empty), home),
+            Some("123456789".to_string())
+        );
+        Ok(())
     }
 }

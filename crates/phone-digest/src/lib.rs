@@ -65,6 +65,10 @@ pub struct DrainArgs {
 pub struct PostArgs {
     /// {"items": [{"app": str, "title": str, "gist": str, "tier": str}]}
     pub json: String,
+    /// ping the user (mention them in the first message) — pass when any
+    /// item is agent-originated
+    #[arg(long)]
+    pub ping: bool,
 }
 
 pub fn run() -> Result<()> {
@@ -75,7 +79,7 @@ pub fn run() -> Result<()> {
             let contents = drain::drain(&state_dir(args.state_dir)?)?;
             print_drained(&contents)
         }
-        Cmd::Post(args) => post::post(&args.json),
+        Cmd::Post(args) => post::post(&args.json, args.ping),
     }
 }
 
