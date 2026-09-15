@@ -1,3 +1,21 @@
+## [0.10.2](https://github.com/FAZuH/agent/compare/v0.10.1...v0.10.2) (2026-09-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **plugin:** remove the quiz tool pair
+* **skill:** teach quizzes are plain chat Q&A
+
+### Features
+
+* render mail-digest bullets as Discord markdown lists ([bb36f65](https://github.com/FAZuH/agent/commit/bb36f65b32fd35021b377dfce854aceec1f9476b))
+* **skill:** teach quizzes are plain chat Q&A ([6501996](https://github.com/FAZuH/agent/commit/650199612bb261cb2be2f83d3d3505388039e8e0))
+
+
+### Miscellaneous Chores
+
+* **plugin:** remove the quiz tool pair ([05a0b30](https://github.com/FAZuH/agent/commit/05a0b300a01b55bdcf04c0c4b0d6a6fdbd8c8da0))
+
 ## [0.10.1](https://github.com/FAZuH/agent/compare/v0.10.0...v0.10.1) (2026-09-15)
 
 
@@ -24,6 +42,7 @@
 
 * **ocv2:** drop the personal home path from the pluginhealth evidence ([d978ad0](https://github.com/FAZuH/agent/commit/d978ad00538ba921c2ef3bef458cb7fd244479c5))
 * **ocv2:** report idiom hits on their real lines, and self-test the scanner ([97bebd8](https://github.com/FAZuH/agent/commit/97bebd89dca608dd2a82af579e5c1aafc4a14ec0))
+* **plugin:** make quiz option order deterministic so mirrors agree ([c9baf32](https://github.com/FAZuH/agent/commit/c9baf32bb82ae34bdfdd406ec9257a32fa49e50b))
 * **plugin:** resolve mermaid and viz project paths from the session ([c29af1f](https://github.com/FAZuH/agent/commit/c29af1f7f2fe6390421717b054afe62c2fd221f1))
 * **plugin:** resolve playwright with import() so doctor can find an on-disk install ([c35a15d](https://github.com/FAZuH/agent/commit/c35a15d3a535277d588ccede3c8d2964a43a393b))
 * **plugin:** tell the reader where playwright can actually be installed ([ceb018e](https://github.com/FAZuH/agent/commit/ceb018ec81508d5af4e782dc2f7ff3d2ee33d350))
@@ -48,23 +67,4 @@
 * cargo workspace — octask subtree, phone-digest and mail-digest crates ([9576e9a](https://github.com/FAZuH/agent/commit/9576e9ae374ed0e92bb607a0d59d86f7a621e126))
 * cutover digest tooling onto the workspace binaries ([f72ac71](https://github.com/FAZuH/agent/commit/f72ac7157fe921ba1df3ec98676891777b47e25c))
 * port octask CLI to Rust ([a8a4190](https://github.com/FAZuH/agent/commit/a8a419071ce7960ad3e28bed0b4a5d169253909b))
-
-## [0.9.2](https://github.com/FAZuH/agent/compare/v0.9.1...v0.9.2) (2026-09-11)
-
-
-### Features
-
-* **agent:** add mail-digest daily email digest agent ([9e353d8](https://github.com/FAZuH/agent/commit/9e353d8548ea54bdaaba52c55dd4a734d2175e82))
-* **agent:** improve malware-check agent ([449441e](https://github.com/FAZuH/agent/commit/449441e7c7af56cd8ee9cc3d487f9002865e649d))
-* **script:** track bin scripts in scripts/ and install via sync ([b3ddc5b](https://github.com/FAZuH/agent/commit/b3ddc5be5fbd4426a2bdfcda962a51cea217faa6))
-* **skill:** add comments skill ([e3c5f25](https://github.com/FAZuH/agent/commit/e3c5f2576a48ece8600942830a3ef015126d607b))
-* **skill:** add octask credential support ([64a42d0](https://github.com/FAZuH/agent/commit/64a42d012e67a992e0ab2712d81298e4c6624306))
-* **skill:** add octask edit and show subcommands ([ec63f76](https://github.com/FAZuH/agent/commit/ec63f76f9ac986aabe70dce8311dab5d7e782d16))
-* **skill:** add octask export/import commands ([140bd9d](https://github.com/FAZuH/agent/commit/140bd9d9a7b7ab31eccb03b1d1580d5c47ca1b53))
-* **skill:** add plan-confirm skill ([0a0d8e6](https://github.com/FAZuH/agent/commit/0a0d8e6755448260ee4f02b45f3f35106e585ff3))
-
-
-### Bug Fixes
-
-* **agent:** malware-check single-command shell rule and bare dir allows ([824f5ca](https://github.com/FAZuH/agent/commit/824f5ca4e7a3fbe8fe2ca6890db7021586dea419))
 
