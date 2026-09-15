@@ -12,7 +12,7 @@
   ↳ Digest part 3 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
   ↳ Digest part 4 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
   ↳ Digest part 5 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest repeated (tail)
+  ↳ Digest repeated (taildddddddddddddddddddddddddddddddddddddddd)
 
 ## work (2)
 **🟡 Notable**

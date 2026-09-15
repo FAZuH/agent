@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { DEFAULT_OPENER, openArgs } from "./core.ts"
 
-const FILE = "/home/tester/Notes/Learn/link_Quiz question order mismatch.md"
+const FILE = "/home/tester/Notes/Learn/link_Teach question order mismatch.md"
 
 describe("openArgs", () => {
   test("default template → xdg-open obsidian URI with encoded path", () => {

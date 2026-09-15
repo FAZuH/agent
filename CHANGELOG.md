@@ -24,7 +24,6 @@
 
 * **ocv2:** drop the personal home path from the pluginhealth evidence ([d978ad0](https://github.com/FAZuH/agent/commit/d978ad00538ba921c2ef3bef458cb7fd244479c5))
 * **ocv2:** report idiom hits on their real lines, and self-test the scanner ([97bebd8](https://github.com/FAZuH/agent/commit/97bebd89dca608dd2a82af579e5c1aafc4a14ec0))
-* **plugin:** make quiz option order deterministic so mirrors agree ([c9baf32](https://github.com/FAZuH/agent/commit/c9baf32bb82ae34bdfdd406ec9257a32fa49e50b))
 * **plugin:** resolve mermaid and viz project paths from the session ([c29af1f](https://github.com/FAZuH/agent/commit/c29af1f7f2fe6390421717b054afe62c2fd221f1))
 * **plugin:** resolve playwright with import() so doctor can find an on-disk install ([c35a15d](https://github.com/FAZuH/agent/commit/c35a15d3a535277d588ccede3c8d2964a43a393b))
 * **plugin:** tell the reader where playwright can actually be installed ([ceb018e](https://github.com/FAZuH/agent/commit/ceb018ec81508d5af4e782dc2f7ff3d2ee33d350))

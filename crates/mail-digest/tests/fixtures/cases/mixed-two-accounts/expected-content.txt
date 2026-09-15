@@ -1,11 +1,12 @@
 # Mail digest — 4 mails across 2 accounts
 <t:1770000000:R>
 ## gmail
-• 🟡 Alice <a@x.com> — Your monthly invoice is here
-• 🟢 Bob <b@y.com> — sounds good
+- 🟡 Alice <a@x.com> — Your monthly invoice is here
+- 🟢 Bob <b@y.com> — sounds good
 ## work
-• 🔴 CI Bot — tests failing on main
-↳ 🔴 CI Bot — flaky test again
+- CI Bot
+  - 🔴 tests failing on main
+  - 🔴 flaky test again
 ## ⚠️ errors
-• imap: connection reset
-• spam-filter: 2 false positives
+- imap: connection reset
+- spam-filter: 2 false positives

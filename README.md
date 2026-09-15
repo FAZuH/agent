@@ -186,10 +186,12 @@ The learning system (ported from oc-learn) supplies the visual makers
 ## Plugins
 
 - `plugins/mermaid/` — `mermaid-compile` + `mermaid-doctor` tools (fazuh.mermaid)
-- `plugins/quiz/` — graded `quiz_ask` / `quiz_grade` pair (fazuh.quiz)
 - `plugins/md-link/` — live-mirror a session to a markdown file (fazuh.md-link; TUI: `ctrl+alt:m` / `/md-link`)
 - `plugins/viz/` — `write_*/edit_*/render_*` authoring loops + `/viz-dir` (fazuh.viz)
-- `plugins/tui/` — TUI discovery shims for md-link/viz (see its README: the CLI loads local TUI modules only from this scan dir)
+
+A plugin that adds TUI commands ships a file named `tui.ts` at its own
+directory root; the CLI resolves the TUI entry as `<plugin-dir>/tui` and loads
+nothing otherwise.
 
 ### Dependency Diagrams
 

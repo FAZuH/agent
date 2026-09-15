@@ -1,157 +1,156 @@
-# 📬 Mail digest 2026-09-12 — 150 mails across 1 accounts
-
-## gmail (150)
-**⚪ Routine**
-• Alice <a@example.com> — S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ S ()
-  ↳ Sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy)
-
-## Errors
-- ⚠️ imap: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+# Mail digest — 150 mails across 1 accounts
+<t:1770000000:R>
+## gmail
+- Alice <a@example.com>
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 
+  - 🟢 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+## ⚠️ errors
+- imap: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
