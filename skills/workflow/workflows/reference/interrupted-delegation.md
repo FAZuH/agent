@@ -13,8 +13,8 @@ the wreckage procedure only if the retry fails too.
 - Dispatch dies with `context deadline exceeded` or
   `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → transient provider hop; retry
   the dispatch once.
-- Any DNS-signed failure (`ENOTFOUND llm.internal.fazuh.com`) → the litellm
-  router lives behind tailscale; check tailscale is up before anything else.
+- Any DNS-signed failure (`ENOTFOUND <litellm-host>`) → the litellm router
+  lives behind tailscale; check tailscale is up before anything else.
 - NOT transient: litellm `BadRequest` deserialize on a large prompt (shrink
   the prompt), and a resumed session carrying images into a text-only model
   (use a vision model or a fresh session).
