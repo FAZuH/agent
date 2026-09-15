@@ -69,10 +69,10 @@ describe("removeBlock / upsertTailBlock", () => {
   })
 
   test("repositions to tail after a QA block appended mid-run", () => {
-    expect(block("qa-ask-1", "> [!question] Quiz")).toBe("written")
+    expect(block("qa-ask-1", "> [!question] Question")).toBe("written")
     expect(upsertTailBlock(file, { text: "> [!info] ⏳ Thinking…", markerKey: "thinking" }, null)).toBe("written")
     const c = readFileSync(file, "utf-8")
-    expect(c.indexOf("> [!question] Quiz")).toBeLessThan(c.indexOf("⏳ Thinking…"))
+    expect(c.indexOf("> [!question] Question")).toBeLessThan(c.indexOf("⏳ Thinking…"))
     expect(c.trimEnd().endsWith("> [!info] ⏳ Thinking…")).toBe(true)
   })
 
@@ -82,7 +82,7 @@ describe("removeBlock / upsertTailBlock", () => {
     const c = readFileSync(file, "utf-8")
     expect(c.includes("Thinking…")).toBe(false)
     expect(c.includes("first reply")).toBe(true)
-    expect(c.includes("> [!question] Quiz")).toBe(true)
+    expect(c.includes("> [!question] Question")).toBe(true)
   })
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }))

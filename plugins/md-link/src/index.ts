@@ -11,10 +11,9 @@
  * What gets mirrored (teaching-session parity with the pi md-log):
  *   - assistant replies   → poller (2.5 s) over `opencode2 api get …/message`
  *   - user prompts        → poller, as `> [!quote] YOU` callouts
- *   - quiz_ask / question → tool hooks: question callout written at
+ *   - question tool       → tool hooks: question callout written at
  *                           execute.before (pre-answer, sanitized input),
- *                           feedback callout at execute.after (quiz_grade /
- *                           question results)
+ *                           answer callout at execute.after
  * We deliberately do NOT use plugin event delivery — as of the 2026-08-25
  * beta, external server plugins receive no session events through any
  * mechanism (hooks.event, ctx.event.subscribe); see ocv2-findings/findings.md.
@@ -163,19 +162,6 @@ function appendQa(file: string, markerKey: string, text: string, keep: number | 
   if (res === "failed") console.error("[md-link] qa append failed:", markerKey)
 }
 
-/** Display labels for a quiz_ask mirror callout, in the exact order the quiz
- * form shows them: same empty-label filter as quiz `normalizeOptions`, same
- * plain-codepoint sort as quiz `displayOrder` (keep in sync with
- * plugins/quiz/src/index.ts). `shuffle === false` preserves input order.
- * Caller appends the trailing "I don't know" option. */
-export function quizDisplayLabels(raw: any, shuffle?: boolean): string[] {
-  const labels = (Array.isArray(raw) ? raw : [])
-    .map((o) => String(o?.label ?? "").trim())
-    .filter((l) => l.length > 0)
-  if (shuffle === false) return labels
-  return labels.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-}
-
 function questionCallout(label: string, question: string, details: string | undefined, options: any[]): string {
   const body: string[] = []
   for (const line of String(question || "").split("\n")) body.push(line)
@@ -198,27 +184,6 @@ function resultText(result: any): string {
     return result.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join("\n")
   }
   return String(result?.output ?? "")
-}
-
-/** Feedback callout from quiz_grade's result text (we control that format). */
-function gradeCallout(content: string): string {
-  const lines = content
-    .split("\n")
-    .filter((l) => l.trim().length > 0 && !/^Relay the verdict/i.test(l.trim()))
-  const first = lines[0] ?? ""
-  if (/answered correctly/i.test(first)) {
-    return callout("success", "Quiz — correct ✓", lines.slice(1))
-  }
-  if (/answered incorrectly/i.test(first)) {
-    return callout("failure", "Quiz — incorrect ✗", lines.slice(1))
-  }
-  if (/I don't know/i.test(content)) {
-    return callout("question", "Quiz — I don't know", lines.slice(1))
-  }
-  if (/dismissed|not answered in time/i.test(content)) {
-    return callout("warning", "Quiz — dismissed", ["(no answer given)"])
-  }
-  return callout("example", "Quiz", lines)
 }
 
 export const mdLinkPlugin = {
@@ -261,20 +226,14 @@ export const mdLinkPlugin = {
 
     // ── Q&A capture ─────────────────────────────────────────────────────────
     // execute.before: write the question callout BEFORE the learner answers
-    // (quiz_ask/question inputs are sanitized — no answer material).
+    // (question inputs are sanitized — no answer material).
     if (typeof ctx?.tool?.hook === "function") {
       await ctx.tool.hook("execute.before", async (event: any) => {
       try {
         const file = mirrorFor(event.sessionID)
         if (!file) return
         const { keep } = loadState()
-        if (event.tool === "quiz_ask") {
-          const input = event.input ?? {}
-          const labels = quizDisplayLabels(input.options, input.shuffle)
-          const mirrorOpts = [...labels.map((l) => ({ label: l })), { label: "I don't know" }]
-          const block = questionCallout("Quiz", input.question, input.details, mirrorOpts)
-          appendQa(file, `qa-ask-${event.id}`, block, keep)
-        } else if (event.tool === "question") {
+        if (event.tool === "question") {
           const q = event.input?.questions?.[0] ?? {}
           const block = questionCallout("Question", q.question ?? q.header ?? "", undefined, q.options)
           appendQa(file, `qa-ask-${event.id}`, block, keep)
@@ -288,10 +247,7 @@ export const mdLinkPlugin = {
         const file = mirrorFor(event.sessionID)
         if (!file) return
         const { keep } = loadState()
-        if (event.tool === "quiz_grade") {
-          const content = resultText(event.result)
-          if (content) appendQa(file, `qa-grade-${event.id}`, gradeCallout(content), keep)
-        } else if (event.tool === "question" && event.status === "completed") {
+        if (event.tool === "question" && event.status === "completed") {
           const content = resultText(event.result)
           if (content) appendQa(file, `qa-grade-${event.id}`, callout("example", "Answer", content.split("\n")), keep)
         }
