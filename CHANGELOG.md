@@ -1,3 +1,11 @@
+## [0.10.1](https://github.com/FAZuH/agent/compare/v0.10.0...v0.10.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* keep the ingest bind host out of the published source ([a8d751f](https://github.com/FAZuH/agent/commit/a8d751f4ba2e9a451edadb3cf43037d0c5b22824))
+* **skill:** replace the internal litellm hostname with a placeholder ([1aaa90e](https://github.com/FAZuH/agent/commit/1aaa90ee3a3b929e8611bead50ce1ece7671a852))
+
 ## [0.10.0](https://github.com/FAZuH/agent/compare/v0.9.4...v0.10.0) (2026-09-14)
 
 
@@ -60,12 +68,4 @@
 ### Bug Fixes
 
 * **agent:** malware-check single-command shell rule and bare dir allows ([824f5ca](https://github.com/FAZuH/agent/commit/824f5ca4e7a3fbe8fe2ca6890db7021586dea419))
-
-## [0.9.1](https://github.com/FAZuH/agent/compare/v0.9.0...v0.9.1) (2026-09-06)
-
-
-### Features
-
-* **ocv2:** distinct exit code when oc-wait times out with session running ([1f7488c](https://github.com/FAZuH/agent/commit/1f7488c6c565ae97e8dcf711050750885f941dc2))
-* **skill:** propagate oc-wait running-timeout in oc-delegate ([9019dc7](https://github.com/FAZuH/agent/commit/9019dc7ad8cd38362d451acf0dd9eafce3e11458))
 
