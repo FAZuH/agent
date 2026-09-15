@@ -170,19 +170,31 @@ fn group(data: &Value) -> Grouped {
     Grouped { accounts, errors }
 }
 
-/// New-shape bullets: `• <emoji> <sender> — <gist>`, `↳` when the previous
-/// bullet had the same sender.
+/// Digest bullets, as Discord markdown. A run of consecutive mails from one
+/// sender is a `- <sender>` parent with indented `  - <emoji> <gist>` children;
+/// a sender with one mail in the run stays a flat `- <emoji> <sender> — <gist>`.
 fn digest_block(mail: &[Mail]) -> Vec<String> {
     let mut lines = Vec::new();
-    let mut last_sender: Option<&str> = None;
-    for m in mail {
-        let emoji = TIER_EMOJI[m.tier];
-        if last_sender == Some(m.sender.as_str()) {
-            lines.push(format!("↳ {emoji} {} — {}", m.sender, m.gist));
+    let mut rest = mail;
+    while !rest.is_empty() {
+        let run_end = rest[1..]
+            .iter()
+            .position(|m| m.sender != rest[0].sender)
+            .map_or(rest.len(), |p| p + 1);
+        let (run, tail) = rest.split_at(run_end);
+        if run.len() == 1 {
+            lines.push(format!(
+                "- {} {} — {}",
+                TIER_EMOJI[run[0].tier], run[0].sender, run[0].gist
+            ));
         } else {
-            lines.push(format!("• {emoji} {} — {}", m.sender, m.gist));
-            last_sender = Some(&m.sender);
+            lines.push(format!("- {}", run[0].sender));
+            lines.extend(
+                run.iter()
+                    .map(|m| format!("  - {} {}", TIER_EMOJI[m.tier], m.gist)),
+            );
         }
+        rest = tail;
     }
     lines
 }
@@ -219,7 +231,7 @@ fn error_lines(errors: &[(String, String)]) -> Vec<String> {
     lines.extend(
         errors
             .iter()
-            .map(|(alias, message)| format!("• {alias}: {message}")),
+            .map(|(alias, message)| format!("- {alias}: {message}")),
     );
     lines
 }

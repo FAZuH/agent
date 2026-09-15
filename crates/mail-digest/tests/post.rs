@@ -249,7 +249,7 @@ fn ping_prefixes_the_mention_to_the_posted_content() {
     let payload: Value = serde_json::from_slice(&request.body).unwrap();
     assert_eq!(
         payload["content"].as_str().unwrap(),
-        "<@424242>\n# Mail digest — 1 mails across 1 accounts\n<t:1770000000:R>\n## gmail\n• 🔴 S — G"
+        "<@424242>\n# Mail digest — 1 mails across 1 accounts\n<t:1770000000:R>\n## gmail\n- 🔴 S — G"
     );
 
     // without the flag, no mention

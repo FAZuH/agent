@@ -1,1 +1,1 @@
-posted file 1800 chars, http 204
+posted inline 1405 chars, http 204
