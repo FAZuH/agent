@@ -10,5 +10,8 @@ node_modules/
 # agent friction log (machine-local, never tracked)
 .papercuts.jsonl
 
+# python bytecode caches
+__pycache__/
+
 # Rust build output (Cargo.lock stays tracked — these are binaries)
 /target
