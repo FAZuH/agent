@@ -32,9 +32,12 @@ loaded directly.
 
 State lives under the XDG data home (never in the config dir):
 
-- `$XDG_DATA_HOME/skill-doctor/graph.mmd` (default `~/.local/share/skill-doctor/graph.mmd`) — full regeneration; mermaid
-  flowchart LR, one subgraph per root plus an agent-defs subgraph. The header
-  comments define the legend; keep them true if you ever touch generation.
+- `$XDG_DATA_HOME/skill-doctor/graph.json` (default `~/.local/share/skill-doctor/graph.json`) —
+  machine-readable graph, schema 1: nodes keyed by logical id (`skill:x`,
+  `agent:x`, `missing:x`, `AGENTS.md`) with roots/active/drift/collision/degree/path,
+  edges typed `loads`/`routes`/`documents`/`missing`, findings inlined. The
+  regenerated `graph.html` beside it is the interactive viewer; its legend lives
+  in the HTML template — keep the legend true if you ever touch generation.
 - stdout — JSONL: first a run-summary line
   `{skills,agents,edges,broken,collisions,drift}`, then one line per finding
   `{ts,check,severity,item,detail}` with checks `broken-ref` (high),
@@ -81,11 +84,18 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
      the loser copy only in owned roots; never touch install targets.
    - **Drift repo-vs-installed** — give the user the reinstall command below.
      NEVER hand-sync files between repo and install targets.
-4. Regenerate `graph.mmd`, then append disposition records to
+4. Regenerate `graph.json`/`graph.html`, then append disposition records to
    `findings.jsonl`: keep the original finding line untouched and add a new
    line merging `{"disposition":"proposed-fix|reported|documented|upstream|user-action","note":"..."}`
    into a copy of it.
-5. Optional: render `graph.mmd` via the `mermaid-skill` skill (`~/.agents/skills/mermaid-skill`, source `Agents365-ai/365-skills`).
+5. Optional: view or screenshot the graph with `scripts/skill-graph` (repo
+   `scripts/`, installed flat to `~/.local/bin` via `sync.sh push -g`). Run it
+   bare for the interactive page (auto-opens; `--no-open` to skip); add
+   `--png out.png` for a headless capture, optionally with
+   `--focus <id> --depth 1 --layout dagre`. Layout defaults: cose for the
+   overview, dagre for focus crops. For high-degree hubs (degree ≳25) a
+   landscape canvas crushes the dagre column — pass a portrait canvas, e.g.
+   `--focus workflows --layout dagre --width 800 --height 2800`.
 
 ## Common commands
 

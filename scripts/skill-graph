@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+"""Render the skill-doctor relation graph as an interactive cytoscape page.
+
+Reads graph.json (written by skill-doctor's scripts/build_graph.py), writes a
+self-contained graph.html with the data inlined, and opens it. --png captures
+the same page through headless chromium, optionally cropped to one node's ego
+network, so the agent looks at the picture the human looks at.
+
+Layout positions persist in the page's localStorage: a force layout randomizes
+by default, and the graph regenerates often.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import webbrowser
+from pathlib import Path
+
+SUPPORTED_SCHEMA = 1
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+DEFAULT_JSON = DATA_HOME / "skill-doctor" / "graph.json"
+CHROMIUM = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
+
+CYTOSCAPE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape@3.34.3/dist/cytoscape.min.js"
+DAGRE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape-dagre@4.0.1/dist/cytoscape-dagre.min.js"
+
+PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skill graph</title>
+<script src="@@CYTO@@"></script>
+<script src="@@DAGRE@@"></script>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.45 system-ui, sans-serif; display: flex; height: 100vh; background: #fff; }
+#panel { width: 268px; flex: 0 0 268px; overflow-y: auto; padding: 10px 12px; border-right: 1px solid #ddd; background: #fbfbfb; }
+#cy { flex: 1 1 auto; min-width: 0; }
+h1 { font-size: 14px; margin: 0 0 6px; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #666; margin: 14px 0 4px; }
+label { display: block; margin: 2px 0; }
+input[type=search], select { width: 100%; font: inherit; padding: 3px 4px; }
+button { font: inherit; padding: 3px 7px; margin: 2px 3px 0 0; cursor: pointer; }
+ul { list-style: none; margin: 0; padding: 0; }
+li { padding: 1px 0; }
+li a { color: #0b5cad; text-decoration: none; cursor: pointer; }
+li a:hover { text-decoration: underline; }
+.count { color: #888; }
+.swatch { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; border: 1px solid #999; vertical-align: baseline; }
+#detail { font-size: 12px; }
+#detail p { margin: 2px 0; }
+#detail .path { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; color: #444; }
+.deg { color: #999; float: right; }
+body[data-static="1"] #panel { display: none; }
+</style>
+</head>
+<body data-static="@@STATIC@@">
+<div id="panel">
+  <h1>Skill graph</h1>
+  <div id="stats" class="count"></div>
+  <input type="search" id="q" placeholder="search skill / agent" autocomplete="off">
+  <div>
+    <button id="btn-fit">Fit</button>
+    <button id="btn-clear">Show all</button>
+    <button id="btn-reset">Reset layout</button>
+  </div>
+
+  <h2>Layout</h2>
+  <select id="layout">
+    <option value="cose">Force (cose)</option>
+    <option value="dagre">Layered (dagre, LR)</option>
+  </select>
+  <label>Focus depth
+    <select id="depth"><option>1</option><option selected>2</option><option>3</option></select>
+  </label>
+
+  <h2>Show edges</h2>
+  <div id="kinds"></div>
+  <label><input type="checkbox" id="orphans"> Show isolated (<span id="norphans">0</span>)</label>
+
+  <h2>Legend</h2>
+  <div id="legend"></div>
+
+  <h2>Most referenced</h2>
+  <ul id="hubs"></ul>
+  <h2>Findings</h2>
+  <ul id="findings"></ul>
+  <h2 id="dtitle">Selected</h2>
+  <div id="detail"><p class="count">Click a node.</p></div>
+</div>
+<div id="cy"></div>
+
+<script id="graph" type="application/json">@@DATA@@</script>
+<script>
+"use strict";
+const G = JSON.parse(document.getElementById("graph").textContent);
+cytoscape.use(window.cytoscapeDagre);
+
+const ROOT_FILL = { config: ["#bfe3c0", "#2f7d32", "~/.config/opencode/skills"],
+                    agents: ["#f6e0a8", "#a97b00", "~/.agents/skills"] };
+const SOURCE_FILL = ["#f2f2f2", "#8a8a8a", "repo source only (never loaded)"];
+const KINDS = { loads: ["solid grey", "A's body @-mentions skill B"],
+                routes: ["solid blue", "A delegates to agent B"],
+                documents: ["dashed purple", "AGENTS.md names B"],
+                missing: ["dotted red", "an @-mention that resolves to nothing"] };
+
+function rootClass(n) {
+  if (n.kind !== "skill") return "";
+  return n.active ? "root-" + n.active : "root-source";
+}
+function nodeClasses(n) {
+  const c = ["kind-" + n.kind, rootClass(n)];
+  if (n.drift) c.push("flag-drift");
+  if (n.collision) c.push("flag-collision");
+  return c.filter(Boolean).join(" ");
+}
+
+const cy = cytoscape({
+  container: document.getElementById("cy"),
+  elements: [
+    ...G.nodes.map(n => ({ group: "nodes", data: { id: n.id, label: n.label, path: n.path,
+        degree: n.degree, kind: n.kind, roots: n.roots.join(" ") },
+        classes: nodeClasses(n), position: n.position || undefined })),
+    ...G.edges.map((e, i) => ({ group: "edges", data: { id: "e" + i, source: e.from, target: e.to },
+        classes: "k-" + e.kind }))
+  ],
+  style: [
+    { selector: "node", style: {
+        label: "data(label)", "font-size": 9, "text-wrap": "wrap", "text-max-width": 96,
+        color: "#222", "text-valign": "bottom", "text-halign": "center", "text-margin-y": 3,
+        width: "mapData(data(degree), 0, 45, 20, 50)", height: "mapData(data(degree), 0, 45, 20, 50)",
+        "border-width": 2, "border-color": "#fff", "background-opacity": 1 } },
+    { selector: ".root-config", style: { "background-color": ROOT_FILL.config[0], "border-color": ROOT_FILL.config[1] } },
+    { selector: ".root-agents", style: { "background-color": ROOT_FILL.agents[0], "border-color": ROOT_FILL.agents[1] } },
+    { selector: ".root-source", style: { "background-color": SOURCE_FILL[0], "border-color": "#aaa", "border-style": "dashed" } },
+    { selector: ".kind-agent", style: { shape: "hexagon", "background-color": "#cfe0f5", "border-color": "#4a6fa5" } },
+    { selector: ".kind-doc", style: { shape: "round-rectangle", "background-color": "#e6def6", "border-color": "#7b5ea7" } },
+    { selector: ".kind-missing", style: { shape: "triangle", "background-color": "#fff", "border-color": "#cc3333",
+        "border-width": 3, "border-style": "dashed", color: "#cc3333", "font-weight": 700 } },
+    { selector: ".flag-drift, .flag-collision", style: { "border-color": "#d13438", "border-width": 4, "border-style": "solid" } },
+    { selector: "edge", style: { width: 1.4, "curve-style": "bezier", "target-arrow-shape": "triangle",
+        "line-color": "#bbb", "target-arrow-color": "#bbb", "line-opacity": 0.85 } },
+    { selector: ".k-loads", style: { "line-color": "#8a8a8a", "target-arrow-color": "#8a8a8a" } },
+    { selector: ".k-routes", style: { "line-color": "#4a6fa5", "target-arrow-color": "#4a6fa5", width: 1.8 } },
+    { selector: ".k-documents", style: { "line-style": "dashed", "line-color": "#7b5ea7", "target-arrow-color": "#7b5ea7" } },
+    { selector: ".k-missing", style: { "line-style": "dotted", "line-color": "#cc3333", "target-arrow-color": "#cc3333", width: 2 } },
+    { selector: ".hidden", style: { display: "none" } },
+    { selector: ".faded", style: { opacity: 0.06, "text-opacity": 0 } },
+    { selector: ":selected", style: { "border-color": "#0b5cad", "border-width": 4,
+        "overlay-color": "#0b5cad", "overlay-opacity": 0.13 } }
+  ],
+  wheelSensitivity: 0.2
+});
+
+// ── layout ───────────────────────────────────────────────────────────────────
+const POS_KEY = "skill-graph:positions:" + G.schema;
+function storedPositions() {
+  try { return JSON.parse(localStorage.getItem(POS_KEY) || "null"); } catch (e) { return null; }
+}
+function savePositions() {
+  const p = {};
+  cy.nodes().forEach(n => { p[n.id()] = n.position(); });
+  try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* private mode */ }
+}
+// `eles` is the documented core-layout option for laying out a subset: hidden
+// elements (orphans, filtered edge kinds, an ego crop's background) are excluded.
+const LAYOUTS = {
+  cose: { name: "cose", animate: false, randomize: false, componentSpacing: 220,
+          nodeRepulsion: 450000, idealEdgeLength: 95, edgeElasticity: 0.6,
+          gravity: 0.15, nodeOverlap: 25, padding: 60 },
+  dagre: { name: "dagre", rankDir: "LR", nodeSep: 34, edgeSep: 18, rankSep: 170,
+           ranker: "tight-tree", animate: false, padding: 60 }
+};
+function runLayout(name, then, force) {
+  const stored = !force && name === "cose" ? storedPositions() : null;
+  const visible = cy.elements().not(".hidden");
+  const known = stored ? visible.nodes().filter(n => stored[n.id()]).length : 0;
+  if (stored && known >= visible.nodes().length * 0.9) {
+    visible.nodes().forEach(n => { if (stored[n.id()]) n.position(stored[n.id()]); });
+    cy.fit(undefined, 40);
+    if (then) then();
+    return;
+  }
+  const opts = { ...LAYOUTS[name], eles: visible };
+  // Reset must produce a fresh layout, not a refinement of the state it resets.
+  if (force && name === "cose") opts.randomize = true;
+  const layout = cy.layout(opts);
+  layout.one("layoutstop", () => { savePositions(); cy.fit(undefined, 40); if (then) then(); });
+  layout.run();
+}
+cy.on("dragfree", "node", savePositions);
+
+// ── filters ─────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const showIsolated = document.getElementById("orphans").checked;
+  const kindHidden = e => !checked[KIND_LIST.find(k => e.hasClass("k-" + k))];
+  cy.edges().forEach(e => e.toggleClass("hidden", kindHidden(e)));
+  // "Isolated" is dynamic: a node reached only by a hidden edge class (AGENTS.md
+  // fan-out is off by default) is as disconnected here as a never-referenced one.
+  let isolated = 0;
+  cy.nodes().forEach(n => {
+    const off = !showIsolated && n.connectedEdges().not(".hidden").length === 0;
+    n.toggleClass("hidden", off);
+    if (off) isolated++;
+  });
+  // Both conditions, not either: the final pass must not resurrect edges whose
+  // kind checkbox is off just because both endpoints stayed visible.
+  cy.edges().forEach(e => e.toggleClass("hidden",
+      kindHidden(e) || e.source().hasClass("hidden") || e.target().hasClass("hidden")));
+  document.getElementById("norphans").textContent = isolated;
+}
+const KIND_LIST = ["loads", "routes", "documents", "missing"];
+const checked = {};
+const kindsBox = document.getElementById("kinds");
+for (const kind of Object.keys(KINDS)) {
+  checked[kind] = kind !== "documents";
+  const row = document.createElement("label");
+  row.innerHTML = '<input type="checkbox" checked data-k="' + kind + '"> ' + kind +
+                  ' <span class="count">' + G.edges.filter(e => e.kind === kind).length + "</span>";
+  kindsBox.appendChild(row);
+}
+kindsBox.addEventListener("change", ev => {
+  checked[ev.target.dataset.k] = ev.target.checked;
+  applyFilters();
+});
+document.getElementById("orphans").addEventListener("change", applyFilters);
+
+// ── focus ───────────────────────────────────────────────────────────────────
+let focusNode = null;
+function neighborhood(node, depth) {
+  let nodes = cy.collection().merge(node);
+  for (let i = 0; i < depth; i++) nodes = nodes.union(nodes.nodes().closedNeighborhood());
+  return nodes;
+}
+function clearFocus() {
+  focusNode = null;
+  cy.elements().removeClass("faded");
+  document.getElementById("detail").innerHTML = '<p class="count">Click a node.</p>';
+}
+function focus(node) {
+  const depth = Number(document.getElementById("depth").value);
+  focusNode = node;
+  const keep = neighborhood(node, depth);
+  cy.elements().removeClass("faded");
+  cy.elements().difference(keep).addClass("faded");
+  showDetail(node);
+  cy.animate({ fit: { eles: keep.nodes().not(".hidden"), padding: 60 }, duration: 220 });
+}
+function findingsFor(node) {
+  const label = node.data("label");
+  return G.findings.filter(f => f.item === label || f.item.startsWith(label + " ->"));
+}
+function showDetail(node) {
+  const d = node.data(), box = document.getElementById("detail");
+  const ins = node.incomers("node").filter(n => !n.hasClass("hidden"));
+  const outs = node.outgoers("node").filter(n => !n.hasClass("hidden"));
+  const list = (eles) => eles.map(n => '<li><a data-id="' + n.id() + '">' + n.data("label") +
+      '</a> <span class="count">' + n.data("kind") + "</span></li>").join("");
+  const fl = findingsFor(node).map(f => "<p>" + f.check + " (" + f.severity + "): " + f.detail + "</p>").join("");
+  box.innerHTML = "<p><b>" + d.label + "</b> <span class='count'>" + d.kind + "</span></p>" +
+    (d.roots ? "<p>roots: " + d.roots + "</p>" : "") +
+    "<p>degree: " + d.degree + "</p>" +
+    (d.path ? '<p class="path">' + d.path + "</p>" : "") +
+    fl +
+    "<h2>In (referenced by " + ins.length + ")</h2><ul>" + (list(ins) || "<li class='count'>none</li>") + "</ul>" +
+    "<h2>Out (" + outs.length + ")</h2><ul>" + (list(outs) || "<li class='count'>none</li>") + "</ul>";
+}
+document.getElementById("detail").addEventListener("click", ev => {
+  const id = ev.target.dataset && ev.target.dataset.id;
+  if (id) { const n = cy.getElementById(id); if (n.length) { n.select(); focus(n); } }
+});
+cy.on("tap", "node", ev => { focus(ev.target); });
+cy.on("tap", ev => { if (ev.target === cy) clearFocus(); });
+document.getElementById("btn-clear").addEventListener("click", clearFocus);
+document.getElementById("btn-fit").addEventListener("click", () => cy.fit(undefined, 40));
+document.getElementById("btn-reset").addEventListener("click", () => {
+  localStorage.removeItem(POS_KEY);
+  runLayout(document.getElementById("layout").value, null, true);
+});
+document.getElementById("layout").addEventListener("change", ev => runLayout(ev.target.value));
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") clearFocus(); });
+
+const q = document.getElementById("q");
+q.addEventListener("keydown", ev => {
+  if (ev.key !== "Enter") return;
+  const want = q.value.trim().toLowerCase();
+  const hit = cy.nodes().filter(n => !n.hasClass("hidden") &&
+      (n.data("label") === want || n.data("label").includes(want)))[0];
+  if (hit) { hit.select(); focus(hit); }
+});
+
+// ── panel lists ─────────────────────────────────────────────────────────────
+document.getElementById("stats").textContent =
+  G.nodes.length + " nodes · " + G.edges.length + " edges · built " + G.generated;
+document.getElementById("hubs").innerHTML = G.nodes
+  .filter(n => n.degree > 0 && n.kind === "skill")
+  .sort((a, b) => b.degree - a.degree).slice(0, 15)
+  .map(n => '<li><a data-id="' + n.id + '">' + n.label +
+            '</a><span class="deg">' + n.degree + "</span></li>").join("");
+document.getElementById("findings").innerHTML = G.findings.length
+  ? G.findings.map(f => "<li>" + f.check + " <b>" + f.item + "</b></li>").join("")
+  : '<li class="count">none</li>';
+document.getElementById("legend").innerHTML =
+  Object.values(ROOT_FILL).map(v => '<div><span class="swatch" style="background:' + v[0] + '"></span>' + v[2] + "</div>").join("") +
+  '<div><span class="swatch" style="background:' + SOURCE_FILL[0] + ';border-style:dashed"></span>' + SOURCE_FILL[2] + "</div>" +
+  '<div><span class="swatch" style="background:#cfe0f5"></span>agent definition</div>' +
+  '<div><span class="swatch" style="background:#fff;border-color:#d13438;border-width:2px"></span>drift or collision</div>' +
+  '<div><span class="swatch" style="background:#fff;border-color:#cc3333;border-style:dashed"></span>unresolved reference</div>' +
+  Object.entries(KINDS).map(kv => '<div class="count">' + kv[0] + " = " + kv[1][1] + "</div>").join("");
+document.getElementById("panel").addEventListener("click", ev => {
+  const id = ev.target.dataset && ev.target.dataset.id;
+  if (!id) return;
+  const n = cy.getElementById(id);
+  if (n.length) { n.select(); focus(n); }
+});
+
+// ── boot (hash drives the headless PNG capture) ─────────────────────────────
+const params = new URLSearchParams(location.hash.slice(1));
+const STATIC = document.body.dataset.static === "1";
+const wanted = params.get("focus");
+
+if (STATIC && wanted) {
+  // A capture of one node's ego network: drop everything else and lay the
+  // subset out fresh, otherwise it keeps positions packed for the whole graph.
+  const hit = cy.nodes().filter(n => n.data("label") === wanted)[0];
+  if (!hit) {
+    document.getElementById("stats").textContent = "no node labelled " + wanted;
+  } else {
+    const keep = neighborhood(hit, Number(params.get("depth") || 1));
+    cy.elements().difference(keep).addClass("hidden");
+    if (keep.nodes().length <= 70) {
+      // Fewer nodes on screen: the overview's 9px labels are needlessly small.
+      cy.style().selector("node").style({ "font-size": 13, "text-max-width": 130 }).update();
+    }
+    // dagre is the crop default: deterministic, and it puts referrers on one
+    // side of the node and references on the other — the blast-radius answer.
+    // The spread tuning cose needs at overview density is pointless here.
+    runLayout(params.get("layout") || "dagre", null, true);
+  }
+} else {
+  applyFilters();
+  runLayout(params.get("layout") || "cose", () => { if (STATIC) cy.fit(undefined, 60); });
+}
+window.__ready = true;
+</script>
+</body>
+</html>
+"""
+
+
+def load_graph(path: Path) -> dict:
+    if not path.is_file():
+        sys.exit(f"{path} not found — run skill-doctor's scripts/build_graph.py first")
+    try:
+        graph = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        sys.exit(f"{path} is not valid JSON ({exc}) — rebuild it with build_graph.py")
+    schema = graph.get("schema")
+    if schema != SUPPORTED_SCHEMA:
+        sys.exit(f"{path} declares schema {schema!r}, this viewer speaks {SUPPORTED_SCHEMA} — "
+                 "update skill-doctor (sync.sh push -g) and rebuild the graph")
+    if not graph.get("nodes"):
+        sys.exit(f"{path} has no nodes — rebuild it with build_graph.py")
+    graph.setdefault("findings", [])
+    return graph
+
+
+def render(graph: dict, static: bool) -> str:
+    payload = json.dumps(graph, sort_keys=True).replace("</", "<\\/")
+    return (
+        PAGE.replace("@@DATA@@", payload)
+        .replace("@@STATIC@@", "1" if static else "0")
+        .replace("@@CYTO@@", CYTOSCAPE_CDN)
+        .replace("@@DAGRE@@", DAGRE_CDN)
+    )
+
+
+def screenshot(html: Path, out: Path, width: int, height: int, fragment: str = "") -> None:
+    binary = next((b for b in CHROMIUM if shutil.which(b)), None)
+    if binary is None:
+        sys.exit("no chromium found — install it or pass the graph.html to a browser yourself")
+    cmd = [
+        binary, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        f"--window-size={width},{height}",
+        # Fast-forwards timers/rAF so the force layout finishes before capture.
+        "--virtual-time-budget=20000",
+        f"--screenshot={out}",
+        html.resolve().as_uri() + fragment,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if not out.is_file():
+        sys.exit(f"chromium produced no image (exit {result.returncode}):\n{result.stderr.strip()}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--json", type=Path, default=DEFAULT_JSON, help="graph.json to read")
+    ap.add_argument("--out", type=Path, help="html to write (default: beside graph.json)")
+    ap.add_argument("--png", type=Path, help="also capture a PNG at this path")
+    ap.add_argument("--focus", help="with --png: centre on this skill/agent id")
+    ap.add_argument("--depth", type=int, default=1, help="with --focus: ego depth (default 1)")
+    ap.add_argument("--layout", choices=("cose", "dagre"), help="with --png: which layout")
+    ap.add_argument("--width", type=int, default=1600)
+    ap.add_argument("--height", type=int, default=1000)
+    ap.add_argument("--no-open", action="store_true", help="write the html, do not open it")
+    args = ap.parse_args()
+
+    graph = load_graph(args.json)
+    interactive = args.out or args.json.with_name("graph.html")
+    interactive.write_text(render(graph, static=False), encoding="utf-8")
+    print(interactive)
+
+    if args.png:
+        png = args.png
+        png.parent.mkdir(parents=True, exist_ok=True)
+        static_html = png.with_suffix(".html")
+        # Focus crops default to dagre (layered = the blast-radius answer);
+        # the overview defaults to cose. See the boot comment in the template.
+        layout = args.layout or ("dagre" if args.focus else "cose")
+        fragment = f"layout={layout}"
+        if args.focus:
+            known = {n["label"] for n in graph["nodes"]}
+            if args.focus not in known:
+                sys.exit(f"no node labelled {args.focus!r} in the graph")
+            fragment += f"&focus={args.focus}&depth={args.depth}"
+        static_html.write_text(render(graph, static=True), encoding="utf-8")
+        screenshot(static_html, png, args.width, args.height, "#" + fragment)
+        static_html.unlink()
+        print(png)
+    elif not args.no_open:
+        webbrowser.open(interactive.resolve().as_uri())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

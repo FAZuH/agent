@@ -6,8 +6,12 @@ body: @-mentions (canonical skill/agent invocation form) and backticked
 agent-id spans (subagent delegation). @-mentions must resolve to a skill id or
 agent definition — anything else is a broken-ref finding (no suppression
 list). Also checks collisions across active roots and repo-vs-installed
-drift, regenerates graph.mmd, and prints JSONL findings to stdout (first line
+drift, regenerates graph.json, and prints JSONL findings to stdout (first line
 = run summary).
+
+Nodes are keyed by logical id, not by root copy: one skill present in three
+roots is one node carrying a `roots` list. `scripts/skill-graph` renders this
+file; read it instead of parsing a diagram.
 """
 
 from __future__ import annotations
@@ -22,23 +26,25 @@ from pathlib import Path
 
 HOME = Path.home()
 
-# Precedence later-wins for source-of-truth resolution; opencode itself only
-# loads ACTIVE_ROOTS (built-ins < .claude < .agents < config < project
-# .opencode < explicit skills-config per opencode v2 docs), so collisions are
-# judged on agents+config only.
+# Scan roots. A skill id present in several roots is ONE logical node with a
+# `roots` list — the per-root copies are attributes, not separate nodes.
 ROOTS = [
     ("agents", HOME / ".agents" / "skills"),
     ("config", HOME / ".config" / "opencode" / "skills"),
     ("repo", HOME / "Projects" / "agent" / "skills"),
 ]
+# Collisions are judged on the roots opencode actually loads (built-ins <
+# .claude < .agents < config < project .opencode < skills-config per the v2
+# docs); the repo root is source-only and never loaded.
 ACTIVE_ROOTS = ("agents", "config")
-EDGE_TARGET_ORDER = ("config", "agents", "repo")
+ACTIVE_PRECEDENCE = ("config", "agents")
 
 AGENT_DEFS_DIR = HOME / ".config" / "opencode" / "agents"
 AGENTS_MD = HOME / ".config" / "opencode" / "AGENTS.md"
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share")
 OUT_DIR = DATA_HOME / "skill-doctor"
-GRAPH_PATH = OUT_DIR / "graph.mmd"
+GRAPH_PATH = OUT_DIR / "graph.json"
+SCHEMA_VERSION = 1
 
 BACKTICK_RE = re.compile(r"`([^`\n]+)`")
 # Canonical reference form. Lookbehind rejects word chars and @ (emails,
@@ -98,8 +104,27 @@ def utc_ts_ms() -> str:
     return f"{now.strftime('%Y-%m-%dT%H:%M:%S')}.{now.microsecond // 1000:03d}Z"
 
 
-def mermaid_escape(label: str) -> str:
-    return label.replace('"', "#quot;").replace("`", "")
+def rel_home(path: Path) -> str:
+    """Short display path: ~/.config/opencode/... rather than the absolute one."""
+    try:
+        return "~/" + path.relative_to(HOME).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def skill_node(sid: str) -> str:
+    return f"skill:{sid}"
+
+
+def agent_node(aid: str) -> str:
+    return f"agent:{aid}"
+
+
+def missing_node(token: str) -> str:
+    return f"missing:{token}"
+
+
+DOC_NODE = "AGENTS.md"
 
 
 def main() -> int:
@@ -115,14 +140,11 @@ def main() -> int:
     all_skill_ids = {sid for _, sid, _ in occurrences}
 
     def resolve_skill_node(sid: str) -> str | None:
-        for root_name in EDGE_TARGET_ORDER:
-            if sid in roots[root_name]:
-                return f"{root_name}_{sid}"
-        return None
+        return skill_node(sid) if sid in all_skill_ids else None
 
     edges: set[tuple[str, str, str]] = set()
     findings: list[dict[str, str]] = []
-    missing_nodes: dict[str, str] = {}
+    missing_tokens: set[str] = set()
 
     def add_finding(check: str, item: str, detail: str) -> None:
         findings.append(
@@ -137,21 +159,19 @@ def main() -> int:
 
     for root_name, sid, skill_md in occurrences:
         body = strip_frontmatter(skill_md.read_text(encoding="utf-8", errors="replace"))
-        src_node = f"{root_name}_{sid}"
+        src_node = skill_node(sid)
         # @-mentions are the canonical reference form: every one must resolve
         # to a skill id or an agent definition, else it is a broken-ref finding.
         for token in sorted(extract_mentions(body)):
             if token == sid:
                 continue
             if token in all_skill_ids:
-                dst_node = resolve_skill_node(token)
-                if dst_node:
-                    edges.add((src_node, dst_node, "loads"))
+                edges.add((src_node, skill_node(token), "loads"))
             elif token in agent_id_set:
-                edges.add((src_node, f"agent_{token}", "routes"))
+                edges.add((src_node, agent_node(token), "routes"))
             else:
-                missing_node = missing_nodes.setdefault(token, f"missing_{len(missing_nodes)}")
-                edges.add((src_node, missing_node, "missing"))
+                missing_tokens.add(token)
+                edges.add((src_node, missing_node(token), "missing"))
                 add_finding(
                     "broken-ref",
                     f"{sid} -> {token}",
@@ -162,7 +182,7 @@ def main() -> int:
         # never findings (prose tokens are ambiguous by design).
         for token in sorted(extract_agent_refs(body, agent_id_set)):
             if token != sid:
-                edges.add((src_node, f"agent_{token}", "routes"))
+                edges.add((src_node, agent_node(token), "routes"))
 
     documents_edges: set[tuple[str, str, str]] = set()
     if AGENTS_MD.is_file():
@@ -170,9 +190,8 @@ def main() -> int:
         known_targets = all_skill_ids | agent_id_set
         md_refs = extract_mentions(agents_md_text) | extract_agent_refs(agents_md_text, agent_id_set)
         for token in sorted(md_refs & known_targets):
-            dst_node = resolve_skill_node(token) if token in all_skill_ids else f"agent_{token}"
-            if dst_node:
-                documents_edges.add(("agents_md", dst_node, "documents"))
+            dst_node = resolve_skill_node(token) or agent_node(token)
+            documents_edges.add((DOC_NODE, dst_node, "documents"))
         for token in sorted(md_refs - known_targets):
             add_finding(
                 "broken-ref",
@@ -212,58 +231,96 @@ def main() -> int:
                 f"sync.sh push -g instead of hand-syncing",
             )
 
-    lines: list[str] = [
-        "%% skill-doctor relation graph - regenerated by scripts/build_graph.py; manual edits will be overwritten",
-        "%% Legend: node(\"x\") rounded = skill dir with SKILL.md; node{{\"x\"}} hexagon = agent definition (~/.config/opencode/agents/*.md)",
-        "%% Edges: A -->|loads| B (body @-mentions another skill); A -->|routes| B (body @-mentions or backticks an agent); agents_md -.->|documents| (referenced in ~/.config/opencode/AGENTS.md)",
-        "%% Broken refs: dotted red edge to a virtual \"missing: X\" node (classDef missing)",
-        "%% Subgraphs = scan roots; duplicate ids live per root; loads/routes targets point at the opencode-active copy (config > agents > repo)",
-        "",
-        "flowchart LR",
-    ]
+    drift_ids = {f["item"] for f in findings if f["check"] == "drift"}
+    all_edges = edges | documents_edges
 
-    subgraph_titles = {
-        "agents": "~/.agents/skills",
-        "config": "~/.config/opencode/skills",
-        "repo": "~/Projects/agent/skills",
-    }
-    for root_name, _ in ROOTS:
-        lines.append(f'  subgraph root_{root_name}["{mermaid_escape(subgraph_titles[root_name])}"]')
-        for sid in sorted(roots[root_name]):
-            lines.append(f'    {root_name}_{sid}("{mermaid_escape(sid)}")')
-        lines.append("  end")
+    def root_path(sid: str) -> tuple[str, str]:
+        """(active root, display path of the copy to open) — repo is source-only."""
+        active = next((r for r in ACTIVE_PRECEDENCE if sid in roots[r]), "")
+        return active, rel_home(roots[active or "repo"][sid])
 
-    lines.append('  subgraph agent_defs["agent definitions"]')
-    lines.append('    agents_md["AGENTS.md"]')
+    nodes: list[dict[str, object]] = []
+    for sid in sorted(all_skill_ids):
+        active, path = root_path(sid)
+        nodes.append(
+            {
+                "id": skill_node(sid),
+                "kind": "skill",
+                "label": sid,
+                "roots": [r for r, _ in ROOTS if sid in roots[r]],
+                "active": active,
+                "path": path,
+                "collision": sid in collision_roots,
+                "drift": sid in drift_ids,
+            }
+        )
     for aid in agent_ids:
-        lines.append(f'    agent_{aid}{{"{mermaid_escape(aid)}"}}')
-    lines.append("  end")
+        nodes.append(
+            {
+                "id": agent_node(aid),
+                "kind": "agent",
+                "label": aid,
+                "roots": [],
+                "active": "",
+                "path": rel_home(AGENT_DEFS_DIR / f"{aid}.md"),
+                "collision": False,
+                "drift": False,
+            }
+        )
+    for token in sorted(missing_tokens):
+        nodes.append(
+            {
+                "id": missing_node(token),
+                "kind": "missing",
+                "label": token,
+                "roots": [],
+                "active": "",
+                "path": "",
+                "collision": False,
+                "drift": False,
+            }
+        )
+    if AGENTS_MD.is_file():
+        nodes.append(
+            {
+                "id": DOC_NODE,
+                "kind": "doc",
+                "label": "AGENTS.md",
+                "roots": [],
+                "active": "",
+                "path": rel_home(AGENTS_MD),
+                "collision": False,
+                "drift": False,
+            }
+        )
 
-    if missing_nodes:
-        lines.append('  subgraph missing_refs["unresolved references"]')
-        for token, node in sorted(missing_nodes.items(), key=lambda kv: kv[1]):
-            lines.append(f'    {node}("missing: {mermaid_escape(token)}")')
-        lines.append("  end")
-
-    for src, dst, label in sorted(edges | documents_edges):
-        arrow = "-.->" if label == "missing" else "-->"
-        lines.append(f"  {src} {arrow}|{label}| {dst}")
-
-    lines.append("  classDef missing stroke:#cc3333,color:#cc3333,stroke-dasharray:4 4;")
-    for _, node in sorted(missing_nodes.items(), key=lambda kv: kv[1]):
-        lines.append(f"  class {node} missing;")
-    lines.append("")
+    degree: dict[str, int] = {}
+    for src, dst, _ in all_edges:
+        degree[src] = degree.get(src, 0) + 1
+        degree[dst] = degree.get(dst, 0) + 1
+    for node in nodes:
+        node["degree"] = degree.get(str(node["id"]), 0)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    GRAPH_PATH.write_text("\n".join(lines), encoding="utf-8")
+    graph = {
+        "schema": SCHEMA_VERSION,
+        "generated": utc_ts_ms(),
+        "roots": [{"id": name, "path": str(path)} for name, path in ROOTS],
+        "nodes": nodes,
+        "edges": [{"from": s, "to": d, "kind": k} for s, d, k in sorted(all_edges)],
+        "findings": findings,
+    }
+    GRAPH_PATH.write_text(
+        json.dumps(graph, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     summary = {
-        "skills": len(occurrences),
+        "skills": len(all_skill_ids),
         "agents": len(agent_ids),
-        "edges": len(edges) + len(documents_edges),
+        "edges": len(all_edges),
         "broken": sum(1 for f in findings if f["check"] == "broken-ref"),
         "collisions": len(collision_roots),
-        "drift": sum(1 for f in findings if f["check"] == "drift"),
+        "drift": len(drift_ids),
     }
     print(json.dumps({"run-summary": summary}, separators=(",", ":")))
     for finding in findings:
