@@ -88,14 +88,10 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    `findings.jsonl`: keep the original finding line untouched and add a new
    line merging `{"disposition":"proposed-fix|reported|documented|upstream|user-action","note":"..."}`
    into a copy of it.
-5. Optional: view or screenshot the graph with `scripts/skill-graph` (repo
-   `scripts/`, installed flat to `~/.local/bin` via `sync.sh push -g`). Run it
-   bare for the interactive page (auto-opens; `--no-open` to skip); add
-   `--png out.png` for a headless capture, optionally with
-   `--focus <id> --depth 1 --layout dagre`. Layout defaults: cose for the
-   overview, dagre for focus crops. For high-degree hubs (degree ≳25) a
-   landscape canvas crushes the dagre column — pass a portrait canvas, e.g.
-   `--focus workflows --layout dagre --width 800 --height 2800`.
+5. Optional: view the graph with `scripts/skill-graph` (repo `scripts/`,
+   installed flat to `~/.local/bin` via `sync.sh push -g`). It regenerates the
+   interactive page beside `graph.json` and opens it (`--no-open` to skip;
+   `--json`/`--out` to redirect paths).
 
 ## Common commands
 

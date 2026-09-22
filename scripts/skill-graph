@@ -2,9 +2,7 @@
 """Render the skill-doctor relation graph as an interactive cytoscape page.
 
 Reads graph.json (written by skill-doctor's scripts/build_graph.py), writes a
-self-contained graph.html with the data inlined, and opens it. --png captures
-the same page through headless chromium, optionally cropped to one node's ego
-network, so the agent looks at the picture the human looks at.
+self-contained graph.html with the data inlined, and opens it.
 
 Layout positions persist in the page's localStorage: a force layout randomizes
 by default, and the graph regenerates often.
@@ -15,8 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
-import subprocess
 import sys
 import webbrowser
 from pathlib import Path
@@ -24,7 +20,6 @@ from pathlib import Path
 SUPPORTED_SCHEMA = 1
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
 DEFAULT_JSON = DATA_HOME / "skill-doctor" / "graph.json"
-CHROMIUM = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
 
 CYTOSCAPE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape@3.34.3/dist/cytoscape.min.js"
 DAGRE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape-dagre@4.0.1/dist/cytoscape-dagre.min.js"
@@ -57,10 +52,9 @@ li a:hover { text-decoration: underline; }
 #detail p { margin: 2px 0; }
 #detail .path { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; color: #444; }
 .deg { color: #999; float: right; }
-body[data-static="1"] #panel { display: none; }
 </style>
 </head>
-<body data-static="@@STATIC@@">
+<body>
 <div id="panel">
   <h1>Skill graph</h1>
   <div id="stats" class="count"></div>
@@ -177,21 +171,20 @@ const LAYOUTS = {
   dagre: { name: "dagre", rankDir: "LR", nodeSep: 34, edgeSep: 18, rankSep: 170,
            ranker: "tight-tree", animate: false, padding: 60 }
 };
-function runLayout(name, then, force) {
+function runLayout(name, force) {
   const stored = !force && name === "cose" ? storedPositions() : null;
   const visible = cy.elements().not(".hidden");
   const known = stored ? visible.nodes().filter(n => stored[n.id()]).length : 0;
   if (stored && known >= visible.nodes().length * 0.9) {
     visible.nodes().forEach(n => { if (stored[n.id()]) n.position(stored[n.id()]); });
     cy.fit(undefined, 40);
-    if (then) then();
     return;
   }
   const opts = { ...LAYOUTS[name], eles: visible };
   // Reset must produce a fresh layout, not a refinement of the state it resets.
   if (force && name === "cose") opts.randomize = true;
   const layout = cy.layout(opts);
-  layout.one("layoutstop", () => { savePositions(); cy.fit(undefined, 40); if (then) then(); });
+  layout.one("layoutstop", () => { savePositions(); cy.fit(undefined, 40); });
   layout.run();
 }
 cy.on("dragfree", "node", savePositions);
@@ -281,7 +274,7 @@ document.getElementById("btn-clear").addEventListener("click", clearFocus);
 document.getElementById("btn-fit").addEventListener("click", () => cy.fit(undefined, 40));
 document.getElementById("btn-reset").addEventListener("click", () => {
   localStorage.removeItem(POS_KEY);
-  runLayout(document.getElementById("layout").value, null, true);
+  runLayout(document.getElementById("layout").value, true);
 });
 document.getElementById("layout").addEventListener("change", ev => runLayout(ev.target.value));
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") clearFocus(); });
@@ -320,34 +313,9 @@ document.getElementById("panel").addEventListener("click", ev => {
   if (n.length) { n.select(); focus(n); }
 });
 
-// ── boot (hash drives the headless PNG capture) ─────────────────────────────
-const params = new URLSearchParams(location.hash.slice(1));
-const STATIC = document.body.dataset.static === "1";
-const wanted = params.get("focus");
-
-if (STATIC && wanted) {
-  // A capture of one node's ego network: drop everything else and lay the
-  // subset out fresh, otherwise it keeps positions packed for the whole graph.
-  const hit = cy.nodes().filter(n => n.data("label") === wanted)[0];
-  if (!hit) {
-    document.getElementById("stats").textContent = "no node labelled " + wanted;
-  } else {
-    const keep = neighborhood(hit, Number(params.get("depth") || 1));
-    cy.elements().difference(keep).addClass("hidden");
-    if (keep.nodes().length <= 70) {
-      // Fewer nodes on screen: the overview's 9px labels are needlessly small.
-      cy.style().selector("node").style({ "font-size": 13, "text-max-width": 130 }).update();
-    }
-    // dagre is the crop default: deterministic, and it puts referrers on one
-    // side of the node and references on the other — the blast-radius answer.
-    // The spread tuning cose needs at overview density is pointless here.
-    runLayout(params.get("layout") || "dagre", null, true);
-  }
-} else {
-  applyFilters();
-  runLayout(params.get("layout") || "cose", () => { if (STATIC) cy.fit(undefined, 60); });
-}
-window.__ready = true;
+// ── boot ────────────────────────────────────────────────────────────────────
+applyFilters();
+runLayout("cose");
 </script>
 </body>
 </html>
@@ -371,69 +339,28 @@ def load_graph(path: Path) -> dict:
     return graph
 
 
-def render(graph: dict, static: bool) -> str:
+def render(graph: dict) -> str:
     payload = json.dumps(graph, sort_keys=True).replace("</", "<\\/")
     return (
         PAGE.replace("@@DATA@@", payload)
-        .replace("@@STATIC@@", "1" if static else "0")
         .replace("@@CYTO@@", CYTOSCAPE_CDN)
         .replace("@@DAGRE@@", DAGRE_CDN)
     )
-
-
-def screenshot(html: Path, out: Path, width: int, height: int, fragment: str = "") -> None:
-    binary = next((b for b in CHROMIUM if shutil.which(b)), None)
-    if binary is None:
-        sys.exit("no chromium found — install it or pass the graph.html to a browser yourself")
-    cmd = [
-        binary, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-        f"--window-size={width},{height}",
-        # Fast-forwards timers/rAF so the force layout finishes before capture.
-        "--virtual-time-budget=20000",
-        f"--screenshot={out}",
-        html.resolve().as_uri() + fragment,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if not out.is_file():
-        sys.exit(f"chromium produced no image (exit {result.returncode}):\n{result.stderr.strip()}")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--json", type=Path, default=DEFAULT_JSON, help="graph.json to read")
     ap.add_argument("--out", type=Path, help="html to write (default: beside graph.json)")
-    ap.add_argument("--png", type=Path, help="also capture a PNG at this path")
-    ap.add_argument("--focus", help="with --png: centre on this skill/agent id")
-    ap.add_argument("--depth", type=int, default=1, help="with --focus: ego depth (default 1)")
-    ap.add_argument("--layout", choices=("cose", "dagre"), help="with --png: which layout")
-    ap.add_argument("--width", type=int, default=1600)
-    ap.add_argument("--height", type=int, default=1000)
     ap.add_argument("--no-open", action="store_true", help="write the html, do not open it")
     args = ap.parse_args()
 
     graph = load_graph(args.json)
     interactive = args.out or args.json.with_name("graph.html")
-    interactive.write_text(render(graph, static=False), encoding="utf-8")
+    interactive.write_text(render(graph), encoding="utf-8")
     print(interactive)
 
-    if args.png:
-        png = args.png
-        png.parent.mkdir(parents=True, exist_ok=True)
-        static_html = png.with_suffix(".html")
-        # Focus crops default to dagre (layered = the blast-radius answer);
-        # the overview defaults to cose. See the boot comment in the template.
-        layout = args.layout or ("dagre" if args.focus else "cose")
-        fragment = f"layout={layout}"
-        if args.focus:
-            known = {n["label"] for n in graph["nodes"]}
-            if args.focus not in known:
-                sys.exit(f"no node labelled {args.focus!r} in the graph")
-            fragment += f"&focus={args.focus}&depth={args.depth}"
-        static_html.write_text(render(graph, static=True), encoding="utf-8")
-        screenshot(static_html, png, args.width, args.height, "#" + fragment)
-        static_html.unlink()
-        print(png)
-    elif not args.no_open:
+    if not args.no_open:
         webbrowser.open(interactive.resolve().as_uri())
     return 0
 
