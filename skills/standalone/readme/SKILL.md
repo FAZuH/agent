@@ -67,7 +67,7 @@ Order matters — readers skim top to bottom:
 
 1. **Installation** — only how to download and install the app to the user's machine (prebuilt binaries to `$PATH`, `cargo install`, package manager, `docker pull`, etc.). Keep it runnable: copy-pasteable commands only, no essays. When the app requires further setup (accounts, tokens, `auth.json`, `service.env`, `hyprlay install`, Discord Developer Portal, etc.), do not detail it here beyond a one-line pointer — e.g. `See [Token Exchange](docs/token-exchange.md)`. If that setup is long (multi-step or requires an external portal), give it its own dedicated section instead.
 2. **Setup** — optional, only when installation alone is not enough to run the app and the steps would clutter Installation. Contains the multi-step setup (e.g. create Discord application → add redirect URI → `hyprlay install` → authorize). If setup is a single pointer, keep it as a one-liner in Installation and skip this section.
-3. **Preview / Screenshots** — what it looks like. Prefer real screenshots/GIFs over text. If empty (no images/GIFs and nothing meaningful to show), omit the section entirely and drop it from the outline. Do not keep an empty placeholder.
+3. **Preview / Screenshots** — what it looks like. Prefer real screenshots/GIFs over text. Render them with the hyprlay-style **captioned HTML table** (not stacked `<img>` tags): `### heading + <table><tr><td>one-line caption</td><td><img src="…" width="100%"></td></tr>…</table>`. If empty (no images/GIFs and nothing meaningful to show), omit the section entirely and drop it from the outline. Do not keep an empty placeholder.
 4. **Simple usage with example** — the 30-second happy path. One minimal command sequence that proves it works (e.g. `hyprlay daemon` → `hyprlay status` → `hyprlay set visible`). Link to the full guide in `docs/` instead of dumping every flag here.
 5. *(Middle — only if essential)* — short Features or Quick-start extras. Keep total README under ~150 lines; anything longer belongs in `docs/`.
 6. **Docs** — curated links to user and developer docs (see below).
@@ -82,7 +82,7 @@ Canonical full order: `Installation → [Setup] → [Preview] → Usage → … 
 - Tagline + outline nav (only sections that exist — drop `Preview` when empty, add `Setup` when needed)
 - Installation — download & install only (runnable); further setup → one-line `docs/` link, or dedicated `Setup` section if long
 - Setup — optional, only for long multi-step setup (otherwise a one-liner in Installation)
-- Preview — optional, only if non-empty (real screenshots/GIFs or meaningful demo); omit entirely when empty
+- Preview — optional, only if non-empty (real screenshots/GIFs or meaningful demo); captioned HTML table, not stacked `<img>` tags; omit entirely when empty
 - Usage (minimal example, 3–5 commands)
 - Docs (links with human-friendly titles — not raw paths)
 - License
