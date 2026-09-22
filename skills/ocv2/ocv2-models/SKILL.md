@@ -35,7 +35,8 @@ tokenrouter/z-ai/glm-5.3-free
 ## 3. Pick
 
 - Task needs image input → a `*vision*` entry (`litellm/free-pro-vision`, `litellm/flash-free-pro-vision`).
-- Otherwise prefer `litellm/*` — direct provider, live-verified 2026-09-06 (`free-pro-vision` answered a probe turn normally, cost 0).
+- Otherwise prefer `litellm/*` for chat turns — direct provider, live-verified 2026-09-06 (`free-pro-vision` answered a probe turn normally, cost 0).
+- **Subagent/delegated turns need tool use — `litellm/free-pro` does NOT have it.** It routes to `z-ai/glm-5.2:free`, whose OpenRouter endpoints are filtered out for tool compatibility; the subagent session dies with 404 "Filter by Tool Compatibility" (live-verified 2026-09-22). `tokenrouter/z-ai/glm-5.3-free` listed but had no channel that day. Working subagent pick: `opencode/nemotron-3-ultra-free` (live-verified 2026-09-22 — full tool use across a multi-step provisioning delegation).
 - State the pick and the reason in one line. Don't interview; the AGENTS.md section is the override point.
 
 ## 4. Apply
