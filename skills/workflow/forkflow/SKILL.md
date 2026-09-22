@@ -30,6 +30,17 @@ scripts/oc-delegate.sh ses_SOURCE --agent implement \
 Exit 0 only when the child turn succeeds. It reuses the @ocv2-sessions
 scripts. The manual steps below stay as the fallback and the reference.
 
+For a plain Q&A fork that keeps the parent's agent and model (no switch),
+`scripts/oc-ask.sh` is the one-shot — fork at the latest message → prompt →
+wait → print the reply:
+
+```sh
+scripts/oc-ask.sh ses_SOURCE --prompt "why does X fail?" [--model M] [--timeout SECS]
+```
+
+Use `oc-delegate.sh` when the child must change agent; use `oc-ask.sh` when
+the current agent's context is the point.
+
 ## Non-negotiable order
 
 For every child:
