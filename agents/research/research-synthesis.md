@@ -1,5 +1,5 @@
 ---
-description: Web researcher — searches the web and synthesizes findings
+description: Web research synthesis — searches multiple sources and returns a focused, cited brief in chat. Use for broad or comparative questions that need a synthesized answer, not repository mapping or a findings file.
 mode: subagent
 # Ask by default; last matching rule wins, so allows come after the wildcard.
 permissions:
