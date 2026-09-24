@@ -39,6 +39,7 @@ Then, push agent configurations to your OpenCode v2 config with `sync.sh`. See e
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
+                                   # (incl. the two agent scripts/ → ~/.local/bin)
 ./sync.sh push -g -t dev,ocv2    # only items tagged dev or ocv2 (tags.conf)
 ./sync.sh push -g -t utils       # utility skills (scheduling, PDFs)
 ./sync.sh push agents            # same target (global), one top only
@@ -47,11 +48,17 @@ Then, push agent configurations to your OpenCode v2 config with `sync.sh`. See e
 # --dry-run to preview
 ```
 
-This script copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). Files that are not ours are left alone.
+This script copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). It also installs the two agent-owned scripts from `scripts/`; personal commands belong in the dotfiles repository. Files that are not ours are left alone.
 
 ### Extras
 
 Some other useful skills I use, but not required for this setup.
+
+`miqdadbadjuber/anti-slop` filters generic AI-generated UI and copy:
+
+```bash
+npx skills add miqdadbadjuber/anti-slop -g -a opencode -y
+```
 
 `kajisho5/ffmpeg-skill` — local FFmpeg video/audio editing. The CLI
 rejects it (`YAML parse error` — unquoted colons in upstream's
