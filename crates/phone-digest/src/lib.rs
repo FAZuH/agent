@@ -46,17 +46,17 @@ pub struct ServeArgs {
     /// address to bind, overrides PHONE_INGEST_ADDR
     #[arg(long)]
     pub addr: Option<String>,
-    /// state directory, default ~/.local/state/phone-inbox
+    /// state directory, default ~/.config/fazuh-agent/data/phone-inbox
     #[arg(long)]
     pub state_dir: Option<PathBuf>,
-    /// token file, default ~/.secrets/phone-ingest.token
+    /// token file, default ~/.config/fazuh-agent/secrets/phone-ingest.token
     #[arg(long)]
     pub token_file: Option<PathBuf>,
 }
 
 #[derive(Args)]
 pub struct DrainArgs {
-    /// state directory, default ~/.local/state/phone-inbox
+    /// state directory, default ~/.config/fazuh-agent/data/phone-inbox
     #[arg(long)]
     pub state_dir: Option<PathBuf>,
 }
@@ -93,7 +93,7 @@ fn serve_config(args: &ServeArgs) -> Result<ServeConfig> {
         state_dir: state_dir(args.state_dir.clone())?,
         token_file: match &args.token_file {
             Some(file) => file.clone(),
-            None => home_dir()?.join(".secrets/phone-ingest.token"),
+            None => home_dir()?.join(".config/fazuh-agent/secrets/phone-ingest.token"),
         },
     })
 }
@@ -101,7 +101,7 @@ fn serve_config(args: &ServeArgs) -> Result<ServeConfig> {
 fn state_dir(explicit: Option<PathBuf>) -> Result<PathBuf> {
     match explicit {
         Some(dir) => Ok(dir),
-        None => Ok(home_dir()?.join(".local/state/phone-inbox")),
+        None => Ok(home_dir()?.join(".config/fazuh-agent/data/phone-inbox")),
     }
 }
 

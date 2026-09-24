@@ -9,7 +9,7 @@ fn service_text_matches_bash_output() {
         description: "agent autocommit in ~/Notes [litellm/free-pro]".into(),
         workdir: "/home/u/Notes".into(),
         envs: vec!["PATH=/usr/local/bin:/usr/bin".into(), "FOO=bar".into()],
-        creds: vec!["MAILCRED:/home/u/.secrets/mail".into()],
+        creds: vec!["MAILCRED:/home/u/.config/fazuh-agent/secrets/mail".into()],
         timeout: "600".into(),
         exec: "~/.opencode/bin/opencode2 run --agent autocommit \"go\"".into(),
         ..Task::default()
@@ -24,7 +24,7 @@ Type=oneshot
 WorkingDirectory=/home/u/Notes
 Environment=PATH=/usr/local/bin:/usr/bin
 Environment=FOO=bar
-LoadCredential=MAILCRED:/home/u/.secrets/mail
+LoadCredential=MAILCRED:/home/u/.config/fazuh-agent/secrets/mail
 TimeoutStartSec=600
 ExecStart=/usr/bin/bash -c '~/.opencode/bin/opencode2 run --agent autocommit \"go\"'
 ";

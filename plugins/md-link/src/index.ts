@@ -16,7 +16,8 @@
  *                           answer callout at execute.after
  * We deliberately do NOT use plugin event delivery — as of the 2026-08-25
  * beta, external server plugins receive no session events through any
- * mechanism (hooks.event, ctx.event.subscribe); see ocv2-findings/findings.md.
+ * mechanism (hooks.event, ctx.event.subscribe); see the @notes skill and
+ * `ocv2-findings.md`.
  * Tool hooks DO fire externally and carry {tool, sessionID, id, input,
  * status, result}. The poller only runs while at least one session is enabled.
  */

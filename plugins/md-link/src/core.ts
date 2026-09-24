@@ -9,7 +9,7 @@
  * auto-loads server-side as a package dir, while tui.ts needs an explicit
  * entry in cli.json.
  *
- * State file contract (~/.config/opencode/md-link-state.json):
+ * State file contract (~/.config/fazuh-agent/data/md-link-state.json):
  *   {
  *     "defaultDir": "/abs/dir" | null,          // fallback output dir
  *     "keep": 25 | null,                        // prune mirrors to N newest replies
@@ -46,7 +46,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, appendFileSync } fr
 import { dirname, join } from "path"
 import { homedir } from "os"
 
-export const STATE_FILE = join(homedir(), ".config", "opencode", "md-link-state.json")
+export const STATE_FILE = join(homedir(), ".config", "fazuh-agent", "data", "md-link-state.json")
 
 export type MdLinkState = {
   defaultDir: string | null

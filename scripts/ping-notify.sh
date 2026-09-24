@@ -9,8 +9,8 @@ discord-notify() {
     local message="$1"
     local webhook_url
     local user_id
-    webhook_url=$(sed -n '1p' {{USER_HOME}}/.secrets/discord/notify.key)
-    user_id=$(sed -n '2p' {{USER_HOME}}/.secrets/discord/notify.key)
+    webhook_url=$(sed -n '1p' {{USER_HOME}}/.config/fazuh-agent/secrets/discord/notify.key)
+    user_id=$(sed -n '2p' {{USER_HOME}}/.config/fazuh-agent/secrets/discord/notify.key)
     curl -s -H "Content-Type: application/json" \
         -d "{\"content\": \"<@${user_id}> $message\"}" \
         "$webhook_url"

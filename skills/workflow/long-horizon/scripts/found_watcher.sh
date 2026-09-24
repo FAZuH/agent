@@ -6,7 +6,7 @@ set -u
 
 # ── CONFIG ────────────────────────────────────────────────────────────────
 WORKDIR=/path/to/workspace
-KEYFILE="$HOME/.secrets/webhook-discord-notify.key"  # line 1 = webhook URL, line 2 = user id
+KEYFILE="$HOME/.config/fazuh-agent/secrets/discord/notify.key"  # line 1 = webhook URL, line 2 = user id
 LOG="$WORKDIR/watcher.log"
 CYCLE=20
 # ──────────────────────────────────────────────────────────────────────────

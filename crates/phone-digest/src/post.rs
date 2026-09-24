@@ -165,13 +165,13 @@ fn bad_json() -> Error {
 }
 
 /// Webhook credential roots, in lookup order: `$CREDENTIALS_DIRECTORY/discord`
-/// first (when set), then `~/.secrets/discord`.
+/// first (when set), then `~/.config/fazuh-agent/secrets/discord`.
 pub fn webhook_roots(credentials_dir: Option<&Path>, home: &Path) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(dir) = credentials_dir.filter(|dir| !dir.as_os_str().is_empty()) {
         roots.push(dir.join("discord"));
     }
-    roots.push(home.join(".secrets/discord"));
+    roots.push(home.join(".config/fazuh-agent/secrets/discord"));
     roots
 }
 
@@ -522,7 +522,7 @@ mod tests {
         let home = Path::new("/home/tester");
         assert_eq!(
             webhook_roots(None, home),
-            vec![PathBuf::from("/home/tester/.secrets/discord")]
+            vec![PathBuf::from("/home/tester/.config/fazuh-agent/secrets/discord")]
         );
         assert_eq!(
             webhook_roots(
@@ -531,7 +531,7 @@ mod tests {
             ),
             vec![
                 PathBuf::from("/run/credentials/phone-digest.service/discord"),
-                PathBuf::from("/home/tester/.secrets/discord"),
+                PathBuf::from("/home/tester/.config/fazuh-agent/secrets/discord"),
             ]
         );
         // same names, same order
@@ -542,9 +542,9 @@ mod tests {
     fn ping_user_id_reads_line_2_of_notify_key() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let home = dir.path();
-        fs::create_dir_all(home.join(".secrets/discord"))?;
+        fs::create_dir_all(home.join(".config/fazuh-agent/secrets/discord"))?;
         fs::write(
-            home.join(".secrets/discord/notify.key"),
+            home.join(".config/fazuh-agent/secrets/discord/notify.key"),
             "https://discord.com/api/webhooks/a\n123456789\ngarbage\n",
         )?;
         assert_eq!(

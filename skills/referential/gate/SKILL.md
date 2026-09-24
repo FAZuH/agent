@@ -159,6 +159,7 @@ simply not this skill's subject and do not reference it.
 
 Harness permission rules (agent frontmatter `ask` / `allow` / `deny`) are a
 separate layer from gates: a gate is a procedure step that calls the
-`question` tool, not a permission prompt. Compare ocv2-findings: depth-2
-`ask` *permission* prompts hang, while question-form gates propagate to the
-top. Do not try to implement a gate as a frontmatter `ask` rule.
+`question` tool, not a permission prompt. See @notes and the
+`ocv2-findings.md` note for the OpenCode v2 behavior: depth-2 `ask`
+*permission* prompts hang, while question-form gates propagate to the top.
+Do not try to implement a gate as a frontmatter `ask` rule.
