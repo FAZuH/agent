@@ -1,3 +1,18 @@
+## [0.10.3](https://github.com/FAZuH/agent/compare/v0.10.2...v0.10.3) (2026-09-24)
+
+
+### Features
+
+* centralize FAZuH agent storage ([652b5c9](https://github.com/FAZuH/agent/commit/652b5c965c5e225d2585d5cc3f431675349232c4))
+* replace skill-doctor's Mermaid graph with graph.json and a cytoscape viewer ([b09bc3e](https://github.com/FAZuH/agent/commit/b09bc3e34654ac81e3526437806c7e10fab8be1b))
+* **skill:** add oc-ask one-shot QA fork ([23fa6b2](https://github.com/FAZuH/agent/commit/23fa6b2223c1cc0d70f80eed1b92d3a06cb62a2e))
+* **skill:** add secrets-argv skill ([af60607](https://github.com/FAZuH/agent/commit/af60607e33cb14c6c1a448f993b1f3e1d6d21335))
+
+
+### Bug Fixes
+
+* **agent:** audit existing checkout directly in malware-check ([95e9a98](https://github.com/FAZuH/agent/commit/95e9a988c496fd1972a081ccb8d065144b238ec1))
+
 ## [0.10.2](https://github.com/FAZuH/agent/compare/v0.10.1...v0.10.2) (2026-09-15)
 
 
@@ -58,13 +73,4 @@
 
 * **agent:** approval-gated shell for malware-check ([6206a81](https://github.com/FAZuH/agent/commit/6206a81eb573df60eb3a24df9b1ce704c97b993b))
 * **skill:** add omarchy-plugin-install with mandatory malware-check delegation ([a38754d](https://github.com/FAZuH/agent/commit/a38754da45b44c9aa4b37e1b204f6f730bc7e28e))
-
-## [0.9.3](https://github.com/FAZuH/agent/compare/v0.9.2...v0.9.3) (2026-09-11)
-
-
-### Features
-
-* cargo workspace — octask subtree, phone-digest and mail-digest crates ([9576e9a](https://github.com/FAZuH/agent/commit/9576e9ae374ed0e92bb607a0d59d86f7a621e126))
-* cutover digest tooling onto the workspace binaries ([f72ac71](https://github.com/FAZuH/agent/commit/f72ac7157fe921ba1df3ec98676891777b47e25c))
-* port octask CLI to Rust ([a8a4190](https://github.com/FAZuH/agent/commit/a8a419071ce7960ad3e28bed0b4a5d169253909b))
 
