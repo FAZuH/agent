@@ -26,7 +26,7 @@ import {
  * sessionID when the harness provides it, else a shared slot), so a maker
  * writes, exact-match-edits, and renders without naming files.
  *
- * v2 beta constraint (see ocv2-findings): custom tool results cannot deliver
+ * v2 beta constraint (see @notes and `ocv2-findings.md`): custom tool results cannot deliver
  * images to the model. render_* therefore returns the PNG's absolute path and
  * instructs the agent to LOOK at it via the native read tool — same
  * render-and-inspect loop, one extra step.
@@ -54,7 +54,7 @@ export default {
     // the session API when the ctx lacks directory/worktree. A configured
     // defaultDir (viz-state.json, md-link-style) overrides all of that;
     // empty means publish into the session's project.
-    const VIZ_STATE_FILE = join(homedir(), ".config", "opencode", "viz-state.json")
+    const VIZ_STATE_FILE = join(homedir(), ".config", "fazuh-agent", "data", "viz-state.json")
     // Last-resort publish base: setup ctx has no string project path for a
     // global load (ctx.worktree is an empty object, ctx.directory undefined),
     // so the per-call session lookup below is what normally wins.
@@ -186,7 +186,7 @@ export default {
           `Render the CURRENT session ${cap} source to a PNG, then OPEN the returned PNG path with the read tool and LOOK at it before continuing — ` +
           `rendering success proves nothing about correctness. You do NOT pass the source here; call write_${kind} first.\n\n` +
           `Iterate freely with no \`save_as\` (preview only). When it is correct and clean, call once more with \`save_as\` set to a short kebab-case topic slug: ` +
-          `that publishes the PNG into <project>/viz (or the dir configured via ~/.config/opencode/viz-state.json) with a unique filename and returns the filename to embed. On a render error this returns error text — fix with edit_${kind} and re-render.`,
+          `that publishes the PNG into <project>/viz (or the dir configured via ~/.config/fazuh-agent/data/viz-state.json) with a unique filename and returns the filename to embed. On a render error this returns error text — fix with edit_${kind} and re-render.`,
         input: {
           type: "object",
           properties: {

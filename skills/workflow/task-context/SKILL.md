@@ -5,7 +5,7 @@ description: >-
   .scratch/<date>_<task>/context-packet.md — objective, base commit,
   relevant files and symbols, architecture boundaries, invariants,
   decisions, acceptance criteria, verification commands, known failures,
-  and role-specific projections for implement, review, test, and research.
+  and role-specific projections for implement, review, and research-discovery.
   Use when non-trivial ticket work moves from research/design to
   delegation, when a public API, module boundary, or design decision
   changes (refresh), and when resuming after compaction or an interrupted
@@ -122,10 +122,9 @@ worker reads the full packet only when it needs more.
 
 | Worker | Projection carries |
 |---|---|
-| `implement` | Objective, relevant files & symbols, boundaries, invariants, acceptance criteria, verification commands, known failures, out of scope |
+| `implement` | Objective, relevant files & symbols, boundaries, invariants, acceptance criteria, verification commands and test surface, known failures, out of scope |
 | `review` | Base commit (diff scope), decisions, invariants, acceptance criteria, out of scope |
-| `test` | Objective, acceptance criteria, verification commands, known failures, test surface from Relevant files |
-| `research` / you | Open questions, boundaries, decisions |
+| `research-discovery` / you | Open questions, boundaries, decisions |
 
 Raw research transcripts stay in their findings file (`docs/research/`); the
 packet carries the distilled facts, and prompts carry the projection.

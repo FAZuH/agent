@@ -39,6 +39,7 @@ Then, push agent configurations to your OpenCode v2 config with `sync.sh`. See e
 
 ```bash
 ./sync.sh push -g                # global (~/.config/opencode)
+                                   # (incl. the two agent scripts/ → ~/.local/bin)
 ./sync.sh push -g -t dev,ocv2    # only items tagged dev or ocv2 (tags.conf)
 ./sync.sh push -g -t utils       # utility skills (scheduling, PDFs)
 ./sync.sh push agents            # same target (global), one top only
@@ -47,11 +48,17 @@ Then, push agent configurations to your OpenCode v2 config with `sync.sh`. See e
 # --dry-run to preview
 ```
 
-This script copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). Files that are not ours are left alone.
+This script copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). It also installs the two agent-owned scripts from `scripts/`; personal commands belong in the dotfiles repository. Files that are not ours are left alone.
 
 ### Extras
 
 Some other useful skills I use, but not required for this setup.
+
+`miqdadbadjuber/anti-slop` filters generic AI-generated UI and copy:
+
+```bash
+npx skills add miqdadbadjuber/anti-slop -g -a opencode -y
+```
 
 `kajisho5/ffmpeg-skill` — local FFmpeg video/audio editing. The CLI
 rejects it (`YAML parse error` — unquoted colons in upstream's
@@ -119,11 +126,11 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[workflows](./skills/workflow/workflows/SKILL.md)**: The orchestrator's concrete workflows and subagent routing table; loaded before any routing decision.
 - **[scratch-finish](./skills/workflow/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps.
 - **[prepare-compact](./skills/workflow/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, clear the goal, then offer the compaction (auto mode compacts immediately). Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
-- **[deep-research](./skills/workflow/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via the `research` subagent.
+- **[deep-research](./skills/workflow/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via `research-discovery`.
 - **[papercut-sweep](./skills/workflow/papercut-sweep/SKILL.md)**: Sweep the global papercuts backlog (`self::` entries) and apply approved self-improvement drafts.
 - **[changelog](./skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version by comparing the current commit against the latest version.
 - **[session-retro](./skills/workflow/session-retro/SKILL.md)**: End-of-session retrospective — files `self::` proposals without touching code.
-- **[skill-doctor](./skills/workflow/skill-doctor/SKILL.md)**: Audit the skill/agent relation graph (`loads`/`routes`/`documents`), flag `broken-ref`/`collision`/`drift`, optionally render via `mermaid-skill`.
+- **[skill-doctor](./skills/workflow/skill-doctor/SKILL.md)**: Audit the skill/agent relation graph (`loads`/`routes`/`documents`), flag `broken-ref`/`collision`/`drift`, visualize via `scripts/skill-graph` (interactive HTML).
 - **[teach](./skills/workflow/teach/SKILL.md)**: Teach anything so it locks in: graded quizzes probe your level, then a dependency map is taught node by node. Ported from [amosblomqvist/learn](https://github.com/amosblomqvist/learn).
 - **[visualize](./skills/workflow/visualize/SKILL.md)**: Adds a correct, minimal diagram to a lesson when an idea is clearer as a picture; briefs a maker subagent that renders and verifies the image.
 - **[offload](./skills/workflow/offload/SKILL.md)**: Offload builds, checks, or full agent batches to a remote machine over ssh; per-repo memory lives in gitignored `.opencode/offload.md`.
@@ -158,7 +165,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 
 - **[ocv2-api](./skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API and where its docs live.
 - **[ocv2-compact](./skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session via the API — trigger, poll the summary, nothing-to-compact and steer gotchas.
-- **[ocv2-findings](./skills/ocv2/ocv2-findings/SKILL.md)**: Save and retrieve hard-won OpenCode v2 findings.
+- **[notes](./skills/standalone/notes/SKILL.md)**: Read and maintain durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode v2.
 - **[ocv2-models](./skills/ocv2/ocv2-models/SKILL.md)**: Pick a free model when the default account is dry — list with `opencode2 models | rg -i free`, switch the live session via the model endpoint.
 - **[ocv2-sessions](./skills/ocv2/ocv2-sessions/SKILL.md)**: Fork a session and control the fork — switch agent & model, verify, talk, wait.
 - **[ocv2-move](./skills/ocv2/ocv2-move/SKILL.md)**: Move a session to another project directory.
@@ -174,9 +181,9 @@ the orchestrator and subagent tool reference.
 | Category | Agents |
 | --- | --- |
 | `primary` | **[orchestrator](./agents/primary/orchestrator.md)** (routes work to subagents), [autocommit](./agents/primary/autocommit.md) (unattended conventional commits; ask-by-default permissions), [chat](./agents/primary/chat.md), [tutor](./agents/primary/tutor.md) |
-| `build` | [implement](./agents/build/implement.md), [dev-server](./agents/build/dev-server.md) |
-| `review` | [review](./agents/review/review.md), [test](./agents/review/test.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
-| `research` | [research](./agents/research/research.md) (discovery + deep research), [researcher](./agents/research/researcher.md) (web synthesis) |
+| `build` | [implement](./agents/build/implement.md) (implementation, verification, dev servers) |
+| `review` | [review](./agents/review/review.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
+| `research` | [research-discovery](./agents/research/research-discovery.md) (codebase mapping + primary-source findings), [research-synthesis](./agents/research/research-synthesis.md) (web research brief) |
 | `vision` | [image-viewer](./agents/vision/image-viewer.md), [web-viewer](./agents/vision/web-viewer.md), [mermaid-maker](./agents/vision/mermaid-maker.md), [svg-maker](./agents/vision/svg-maker.md) |
 | `document` | [document](./agents/document/document.md), [finish](./agents/document/finish.md) |
 

@@ -2,7 +2,7 @@
  * learn-viz-tui — TUI command for the viz publish directory.
  *
  * The learn-viz-tools server plugin reads defaultDir from
- * ~/.config/opencode/viz-state.json on every publish (empty = the session
+ * ~/.config/fazuh-agent/data/viz-state.json on every publish (empty = the session
  * project's viz/). This module adds the /viz-dir command that edits it:
  *
  *   /viz-dir            open the dialog (prefilled with the current value)
@@ -19,7 +19,7 @@ import { isAbsolute, join } from "node:path"
 
 type DirResult = { ok: true; value: string } | { ok: false; error: string }
 
-const STATE_FILE = join(homedir(), ".config", "opencode", "viz-state.json")
+const STATE_FILE = join(homedir(), ".config", "fazuh-agent", "data", "viz-state.json")
 
 function loadState(): { defaultDir: string } {
   try {

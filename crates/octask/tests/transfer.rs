@@ -17,7 +17,7 @@ fn fixture_task() -> Task {
         timeout: "600".into(),
         description: "agent autocommit in ~/Notes [litellm/free-pro]".into(),
         envs: vec!["PATH=/usr/local/bin:/usr/bin".into(), "FOO=bar".into()],
-        creds: vec!["MAILCRED:/home/u/.secrets/mail".into()],
+        creds: vec!["MAILCRED:/home/u/.config/fazuh-agent/secrets/mail".into()],
         ..Task::default()
     }
 }
@@ -55,7 +55,7 @@ fn import_replays_exported_task_through_add_args() {
     assert_eq!(a.env, vec!["FOO=bar".to_string()]);
     assert_eq!(
         a.credential,
-        vec!["MAILCRED:/home/u/.secrets/mail".to_string()]
+        vec!["MAILCRED:/home/u/.config/fazuh-agent/secrets/mail".to_string()]
     );
     assert!(!a.no_enable, "enabled=1 must stay enabled");
 }

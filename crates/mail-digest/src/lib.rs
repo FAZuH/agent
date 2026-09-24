@@ -26,11 +26,11 @@ use ureq::unversioned::multipart::Part;
 const MAX_INLINE: usize = 1800;
 const USER_AGENT: &str = "octask-mail-digest/1.0";
 /// Fallback credential dir when `CREDENTIALS_DIRECTORY` is unset:
-/// `~/.secrets/discord` (same lookup order as phone-digest).
+/// `~/.config/fazuh-agent/secrets/discord` (same lookup order as phone-digest).
 fn home_secrets_dir() -> Option<PathBuf> {
     env::var_os("HOME")
         .filter(|home| !home.is_empty())
-        .map(|home| PathBuf::from(home).join(".secrets/discord"))
+        .map(|home| PathBuf::from(home).join(".config/fazuh-agent/secrets/discord"))
 }
 const TIER_TITLES: [(&str, &str); 3] = [
     ("urgent", "🔴 Needs attention"),

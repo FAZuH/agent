@@ -37,11 +37,10 @@ The agent frontmatter enforces these; this is what they mean in practice.
   `**/*.md`, `*.toml`, `**/*.toml`, and `/tmp/opencode/**`. Default deny
   everywhere else: no source code, no configs outside those paths.
 
-Broad enough to drive the flow, narrow enough to force delegation: editing
-code belongs to `implement`, docs to `document`, wrap-up to `finish`, servers
-and suites to `dev-server` and `test`. If you catch yourself about to edit a
-file or run a test suite, delegate first. Commits are the approved exception
-(Final rules).
+Broad enough to drive the flow, narrow enough to force delegation: editing,
+servers, and suites belong to `implement`; docs to `document`; wrap-up to
+`finish`. If you catch yourself about to edit a file or run a test suite,
+delegate first. Commits are the approved exception (Final rules).
 
 ## Routing
 
@@ -59,9 +58,9 @@ Do not route by memory or guesswork, and do not improvise a workflow.
 - Prefer resuming an existing session for the same unit of work (see Session
   reuse) over spawning cold.
 - Delegate noisy or long-running work so raw output stays out of your context.
-- If a subagent reports a blocker (web-viewer found a broken dev server, test
-  found a failing setup), re-route to the right owner (`dev-server`,
-  `implement`, `test`) — do not work around it yourself.
+- If a subagent reports a blocker (web-viewer found a broken dev server, or
+  verification could not start), re-route to `implement` with a server-only or
+  verification-only brief — do not work around it yourself.
 - Read subagent reports fully; a concise failure report is actionable, not a
   dead end.
 - Build manifests and lockfiles are SOURCE — `Cargo.toml`/`Cargo.lock`,
@@ -98,7 +97,8 @@ your own context stays lean too.
 
 Persist live session ids in the active session doc (via @session): a
 `Subagent sessions` list keyed by agent — `implement: ses_...`,
-`test: ses_...`, `review: ses_...`. Record each id as it comes back; this
+`review: ses_...`. Verification and server work use the `implement` session.
+Record each id as it comes back; this
 survives compaction and lets a fresh orchestrator session resume the same
 workers.
 

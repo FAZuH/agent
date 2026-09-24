@@ -84,14 +84,14 @@ Run top to bottom when invoked. Do not skip the user gates.
 ```bash
 # File a self-improvement entry (global store)
 papercuts -g add --tag self::skill \
-  "implement.md says delegate to test subagents but subagent_depth blocks nested spawns at runtime"
+  "implement.md delegated to test subagents but subagent_depth blocked nested spawns at runtime"
 
 # Severity + multiple tags
 papercuts -g add --severity major --tag self::agent-def --tag v2-permissions \
   "document.md legacy permission map: root CONTEXT.md edits denied despite '**/*.md': allow"
 
 # Attribute friction reported by a subagent
-papercuts -g add --agent test "test agent could not spawn dev-server; ran gates inline instead"
+papercuts -g add --agent implement "verification command could not start because project dependencies are missing"
 
 # Sweep candidates
 papercuts -g list --tag self::skill --status open

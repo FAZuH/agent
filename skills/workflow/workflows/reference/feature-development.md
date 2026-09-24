@@ -18,7 +18,7 @@ START (user request: feature / ticket / bug fix)
   → PERSIST   session doc + CONTEXT.md + ADRs, then read them
   → RESEARCH  map the code and gather library/API facts
   → IMPLEMENT delegate to implement (tdd; prefer @forkflow after its probe)
-  → VERIFY    test/lint/typecheck via test (fork read-only verifier when safe)
+  → VERIFY    test/lint/typecheck via implement in verification-only mode
       │  failures? → loop back to IMPLEMENT (RESUME sessions via task_id)
   → REVIEW    delegate to review (Standards + Spec; fork from the implement report when safe)
       │  fixes found? → loop back to IMPLEMENT, then VERIFY again (RESUME sessions via task_id)
@@ -33,9 +33,9 @@ START (user request: feature / ticket / bug fix)
 | 1 | PLAN | you | Create a plan in Plan mode. |
 | 2 | GRILL | you | If the plan has gaps: @grilling or @grill-with-docs. If the plan is too large to hold in one session: @wayfinder. |
 | 3 | PERSIST | you | @grill-with-docs leaves a `CONTEXT.md` glossary + `docs/adr/` paper trail; read them before implementation so names match the domain language. Persist the plan with @session. Log plan deviations with @session as they surface. |
-| 4 | RESEARCH | `research` (Mode 1) | Delegate a preliminary pass to map the relevant code and gather library/API facts, then read the files it points to. For a deeper external fact a decision waits on, invoke the @deep-research skill (Mode 2) — it delegates back to `research` for a cited findings file. |
+| 4 | RESEARCH | `research-discovery` | Delegate a preliminary pass to map the relevant code and gather library/API facts, then read the files it points to. For a deeper external fact a decision waits on, invoke the @deep-research skill — it delegates back to `research-discovery` for a cited findings file. |
 | 5 | IMPLEMENT | `implement` / `@forkflow` | Prefer `forkflow`: fork the completed research boundary, switch to `implement`, verify, then send the first prompt. Fall back to a fresh `implement` spawn. |
-| 6 | VERIFY | `test` / `@forkflow` | Test/lint/typecheck runs before review. A forked test child must be read-only. If checks fail, loop back to IMPLEMENT (step 5). |
+| 6 | VERIFY | `implement` / `@forkflow` | Ask `implement` to run checks in verification-only mode before review. If checks fail, resume IMPLEMENT (step 5). |
 | 7 | REVIEW | `review` / `@forkflow` | Fork a read-only review child from the implement report when safe. If it turns up fixes, create or resume an implement session; never switch an already-running child to another agent. |
 | 8 | FINISH | `finish` | Commit only when the user explicitly asks — delegate to `finish` to propose grouped commit messages, restate them to the user for approval, then run the `git add` + `git commit` yourself. |
 
@@ -51,8 +51,8 @@ START (user request: feature / ticket / bug fix)
 - step8 -> step7
 
 When @forkflow is available, the implementation handoff is `research report →
-fork → switch implement → first prompt`. After implementation, review and test
-may fork from the implementation report as independent read-only children.
+fork → switch implement → first prompt`. The implement session owns verification;
+review may fork from its report as a separate read-only child.
 Forks share the working directory, so parallel writers require separate
 worktrees. The broader forkflow + setup-dev-docs + task-context session
 orchestration is deferred until it is exercised on a real ticket.

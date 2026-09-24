@@ -24,7 +24,7 @@ START (visual check / image)
 
 | # | State | Owner | Action |
 |---|---|---|---|
-| 1 | WEB | `web-viewer` | Web pages and UI: delegate to `web-viewer` (Playwright, visual judgment). If it reports the dev server is down, hand off to `dev-server`, then re-run `web-viewer`. |
+| 1 | WEB | `web-viewer` | Web pages and UI: delegate to `web-viewer` (Playwright, visual judgment). If it reports the dev server is down, hand off to `implement` with a server-only brief, then re-run `web-viewer`. |
 | 2 | IMAGE | `image-viewer` | Still images (screenshots, diagrams, manga, math): delegate to `image-viewer`. |
 | 3 | TRUST | you | Trust the subagent's visual report; only re-run if the environment changed. |
 
@@ -37,4 +37,4 @@ START (visual check / image)
 ## Gates
 
 - Step1 and step2 are alternatives: exactly one dispatches per invocation (web page/UI → step1, still image → step2). Step3 consumes whichever ran; the unused alternative being skipped is not a failure.
-- Re-run WEB only after `dev-server` reports the environment is up again.
+- Re-run WEB only after `implement` reports the environment is up again.

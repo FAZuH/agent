@@ -30,6 +30,17 @@ scripts/oc-delegate.sh ses_SOURCE --agent implement \
 Exit 0 only when the child turn succeeds. It reuses the @ocv2-sessions
 scripts. The manual steps below stay as the fallback and the reference.
 
+For a plain Q&A fork that keeps the parent's agent and model (no switch),
+`scripts/oc-ask.sh` is the one-shot — fork at the latest message → prompt →
+wait → print the reply:
+
+```sh
+scripts/oc-ask.sh ses_SOURCE --prompt "why does X fail?" [--model M] [--timeout SECS]
+```
+
+Use `oc-delegate.sh` when the child must change agent; use `oc-ask.sh` when
+the current agent's context is the point.
+
 ## Non-negotiable order
 
 For every child:
@@ -84,14 +95,13 @@ role-specific task brief. Do not make the ticket depend on fork support.
 ```text
 research report
   → fork + switch implement + first prompt
-  → implement report
-      ├→ fork + switch review + first prompt
-      └→ fork + switch test   + first prompt
+  → implement report (including verification)
+      └→ fork + switch review + first prompt
 ```
 
-Review and test may run in parallel only when they are read-only. If review
-finds a fix, resume or fork an implement child with the new explicit boundary;
-do not switch the agent of a child that already ran a turn.
+Verification stays with the implement session. If review finds a fix, resume or
+fork an implement child with the new explicit boundary; do not switch the agent
+of a child that already ran a turn.
 
 ## Unattended fleets
 

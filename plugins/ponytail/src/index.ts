@@ -32,10 +32,11 @@ const { getPonytailInstructions } = require(path.join(PONYTAIL_DIR, "hooks", "po
 const { getDefaultMode, normalizePersistedMode } = require(path.join(PONYTAIL_DIR, "hooks", "ponytail-config.js"))
 const { parseCommandFile } = require(path.join(PONYTAIL_DIR, ".opencode", "plugins", "ponytail-frontmatter.cjs"))
 
-// Same flag file as the V1 adapter: mode state lives beside OpenCode's config.
 const statePath = path.join(
   process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"),
-  "opencode",
+  "fazuh-agent",
+  "data",
+  "ponytail",
   ".ponytail-active",
 )
 
