@@ -1,9 +1,9 @@
 ---
 name: deep-research
-description: Investigate a question against high-trust primary sources and capture the findings as a single cited Markdown file in the repo. Use when a decision waits on an external fact, docs or API facts need gathering, or reading legwork should be delegated — one API, one behaviour, one version claim. Read the upstream [`research`](https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md) skill's primary-source methodology, then delegate the run to the `research` subagent. It is the opencode-execution form of mattpocock's [`research`](https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md) skill; reach for it whenever you would otherwise reach for [@research](https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md).
+description: Investigate a question against high-trust primary sources and capture the findings as a single cited Markdown file in the repo. Use when a decision waits on an external fact, docs or API facts need gathering, or reading legwork should be delegated — one API, one behaviour, one version claim. Read the upstream [`research`](https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md) skill's primary-source methodology, then delegate the run to `research-discovery`. It is the opencode-execution form of mattpocock's [`research`](https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md) skill; reach for it whenever you would otherwise reach for [@research](https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md).
 ---
 
-Deep research delegated to the `research` **subagent**. Keep working while it reads; it reports back only the file path.
+Deep research delegated to the `research-discovery` **subagent**. Keep working while it reads; it reports back only the file path.
 
 The subagent's job:
 

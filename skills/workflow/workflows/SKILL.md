@@ -18,16 +18,17 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 |---|---|---|
 | Orchestrator role: manage tasks, delegate, restore the role | @orchestrate | Load first when acting as orchestrator, or when the role needs restating |
 | Warm per-ticket delegation | `@forkflow` | Probe once, then fork → switch agent → first prompt; fall back to a fresh spawn |
-| Implement a ticket/spec/plan | `implement` | Drives implement + @tdd skills; no PTY |
-| Run test/lint/typecheck suites | `test` | Returns concise analysis only |
+| Implement a ticket/spec/plan | `implement` | Drives implement + @tdd skills; also owns verification and server PTYs |
+| Run test/lint/typecheck suites | `implement` | Verification-only mode; concise analysis, no edits |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
 | Finish a session (docs + archive + summary + delegates to @commit/@self-improve) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated @session-retro + @skill-doctor, offers @papercut-sweep, never auto-runs it); only when the user explicitly asks |
-| Start/monitor dev servers | `dev-server` | Owns PTY lifecycle |
+| Start/monitor dev servers | `implement` | Server-only mode; owns PTY lifecycle |
 | Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
 | Read/transcribe image files | `image-viewer` | Vision, read-only |
-| Preliminary discovery (codebase + web) | `research` | Mode 1: presents its plan and waits for approval before running; read-only, returns `file:line` pointers |
-| Deep research (cited findings file) | @deep-research skill → delegates to `research` | Mode 2: narrow question against primary sources, writes ONE cited findings `.md`, returns path |
+| Preliminary codebase discovery | `research-discovery` | Presents its plan and waits for approval; returns `file:line` pointers |
+| Deep research (cited findings file) | @deep-research skill → delegates to `research-discovery` | Narrow question against primary sources; writes ONE cited findings `.md`, returns path |
+| Broad web research synthesis | `research-synthesis` | Returns a focused, cited brief in chat |
 | Explore codebase / research | `general` / `explore` | For investigation |
 | Sharpen a plan/design | @grilling / @grill-with-docs (skill) | Use yourself |
 | Diagnose a hard bug | @diagnosing-bugs (skill) | Use yourself |
@@ -70,7 +71,7 @@ subagent.
 
 ## Ticket context and durable docs
 
-- Non-trivial ticket work: after research/design synthesis, run @task-context — create or refresh the `.scratch/<date>_<task>/context-packet.md`, then pass each worker its role projection in the delegation prompt (`implement` / `review` / `test` / `research`), never raw research transcripts.
+- Non-trivial ticket work: after research/design synthesis, run @task-context — create or refresh the `.scratch/<date>_<task>/context-packet.md`, then pass each worker its role projection in the delegation prompt (`implement` / `review` / `research-discovery`), never raw research transcripts.
 - Durable developer docs (`docs/dev/`) change only through @setup-dev-docs, on an explicit user request; ordinary feature work writes task context instead.
 - Warm delegation: use @forkflow when its capability probe passes. This is an execution accelerator, not a replacement for the ticket spec or @task-context. The setup-dev-docs/task-context session orchestration remains deferred.
 

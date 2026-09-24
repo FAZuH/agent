@@ -14,7 +14,7 @@ The user reports something broken/failing, or a bug that resists a quick fix.
 ```
 START (bug report)
   → DIAGNOSE  run @diagnosing-bugs: tight feedback loop first
-  → MAP?      delegate first pass to research if the codebase is unfamiliar
+  → MAP?      delegate first pass to research-discovery if the codebase is unfamiliar
   → FIX       delegate fix + regression test
   → TEST      delegate running the regression test
   → REVIEW    review as in feature-development
@@ -27,9 +27,9 @@ START (bug report)
 | # | State | Owner | Action |
 |---|---|---|---|
 | 1 | DIAGNOSE | you | Do not guess. Run the @diagnosing-bugs skill: get a tight feedback loop (one command that already goes red on this bug), then fix with a regression test. |
-| 2 | MAP | `research` | Only for an unfamiliar codebase: delegate a first pass to map where the failing code lives before diagnosing. |
+| 2 | MAP | `research-discovery` | Only for an unfamiliar codebase: delegate a first pass to map where the failing code lives before diagnosing. |
 | 3 | FIX | `implement` | Delegate the fix to `implement`. |
-| 4 | TEST | `test` | Delegate the regression test run to `test`. |
+| 4 | TEST | `implement` | Delegate the regression test run in verification-only mode. |
 | 5 | REVIEW / FINISH | `review` / `finish` | Review and commit as in `feature-development.md`. |
 
 ## Dependency graph

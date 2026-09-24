@@ -30,8 +30,8 @@ START (test work requested)
 | 1 | PLAN | you | Create a plan in Plan mode with @test-guidelines (add @gui-test-guidelines if the suite touches the UI). |
 | 2 | TRIM | you | Adjust the plan: remove testing that "tests apples is apples" — drop tautological or redundant cases. |
 | 3 | BUILD | you | Proceed in Build mode with `/goal`. |
-| 4 | IMPLEMENT | `implement` + `test` | Delegate writing the tests to `implement` (test-first) and running them to `test`. |
-| 5 | ITERATE | `implement` / `test` | Iterate until the suite passes and the new tests add real signal. |
+| 4 | IMPLEMENT | `implement` | Delegate test-first implementation and suite execution to `implement`; it owns both writing and running tests. |
+| 5 | ITERATE | `implement` | Iterate until the suite passes and the new tests add real signal. |
 | 6 | REVIEW | `review` | Review the test work with `review` if the user wants it. |
 | 7 | FINISH | `finish` | Mark the plan complete; @finish to cleanup — finish proposes grouped commit messages, you restate them to the user for approval, then commit yourself. |
 

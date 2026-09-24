@@ -119,7 +119,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[workflows](./skills/workflow/workflows/SKILL.md)**: The orchestrator's concrete workflows and subagent routing table; loaded before any routing decision.
 - **[scratch-finish](./skills/workflow/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace: the completion checklist and archive steps.
 - **[prepare-compact](./skills/workflow/prepare-compact/SKILL.md)**: Prepare a session for context compaction: persist state, clear the goal, then offer the compaction (auto mode compacts immediately). Best used with the [opencode-context-watch plugin](https://github.com/FAZuH/opencode-context-watch/).
-- **[deep-research](./skills/workflow/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via the `research` subagent.
+- **[deep-research](./skills/workflow/deep-research/SKILL.md)**: Investigate against primary sources and capture findings as a single Markdown file; wraps `mattpocock/skills` research methodology via `research-discovery`.
 - **[papercut-sweep](./skills/workflow/papercut-sweep/SKILL.md)**: Sweep the global papercuts backlog (`self::` entries) and apply approved self-improvement drafts.
 - **[changelog](./skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version by comparing the current commit against the latest version.
 - **[session-retro](./skills/workflow/session-retro/SKILL.md)**: End-of-session retrospective — files `self::` proposals without touching code.
@@ -174,9 +174,9 @@ the orchestrator and subagent tool reference.
 | Category | Agents |
 | --- | --- |
 | `primary` | **[orchestrator](./agents/primary/orchestrator.md)** (routes work to subagents), [autocommit](./agents/primary/autocommit.md) (unattended conventional commits; ask-by-default permissions), [chat](./agents/primary/chat.md), [tutor](./agents/primary/tutor.md) |
-| `build` | [implement](./agents/build/implement.md), [dev-server](./agents/build/dev-server.md) |
-| `review` | [review](./agents/review/review.md), [test](./agents/review/test.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
-| `research` | [research](./agents/research/research.md) (discovery + deep research), [researcher](./agents/research/researcher.md) (web synthesis) |
+| `build` | [implement](./agents/build/implement.md) (implementation, verification, dev servers) |
+| `review` | [review](./agents/review/review.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
+| `research` | [research-discovery](./agents/research/research-discovery.md) (codebase mapping + primary-source findings), [research-synthesis](./agents/research/research-synthesis.md) (web research brief) |
 | `vision` | [image-viewer](./agents/vision/image-viewer.md), [web-viewer](./agents/vision/web-viewer.md), [mermaid-maker](./agents/vision/mermaid-maker.md), [svg-maker](./agents/vision/svg-maker.md) |
 | `document` | [document](./agents/document/document.md), [finish](./agents/document/finish.md) |
 

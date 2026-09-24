@@ -95,14 +95,13 @@ role-specific task brief. Do not make the ticket depend on fork support.
 ```text
 research report
   → fork + switch implement + first prompt
-  → implement report
-      ├→ fork + switch review + first prompt
-      └→ fork + switch test   + first prompt
+  → implement report (including verification)
+      └→ fork + switch review + first prompt
 ```
 
-Review and test may run in parallel only when they are read-only. If review
-finds a fix, resume or fork an implement child with the new explicit boundary;
-do not switch the agent of a child that already ran a turn.
+Verification stays with the implement session. If review finds a fix, resume or
+fork an implement child with the new explicit boundary; do not switch the agent
+of a child that already ran a turn.
 
 ## Unattended fleets
 
