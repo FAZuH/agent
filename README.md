@@ -145,6 +145,7 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 
 ### Standalone (consulted on their own)
 
+- **[agent-map](./skills/standalone/agent-map/SKILL.md)**: Map and maintain this personal-public agent repository: source layout, classification, authoring, validation, templating, and `sync.sh` deployment.
 - **[test-guidelines](./skills/standalone/test-guidelines/SKILL.md)**: Test writing guidelines: validity, isolation, determinism, test doubles, anti-patterns, coverage.
 - **[gui-test-guidelines](./skills/standalone/gui-test-guidelines/SKILL.md)**: GUI/E2E test automation guidelines: selectors, Page Object, visual regression, accessibility.
 - **[rust-idioms](./skills/standalone/rust-idioms/SKILL.md)**: Type-driven Rust design patterns — newtype, typestate, sealed traits, RAII guards, error and dispatch design.- **[logging-guidelines](./skills/standalone/logging-guidelines/SKILL.md)**: Structured logging with wide events, correlation, and safe redaction.
