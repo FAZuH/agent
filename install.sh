@@ -2,6 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# rustup keeps cargo outside the default PATH, and a non-login shell — ssh, a
+# systemd timer, CI — never sources the profile that adds it.
+if [[ -d "$HOME/.cargo/bin" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 BONUS=0
 TMP_DIR=""
 
