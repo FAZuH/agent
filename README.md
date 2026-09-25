@@ -9,8 +9,7 @@
 <hr>
 
 <div align="center">
-● <a href="#installation">Installation</a> ﻿ ● <a href="#usage">Usage</a> ﻿ ⭐ ● <a href="#skills">Skills</a><br>
-⭐ ● <a href="#agents">Agents</a> ﻿ ● <a href="#docs">Docs</a> ﻿ ● <a href="#license">License</a>
+● <a href="#installation">Installation</a> ﻿ ● <a href="#usage">Usage</a> ﻿ ● <a href="#docs">Docs</a> ﻿ ● <a href="#license">License</a>
 </div>
 
 ## Installation
@@ -67,43 +66,11 @@ remove the external skills listed under Install.
 v2 hot-reloads most of the changes, so restart it only when a changed component
 does not appear or a plugin is not loaded.
 
-## Skills
-
-Skills are grouped by what they do. `sync.sh` installs them flat
-(`skills/<name>/`), because skill IDs are path-derived. ⭐ marks the entry
-points you or an agent load first.
-
-- **Orchestration**: controls, delegates, tracks, and finishes agent work
-- **Workflow**: repeatable procedures with a defined process
-- **Dev**: engineering guidelines and conventions
-- **Utils**: general machine and tool helpers
-- **Meta**: agent-system and repository maintenance
-- **Shared**: cross-cutting rules and mechanics
-- **OpenCode v2**: OpenCode v2 operations
-
-All 58 skills, with one line each: [Skills](docs/skills.md). To know which ones
-to load, and when, read the [Skill Guide](docs/skill-guide.md).
-
-## Agents
-
-Agent definitions live in `agents/<category>/` and install flat as
-`agents/<name>.md`, so the names the orchestrator and the subagent tool
-reference stay stable. ⭐ marks the agents the orchestrator routes work to.
-
-- **`primary`** — the orchestrator plus the chat, tutor, autocommit, and digest agents
-- **`build`** — implementation, verification, and dev servers
-- **`review`** — code review, malware checks, and PII checks
-- **`research`** — repository discovery and web research
-- **`vision`** — image, page, Mermaid, and SVG inspection
-- **`document`** — ADRs, runbooks, and changelogs
-
-All 17 agent definitions: [Agents](docs/agents.md).
-
 ## Docs
 
+- [Skills](docs/skills.md) — all 58 skills, one line each
 - [Skill Guide](docs/skill-guide.md) — which skills to load at each phase of a change
-- [Skills](docs/skills.md) — every skill by category, with one line on what it does
-- [Agents](docs/agents.md) — every agent definition by role
+- [Agents](docs/agents.md) — all 17 agent definitions, by role
 - [Plugins](docs/plugins.md) — the four OpenCode plugins, plus the command definitions in `commands/`
 - [Commit and Changelog](docs/dev/commit-changelog.md) — how this repository writes commits and changelog entries
 - [Commit Scopes](docs/dev/commit-scopes.md) — the closed vocabulary of Conventional Commit scopes
