@@ -1,34 +1,34 @@
 ---
 description: "Codebase discovery and primary-source research: map repository code to return file:line pointers, or investigate a narrow external question and write one cited findings file when invoked by @deep-research. Discovery requires approval before research; no code edits, installs, or servers. Use to find where behavior lives or verify one library/API fact."
 mode: subagent
-tools:
-  read: true
-  grep: true
-  glob: true
-  list: true
-  bash: true
-  webfetch: true
-  websearch: true
-  question: true
-  write: true
-  edit: true
-permission:
-  edit:
-    "*": ask
-    "**/*.md": allow
-    "**/*.mdx": allow
-    "docs/**": allow
-    "/tmp/**": allow
-  write:
-    "*": ask
-    "**/*.md": allow
-    "**/*.mdx": allow
-    "docs/**": allow
-    "/tmp/**": allow
-  pty_*: ask
-  question: allow
-  bash:
-    "*": allow
+permissions:
+  - action: edit
+    resource: "*"
+    effect: ask
+  - action: edit
+    resource: "**/*.md"
+    effect: allow
+  - action: edit
+    resource: "**/*.mdx"
+    effect: allow
+  - action: edit
+    resource: "docs/**"
+    effect: allow
+  - action: edit
+    resource: "/tmp/**"
+    effect: allow
+  - action: external_directory
+    resource: "/tmp/*"
+    effect: allow
+  - action: "pty_*"
+    resource: "*"
+    effect: ask
+  - action: question
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "*"
+    effect: allow
 ---
 
 You are the `research-discovery` subagent. You have two modes, chosen by the caller.

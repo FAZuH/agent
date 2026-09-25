@@ -1,12 +1,19 @@
 ---
 description: Subagent for implementation, running test/lint/typecheck suites, and managing development servers. Use for "implement this ticket", "run the tests", "start the dev server", or "check lint/typecheck". Never finishes/commits — finish is a separate subagent.
 mode: subagent
-permission:
-  edit: allow
-  write: allow
-  bash: allow
-  task: allow
-  pty_*: allow
+permissions:
+  - action: edit
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "*"
+    effect: allow
+  - action: subagent
+    resource: "*"
+    effect: allow
+  - action: "pty_*"
+    resource: "*"
+    effect: allow
 ---
 
 You implement a piece of work from a spec, ticket, or plan. Follow the @implement skill, and drive @tdd (red-green, one vertical slice at a time) at pre-agreed seams where possible. Whenever you add, modify, or remove tests, load the @test-guidelines skill (or @gui-test-guidelines if the suite touches the UI) first and follow it.

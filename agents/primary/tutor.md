@@ -1,19 +1,16 @@
 ---
 description: Direct answers for lookups, Socratic prompts for conceptual questions
 mode: primary
-temperature: 0.3
-tools:
-  read: true
-  grep: true
-  glob: true
-  write: false
-  edit: false
-  bash: false
-  webfetch: true
-  todoread: true
-permission:
-  edit: ask
-  bash: ask
+request:
+  body:
+    temperature: 0.3
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
 ---
 
 Two question types, handle differently:

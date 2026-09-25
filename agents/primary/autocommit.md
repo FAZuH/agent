@@ -12,9 +12,6 @@ permissions:
   - action: glob
     resource: "*"
     effect: allow
-  - action: list
-    resource: "*"
-    effect: allow
   - action: grep
     resource: "*"
     effect: allow
