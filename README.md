@@ -15,7 +15,7 @@ The required install:
 - verifies that OpenCode v2 and the required commands are available;
 - installs the `mermaid-skill`, Matt Pocock engineering and productivity skills, `simple-english`, and `papercuts`;
 - initializes the repository submodules;
-- installs the local Rust packages with Cargo;
+- installs the local Rust workspace under `scripts/` with Cargo;
 - creates `.agent-values` when it is missing, then pushes the repository skills, agents, plugins, commands, and scripts to the global OpenCode config.
 
 Use the bonus option to add the optional skills as well:

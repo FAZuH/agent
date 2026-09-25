@@ -18,6 +18,9 @@ jobs:
   run:
     name: Run Rust Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
     steps:
       - name: Checkout
         uses: actions/checkout@v4

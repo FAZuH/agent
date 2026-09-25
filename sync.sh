@@ -67,7 +67,7 @@ ${B}Options:${R}
 
 ${B}Examples:${R}
   sync.sh push -g                 install everything, globally
-                                  (incl. scripts/ → ~/.local/bin, copy never symlink)
+                                  (incl. executable scripts/ → ~/.local/bin, copy never symlink)
   sync.sh push -g -t dev,ocv2     install only dev + ocv2 items
   sync.sh list                    targets, tags, installed items
 
@@ -686,16 +686,17 @@ action_remove() {
 }
 
 # ── bin scripts (scripts/ → ~/.local/bin, copy never symlink) ─────────────
-# Machine-global and flat: repo scripts/<name> installs to $BIN_DIR/<name>.
-# Files sync never installed are left alone (adopted only when identical or
-# with --force); anything else in $BIN_DIR is out of scope.
+# Machine-global and flat: executable repo scripts/<name> installs to $BIN_DIR/<name>.
+# Non-executable files and directories under scripts/ are source material, not
+# commands to install. Files sync never installed are left alone (adopted only
+# when identical or with --force); anything else in $BIN_DIR is out of scope.
 
 # Prints repo-relative script paths passing the tag filter.
 enumerate_bin() {
   local f name
   [[ -d "$REPO/scripts" ]] || return 0
   for f in "$REPO/scripts"/*; do
-    [[ -f "$f" ]] || continue
+    [[ -f "$f" && -x "$f" ]] || continue
     name="$(basename "$f")"
     item_selected "scripts/$name" && printf 'scripts/%s\n' "$name"
   done

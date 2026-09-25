@@ -67,7 +67,7 @@ or add a `BREAKING CHANGE:` footer to the body. The changelog then shows the
 entry under a "Breaking Changes" section.
 
 Workspace members (crates) are bumped independently. The CI detects changed
-members by file path under `crates/<member>/`, not by commit scope. Commit
+members by file path under `scripts/crates/<member>/`, not by commit scope. Commit
 scope is a human-readable convention. It has no effect on the bump logic.
 
 ## Per-repo changelog mode

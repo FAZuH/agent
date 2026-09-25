@@ -41,6 +41,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+defaults:
+  run:
+    working-directory: scripts
+
 jobs:
   build-binary:
     name: Build Binary (${{ matrix.target }})
@@ -110,7 +114,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: patched-cargo-toml
-          path: .
+          path: scripts
         continue-on-error: true
 
       - name: Verify Patched Cargo.toml
