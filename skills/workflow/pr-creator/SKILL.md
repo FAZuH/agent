@@ -163,13 +163,24 @@ Use the `gh` CLI to create the PR. Write the description to a temporary file
 first to avoid shell-escaping issues with multi-line Markdown:
 
 ```bash
-# 1. Write the drafted description to a temporary file
-# 2. Create the PR using the --body-file flag
-gh pr create --title "type(scope): succinct description" --body-file <temp_file_path>
-# 3. Remove the temporary file
-rm <temp_file_path>
+# 1. Write the drafted description to a FRESH temp file, never a fixed path
+body=$(mktemp -t pr-body-XXXXXX.md)
+# 2. Assert the file has content before handing it to a flag that replaces the body
+test -s "$body" || { echo "PR body file is empty: $body" >&2; exit 1; }
+# 3. Create the PR using the --body-file flag
+gh pr create --title "type(scope): succinct description" --body-file "$body"
+# 4. Remove the temporary file
+rm "$body"
 ```
 
+- **Never pass an unverified path to `--body-file`.** The flag replaces the body
+  with the file's contents, so a missing or empty file silently wipes it — the
+  call succeeds and the damage is only visible afterwards. Create the file with
+  `mktemp` in the same command that uses it, assert `test -s` before the call,
+  and never append (`>>`) onto a path that may not exist, because that
+  *recreates* the file as empty. Keep cross-session drafts under
+  `/tmp/opencode/`, not bare `/tmp/`, so a concurrent session cannot collide.
+  The same guard applies to `gh issue edit --body-file`.
 - **Title**: Use the [Conventional Commits](https://www.conventionalcommits.org/)
   format if the repository uses it (match the style of recent commits when in
   doubt).
