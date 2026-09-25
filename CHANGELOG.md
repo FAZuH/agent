@@ -1,3 +1,17 @@
+## [0.11.2](https://github.com/FAZuH/agent/compare/v0.11.1...v0.11.2) (2026-09-25)
+
+
+### Features
+
+* add owned uninstaller ([674f3f2](https://github.com/FAZuH/agent/commit/674f3f28bbfe9ddb26640d6159765d3a2a44a2e1))
+
+
+### Bug Fixes
+
+* **ocv2:** require explicit opencode subcommands ([e48d81f](https://github.com/FAZuH/agent/commit/e48d81f229ff7e90261d4c1df947302ceb4163ee))
+* **skill:** guard gh --body-file against empty replacement files ([303262b](https://github.com/FAZuH/agent/commit/303262b273d87536d563392a49248d15b7c9412b))
+* **skill:** harden delegation and worktree guidance ([8648385](https://github.com/FAZuH/agent/commit/8648385c9e96316e6400cc991691bbb4972e7c6d))
+
 ## [0.11.1](https://github.com/FAZuH/agent/compare/v0.11.0...v0.11.1) (2026-09-25)
 
 
@@ -46,12 +60,4 @@
 ### Miscellaneous Chores
 
 * **plugin:** remove the quiz tool pair ([05a0b30](https://github.com/FAZuH/agent/commit/05a0b300a01b55bdcf04c0c4b0d6a6fdbd8c8da0))
-
-## [0.10.1](https://github.com/FAZuH/agent/compare/v0.10.0...v0.10.1) (2026-09-15)
-
-
-### Bug Fixes
-
-* keep the ingest bind host out of the published source ([a8d751f](https://github.com/FAZuH/agent/commit/a8d751f4ba2e9a451edadb3cf43037d0c5b22824))
-* **skill:** replace the internal litellm hostname with a placeholder ([1aaa90e](https://github.com/FAZuH/agent/commit/1aaa90ee3a3b929e8611bead50ce1ece7671a852))
 
