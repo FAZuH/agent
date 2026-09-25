@@ -258,8 +258,9 @@ flowchart TD
 
 ## Common workflows
 
-Named composites of the phases above. Pick the one that matches the job; each
-one is a straight line of skills in the order they fire.
+Named composites of the phases above. Pick the one that matches the job. Every
+node is a skill, in the order it fires; an edge label marks the one step that
+is not a skill.
 
 ### Ticket to merged
 
@@ -267,36 +268,18 @@ The default path for a feature or a fix that has a ticket.
 
 ```mermaid
 flowchart TD
-  T[Ticket] --> S[session: spec, tickets, deviations]
-  S --> W[worktree-new]
+  S[session] --> W[worktree-new]
   W --> X[task-context]
   X --> B[tdd, implement]
   B --> V[reproducing-ci-locally]
   V --> R[code-review]
   R --> P[pr-creator, pr-watchmerge]
-  P --> F[finish: commit, summarise, next steps]
+  P --> F[finish]
 ```
 
 - **session** holds the spec, the tickets, and the deviation log for the whole path.
 - **finish** runs last, not first: it commits the merged result, not the work in progress.
 - **pr-to-close** is this path with the worktree steps already wired together.
-
-### Bug fix
-
-A symptom is a report, not a diagnosis. Find the function every caller routes
-through and fix it there.
-
-```mermaid
-flowchart LR
-  B[Bug report] --> D[diagnosing-bugs]
-  D --> R[Reproduce it in a check that fails]
-  R --> S[Fix the shared function]
-  S --> V[Verify, then Review and Ship]
-```
-
-- **diagnosing-bugs** — the loop: read, hypothesise, probe, narrow.
-- **test-guidelines** — the failing check first, so the fix cannot regress silently.
-- When no shared seam exists, patch the callers and say so in the deviation log.
 
 ### Worktree lifecycle
 
@@ -304,9 +287,9 @@ An isolated branch that ends as a merged pull request and leaves nothing behind.
 
 ```mermaid
 flowchart LR
-  I[Idea] --> W[worktree-new]
-  W --> B[Build in the worktree]
-  B --> P[pr-creator]
+  W[worktree-new] --> I[implement]
+  I --> F[worktree-finish]
+  F --> P[pr-creator]
   P --> M[pr-watchmerge]
   M --> C[worktree-close]
 ```
@@ -320,11 +303,9 @@ Adding or editing a skill, an agent, a plugin, or a command.
 
 ```mermaid
 flowchart LR
-  A[Add or edit an item] --> W[writing-for-agents: structure and frontmatter]
-  W --> D[Add its entry to the docs inventory]
-  D --> S[skill-doctor: links, names, collisions]
-  S --> P[sync.sh diff, then sync.sh push]
-  P --> L[V2 hot-reloads; cold restart only when a component does not appear]
+  M[agent-map] --> W[writing-for-agents]
+  W -->|add its docs entry| S[skill-doctor]
+  S --> C[commit]
 ```
 
 - **agent-map** decides which source directory the item belongs in.
@@ -337,10 +318,9 @@ Work that continues without you at the keyboard.
 
 ```mermaid
 flowchart LR
-  S[Timer or kickoff] --> R[scheduled-task fires]
-  R --> A[scheduled-agent runs headless, least privilege]
-  A --> H[long-horizon: supervisor and heartbeat]
-  H --> N[notes record what it found]
+  T[scheduled-task] --> A[scheduled-agent]
+  A --> H[long-horizon]
+  H --> N[notes]
 ```
 
 - **scheduled-agent** — a deny-by-default agent definition, so a timer cannot do more than it was given.
