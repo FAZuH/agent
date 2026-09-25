@@ -1,3 +1,12 @@
+## [0.11.3](https://github.com/FAZuH/agent/compare/v0.11.2...v0.11.3) (2026-09-25)
+
+
+### Features
+
+* add the update-pins skill ([fc00e69](https://github.com/FAZuH/agent/commit/fc00e69c801469dc276f8f1e19a656cbc6ccb817))
+* **script:** pin the npm, cargo, and git versions install.sh fetches ([2d5316a](https://github.com/FAZuH/agent/commit/2d5316a054165d8ea5662d4b25fad0147401352d))
+* **skill:** add update-fazuh-agent and record the repo path on push ([5e0a5fa](https://github.com/FAZuH/agent/commit/5e0a5fa620dc7ee56a243bfdb601b45a44ced789))
+
 ## [0.11.2](https://github.com/FAZuH/agent/compare/v0.11.1...v0.11.2) (2026-09-25)
 
 
@@ -42,22 +51,4 @@
 ### Bug Fixes
 
 * **agent:** audit existing checkout directly in malware-check ([95e9a98](https://github.com/FAZuH/agent/commit/95e9a988c496fd1972a081ccb8d065144b238ec1))
-
-## [0.10.2](https://github.com/FAZuH/agent/compare/v0.10.1...v0.10.2) (2026-09-15)
-
-
-### ⚠ BREAKING CHANGES
-
-* **plugin:** remove the quiz tool pair
-* **skill:** teach quizzes are plain chat Q&A
-
-### Features
-
-* render mail-digest bullets as Discord markdown lists ([bb36f65](https://github.com/FAZuH/agent/commit/bb36f65b32fd35021b377dfce854aceec1f9476b))
-* **skill:** teach quizzes are plain chat Q&A ([6501996](https://github.com/FAZuH/agent/commit/650199612bb261cb2be2f83d3d3505388039e8e0))
-
-
-### Miscellaneous Chores
-
-* **plugin:** remove the quiz tool pair ([05a0b30](https://github.com/FAZuH/agent/commit/05a0b300a01b55bdcf04c0c4b0d6a6fdbd8c8da0))
 
