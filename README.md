@@ -32,6 +32,18 @@ The bonus install adds:
 
 The installer checks system tools but does not install operating-system packages or use `sudo`. Install missing system tools first, then rerun it.
 
+## Uninstall
+
+Run the uninstaller from the repository root:
+
+```bash
+./uninstall.sh
+```
+
+The default removes this repository's sync-managed skills, agents, plugins, commands, and scripts. It also removes the local Cargo package `agent`, which provides `octask`, `phone-digest`, and `mail-digest`.
+
+It keeps OpenCode, `papercuts`, external skills, operating-system packages, and the repository checkout. Use `--dry-run` to preview the cleanup. Pass `--external-packages` to remove `papercuts` as well, or `--external-skills` to remove the external skills installed by `install.sh`.
+
 After editing the repository, push the changed copies with:
 
 ```bash
