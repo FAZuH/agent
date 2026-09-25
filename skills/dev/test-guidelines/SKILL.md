@@ -51,6 +51,12 @@ Tests that violate these are integration tests. Label and treat them as such —
 - **Tests must not depend on execution order.** Any test must pass in isolation and in any order. If B requires A first, they are one test.
 - **Eliminate non-determinism.** Wall clock time, random numbers, and network calls make tests flaky. Inject clocks, seed RNGs, stub or stub at the boundary. A flaky test is worse than no test — it erodes trust in the entire suite until failures are ignored.
 
+## Measurement validity
+- **A measurement must be falsifiable.** If no plausible change could flip the result, it is not a measurement. A number with no baseline, no error bar, and no named knob is an anecdote.
+- **Hold every input constant across an A/B.** Vary exactly one knob and name it in the write-up. Any other difference invalidates the comparison, including build state and cache state.
+- **Verify the run measured what you think it measured.** Changing an env var that reaches the compiler (`CARGO_INCREMENTAL`, `RUSTFLAGS`, `CARGO_PROFILE_*`) flips codegen flags and dirties build fingerprints, so the next run rebuilds the whole dependency graph. A cold full build then gets reported as a single-crate number. Check whether a full rebuild happened before quoting any timing.
+- **State warm or cold.** Cold-build and warm-build figures are not comparable, and neither is comparable to an incremental one.
+
 ## Structure
 - **One concept per test.** Assert one logical thing. Multiple unrelated assertions in a single test obscure which behavior failed.
 - **Use Arrange-Act-Assert (AAA) / Given-When-Then.** Set up preconditions, execute the single behavior, assert the outcome. Keep each phase minimal and clearly separated.

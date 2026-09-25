@@ -1,7 +1,6 @@
 ---
 name: pr-watchmerge
 description: Watch a pull request's CI checks and merge it automatically once they pass. Use whenever the user wants to watch PR CI/checks and merge when green, auto-merge, wait for checks then merge, "watch the PR and merge it", or merge a PR as soon as its CI passes. Also trigger when the user says "merge once green", "watch CI then merge", "merge after checks pass", or wants a PR merged immediately on success without manual review. Do NOT use for general PR creation or review — those belong to pr-creator / code-review.
-compatibility: Optional opencode-pty plugin — when present, use pty_spawn + pty_wait for the long-running `gh run watch` step.
 ---
 
 # PR watch-and-merge
@@ -46,7 +45,7 @@ gh run watch <run-id> --exit-status
 
 If there are multiple runs, watch each one. `gh run watch` with no id follows the most recent run for the current branch — fine when there's a single workflow run to track.
 
-**If the `opencode-pty` plugin is available**, run the watch as a background PTY so you don't block on it: spawn it with `pty_spawn` (set `notifyOnExit: true` so you're told when it finishes), then wait for it with `pty_wait` (passing the session id). Read its output with `pty_read` afterward to confirm the result. This keeps a potentially long CI watch from occupying the shell/context while it runs.
+Use OpenCode's built-in `shell` tool with `background: true` for each long-running watch. The tool returns immediately and notifies the session when the command finishes. Wait for that notification instead of polling, then run the final-state checks below.
 
 `gh run watch` prints progress and returns when the run completes. Check the final state:
 

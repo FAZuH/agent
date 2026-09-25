@@ -91,7 +91,9 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
 5. Optional: view the graph with `scripts/skill-graph` (repo `scripts/`,
    installed flat to `~/.local/bin` via `sync.sh push -g`). It regenerates the
    interactive page beside `graph.json` and opens it (`--no-open` to skip;
-   `--json`/`--out` to redirect paths).
+   `--json`/`--out` to redirect paths). If browser tools reject `file://` or no
+   desktop bridge is connected, serve the XDG data directory on localhost and
+   open `graph.html` there. Do not hand-roll a Playwright viewer for this.
 
 ## Common commands
 

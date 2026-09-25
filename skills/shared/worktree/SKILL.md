@@ -47,6 +47,7 @@ Because these live in the main tree only, they are *not* available inside the wo
 - Commits and edits go into the worktree directory.
 - Do **not** run `git worktree remove` or `git branch -D` while work is in progress.
 - Untracked main-tree files (`.scratch/`, `.papercuts.jsonl`) are not visible in the worktree; do not try to create or edit them there.
+- In a Rust worktree, set `CARGO_TARGET_DIR=<worktree-path>/target` before building. Cargo locks and fingerprints are path-sensitive, so a shared target directory serializes concurrent worktrees and can trigger a cold rebuild.
 
 ## Finishing / cleanup
 

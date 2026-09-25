@@ -99,7 +99,7 @@ Load the narrowest existing skill that matches the task:
 - `finish` for end-of-session cleanup and closeout
 - `test-guidelines` for test design
 - `gui-test-guidelines` for browser or desktop UI tests
-- `opencode-skill-creator` for creating and evaluating skills
+- `writing-for-agents` for skill and agent document structure
 - `simple-english` for documentation prose
 - `worktree-new` and `worktree-close` for isolated branch work
 - `rust-idioms` and `rust-tea` for Rust design and UI architecture

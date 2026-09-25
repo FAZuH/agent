@@ -20,9 +20,6 @@ permissions:
   - action: external_directory
     resource: "/tmp/*"
     effect: allow
-  - action: "pty_*"
-    resource: "*"
-    effect: ask
   - action: question
     resource: "*"
     effect: allow

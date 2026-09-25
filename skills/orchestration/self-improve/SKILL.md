@@ -50,8 +50,9 @@ Always follow the rules in the *Rules* section at the bottom.
 ## Rules
 
 - This skill never edits skills, agent definitions, or config, and never
-  applies fixes — application belongs to @papercut-sweep, creation to
-  @opencode-skill-creator.
+  applies fixes. Application belongs to @papercut-sweep. Skill creation
+  requires a separate `writing-for-agents` workflow after explicit user
+  approval.
 - Both gates (`papercut-file` in step 1, `offer-sweep` in step 3) are
   `normal` gates: explicit user approval required; they skip only in auto
   mode (vocabulary: @gate).
