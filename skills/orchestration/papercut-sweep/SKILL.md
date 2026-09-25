@@ -62,10 +62,10 @@ Run top to bottom when invoked. Do not skip the user gates.
      skips; propose, get explicit OK, wait)**. No autonomous config edits,
      ever, even "obvious" ones.
    - Project source code → never through this loop; route to normal work.
-4. **Evidence** — when a change rewrites a skill *description*, OFFER to
-     validate with the opencode-skill-creator eval tooling
-     (`skill_eval`); do not run evals unprompted. Body/content edits need
-     no formal evidence unless the user asks.
+4. Evidence: when a change rewrites a skill description, review its trigger
+   branches against the body and run `skill-doctor`. Treat trigger accuracy as a
+   manual judgment unless the user supplies a dedicated evaluation tool. Body
+   and content edits need no formal evidence unless the user asks.
 5. **Graduate big trials** — an idea needing real-world trial (new
    workflow, structural skill change) becomes a `.scratch/<date>_<slug>/`
    session ticket instead of a direct edit; adopt or reject from the

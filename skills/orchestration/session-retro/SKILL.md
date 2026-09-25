@@ -70,8 +70,9 @@ Use `-g` only for global scope.
   trigger (when it should fire), what the skill would do end-to-end, and
   evidence (transcript excerpt + steps). Format:
   `new-skill <working-name>: <trigger when> > <what it would do> > evidence: <excerpt>`.
-  `@papercut-sweep` picks these up by the `self::` prefix; creation itself
-  belongs to @opencode-skill-creator after explicit user approval, never here.
+  `@papercut-sweep` picks these up by the `self::` prefix. Creation requires
+  `writing-for-agents` and a separate implementation session after explicit
+  user approval, never here.
 - One finding per entry; overlapping findings get separate entries so the
   sweep can dedup.
 
@@ -131,9 +132,10 @@ collect its `id`. Then report a compact **filed** table:
 - **Propose and gate.** The GATE papercut-file tag above binds: never file a
   papercut without explicit user approval in this session, and never edit
   skills, agent defs, or config from this skill. Never auto-create a new
-  skill here — if the user wants to pursue a `self::new-skill` candidate
-  after filing, hand off explicitly to @opencode-skill-creator. If the user wants immediate
-  application after filing, hand off explicitly to @papercut-sweep.
+  skill here. If the user wants to pursue a `self::new-skill` candidate after
+  filing, start a separate skill-authoring session with `writing-for-agents`.
+  If the user wants immediate application after filing, hand off explicitly
+  to @papercut-sweep.
 - **Scope decides store.** Global scope → global store (`-g`); repo/project scope → local store (no `-g`). Do not use `-g` for repo-local fixes.
 
 ## Rules
