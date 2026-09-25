@@ -90,6 +90,7 @@ Session message lists can exceed the shell tool's output limit (>250KB on long s
 4. **Boundary forms:** `POST /api/session/{id}/fork` requires `{"boundary":{"type":"through"}}` or `{"type":"before","messageID":"msg_…"}`. `through` without `messageID` is valid — server fills the last message (live-verified). `before` without `messageID` is `InvalidRequestError`.
 5. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}` — `variant` optional, `id`+`providerID` required.
 6. **No curl-style flags:** `opencode2 api` rejects `-w`/`-o` (`Unrecognized flag`) and has no timeout flag. Redirect the body to a file and parse it (`> out.json`); wrap poll-loop calls in `timeout N opencode2 api …` — a hung child blocked a plugin poll loop for 15.5 minutes.
+7. **Interactive commands need a subcommand:** bare `opencode` (or its `opencode2` compatibility wrapper) launches the TUI and blocks the shell tool until timeout. Use the v2 binary with an explicit subcommand such as `api`, `models`, `auth list`, or `run`.
 
 ## Related
 
