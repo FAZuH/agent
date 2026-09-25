@@ -3,9 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # rustup keeps cargo outside the default PATH, and a non-login shell — ssh, a
-# systemd timer, CI — never sources the profile that adds it.
+# systemd timer, CI — never sources the profile that adds it. A self-installed
+# OpenCode sits in the same spot, so look there too before giving up on both.
 if [[ -d "$HOME/.cargo/bin" ]]; then
   export PATH="$HOME/.cargo/bin:$PATH"
+fi
+if ! command -v opencode >/dev/null 2>&1 && [[ -x "$HOME/.opencode/bin/opencode" ]]; then
+  export PATH="$HOME/.opencode/bin:$PATH"
 fi
 
 BONUS=0
