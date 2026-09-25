@@ -11,9 +11,6 @@ permissions:
   - action: glob
     resource: "*"
     effect: allow
-  - action: list
-    resource: "*"
-    effect: allow
   - action: grep
     resource: "*"
     effect: allow
@@ -26,7 +23,7 @@ permissions:
   - action: shell
     resource: "sleep *"
     effect: allow
-  - action: task
+  - action: subagent
     resource: "*"
     effect: allow
 ---

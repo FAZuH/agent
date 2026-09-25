@@ -22,7 +22,10 @@ credentials, local target state, or host commands. Keep those facts in the host
 - `plugins/` contains OpenCode plugins. Keep plugin dependencies in
   `plugins/package.json`.
 - `commands/` contains user-facing command definitions.
-- `sync.sh` deploys repository items to OpenCode configuration directories.
+- `scripts/` contains executable repository commands plus the Rust workspace
+  (`Cargo.toml`, `Cargo.lock`, `crates/`, `src/`, `tests/`, and `rustfmt.toml`).
+- `sync.sh` deploys only executable top-level files from `scripts/` to
+  `~/.local/bin`; the Rust workspace is source material and is not installed.
 - `targets.conf` defines named deployment targets. `global` is implicit.
 - `tags.conf` defines selective deployment tags.
 - `.agent-values.example` documents portable template keys. The local
@@ -56,7 +59,8 @@ repository and its machine-specific values in the host overlay.
 | Agent | `agents/<category>/<name>.md` |
 | Plugin | `plugins/<name>/` |
 | Command | `commands/<name>.md` |
-| Repository script | `scripts/<name>` |
+| Executable repository script | `scripts/<name>` (top-level executable file) |
+| Rust workspace | `scripts/Cargo.toml`, `scripts/crates/`, `scripts/src/`, `scripts/tests/` |
 | Public documentation | `README.md` or `docs/` |
 
 Use the category that matches what the skill does:

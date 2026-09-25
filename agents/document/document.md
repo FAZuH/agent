@@ -11,9 +11,6 @@ permissions:
   - action: glob
     resource: "*"
     effect: allow
-  - action: list
-    resource: "*"
-    effect: allow
   - action: grep
     resource: "*"
     effect: allow
@@ -48,39 +45,6 @@ permissions:
     resource: "CHANGELOG*"
     effect: allow
   - action: edit
-    resource: "LICENSE*"
-    effect: allow
-  - action: write
-    resource: "**/*.md"
-    effect: allow
-  - action: write
-    resource: "**/*.mdx"
-    effect: allow
-  - action: write
-    resource: "**/*.rst"
-    effect: allow
-  - action: write
-    resource: "**/*.adoc"
-    effect: allow
-  - action: write
-    resource: "**/*.txt"
-    effect: allow
-  - action: write
-    resource: "**/*.typ"
-    effect: allow
-  - action: write
-    resource: "docs/**"
-    effect: allow
-  - action: write
-    resource: "CONTEXT*"
-    effect: allow
-  - action: write
-    resource: "README*"
-    effect: allow
-  - action: write
-    resource: "CHANGELOG*"
-    effect: allow
-  - action: write
     resource: "LICENSE*"
     effect: allow
   - action: shell

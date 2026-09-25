@@ -112,7 +112,7 @@ cargo install --git https://github.com/FAZuH/papercuts
 step "Installing repository packages"
 ensure_agent_values
 git -C "$ROOT" submodule update --init
-cargo install --path "$ROOT"
+cargo install --path "$ROOT/scripts"
 
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g

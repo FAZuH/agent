@@ -99,8 +99,9 @@ Rules and gotchas:
 
 ## Step 2 — schedule the run
 
-Use the unified `octask` CLI (Rust binary, `cargo install --git
-https://github.com/FAZuH/agent` if missing; source `~/Projects/agent`):
+Use the unified `octask` CLI (Rust binary). If missing, clone
+`https://github.com/FAZuH/agent` and run `cargo install --path scripts`; the
+local source is `~/Projects/agent/scripts`:
 
 ```bash
 octask add <name> \

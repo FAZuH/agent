@@ -11,6 +11,9 @@ jobs:
   detect:
     name: Detect Workspace Changes
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
     outputs:
       member-versions: ${{ steps.output.outputs.member-versions }}
     steps:

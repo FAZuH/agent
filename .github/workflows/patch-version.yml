@@ -21,12 +21,15 @@ on:
         description: 'Space-separated list of package names to publish'
         value: ${{ jobs.patch.outputs.packages }}
       manifests_b64:
-        description: 'Base64 gzip tar of the patched manifests (Cargo.toml, Cargo.lock, crates/**/Cargo.toml)'
+        description: 'Base64 gzip tar of the patched manifests (scripts/Cargo.toml, scripts/Cargo.lock, scripts/crates/**/Cargo.toml)'
         value: ${{ jobs.patch.outputs.manifests_b64 }}
 
 jobs:
   patch:
     name: Patch Cargo.toml Version
+    defaults:
+      run:
+        working-directory: scripts
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.set-version.outputs.version }}
@@ -218,7 +221,7 @@ jobs:
         with:
           name: patched-cargo-toml
           path: |
-            Cargo.toml
-            Cargo.lock
-            crates/**/Cargo.toml
+            scripts/Cargo.toml
+            scripts/Cargo.lock
+            scripts/crates/**/Cargo.toml
           retention-days: 3

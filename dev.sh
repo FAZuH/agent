@@ -10,6 +10,7 @@ set -e
 
 # Resolve script directory so module discovery works from any CWD
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CARGO_MANIFEST="$SCRIPT_DIR/scripts/Cargo.toml"
 
 # Colors for output
 RED='\033[0;31m'
@@ -55,24 +56,24 @@ dev_desc() {
 
 cmd_format() {
     inf "Formatting code..."
-    cargo +nightly fmt --all
+    cargo +nightly fmt --manifest-path "$CARGO_MANIFEST" --all
     scs "Formatting completed"
 }
-dev_desc format "Format code with \"cargo +nightly fmt --all\""
+dev_desc format "Format code with \"cargo +nightly fmt --manifest-path scripts/Cargo.toml --all\""
 
 cmd_lint() {
     inf "Linting code..."
-    cargo clippy --workspace --all-targets --all-features --no-deps --fix --allow-dirty
+    cargo clippy --manifest-path "$CARGO_MANIFEST" --workspace --all-targets --all-features --no-deps --fix --allow-dirty
     scs "Linting completed"
 }
-dev_desc lint "Run linter with \"cargo clippy --workspace --all-targets --all-features --fix --allow-dirty\""
+dev_desc lint "Run linter with \"cargo clippy --manifest-path scripts/Cargo.toml --workspace --all-targets --all-features --fix --allow-dirty\""
 
 cmd_test() {
     inf "Running tests..."
-    cargo test --workspace --all-targets --all-features --no-fail-fast
+    cargo test --manifest-path "$CARGO_MANIFEST" --workspace --all-targets --all-features --no-fail-fast
     scs "Tests completed"
 }
-dev_desc test "Run tests with \"cargo test --workspace --all-targets --all-features\""
+dev_desc test "Run tests with \"cargo test --manifest-path scripts/Cargo.toml --workspace --all-targets --all-features\""
 
 cmd_docs() {
     inf "Compiling Mermaid diagrams..."
@@ -103,7 +104,7 @@ dev_desc docs "Compile Mermaid diagrams to images"
 
 cmd_demo() {
     inf "Building release binary..."
-    cargo build --release
+    cargo build --manifest-path "$CARGO_MANIFEST" --release
     scs "Release build completed"
 
     inf "Creating wrapper script..."
@@ -111,7 +112,7 @@ cmd_demo() {
     mkdir -p "$wrapper_dir"
     cat > "$wrapper_dir/tomo" << SCRIPT
 #!/bin/bash
-exec $PWD/target/release/tomo --config-path /tmp/tomo-demo "\$@"
+exec "$SCRIPT_DIR/scripts/target/release/tomo" --config-path /tmp/tomo-demo "\$@"
 SCRIPT
     chmod +x "$wrapper_dir/tomo"
     export PATH="$wrapper_dir:$PATH"

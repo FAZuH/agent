@@ -23,10 +23,12 @@ curl -fsSL -o /usr/local/bin/octask \
 chmod +x /usr/local/bin/octask
 ```
 
-Or build from source:
+Or build from a clone:
 
 ```sh
-cargo install --git https://github.com/FAZuH/agent
+git clone https://github.com/FAZuH/agent.git
+cd agent
+cargo install --path scripts
 ```
 
 ## Usage

@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+DEFAULT_MODEL="${DEFAULT_AGENT:-opencode/space-bunny-free}"
+COMMANDS=(answer code diagram handwriting latex math obsidian ocr summarize translate)
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+COMMAND_DIR="$CONFIG_DIR/commands/imagescan"
+
+usage() {
+  cat <<EOF
+Usage: imagescan [-m MODEL] <0-9|name> [image]
+
+Capture the whole screen, run an ImageScan command, and show its answer.
+If image is omitted, capture the whole screen automatically.
+
+Model: $DEFAULT_MODEL (override with -m/--model)
+
+0 answer       5 math
+1 code         6 obsidian
+2 diagram      7 ocr
+3 handwriting  8 summarize
+4 latex        9 translate
+EOF
+}
+
+die() {
+  printf 'imagescan: %s\n' "$*" >&2
+  exit 2
+}
+
+notify() {
+  notify-send --app-name=ImageScan --expire-time=15000 "ImageScan: $1" "$2"
+}
+
+model="$DEFAULT_MODEL"
+selection=""
+image=""
+
+while (($#)); do
+  case "$1" in
+    -m|--model)
+      (($# >= 2)) || die "$1 requires a model"
+      model="$2"
+      shift 2
+      ;;
+    -m*) model="${1#-m}"; shift ;;
+    --model=*) model="${1#--model=}"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; (($# <= 2)) || die "expected a command and optional image"; [[ -n ${1-} ]] && selection="$1"; [[ -n ${2-} ]] && image="$2"; break ;;
+    -*) die "unknown option: $1" ;;
+    *)
+      if [[ -z "$selection" ]]; then
+        selection="$1"
+      elif [[ -z "$image" ]]; then
+        image="$1"
+      else
+        die "too many arguments"
+      fi
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$selection" ]] || { usage >&2; exit 2; }
+[[ -n "$model" ]] || die "model cannot be empty"
+command -v opencode >/dev/null || die "opencode is not installed"
+command -v jq >/dev/null || die "jq is not installed"
+command -v notify-send >/dev/null || die "notify-send is not installed"
+
+if [[ "$selection" =~ ^[0-9]$ ]]; then
+  key="${COMMANDS[$((10#$selection))]}"
+else
+  key="${selection##*/}"
+  key="${key#imagescan-}"
+  key="${key%.md}"
+  valid=0
+  for command_name in "${COMMANDS[@]}"; do
+    [[ "$key" == "$command_name" ]] && valid=1 && break
+  done
+  ((valid)) || die "unknown ImageScan command: $selection"
+fi
+
+command_file="$COMMAND_DIR/imagescan-$key.md"
+[[ -r "$command_file" ]] || die "command file not found: $command_file"
+
+if [[ -z "$image" ]]; then
+  command -v omarchy >/dev/null || die "omarchy is required when no image path is supplied"
+  notify "$key" "Capturing the whole screen"
+  image="$(omarchy capture screenshot fullscreen save)" || die "screenshot capture failed"
+fi
+[[ -s "$image" ]] || die "image not found or empty: $image"
+
+# opencode run sends slash commands literally, so use the stored template to keep -m authoritative.
+prompt="$(awk '
+  NR == 1 && $0 == "---" { frontmatter = 1; next }
+  frontmatter && $0 == "---" { frontmatter = 0; body = 1; next }
+  body { print }
+' "$command_file")"
+[[ -n "$prompt" ]] || die "command template is empty: $command_file"
+
+notify "$key" "Running $model"
+if output="$(opencode run --agent chat --model "$model" --file "$image" --format json "$prompt" 2>&1)"; then
+  answer="$(printf '%s\n' "$output" | jq -r 'select(.type == "text") | .part.text // empty')"
+else
+  status=$?
+  error="$(printf '%s\n' "$output" | jq -r 'select(.type == "error") | .error.message // empty' 2>/dev/null | tail -n 1)"
+  [[ -n "$error" ]] || error="$(printf '%s\n' "$output" | tail -n 3)"
+  notify "$key" "OpenCode failed: $error"
+  printf 'imagescan: OpenCode failed: %s\n' "$error" >&2
+  exit "$status"
+fi
+
+[[ -n "$answer" ]] || die "OpenCode returned no text"
+notify "$key" "$answer" || die "notification failed"
+printf '%s\n' "$answer"
