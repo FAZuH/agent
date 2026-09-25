@@ -1,6 +1,5 @@
 ---
 description: Extract and format text from images as clean markdown
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

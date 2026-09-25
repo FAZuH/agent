@@ -172,14 +172,15 @@ item_selected() { # <src> — true when the item passes the tag filter
   return 1
 }
 
-# Warn about config patterns that match no repo item — usually a typo, and
-# it would silently drop items from a tagged deploy. Checks against ALL tops,
+# Warn about patterns that match no repo item — usually a typo, and it would
+# silently drop items from a tagged deploy. Checks all deployable items,
 # regardless of top/tag selection.
 warn_unused_patterns() {
   local sel=("${TAGS_SEL[@]}") tops=("${TOP_LIST[@]}") src i pats p found
   TAGS_SEL=(); TOP_LIST=("${TOPS[@]}")
   local all_srcs=()
   while IFS='|' read -r src rel; do all_srcs+=("$src"); done < <(enumerate_items)
+  while IFS= read -r src; do all_srcs+=("$src"); done < <(enumerate_bin)
   TAGS_SEL=("${sel[@]}"); TOP_LIST=("${tops[@]}")
   for i in "${!TAG_NAME[@]}"; do
     IFS=',' read -ra pats <<<"${TAG_PATS[i]}"
@@ -307,10 +308,10 @@ enumerate_items() {
           emit_item "plugins/$name" "plugins/$name"
         done ;;
       commands)
-        for child in "$REPO/commands"/*.md; do
-          [[ -f "$child" ]] || continue
-          emit_item "commands/$(basename "$child")" "commands/$(basename "$child")"
-        done ;;
+        while IFS= read -r -d '' child; do
+          name="${child#"$REPO/commands/"}"
+          emit_item "commands/$name" "commands/$name"
+        done < <(find "$REPO/commands" -type f -name '*.md' -print0 | sort -z) ;;
     esac
   done
 }

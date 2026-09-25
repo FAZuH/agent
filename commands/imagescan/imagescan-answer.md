@@ -1,6 +1,5 @@
 ---
 description: Answer questions found in screenshot images
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

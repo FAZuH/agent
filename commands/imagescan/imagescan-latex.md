@@ -1,6 +1,5 @@
 ---
 description: Transcribe mathematical expressions to MathJax format
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

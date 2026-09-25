@@ -1,6 +1,5 @@
 ---
 description: Summarize content from images concisely
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

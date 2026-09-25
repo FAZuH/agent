@@ -1,6 +1,5 @@
 ---
 description: Transcribe handwritten text from images
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

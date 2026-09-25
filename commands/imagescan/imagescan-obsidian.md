@@ -1,6 +1,5 @@
 ---
 description: Extract markdown text from images for Obsidian
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

@@ -1,6 +1,5 @@
 ---
 description: Describe diagrams and flowcharts from images
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 

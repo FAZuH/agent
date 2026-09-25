@@ -1,6 +1,5 @@
 ---
 description: Translate text from images to English
-model: opencode/muse-spark-1.2-contributor-free
 agent: chat
 ---
 
