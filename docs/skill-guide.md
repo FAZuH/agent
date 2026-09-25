@@ -1,18 +1,8 @@
 # Skill Guide
 
-Skills by the phase of the work they serve. Find the phase, load only what that
-phase lists, and stop.
+Skills by the phase of work.
 
-- A skill is listed once. Cross-phase tools live under **Any time**.
-- Order inside a phase is a suggestion, not a gate. `gate` decides what waits
-  for a human.
-- Names in **bold** are skills. The repository's own inventory, with one line
-  each, is in [Skills](skills.md); the rest are installed by `install.sh`.
-
-- [Flow](#flow) — the phase chain and its two loops
-- [Phases](#phases) — what each phase settles, and the skills for it
-- [Any time](#any-time) — legal in every phase
-- [Common workflows](#common-workflows) — the named composites of the phases
+## Phases
 
 The eight phases, in order:
 
@@ -27,7 +17,6 @@ The eight phases, in order:
 | [Ship](#ship) | Branch to merged |
 | [Close](#close) | Commit, document, archive, improve |
 
-## Flow
 
 ```mermaid
 flowchart LR
@@ -42,17 +31,12 @@ flowchart LR
   C --> F
 ```
 
-`Verify` loops back to `Build` until the checks agree, `Review` sends fixes back
-the same way, and `Close` hands the next ticket back to `Frame`.
-
-## Phases
-
 ### Frame
 
 Understand the task before touching anything.
 
 ```mermaid
-flowchart TD
+flowchart LR
   T[Task lands] --> A[ask-matt picks the skill]
   A --> O[agent-map, read-pdf, triage orient you]
   O --> R[deep-research, research gather facts]
@@ -75,7 +59,7 @@ flowchart TD
 Settle the design before code exists.
 
 ```mermaid
-flowchart TD
+flowchart LR
   Q[Question] --> G[grill-me, grilling, grill-with-docs]
   G --> O[design-tradeoffs, codebase-design, oop]
   O --> P[prototype]
@@ -100,7 +84,7 @@ flowchart TD
 Give the work its own branch, workspace, and context.
 
 ```mermaid
-flowchart TD
+flowchart LR
   N[Decided ticket] --> S[session opens the workspace]
   S --> W[worktree-new]
   W --> F[forkflow]
@@ -120,7 +104,7 @@ flowchart TD
 Write the thing.
 
 ```mermaid
-flowchart TD
+flowchart LR
   C[Context packet] --> T[tdd]
   T --> I[implement]
   I --> H[house rules]
@@ -145,7 +129,7 @@ flowchart TD
 Make the checks mean the same thing here and on the runner.
 
 ```mermaid
-flowchart TD
+flowchart LR
   B[Built change] --> T[test-guidelines, gui-test-guidelines]
   T --> C[reproducing-ci-locally]
   C --> G{Green where CI is green?}
@@ -162,7 +146,7 @@ flowchart TD
 Standards and spec, read side by side.
 
 ```mermaid
-flowchart TD
+flowchart LR
   D[Diff since a fixed point] --> S[code-review]
   S --> W[writing-defect-reports]
   W --> X[shipping-across-surfaces]
@@ -180,7 +164,7 @@ flowchart TD
 Branch to merged.
 
 ```mermaid
-flowchart TD
+flowchart LR
   G[Approved diff] --> P[pr-creator]
   P --> W[pr-watchmerge]
   W --> C{Conflicts?}
@@ -204,7 +188,7 @@ flowchart TD
 Commit, document, archive, improve.
 
 ```mermaid
-flowchart TD
+flowchart LR
   M[Merged] --> F[finish]
   F --> A[scratch-finish, worktree-finish]
   A --> I[self-improve, papercut-sweep]
@@ -229,7 +213,7 @@ Long work also checkpoints through `session`, which [Isolate](#isolate) sets
 up.
 
 ```mermaid
-flowchart TD
+flowchart LR
   A[Any turn] --> O[orchestrate, workflows]
   O --> G[gate]
   G --> P[prepare-compact]

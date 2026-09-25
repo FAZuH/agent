@@ -4,8 +4,8 @@
 Reads graph.json (written by skill-doctor's scripts/build_graph.py), writes a
 self-contained graph.html with the data inlined, and opens it.
 
-Layout positions persist in the page's localStorage: a force layout randomizes
-by default, and the graph regenerates often.
+Layout positions persist in the page's localStorage, per layout: the graph
+regenerates often, and a hand-placed fcose layout is no seed for dagre.
 """
 
 from __future__ import annotations
@@ -23,6 +23,11 @@ DEFAULT_JSON = DATA_HOME / "skill-doctor" / "graph.json"
 
 CYTOSCAPE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape@3.34.3/dist/cytoscape.min.js"
 DAGRE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape-dagre@4.0.1/dist/cytoscape-dagre.min.js"
+# The fcose browser bundles are not self-contained: each resolves the previous
+# one off window (fcose -> cose-base -> layout-base), so all three load in order.
+LAYOUT_BASE_CDN = "https://cdn.jsdelivr.net/npm/layout-base@2.0.1/layout-base.min.js"
+COSE_BASE_CDN = "https://cdn.jsdelivr.net/npm/cose-base@2.2.0/cose-base.min.js"
+FCOSE_CDN = "https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/cytoscape-fcose.min.js"
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -30,6 +35,9 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <title>Skill graph</title>
 <script src="@@CYTO@@"></script>
+<script src="@@LBASE@@"></script>
+<script src="@@BASEC@@"></script>
+<script src="@@FCO@@"></script>
 <script src="@@DAGRE@@"></script>
 <style>
 :root { color-scheme: light; }
@@ -67,7 +75,8 @@ li a:hover { text-decoration: underline; }
 
   <h2>Layout</h2>
   <select id="layout">
-    <option value="cose">Force (cose)</option>
+    <option value="fcose" selected>Force (fcose)</option>
+    <option value="cose">CoSE (hairball)</option>
     <option value="dagre">Layered (dagre, LR)</option>
   </select>
   <label>Focus depth
@@ -94,6 +103,7 @@ li a:hover { text-decoration: underline; }
 <script>
 "use strict";
 const G = JSON.parse(document.getElementById("graph").textContent);
+cytoscape.use(window.cytoscapeFcose);
 cytoscape.use(window.cytoscapeDagre);
 
 const ROOT_FILL = { config: ["#bfe3c0", "#2f7d32", "~/.config/opencode/skills"],
@@ -128,7 +138,9 @@ const cy = cytoscape({
     { selector: "node", style: {
         label: "data(label)", "font-size": 9, "text-wrap": "wrap", "text-max-width": 96,
         color: "#222", "text-valign": "bottom", "text-halign": "center", "text-margin-y": 3,
-        width: "mapData(data(degree), 0, 45, 20, 50)", height: "mapData(data(degree), 0, 45, 20, 50)",
+        // mapData takes a bare field name; `data(degree)` is invalid and
+        // silently falls back to the default 30px for every node.
+        width: "mapData(degree, 0, 45, 20, 50)", height: "mapData(degree, 0, 45, 20, 50)",
         "border-width": 2, "border-color": "#fff", "background-opacity": 1 } },
     { selector: ".root-config", style: { "background-color": ROOT_FILL.config[0], "border-color": ROOT_FILL.config[1] } },
     { selector: ".root-agents", style: { "background-color": ROOT_FILL.agents[0], "border-color": ROOT_FILL.agents[1] } },
@@ -153,41 +165,69 @@ const cy = cytoscape({
 });
 
 // ── layout ───────────────────────────────────────────────────────────────────
-const POS_KEY = "skill-graph:positions:" + G.schema;
-function storedPositions() {
-  try { return JSON.parse(localStorage.getItem(POS_KEY) || "null"); } catch (e) { return null; }
+// Positions are per-layout: a cose hairball is the wrong seed for dagre.
+const posKey = name => "skill-graph:positions:" + G.schema + ":" + name;
+function storedPositions(name) {
+  try { return JSON.parse(localStorage.getItem(posKey(name)) || "null"); } catch (e) { return null; }
 }
-function savePositions() {
+function savePositions(name) {
   const p = {};
   cy.nodes().forEach(n => { p[n.id()] = n.position(); });
-  try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* private mode */ }
+  try { localStorage.setItem(posKey(name), JSON.stringify(p)); } catch (e) { /* private mode */ }
+}
+// 64 of the 144 nodes sit in tiny islands off the main cluster. Fitting to all
+// of them shrinks the real graph to a smear, so fit the biggest visible piece.
+function fitMain() {
+  const vis = cy.nodes().not(".hidden");
+  const todo = new Set(vis.map(n => n.id()));
+  let main = vis;
+  vis.forEach(seed => {
+    if (!todo.has(seed.id())) return;
+    const comp = [seed];
+    todo.delete(seed.id());
+    for (let i = 0; i < comp.length; i++) {
+      // connectedNodes() reads the endpoints of an edge collection; .nodes()
+      // would select nodes *inside* it and always come back empty.
+      comp[i].connectedEdges().not(".hidden").connectedNodes().not(".hidden").forEach(n => {
+        if (todo.delete(n.id())) comp.push(n);
+      });
+    }
+    if (comp.length > main.length) main = cy.collection(comp);
+  });
+  cy.fit(main, 40);
 }
 // `eles` is the documented core-layout option for laying out a subset: hidden
 // elements (orphans, filtered edge kinds, an ego crop's background) are excluded.
+// fcose is ForceAtlas2 — the model Obsidian's graph view runs — and unlike cose
+// it separates hubs instead of collapsing them into one clump.
 const LAYOUTS = {
-  cose: { name: "cose", animate: false, randomize: false, componentSpacing: 220,
+  fcose: { name: "fcose", quality: "proof", randomize: true, animate: false,
+           nodeRepulsion: n => 20000 + 1200 * Math.min(n.data("degree") || 0, 20),
+           idealEdgeLength: 220, edgeElasticity: 0.6, nestingFactor: 0.1,
+           gravity: 0.25, gravityRange: 3.8, numIter: 4000, packComponents: false },
+  cose: { name: "cose", animate: false, randomize: true, componentSpacing: 220,
           nodeRepulsion: 450000, idealEdgeLength: 95, edgeElasticity: 0.6,
           gravity: 0.15, nodeOverlap: 25, padding: 60 },
   dagre: { name: "dagre", rankDir: "LR", nodeSep: 34, edgeSep: 18, rankSep: 170,
            ranker: "tight-tree", animate: false, padding: 60 }
 };
 function runLayout(name, force) {
-  const stored = !force && name === "cose" ? storedPositions() : null;
+  const stored = !force ? storedPositions(name) : null;
   const visible = cy.elements().not(".hidden");
   const known = stored ? visible.nodes().filter(n => stored[n.id()]).length : 0;
   if (stored && known >= visible.nodes().length * 0.9) {
     visible.nodes().forEach(n => { if (stored[n.id()]) n.position(stored[n.id()]); });
-    cy.fit(undefined, 40);
+    fitMain();
     return;
   }
-  const opts = { ...LAYOUTS[name], eles: visible };
-  // Reset must produce a fresh layout, not a refinement of the state it resets.
-  if (force && name === "cose") opts.randomize = true;
-  const layout = cy.layout(opts);
-  layout.one("layoutstop", () => { savePositions(); cy.fit(undefined, 40); });
+  // No stored positions to resume from, so the layout always randomizes: fcose
+  // treats randomize:false as "pure incremental" and drops the spectral pass,
+  // which from the all-at-origin cold start collapses every node into a clump.
+  const layout = cy.layout({ ...LAYOUTS[name], eles: visible });
+  layout.one("layoutstop", () => { savePositions(name); fitMain(); });
   layout.run();
 }
-cy.on("dragfree", "node", savePositions);
+cy.on("dragfree", "node", () => savePositions(document.getElementById("layout").value));
 
 // ── filters ─────────────────────────────────────────────────────────────────
 function applyFilters() {
@@ -271,10 +311,11 @@ document.getElementById("detail").addEventListener("click", ev => {
 cy.on("tap", "node", ev => { focus(ev.target); });
 cy.on("tap", ev => { if (ev.target === cy) clearFocus(); });
 document.getElementById("btn-clear").addEventListener("click", clearFocus);
-document.getElementById("btn-fit").addEventListener("click", () => cy.fit(undefined, 40));
+document.getElementById("btn-fit").addEventListener("click", fitMain);
 document.getElementById("btn-reset").addEventListener("click", () => {
-  localStorage.removeItem(POS_KEY);
-  runLayout(document.getElementById("layout").value, true);
+  const name = document.getElementById("layout").value;
+  localStorage.removeItem(posKey(name));
+  runLayout(name, true);
 });
 document.getElementById("layout").addEventListener("change", ev => runLayout(ev.target.value));
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") clearFocus(); });
@@ -315,7 +356,7 @@ document.getElementById("panel").addEventListener("click", ev => {
 
 // ── boot ────────────────────────────────────────────────────────────────────
 applyFilters();
-runLayout("cose");
+runLayout(document.getElementById("layout").value);
 </script>
 </body>
 </html>
@@ -344,6 +385,9 @@ def render(graph: dict) -> str:
     return (
         PAGE.replace("@@DATA@@", payload)
         .replace("@@CYTO@@", CYTOSCAPE_CDN)
+        .replace("@@LBASE@@", LAYOUT_BASE_CDN)
+        .replace("@@BASEC@@", COSE_BASE_CDN)
+        .replace("@@FCO@@", FCOSE_CDN)
         .replace("@@DAGRE@@", DAGRE_CDN)
     )
 
