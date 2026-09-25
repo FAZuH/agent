@@ -31,15 +31,53 @@ cd agent
 ./install.sh
 ```
 
-The installer checks the requirements, installs the external skills and the
-`papercuts` binary, builds the Rust workspace under `scripts/`, and pushes the
-skills, agents, plugins, commands, and scripts to your global OpenCode config.
+It installs every item below.
+
+From this repository, with no upstream:
+
+- `skills/`, `agents/`, `plugins/`, and `commands/` into `~/.config/opencode/`.
+- Every executable file in `scripts/` into `~/.local/bin/`.
+- The Rust package `agent`, giving you `octask`, `phone-digest`, and
+  `mail-digest`.
+- `.agent-values`, created from `.agent-values.example` on the first run.
+
+From an upstream, installed through the
+[`skills`](https://github.com/vercel-labs/skills) CLI into `~/.agents/skills/`.
+Never hand-edit these copies; update them from their owner.
+
+- [mattpocock/skills](https://github.com/mattpocock/skills) — 18 engineering
+  skills: `ask-matt`, `code-review`, `codebase-design`, `diagnosing-bugs`,
+  `domain-modeling`, `grill-with-docs`, `implement`,
+  `improve-codebase-architecture`, `prototype`, `research`,
+  `resolving-merge-conflicts`, `setup-matt-pocock-skills`, `tdd`, `to-spec`,
+  `to-tickets`, `triage`, `wayfinder`, `wizard`.
+- [mattpocock/skills](https://github.com/mattpocock/skills) — 6 productivity
+  skills: `grill-me`, `grilling`, `handoff`, `to-questionnaire`, `wait-what`,
+  `writing-for-agents`.
+- [Agents365-ai/365-skills](https://github.com/Agents365-ai/365-skills) —
+  `mermaid-skill`.
+- [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish) —
+  `simple-english`.
+- [FAZuH/papercuts](https://github.com/FAZuH/papercuts) — the `papercuts` CLI,
+  installed with `cargo install`.
+- [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) — the
+  `plugins/ponytail/upstream` submodule, and the `fazuh.ponytail` plugin that
+  wraps it.
+
 Add `-b` to also install the bonus skills — `anti-slop` for filtering generic AI
 output, and `ffmpeg-skill` for editing media locally:
 
 ```bash
 ./install.sh -b
 ```
+
+Both come from an upstream:
+
+- [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) — 6
+  skills: `antislop`, `antislop-code`, `antislop-copywriting`, `antislop-human`,
+  `antislop-layoutmobile`, `antislop-ui`.
+- [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) —
+  `ffmpeg-skill`, copied by hand and checked with its own doctor script.
 
 ### Uninstall
 
