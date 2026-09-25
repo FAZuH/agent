@@ -1,5 +1,5 @@
 ---
-description: Primary orchestrator agent. Routes work between specialized subagents (implement, review, document, finish, web-viewer, image-viewer, research-discovery, research-synthesis) and uses the workflows skill for concrete workflows and routing.
+description: Primary orchestrator agent. Routes work between specialized subagents (implement, review, document, web-viewer, image-viewer, research-discovery, research-synthesis) and uses the workflows skill for concrete workflows and routing.
 mode: primary
 permission:
   edit:

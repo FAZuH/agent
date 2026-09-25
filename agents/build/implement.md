@@ -44,4 +44,4 @@ Rules:
 - Do ONLY what you were told. No sidetracking: implement exactly the requested scope — no speculative features, no unrelated refactors, no "while I'm here" cleanup, no dependency upgrades. Out-of-scope observations go in your final report, not the code.
 - If the spec/ticket is ambiguous or the seam is unclear, stop and ask the orchestrator rather than guessing.
 - Never add comments to code unless the codebase convention calls for them.
-- NEVER commit or finish. Wrapping up and committing is the `finish` subagent's job and only happens on explicit request.
+- Never commit. The orchestrator runs the @finish workflow on explicit request.
