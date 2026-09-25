@@ -1,3 +1,11 @@
+## [0.11.0](https://github.com/FAZuH/agent/compare/v0.10.3...v0.11.0) (2026-09-25)
+
+
+### Features
+
+* add idempotent setup installer ([c84439f](https://github.com/FAZuH/agent/commit/c84439f28ab34fba48402bc234ff688a6083a0c2))
+* **skill:** add agent map ([b41d784](https://github.com/FAZuH/agent/commit/b41d784dbc828b2165da24b1612bccc2cd282480))
+
 ## [0.10.3](https://github.com/FAZuH/agent/compare/v0.10.2...v0.10.3) (2026-09-24)
 
 
@@ -65,12 +73,4 @@
 * **skill:** center readme title with tagline in header block ([7c45dcc](https://github.com/FAZuH/agent/commit/7c45dcc11712f9d253415b3f3924a6299b7f5bca))
 * **skill:** drop the personal fazuh-agent reference from external-skills ([113ed4f](https://github.com/FAZuH/agent/commit/113ed4fcf21aa6129f23da85e7939351433cb584))
 * **skill:** drop the personal vault path from the scheduled-agent example ([96d969b](https://github.com/FAZuH/agent/commit/96d969ba44d543597bd73b0a8c0716cbf4072453))
-
-## [0.9.4](https://github.com/FAZuH/agent/compare/v0.9.3...v0.9.4) (2026-09-13)
-
-
-### Features
-
-* **agent:** approval-gated shell for malware-check ([6206a81](https://github.com/FAZuH/agent/commit/6206a81eb573df60eb3a24df9b1ce704c97b993b))
-* **skill:** add omarchy-plugin-install with mandatory malware-check delegation ([a38754d](https://github.com/FAZuH/agent/commit/a38754da45b44c9aa4b37e1b204f6f730bc7e28e))
 
