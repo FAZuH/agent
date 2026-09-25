@@ -18,9 +18,16 @@ EXTERNAL_SKILLS=(
   triage wayfinder wizard
   grill-me grilling handoff to-questionnaire wait-what writing-for-agents
   simple-english
+  bgrun
   antislop antislop-code antislop-copywriting antislop-human antislop-layoutmobile antislop-ui
   ffmpeg-skill
 )
+
+REVERSE_SKILL_DIR="$HOME/.local/share/reverse-skill"
+
+# Must match the pin in install.sh; a newer CLI cannot remove what it did not
+# write. The update-pins skill moves both together.
+SKILLS_CLI_VERSION="1.7.0"
 
 usage() {
   cat <<EOF
@@ -31,12 +38,14 @@ Remove this repository's installed files from the current user account.
 Default:
   - Remove sync-managed skills, agents, plugins, commands, and scripts.
   - Uninstall the local Cargo package 'agent'.
-  - Keep OpenCode, papercuts, external skills, OS packages, and this checkout.
+  - Keep OpenCode, papercuts, bgrun, external skills, OS packages, and this
+    checkout.
 
 Options:
   --dry-run              Show what would be removed without changing files.
-  --external-packages    Also uninstall papercuts from this installer.
-  --external-skills      Also remove the external skills installed by install.sh.
+  --external-packages    Also uninstall papercuts and bgrun from this installer.
+  --external-skills      Also remove the external skills installed by install.sh,
+                         including the reverse-skill checkout.
 EOF
 }
 
@@ -47,12 +56,6 @@ agent_installed() {
   local listing
   listing="$(cargo install --list 2>/dev/null || true)"
   grep -Eq '^agent v[^ ]+ ' <<<"$listing" && grep -Fq "($ROOT/scripts):" <<<"$listing"
-}
-
-papercuts_installed() {
-  local listing
-  listing="$(cargo install --list 2>/dev/null || true)"
-  grep -Eq '^papercuts v[^ ]+ \(https://github\.com/FAZuH/papercuts[^)]*\):' <<<"$listing"
 }
 
 remove_sync_files() {
@@ -84,15 +87,19 @@ remove_external_packages() {
   if ! command -v cargo >/dev/null 2>&1; then
     die 'cargo is required for --external-packages'
   fi
-  if ! papercuts_installed; then
-    info 'papercuts is not installed from FAZuH/papercuts; kept'
-    return
-  fi
-  if ((DRY_RUN)); then
-    info 'would uninstall Cargo package papercuts from FAZuH/papercuts'
-  else
-    cargo uninstall papercuts
-  fi
+  local name listing
+  listing="$(cargo install --list 2>/dev/null || true)"
+  for name in papercuts bgrun; do
+    if ! grep -Eq "^$name v[^ ]+ \(https://github\.com/FAZuH/${name}[^)]*\):" <<<"$listing"; then
+      info "$name is not installed from FAZuH/$name; kept"
+      continue
+    fi
+    if ((DRY_RUN)); then
+      info "would uninstall Cargo package $name from FAZuH/$name"
+    else
+      cargo uninstall "$name"
+    fi
+  done
 }
 
 remove_external_skills() {
@@ -105,9 +112,27 @@ remove_external_skills() {
     if ((DRY_RUN)); then
       info "would remove external skill $skill"
     else
-      npx --yes skills remove -g --agent opencode --yes "$skill"
+      npx --yes "skills@$SKILLS_CLI_VERSION" remove -g --agent opencode --yes "$skill"
     fi
   done
+  remove_reverse_skill
+}
+
+# reverse-skill is a git checkout, not a CLI-installed skill, so it needs a
+# different removal path. Confirm the origin before deleting anything.
+remove_reverse_skill() {
+  command -v git >/dev/null 2>&1 || return 0
+  local origin
+  origin="$(git -C "$REVERSE_SKILL_DIR" config --get remote.origin.url 2>/dev/null || true)"
+  if [[ "$origin" != *zhaoxuya520/reverse-skill* ]]; then
+    [[ -e "$REVERSE_SKILL_DIR" ]] && info "reverse-skill at $REVERSE_SKILL_DIR is not from zhaoxuya520/reverse-skill; kept"
+    return
+  fi
+  if ((DRY_RUN)); then
+    info "would remove the reverse-skill checkout at $REVERSE_SKILL_DIR"
+  else
+    rm -rf "$REVERSE_SKILL_DIR"
+  fi
 }
 
 while (($#)); do
