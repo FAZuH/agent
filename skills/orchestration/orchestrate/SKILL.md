@@ -63,19 +63,22 @@ Do not route by memory or guesswork, and do not improvise a workflow.
   verification-only brief — do not work around it yourself.
 - Read subagent reports fully; a concise failure report is actionable, not a
   dead end.
+- Pass only a child `sessionID` when resuming. Never pass the current
+  session ID. Omit optional subagent fields, including `model`, unless the
+  task requires them; empty strings are rejected.
 - Build manifests and lockfiles are SOURCE — `Cargo.toml`/`Cargo.lock`,
   `package.json`/`package-lock.json`, `pyproject.toml` + its lockfile. Route
   any edit to them to `implement`. Never hand-edit a manifest, even inside a
   refactor/extraction task.
 
-## Subagent session reuse (`task_id`)
+## Subagent session reuse (`sessionID`)
 
-Every task result returns the subagent's session id (`<task id="...">`). Pass
-it back as `task_id` on the next Task call to RESUME that session instead of
-spawning cold — it keeps everything it already loaded (AGENTS.md, CONTEXT.md,
-ADRs, plan, codebase map), skipping warm-up reads.
+Every task result returns the child's `sessionID`. Pass it back as `sessionID`
+on the next `subagent` call to resume that session instead of spawning cold.
+It keeps everything the child already loaded, including AGENTS.md, CONTEXT.md,
+ADRs, the plan, and the codebase map.
 
-RESUME (pass `task_id`) whenever the next task:
+RESUME (pass the child's `sessionID`) whenever the next task:
 
 - is the same agent as a session you already spawned, AND
 - continues the same unit of work (next ticket/increment, a re-run, a
@@ -85,13 +88,13 @@ Resume eagerly — there is no hop limit. The `context-watch` plugin warns on
 context usage and the subagent's own auto-compaction handles growth, so a long
 session is not a reason to re-spawn.
 
-SPAWN FRESH (no `task_id`) only when the task calls for it:
+SPAWN FRESH (omit `sessionID`) only when the task calls for it:
 
 - unrelated work / a different feature where fresh context is cleaner, or
 - you need that agent running in parallel (one session cannot be two places).
 
-Keep the same `subagent_type` when resuming — the session already carries its
-agent and system prompt. When you resume, tell the subagent it is continuing,
+Keep the same `agent` when resuming. The session already carries its agent
+and system prompt. When you resume, tell the subagent it is continuing,
 reference its last report, and ask for a delta rather than a full re-report, so
 your own context stays lean too.
 

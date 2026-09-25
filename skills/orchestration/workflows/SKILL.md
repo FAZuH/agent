@@ -78,4 +78,4 @@ subagent.
 ## Loading rules
 
 - Load the reference file for the workflow you are about to run and follow its procedure.
-- When a workflow hands a step to a subagent, follow the @orchestrate delegation rules (no duplication, resume with `task_id`).
+- When a workflow hands a step to a subagent, follow the @orchestrate delegation rules (no duplication, resume with the child's `sessionID`).

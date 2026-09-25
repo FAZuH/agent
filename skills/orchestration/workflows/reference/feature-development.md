@@ -19,9 +19,9 @@ START (user request: feature / ticket / bug fix)
   → RESEARCH  map the code and gather library/API facts
   → IMPLEMENT delegate to implement (tdd; prefer @forkflow after its probe)
   → VERIFY    test/lint/typecheck via implement in verification-only mode
-      │  failures? → loop back to IMPLEMENT (RESUME sessions via task_id)
+      │  failures? → loop back to IMPLEMENT (RESUME sessions via sessionID)
   → REVIEW    delegate to review (Standards + Spec; fork from the implement report when safe)
-      │  fixes found? → loop back to IMPLEMENT, then VERIFY again (RESUME sessions via task_id)
+      │  fixes found? → loop back to IMPLEMENT, then VERIFY again (RESUME sessions via sessionID)
   → FINISH    only on explicit user request
   → DONE
 ```

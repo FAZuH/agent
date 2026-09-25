@@ -15,6 +15,9 @@ the wreckage procedure only if the retry fails too.
   the dispatch once.
 - Any DNS-signed failure (`ENOTFOUND <litellm-host>`) → the litellm router
   lives behind tailscale; check tailscale is up before anything else.
+- A child reports completion with no text and `git status` shows no work from
+  its brief: spawn the same brief once in a fresh session. Do not resume the
+  silent session. A second silent completion is not transient.
 - NOT transient: litellm `BadRequest` deserialize on a large prompt (shrink
   the prompt), and a resumed session carrying images into a text-only model
   (use a vision model or a fresh session).
