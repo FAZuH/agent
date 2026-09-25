@@ -43,7 +43,8 @@ From this repository, with no upstream:
 
 From an upstream, installed through the
 [`skills`](https://github.com/vercel-labs/skills) CLI into `~/.agents/skills/`.
-Never hand-edit these copies; update them from their owner.
+Never hand-edit these copies; update them from their owner. The CLI takes
+upstream `HEAD` and cannot pin a ref, so these move on their own.
 
 - [mattpocock/skills](https://github.com/mattpocock/skills) — 18 engineering
   skills: `ask-matt`, `code-review`, `codebase-design`, `diagnosing-bugs`,
@@ -58,26 +59,49 @@ Never hand-edit these copies; update them from their owner.
   `mermaid-skill`.
 - [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish) —
   `simple-english`.
+- [FAZuH/bgrun](https://github.com/FAZuH/bgrun) — the `bgrun` skill and the
+  `bgrun` CLI, which runs a command as a systemd user unit.
 - [FAZuH/papercuts](https://github.com/FAZuH/papercuts) — the `papercuts` CLI,
   installed with `cargo install`.
 - [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) — the
   `plugins/ponytail/upstream` submodule, and the `fazuh.ponytail` plugin that
   wraps it.
 
-Add `-b` to also install the bonus skills — `anti-slop` for filtering generic AI
-output, and `ffmpeg-skill` for editing media locally:
+Add `-b` to also install the bonus items — `anti-slop` for filtering generic AI
+output, `ffmpeg-skill` for editing media locally, and `reverse-skill` for
+reverse engineering and authorized security work:
 
 ```bash
 ./install.sh -b
 ```
 
-Both come from an upstream:
+Both skills come from an upstream:
 
 - [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) — 6
   skills: `antislop`, `antislop-code`, `antislop-copywriting`, `antislop-human`,
   `antislop-layoutmobile`, `antislop-ui`.
 - [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) —
   `ffmpeg-skill`, copied by hand and checked with its own doctor script.
+
+`reverse-skill` is a repository, not a skill package, so it is cloned whole into
+`~/.local/share/reverse-skill` and its tool index is refreshed there. Upstream
+says to use it from the full checkout, not from a copy of `skills/`:
+
+- [zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill) — a
+  ~45-module routing pack for APK, binary, JS, malware, CTF, and pentest work.
+  Open the checkout as a workspace, or point a session at its `RULES.md` and
+  `skills/<name>/SKILL.md`. The tools it drives (Java, Node, Python, jadx,
+  radare2, and the rest) stay optional; the tool index only reports which ones
+  this machine has.
+
+### Pinned versions
+
+`install.sh` pins everything it fetches outside the `skills` CLI: the CLI's npm
+version, and the papercuts, bgrun, ffmpeg-skill, and reverse-skill commits. The
+pin block sits at the top of `install.sh`. To move one, load the `update-pins`
+skill — it checks each remote, shows the diff between the pinned and current
+commit, and only edits after you approve. `uninstall.sh` mirrors the CLI pin
+because a newer CLI cannot remove what it did not write.
 
 ### Uninstall
 
@@ -106,7 +130,7 @@ does not appear or a plugin is not loaded.
 
 ## Docs
 
-- [Skills](docs/skills.md) — all 58 skills, one line each
+- [Skills](docs/skills.md) — all 60 skills, one line each
 - [Skill Guide](docs/skill-guide.md) — which skills to load at each phase of a change
 - [Agents](docs/agents.md) — all 17 agent definitions, by role
 - [Plugins](docs/plugins.md) — the four OpenCode plugins, plus the command definitions in `commands/`
