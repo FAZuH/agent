@@ -9,6 +9,24 @@ phase lists, and stop.
 - Names in **bold** are skills. The repository's own inventory, with one line
   each, is in [Skills](skills.md); the rest are installed by `install.sh`.
 
+- [Flow](#flow) — the phase chain and its two loops
+- [Phases](#phases) — what each phase settles, and the skills for it
+- [Any time](#any-time) — legal in every phase
+- [Common workflows](#common-workflows) — the named composites of the phases
+
+The eight phases, in order:
+
+| Phase | What it settles |
+| --- | --- |
+| [Frame](#frame) | Understand the task before touching anything |
+| [Decide](#decide) | Settle the design before code exists |
+| [Isolate](#isolate) | Give the work its own branch, workspace, and context |
+| [Build](#build) | Write the thing |
+| [Verify](#verify) | Make the checks mean the same thing here and on the runner |
+| [Review](#review) | Standards and spec, read side by side |
+| [Ship](#ship) | Branch to merged |
+| [Close](#close) | Commit, document, archive, improve |
+
 ## Flow
 
 ```mermaid
@@ -27,7 +45,9 @@ flowchart LR
 `Verify` loops back to `Build` until the checks agree, `Review` sends fixes back
 the same way, and `Close` hands the next ticket back to `Frame`.
 
-## Frame
+## Phases
+
+### Frame
 
 Understand the task before touching anything.
 
@@ -50,7 +70,7 @@ flowchart TD
 `orchestrate` and `workflows` do the routing itself, and are listed under
 [Any time](#any-time).
 
-## Decide
+### Decide
 
 Settle the design before code exists.
 
@@ -75,7 +95,7 @@ flowchart TD
 - **to-questionnaire** — hand a decision you cannot make to someone else.
 - **plan-confirm** — present a long plan for grouped accept, reject, or defer.
 
-## Isolate
+### Isolate
 
 Give the work its own branch, workspace, and context.
 
@@ -95,7 +115,7 @@ flowchart TD
 - **forkflow** — a warm fork of a finished session, so the child already has the context.
 - **task-context** — the context packet a worker agent needs before it starts.
 
-## Build
+### Build
 
 Write the thing.
 
@@ -120,7 +140,7 @@ flowchart TD
 - **wizard** — a script that walks a human through the steps only they can do.
 - **ffmpeg-skill** — cut, caption, convert, and normalise local media.
 
-## Verify
+### Verify
 
 Make the checks mean the same thing here and on the runner.
 
@@ -137,7 +157,7 @@ flowchart TD
 - **reproducing-ci-locally** — derive the exact CI command from the workflow file, then run that.
 - **diagnosing-bugs** — the loop for a hard bug or a performance regression.
 
-## Review
+### Review
 
 Standards and spec, read side by side.
 
@@ -155,7 +175,7 @@ flowchart TD
 - **writing-defect-reports** — establish a finding before you publish it, and correct it after.
 - **shipping-across-surfaces** — land the same fact everywhere it is stated.
 
-## Ship
+### Ship
 
 Branch to merged.
 
@@ -179,7 +199,7 @@ flowchart TD
 - **ci-pipeline-synthesizer** — author or update a GitHub Actions pipeline.
 - **running-github-actions-efficiently** — cut CI minutes and wall-clock time.
 
-## Close
+### Close
 
 Commit, document, archive, improve.
 
@@ -267,7 +287,7 @@ A symptom is a report, not a diagnosis. Find the function every caller routes
 through and fix it there.
 
 ```mermaid
-flowchart TD
+flowchart LR
   B[Bug report] --> D[diagnosing-bugs]
   D --> R[Reproduce it in a check that fails]
   R --> S[Fix the shared function]
@@ -283,7 +303,7 @@ flowchart TD
 An isolated branch that ends as a merged pull request and leaves nothing behind.
 
 ```mermaid
-flowchart TD
+flowchart LR
   I[Idea] --> W[worktree-new]
   W --> B[Build in the worktree]
   B --> P[pr-creator]
@@ -299,7 +319,7 @@ flowchart TD
 Adding or editing a skill, an agent, a plugin, or a command.
 
 ```mermaid
-flowchart TD
+flowchart LR
   A[Add or edit an item] --> W[writing-for-agents: structure and frontmatter]
   W --> D[Add its entry to the docs inventory]
   D --> S[skill-doctor: links, names, collisions]
@@ -316,7 +336,7 @@ flowchart TD
 Work that continues without you at the keyboard.
 
 ```mermaid
-flowchart TD
+flowchart LR
   S[Timer or kickoff] --> R[scheduled-task fires]
   R --> A[scheduled-agent runs headless, least privilege]
   A --> H[long-horizon: supervisor and heartbeat]
