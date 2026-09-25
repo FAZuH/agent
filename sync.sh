@@ -12,6 +12,9 @@ VALUES_FILE="${AGENT_VALUES:-$REPO/.agent-values}"
 TARGETS_CONF="$REPO/targets.conf"
 TAGS_CONF="$REPO/tags.conf"
 AGENTS_SKILLS="$HOME/.agents/skills"
+# Where this checkout lives, recorded on push so the update-fazuh-agent skill
+# can find it from an installed copy. Machine state, not a deployable item.
+REPO_POINTER=".agent-repo"
 # Machine-global install root for repo scripts/ (overridable for tests).
 BIN_DIR="${AGENT_BIN_DIR:-$HOME/.local/bin}"
 TOPS=(skills agents plugins commands)
@@ -595,6 +598,11 @@ action_push() {
       fi
     done < <(manifest_read_items "$target")
   fi
+
+  if [[ $DRY -eq 0 && "$target" == "$GLOBAL_CFG" ]]; then
+    printf '%s\n' "$REPO" > "$target/$REPO_POINTER"
+    ok "recorded repo path in $REPO_POINTER"
+  fi
 }
 
 action_pull() {
@@ -676,6 +684,7 @@ action_remove() {
     fi
   done < <(manifest_read_items "$target")
   if [[ $DRY -eq 0 ]]; then
+    [[ "$target" == "$GLOBAL_CFG" ]] && rm -f "$target/$REPO_POINTER"
     for top in "${TOPS[@]}"; do rmdir "$target/$top" 2>/dev/null || true; done
     rmdir "$target" 2>/dev/null || true
     # a full remove clears the target's tracking; a tag-filtered remove only

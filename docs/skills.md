@@ -73,6 +73,8 @@ the category directory never reaches the installed name.
 ## Meta
 
 - ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Map and maintain this personal-public agent repository.
+- ⭐ **[update-fazuh-agent](../skills/meta/update-fazuh-agent/SKILL.md)**: Update the installed setup from the agent repository: pull, redeploy, verify.
+- **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
 - ⭐ **[skill-doctor](../skills/meta/skill-doctor/SKILL.md)**: Audit skill references, names, collisions, and source drift.
 

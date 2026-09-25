@@ -32,6 +32,9 @@ credentials, local target state, or host commands. Keep those facts in the host
   `.agent-values` file supplies their values and is not committed.
 - `.agent-sync.json` records deployed items and content hashes. It is local
   state and is not committed.
+- `sync.sh push` writes the checkout path to `.agent-repo` in the global
+  config, so an installed skill can find the repository without a hardcoded
+  path. The `update-fazuh-agent` skill reads it.
 - `README.md` is the public entry point. Keep it portable and free of machine
   details. The item inventories live in `docs/skills.md`, `docs/agents.md`, and
   `docs/plugins.md`; the README links to them instead of repeating them.
@@ -109,6 +112,7 @@ Load the narrowest existing skill that matches the task:
 - `skill-doctor` for skill links, names, collisions, and drift
 - `readme` for README structure
 - `commit-scopes` for commit vocabulary
+- `update-fazuh-agent` to pull the repository and redeploy the config
 
 Do not copy rules from these skills into this map. Keep this skill focused on
 repository orientation and boundaries.
