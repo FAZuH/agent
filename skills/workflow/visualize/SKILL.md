@@ -1,17 +1,17 @@
 ---
 name: visualize
-description: "Add a correct, minimal visual to a lesson — a diagram or geometric picture — that renders inline in the Obsidian log. Use when an idea is genuinely clearer as a picture: a dependency graph, system/flow, sequence, state machine, tree, comparison, or a spatial/geometric thing (coordinate geometry, number line, vectors, a plot, a physical layout). Outsources authoring+rendering to a maker subagent that verifies the image by looking at it, then you embed the returned file."
+description: "Create one correct, minimal visual artifact when a picture materially improves an explanation. Use for structural or spatial ideas in chat, notes, documentation, or lessons: dependency graphs, system flows, sequences, state machines, trees, comparisons, coordinate geometry, number lines, vectors, plots, and physical layouts. Delegates rendering and visual verification to a maker subagent, then returns a usable image."
 ---
 
 # Visualize
 
-A picture earns its place only when it shows something words can't — shape, structure, direction, relationship, geometry. This skill produces ONE such picture, guarantees it is **correct** (the maker renders it and looks at it before returning), and drops it into the lesson so it renders inline in the Obsidian mirror `.md` file.
+A picture earns its place only when it shows something words can't: shape, structure, direction, relationship, or geometry. This workflow produces ONE such picture, guarantees it is **correct** (the maker renders it and looks at it before returning), and returns a usable visual artifact.
 
 You are the **creative director**. You decide the exact idea and distill it to its fewest carrying elements. A **maker subagent** does the authoring, rendering, visual verification, and saving, then returns a filename. You embed that filename in your reply.
 
 ## When to visualize (and when not to)
 
-This teaching system builds a **dependency graph in the learner's head** — axioms at the root, derived facts hanging off them. A visual is powerful exactly when it makes that structure (or a geometry) visible. Reach for one when:
+A visual is useful when it makes structure or geometry easier to understand than prose. Reach for one when:
 
 - The idea is a **structure or relationship**: dependencies, a system with parts and arrows, a flow/pipeline, a sequence of exchanges, a state machine, a tree/hierarchy, a comparison, a containment (what's inside vs outside).
 - The idea is **spatial or geometric**: coordinate geometry, a number line, vectors, a function's shape, a physical arrangement.
@@ -59,20 +59,20 @@ path: <cwd>/viz/viz-<slug>-<timestamp>.png
 
 If it returns `RESULT: NONE`, it couldn't make a correct picture of the brief — simplify or rethink, or decide the visual isn't worth it. Never hand-author or fake a diagram yourself; correctness depends on the maker's render-and-inspect loop.
 
-## Embed it in the lesson
+## Return and embed the visual
 
-Put the embed directly in your teaching reply, using Obsidian's wikilink embed with the returned **filename** (not the full path) and a display width:
+Put the embed in the response or note that needs it. When the result belongs in an Obsidian mirror, use the returned **filename** (not the full path) and a display width:
 
 ```
 ![[viz-<slug>-<timestamp>.png|500]]
 ```
 
-That's all. The `md-link` plugin mirrors your reply text verbatim into the linked `.md`, and Obsidian resolves the embed by filename anywhere in the vault (the maker saves into the project's `viz` folder, which is inside the vault) — so it renders inline in the lesson automatically. Width `|500` is a good default; use larger for dense diagrams. Introduce the visual in a sentence, then let it carry the idea — don't narrate every element back in prose.
+That's all. The `md-link` plugin can mirror the response into a linked `.md`, and Obsidian resolves the embed by filename anywhere in the vault. The maker saves into the project's `viz` folder, which is inside the vault. Width `|500` is a good default; use larger for dense diagrams. Introduce the visual in a sentence, then let it carry the idea.
 
 ## Why this is reliable
 
-- The maker never returns a picture it hasn't **looked at**, so "renders fine but says something false" is caught before it reaches the learner.
-- PNG embed means **what the maker verified is pixel-identical to what the learner sees** — no re-render drift.
+- The maker never returns a picture it hasn't **looked at**, so "renders fine but says something false" is caught before it reaches the reader.
+- PNG embed means **what the maker verified is pixel-identical to what the reader sees**, so there is no re-render drift.
 - Unique filenames keep Obsidian's by-filename embed resolution unambiguous.
 
 > The makers render through the global viz plugin (Mermaid via `mmdc` from PATH; SVG via `rsvg-convert`, fallback ImageMagick). You don't render anything yourself — you only brief the maker and embed the filename it returns.

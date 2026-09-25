@@ -59,12 +59,14 @@ repository and its machine-specific values in the host overlay.
 | Repository script | `scripts/<name>` |
 | Public documentation | `README.md` or `docs/` |
 
-Use the category that matches how the agent reaches the item:
+Use the category that matches what the skill does:
 
-- `orchestration`: large workflows that coordinate other work
-- `workflow`: procedures that perform a defined task
-- `referential`: rules and conventions loaded by other skills
-- `standalone`: standards and guidance consulted directly
+- `orchestration`: control, delegate, track, and finish agent work
+- `workflow`: repeatable procedures with a defined process
+- `dev`: engineering guidelines and conventions
+- `utils`: general machine and tool helpers
+- `meta`: maintenance of the agent system and this repository
+- `shared`: rules and mechanics used by several higher-level skills
 - `ocv2`: OpenCode v2 operations
 
 ## Repository agents
@@ -143,10 +145,11 @@ Deploy a project target or every configured target:
 ./sync.sh all push
 ```
 
-After a push, restart OpenCode so it loads the new copies. Use `diff` before
-every deployment when the target state is uncertain. Use `pull` only when the
-target contains the changes that belong in the source. Pull skips files with
-machine templates.
+After a normal push, OpenCode v2 hot-reloads most components. Restart only when
+a changed component does not appear, a plugin is not loaded, or a cold restart
+is required. Use `diff` before every deployment when the target state is
+uncertain. Use `pull` only when the target contains the changes that belong in
+the source. Pull skips files with machine templates.
 
 The manifest protects target state. A stale target is removed only when its
 content still matches the recorded hash. Modified target files are kept and

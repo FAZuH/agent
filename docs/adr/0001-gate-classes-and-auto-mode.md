@@ -1,7 +1,7 @@
 # ADR 0001 — Gate classes and the `auto` run mode
 
 - Status: accepted (2026-09-02)
-- Scope: agent-facing skill/agent conventions (`skills/referential/gate/`, retrofit sites)
+- Scope: agent-facing skill/agent conventions (`skills/shared/gate/`, retrofit sites)
 
 ## Context
 
@@ -16,7 +16,7 @@ there unless the run is configured for it.
 
 ## Decision
 
-1. **One vocabulary, one skill.** `skills/referential/gate/` defines run
+1. **One vocabulary, one skill.** `skills/shared/gate/` defines run
    modes (`interactive` / `auto`), gate classes, the one-line `GATE`
    tag convention, and the gate-log format. Skills declare gates as tags;
    they no longer restate skip mechanics. The skill is loaded only where

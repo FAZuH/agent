@@ -15,7 +15,7 @@ flowchart TD
         scratch_finish_r["scratch-finish"]
         task_context_r["task-context"]
     end
-    subgraph refdeps["Referential"]
+    subgraph refdeps["Shared"]
         scratch["scratch"]
         worktree["worktree"]
     end
@@ -40,7 +40,7 @@ flowchart TD
         direction LR
         L_orch["Orchestration"]
         L_work["Workflow"]
-        L_ref["Referential"]
+        L_ref["Shared"]
     end
 
     classDef orchestration fill:#DE7A63,stroke:#BE5D48,color:#FFFFFF
