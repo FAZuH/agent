@@ -78,7 +78,7 @@ Agent definitions live under `agents/<category>/<name>.md` and install flat as
 - `review`: code review, malware checks, and PII checks
 - `research`: repository discovery and external research
 - `vision`: image, web, Mermaid, and SVG inspection
-- `document`: documentation and session closeout
+- `document`: documentation and changelog work
 
 Keep subagents within the task assigned by the primary agent. They report
 blockers instead of silently changing scope. The primary agent owns delegation

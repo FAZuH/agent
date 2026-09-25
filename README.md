@@ -186,7 +186,7 @@ the orchestrator and subagent tool reference.
 | `review` | [review](./agents/review/review.md), [malware-check](./agents/review/malware-check.md), [pii-check](./agents/review/pii-check.md) |
 | `research` | [research-discovery](./agents/research/research-discovery.md) (codebase mapping + primary-source findings), [research-synthesis](./agents/research/research-synthesis.md) (web research brief) |
 | `vision` | [image-viewer](./agents/vision/image-viewer.md), [web-viewer](./agents/vision/web-viewer.md), [mermaid-maker](./agents/vision/mermaid-maker.md), [svg-maker](./agents/vision/svg-maker.md) |
-| `document` | [document](./agents/document/document.md), [finish](./agents/document/finish.md) |
+| `document` | [document](./agents/document/document.md) |
 
 The learning system (ported from oc-learn) supplies the visual makers
 (`mermaid-maker`, `svg-maker`) and the @teach/@visualize skills.

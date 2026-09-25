@@ -1,23 +1,23 @@
 ---
 name: finish
-description: "End a working session — update the relevant docs, archive a completed `.scratch/` session workspace, summarize what was accomplished, suggest next steps, then delegate to @commit (§2) and @self-improve (§6). Use when wrapping up a session or when the user asks to finish or commit the session's work. The finish agent never runs `git add`/`git commit` itself."
+description: "End a working session. Update the relevant docs, archive a completed `.scratch/` session workspace, summarize what was accomplished, suggest next steps, then load @commit (§2) and @self-improve (§6). Use when wrapping up a session or when the user asks to finish or commit the session's work. This skill never runs `git add`/`git commit` itself."
 ---
 
 # Finish a session
 
-End a working session: update the relevant docs, delegate commit planning to @commit, archive the workspace, summarize what you accomplished, suggest next steps, then delegate self-improvement to @self-improve. Do the steps in order.
+End a working session: update the relevant docs, load @commit, archive the workspace, summarize what you accomplished, suggest next steps, then load @self-improve. Do the steps in order.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report.
 
-Commit and self-improvement gates live in the delegated skills: GATE
+Commit and self-improvement gates live in the loaded skills: GATE
 `commit-approval` in @commit, GATE `papercut-file` (via @session-retro) and
 GATE `offer-sweep` in @self-improve (vocabulary: the @gate skill). The
 `/finish` command wrapper grants `commit-approval` when its argument begins
 with `auto`. This skill declares no gates of its own and never runs `git
-add`, `git commit`, or `git push` — it only returns the delegated skills'
-proposals to the orchestrator.
+add`, `git commit`, or `git push`. It returns proposed commit groups to the
+primary agent, which asks the user for approval before committing.
 
 ## 1. Update relevant docs
 
@@ -30,7 +30,8 @@ Review the conversation. Identify the docs that the changes require. Update the 
 Load the @commit skill and follow it exactly. It owns the commit permission
 gate, the commit-docs lookup, the `git log` convention check, and the
 group-then-propose procedure. Return its proposed group messages to the
-orchestrator unchanged. Do not restate or duplicate its steps here.
+primary agent unchanged. The primary agent asks the user for approval before
+committing. Do not restate or duplicate its steps here.
 
 ## 3 Archive a completed `.scratch/` workspace
 
