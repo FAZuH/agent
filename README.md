@@ -4,104 +4,49 @@ My personal OpenCode setup: skills, agent definitions, plugins, and commands. Co
 
 ## Install
 
-### Prerequisites
-
-- [OpenCode v2](https://opencode.ai/v2/docs): Agent harness
-- [rsync](https://github.com/RsyncProject/rsync): For synchronizing configs
-- [mermaid-skill](https://github.com/Agents365-ai/creating-mermaid-diagrams): Skill for creating mermaid diagrams
-- [mattpocock's skills](https://github.com/mattpocock/skills): Software engineering skills
-- [simple-english](https://github.com/AminBlg/SimpleEnglish): ASD-STE100 plain-English writing, referenced by `AGENTS.md` and the `document` agent
-- [papercuts](https://github.com/FAZuH/papercuts): Tiny CLI that gives AI agents a complaint box
-- [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html): For installing Rust packages
+Run the installer from the repository root:
 
 ```bash
-npx skills add Agents365-ai/365-skills -g -a opencode -s mermaid-skill
-npx skills add https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*' -g -a opencode -y
-npx skills add https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*' -g -a opencode -y
-npx skills add AminBlg/SimpleEnglish -g -a opencode -s simple-english -y
-cargo install --git https://github.com/FAZuH/papercuts
-cargo install --git https://github.com/FAZuH/agent
+./install.sh
 ```
 
-### Install
+The required install:
 
-Make sure you're in the project root directory.
+- verifies that OpenCode v2 and the required commands are available;
+- installs the `mermaid-skill`, Matt Pocock engineering and productivity skills, `simple-english`, and `papercuts`;
+- initializes the repository submodules;
+- installs the local Rust packages with Cargo;
+- creates `.agent-values` when it is missing, then pushes the repository skills, agents, plugins, commands, and scripts to the global OpenCode config.
 
-Initialize submodules in this repository `git submodule update --init` after cloning (an empty `plugins/ponytail/upstream/` pushes an empty dir).
-
-First, install Rust packages in this repo:
+Use the bonus option to add the optional skills as well:
 
 ```bash
-cargo install --path .
+./install.sh -b
 ```
 
-Then, push agent configurations to your OpenCode v2 config with `sync.sh`. See examples below:
+The bonus install adds:
+
+- `miqdadbadjuber/anti-slop` for filtering generic AI-generated UI and copy;
+- `kajisho5/ffmpeg-skill` through its manual upstream copy fallback;
+- an `ffmpeg` command check because the skill edits media locally.
+
+The installer checks system tools but does not install operating-system packages or use `sudo`. Install missing system tools first, then rerun it.
+
+After editing the repository, push the changed copies with:
 
 ```bash
-./sync.sh push -g                # global (~/.config/opencode)
-                                   # (incl. the two agent scripts/ → ~/.local/bin)
-./sync.sh push -g -t dev,ocv2    # only items tagged dev or ocv2 (tags.conf)
-./sync.sh push -g -t utils       # utility skills (scheduling, PDFs)
-./sync.sh push agents            # same target (global), one top only
-./sync.sh push ~/Notes           # project (<project>/.opencode)
-./sync.sh diff -g                # preview drift (push + pull directions)
-# --dry-run to preview
+./sync.sh push -g
 ```
 
-This script copies `skills/ agents/ plugins/ commands/` (tracked in `.agent-sync.json`). It also installs the two agent-owned scripts from `scripts/`; personal commands belong in the dotfiles repository. Files that are not ours are left alone.
-
-### Extras
-
-Some other useful skills I use, but not required for this setup.
-
-`miqdadbadjuber/anti-slop` filters generic AI-generated UI and copy:
-
-```bash
-npx skills add miqdadbadjuber/anti-slop -g -a opencode -y
-```
-
-`kajisho5/ffmpeg-skill` — local FFmpeg video/audio editing. The CLI
-rejects it (`YAML parse error` — unquoted colons in upstream's
-frontmatter), so install via the @external-skills manual fallback:
-
-```bash
-git clone --depth 1 https://github.com/kajisho5/ffmpeg-skill /tmp/opencode/ffmpeg-skill
-mkdir -p ~/.agents/skills/ffmpeg-skill
-cp /tmp/opencode/ffmpeg-skill/SKILL.md ~/.agents/skills/ffmpeg-skill/
-cp -r /tmp/opencode/ffmpeg-skill/{scripts,references,docs,package.json} ~/.agents/skills/ffmpeg-skill/
-python3 ~/.agents/skills/ffmpeg-skill/scripts/_contract.py doctor  # missing required: none
-```
-
-Manual copy is invisible to `npx skills list/update` — re-run the CLI
-install once upstream quotes the description. Until then, invoke it by
-name (OpenCode drops the unparseable `description`, so it may not
-auto-trigger on mention).
-
-### Tagging
-
-Items can be tagged in `tags.conf` (`tag=pattern,pattern` against repo paths) and deployed selectively:
-
-```bash
-./sync.sh push -g -t learn,dev
-```
-
-No `-t` deploys everything. `"all"` is reserved.
-
-### Templating
-
-Files may carry `{{KEY}}` placeholders. `sync.sh` substitutes values from the gitignored `.agent-values` at push time (template: `.agent-values.example`). An undefined key fails the run. `pull` skips templated files.
-
-### Editing workflow
-
-Installs are copies — edits in the repo apply only where they've been pushed. Run `./sync.sh push -g` after changing anything.
+Use `./sync.sh --help` for selective tags, project targets, templates, and other deployment options.
 
 ## Skills
 
 These split on how you'll reach for them — a guide, not hard rules about who may call what. In the repo they live under category subdirs (`skills/orchestration/…`); **`sync.sh` installs them flat** (`skills/<name>/`) because skill and agent IDs are path-derived.
 
 - **Orchestration**: Large workflows you run manually. Runs other workflows
-- **Workflow**: Workflows/procedures the agent runs. You can invoke them directly, but they're usually pulled in automatically by other skills. 
-- **Referential**: Modular instructions and conventions other workflows load as dependencies. 
+- **Workflow**: Workflows/procedures the agent runs. You can invoke them directly, but they're usually pulled in automatically by other skills.
+- **Referential**: Modular instructions and conventions other workflows load as dependencies.
 - **Standalone**: Standards and conventions the agent consults on its own to guide what it writes.
 
 ### Orchestration (you run these)
@@ -148,7 +93,8 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[agent-map](./skills/standalone/agent-map/SKILL.md)**: Map and maintain this personal-public agent repository: source layout, classification, authoring, validation, templating, and `sync.sh` deployment.
 - **[test-guidelines](./skills/standalone/test-guidelines/SKILL.md)**: Test writing guidelines: validity, isolation, determinism, test doubles, anti-patterns, coverage.
 - **[gui-test-guidelines](./skills/standalone/gui-test-guidelines/SKILL.md)**: GUI/E2E test automation guidelines: selectors, Page Object, visual regression, accessibility.
-- **[rust-idioms](./skills/standalone/rust-idioms/SKILL.md)**: Type-driven Rust design patterns — newtype, typestate, sealed traits, RAII guards, error and dispatch design.- **[logging-guidelines](./skills/standalone/logging-guidelines/SKILL.md)**: Structured logging with wide events, correlation, and safe redaction.
+- **[rust-idioms](./skills/standalone/rust-idioms/SKILL.md)**: Type-driven Rust design patterns — newtype, typestate, sealed traits, RAII guards, error and dispatch design.
+- **[logging-guidelines](./skills/standalone/logging-guidelines/SKILL.md)**: Structured logging with wide events, correlation, and safe redaction.
 - **[design-tradeoffs](./skills/standalone/design-tradeoffs/SKILL.md)**: Compare design options with structured tradeoff analysis.
 - **[scheduled-task](./skills/standalone/scheduled-task/SKILL.md)**: Manage scheduled tasks with systemd user timers (`octask` CLI on `$PATH` — add/remove/list/enable/disable/status/logs; `octask-` prefixed units, OnCalendar validation).
 - **[scheduled-agent](./skills/standalone/scheduled-agent/SKILL.md)**: Schedule unattended agent runs on user timers (`octask add --agent ...`), with a deny-all-by-default restricted agent template.
@@ -158,7 +104,6 @@ These split on how you'll reach for them — a guide, not hard rules about who m
 - **[read-pdf](./skills/standalone/read-pdf/SKILL.md)**: Parse/read PDFs — decision tree over pdftotext, rga, pdfplumber, image rendering + vision, OCR; offers to install missing tools and records declined installs as approval gates in the project AGENTS.md.
 - **[readme](./skills/standalone/readme/SKILL.md)**: Standardize a README.md to house style: tagline, outline nav, Installation → Preview → Usage up top, Docs → License at bottom.
 - **[commit-scopes](./skills/standalone/commit-scopes/SKILL.md)**: Create or update the closed vocabulary for Conventional Commit scopes (`docs/dev/commit-scopes.md`).
-- **[rust-idioms](./skills/standalone/rust-idioms/SKILL.md)**: Type-driven Rust design patterns — newtype, typestate, sealed traits, RAII guards, error and dispatch design.
 - **[rust-tea](./skills/standalone/rust-tea/SKILL.md)**: Renderer-agnostic Elm Architecture (TEA/MVU) for Rust — Model/Message/Update/View/Effects for iced and ratatui apps.
 - **[external-skills](./skills/standalone/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned (External class) skills via the `skills` CLI — check `npx skills --help` first, install with `--global --agent opencode --yes`, manual clone+copy fallback when the CLI rejects a repo.
 
