@@ -12,6 +12,12 @@ Work on a branch inside its own git worktree. The main working tree keeps the un
 > untracked, so they live only in the main tree. This skill only needs to know
 > they must not be created or edited inside a worktree — see the @scratch
 > skill for anything you actually need to do with `.scratch/`.
+>
+> **A concurrent session's clean-tree step can delete them.** `git clean` with a
+> broad pathspec in the main tree removes untracked files belonging to *another*
+> session, not just your own. Scope a clean to your own paths
+> (`git clean -fd -- <path>`), or dry-run first with `git clean -nd`. Untracked
+> means "not on any branch" — it does not mean "not wanted".
 
 ## Key idea
 
