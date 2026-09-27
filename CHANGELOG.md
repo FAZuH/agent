@@ -1,4 +1,22 @@
-## [0.11.3](https://github.com/FAZuH/agent/compare/v0.11.2...v0.11.3) (2026-09-25)
+## [0.11.4](https://github.com/FAZuH/agent/compare/v0.11.3...v0.11.4) (2026-09-27)
+
+
+### Features
+
+* **agent:** hand review findings to the fixing agent ([deb5ae3](https://github.com/FAZuH/agent/commit/deb5ae378ece920b685c54c8d5e87f0b2cb6f6ff))
+* **script:** add ponytail skill to install script ([b8820ec](https://github.com/FAZuH/agent/commit/b8820eca49f9313af4a9e8eef6975c14f986c8b3))
+* **skill:** verify PR contains only branch work before push ([40ee78e](https://github.com/FAZuH/agent/commit/40ee78e31bfcc61658a2a4d823ff88368c461fda))
+
+
+### Bug Fixes
+
+* **ci:** stop the release run from half-pushing a tag ([4be96b7](https://github.com/FAZuH/agent/commit/4be96b7a8b3652739a5d068277b2a3362c88b438))
+* **ci:** upload the release binary from the scripts/ workspace ([ad008a4](https://github.com/FAZuH/agent/commit/ad008a4f0b1bc62713d96426bc2454d6205daaa2))
+* **ocv2:** correct session wait endpoint path ([0087d76](https://github.com/FAZuH/agent/commit/0087d7695655eb5e7c8eaaa6447b068327d14542))
+* **skill:** hash rendered skill sources to avoid false drift ([7dc9584](https://github.com/FAZuH/agent/commit/7dc95846568aceddc57ef1eec376003a62d9f25f))
+* **skill:** warn against broad git clean across sessions ([9bdf703](https://github.com/FAZuH/agent/commit/9bdf703897c1d94ad581586ad8bb8f43d51fc5ae))
+
+## [0.11.3](https://github.com/FAZuH/agent/compare/v0.11.2...v0.11.3) (2026-09-27)
 
 
 ### Features
@@ -6,6 +24,12 @@
 * add the update-pins skill ([fc00e69](https://github.com/FAZuH/agent/commit/fc00e69c801469dc276f8f1e19a656cbc6ccb817))
 * **script:** pin the npm, cargo, and git versions install.sh fetches ([2d5316a](https://github.com/FAZuH/agent/commit/2d5316a054165d8ea5662d4b25fad0147401352d))
 * **skill:** add update-fazuh-agent and record the repo path on push ([5e0a5fa](https://github.com/FAZuH/agent/commit/5e0a5fa620dc7ee56a243bfdb601b45a44ced789))
+
+
+### Bug Fixes
+
+* **script:** find a self-installed opencode off the PATH ([d1272d4](https://github.com/FAZuH/agent/commit/d1272d46e123ac31c42527e5a6f1449f28b5b849))
+* **script:** find cargo in a non-login shell ([6a786d3](https://github.com/FAZuH/agent/commit/6a786d324bb7089cfa08db48bf5a21f8b1338314))
 
 ## [0.11.2](https://github.com/FAZuH/agent/compare/v0.11.1...v0.11.2) (2026-09-25)
 
@@ -36,19 +60,4 @@
 
 * add idempotent setup installer ([c84439f](https://github.com/FAZuH/agent/commit/c84439f28ab34fba48402bc234ff688a6083a0c2))
 * **skill:** add agent map ([b41d784](https://github.com/FAZuH/agent/commit/b41d784dbc828b2165da24b1612bccc2cd282480))
-
-## [0.10.3](https://github.com/FAZuH/agent/compare/v0.10.2...v0.10.3) (2026-09-24)
-
-
-### Features
-
-* centralize FAZuH agent storage ([652b5c9](https://github.com/FAZuH/agent/commit/652b5c965c5e225d2585d5cc3f431675349232c4))
-* replace skill-doctor's Mermaid graph with graph.json and a cytoscape viewer ([b09bc3e](https://github.com/FAZuH/agent/commit/b09bc3e34654ac81e3526437806c7e10fab8be1b))
-* **skill:** add oc-ask one-shot QA fork ([23fa6b2](https://github.com/FAZuH/agent/commit/23fa6b2223c1cc0d70f80eed1b92d3a06cb62a2e))
-* **skill:** add secrets-argv skill ([af60607](https://github.com/FAZuH/agent/commit/af60607e33cb14c6c1a448f993b1f3e1d6d21335))
-
-
-### Bug Fixes
-
-* **agent:** audit existing checkout directly in malware-check ([95e9a98](https://github.com/FAZuH/agent/commit/95e9a988c496fd1972a081ccb8d065144b238ec1))
 
