@@ -20,6 +20,7 @@ EXTERNAL_SKILLS=(
   simple-english
   bgrun
   antislop antislop-code antislop-copywriting antislop-human antislop-layoutmobile antislop-ui
+  ponytail ponytail-audit ponytail-debt ponytail-gain ponytail-help ponytail-review
   ffmpeg-skill
 )
 

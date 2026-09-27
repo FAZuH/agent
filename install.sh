@@ -151,6 +151,7 @@ install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering 
 install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill grill-me grilling handoff to-questionnaire wait-what writing-for-agents
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
+install_skill DietrichGebert/ponytail
 cargo install --git https://github.com/FAZuH/papercuts --rev "$PAPERCUTS_REV"
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"
 
