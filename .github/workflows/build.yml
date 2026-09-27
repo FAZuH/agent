@@ -122,4 +122,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: octask
-          path: artifacts/octask
+          # upload-artifact resolves paths against the workspace root, so this
+          # must not repeat the scripts/ working-directory of the run steps.
+          path: scripts/artifacts/octask
+          if-no-files-found: error

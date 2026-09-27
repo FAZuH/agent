@@ -144,5 +144,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
-          path: artifacts/${{ matrix.asset_name }}
+          # upload-artifact resolves paths against the workspace root, so this
+          # must not repeat the scripts/ working-directory of the run steps.
+          path: scripts/artifacts/${{ matrix.asset_name }}
           retention-days: 3
+          if-no-files-found: error
