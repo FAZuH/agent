@@ -1,3 +1,16 @@
+## [0.11.5](https://github.com/FAZuH/agent/compare/v0.11.4...v0.11.5) (2026-09-27)
+
+
+### Features
+
+* **agent:** give the review subagent the write its handoff needs ([3bbd889](https://github.com/FAZuH/agent/commit/3bbd88985bddd681f272908b78a874333de456c8))
+
+
+### Bug Fixes
+
+* keep the release token out of the git remote URL ([2a425e4](https://github.com/FAZuH/agent/commit/2a425e4544a6e64006d8ed54f2bdd3541149fa68))
+* **script:** install only the six documented ponytail skills ([d4d426e](https://github.com/FAZuH/agent/commit/d4d426ef4a7acc4eb7bb6c91f21f141c3ca39282))
+
 ## [0.11.4](https://github.com/FAZuH/agent/compare/v0.11.3...v0.11.4) (2026-09-27)
 
 
@@ -52,12 +65,4 @@
 
 * add ImageScan notification workflow ([82a8db6](https://github.com/FAZuH/agent/commit/82a8db67c780c621edcdffdfe7fef13c89b52fa8))
 * **command:** add image scanning commands ([59e1d06](https://github.com/FAZuH/agent/commit/59e1d06c89ec54d97c3af43f7cb224799fe3400c))
-
-## [0.11.0](https://github.com/FAZuH/agent/compare/v0.10.3...v0.11.0) (2026-09-25)
-
-
-### Features
-
-* add idempotent setup installer ([c84439f](https://github.com/FAZuH/agent/commit/c84439f28ab34fba48402bc234ff688a6083a0c2))
-* **skill:** add agent map ([b41d784](https://github.com/FAZuH/agent/commit/b41d784dbc828b2165da24b1612bccc2cd282480))
 
