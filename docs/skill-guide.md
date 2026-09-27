@@ -235,6 +235,7 @@ flowchart LR
 - **simple-english** — plain, layman-readable prose for readers outside the field.
 - **writing-for-agents** — structure for skills, agent definitions, and `AGENTS.md`.
 - **antislop** and **antislop-code**, **-copywriting**, **-human**, **-layoutmobile**, **-ui** — the anti-slop filter for generic AI output.
+- **ponytail** and **ponytail-review**, **-audit**, **-debt**, **-gain**, **-help** — the laziest solution that works; review, audit, and debt views of it.
 - **visualize**, **show-me**, **mermaid-skill** — one correct visual when a picture carries the idea.
 - **teach** — the multi-session teaching workflow, with quizzes and durable lesson records.
 - **handoff**, **wait-what** — compact the session for another agent, or re-pitch the last answer.

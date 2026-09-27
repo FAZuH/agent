@@ -82,6 +82,37 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+AGENT_VALUES_RE = re.compile(r"\{\{([A-Z_][A-Z0-9_]*)\}\}")
+
+
+def agent_values(start: Path) -> dict[str, str]:
+    """Parse the nearest .agent-values (KEY=value, # comments) above `start`."""
+    for parent in [start, *start.parents]:
+        candidate = parent / ".agent-values"
+        if candidate.is_file():
+            values: dict[str, str] = {}
+            for line in candidate.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, val = line.partition("=")
+                    values[key.strip()] = val.strip()
+            return values
+    return {}
+
+
+def sha256_source(path: Path) -> str:
+    """Hash a repo source file as sync.sh would render it.
+
+    sync.sh substitutes double-brace KEY placeholders from the repo's gitignored
+    .agent-values on push, so hashing raw source bytes makes every templated
+    skill report drift forever. Unknown keys are left as-is: an unresolved
+    placeholder is a real difference, not a false positive to hide.
+    """
+    values = agent_values(path)
+    text = AGENT_VALUES_RE.sub(lambda m: values.get(m.group(1), m.group(0)), path.read_text())
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
 def load_root_skills(root_path: Path) -> dict[str, Path]:
     skills: dict[str, Path] = {}
     if not root_path.is_dir():
@@ -220,7 +251,7 @@ def main() -> int:
         installed_root = next((r for r in ("config", "agents") if sid in roots[r]), None)
         if installed_root is None:
             continue
-        repo_hash = sha256_file(roots["repo"][sid])
+        repo_hash = sha256_source(roots["repo"][sid])
         installed_hash = sha256_file(roots[installed_root][sid])
         if repo_hash != installed_hash:
             add_finding(

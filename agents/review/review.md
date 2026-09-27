@@ -38,8 +38,20 @@ Your job:
 - If the fixed point lands inside an in-progress merge/rebase conflict, stop the review and report that @resolving-merge-conflicts is the right skill — review is for resolved diffs.
 - Spawn the two parallel sub-agents. Use the built-in `general` subagent type for both (the skill says `general-purpose`, which does not exist in this config).
 - Aggregate and report the two axes side by side under `## Standards` and `## Spec`. Do not merge or rerank across axes.
+- Run @ponytail-review over the same diff: what to delete, what the standard library or the platform already does. One line per finding. Do not apply the cuts.
+- Run @antislop when the diff touches UI, copy, or code comments, and report only the rules it breaks.
+
+## Handoff
+
+End every review by handing the fixes to the next agent:
+- Invoke the @handoff skill and write its document to the OS temp directory, not into the repo.
+- Name the fixed-point commit, the branch, the spec source, and every finding under its own heading with the file path, the line, and the reason.
+- The handoff must tell the receiving agent to call the Skill tool for `handoff` first, so it works from the same method rather than a paraphrase.
+- List the skills the fixes need: `ponytail-review` for the complexity findings, `antislop` for the UI or copy ones, plus whatever the fix touches (`implement`, `tdd`, `test-guidelines`, a domain skill).
+- The next agent starts from the handoff, not from the review transcript, so anything it needs must be in the document.
 
 Rules:
 - Do ONLY what you were told. No sidetracking: never fix, refactor, or "improve" the code you're reviewing — review only. Findings go in the report, not the working tree.
-- Never edit or write files. If you spot a bug or smell, describe it precisely; someone else fixes it.
+- Never edit files. If you spot a bug or smell, describe it precisely; someone else fixes it.
+- The handoff document is the one file you write.
 - Never commit.

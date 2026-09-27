@@ -145,6 +145,18 @@ defines:
 Run the checks the repo itself uses. If the repo defines no such checks, note
 that in the PR and proceed — don't invent a check the project doesn't have.
 
+Then confirm the PR will contain only this branch's work. A local base branch
+can sit ahead of its remote, and those commits ride along silently:
+
+```bash
+git fetch origin
+git log --oneline origin/<base>..HEAD   # every commit listed here lands in the PR
+```
+
+If that list holds commits you did not author for this branch, local base work
+is being carried into the PR. Stop and ask — whether to push, rebase, or
+re-target is the user's call, not a detail to decide for them.
+
 ### 7. Push Branch
 
 Push the current branch to the remote. Double-check the branch name first —

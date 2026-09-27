@@ -64,8 +64,9 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
 - [FAZuH/papercuts](https://github.com/FAZuH/papercuts) — the `papercuts` CLI,
   installed with `cargo install`.
 - [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) — the
-  `plugins/ponytail/upstream` submodule, and the `fazuh.ponytail` plugin that
-  wraps it.
+  `plugins/ponytail/upstream` submodule, the `fazuh.ponytail` plugin that wraps
+  it, and 6 skills: `ponytail`, `ponytail-review`, `ponytail-audit`,
+  `ponytail-debt`, `ponytail-gain`, `ponytail-help`.
 
 Add `-b` to also install the bonus items — `anti-slop` for filtering generic AI
 output, `ffmpeg-skill` for editing media locally, and `reverse-skill` for

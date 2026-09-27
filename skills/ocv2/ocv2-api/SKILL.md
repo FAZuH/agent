@@ -56,7 +56,7 @@ opencode2 api post /api/session/ses_XXX/fork --data '{"boundary":{"type":"throug
 opencode2 api post /api/session/ses_XXX/agent --data '{"agent":"chat"}'
 opencode2 api post /api/session/ses_XXX/model --data '{"model":{"providerID":"opencode","id":"ling-3.0-flash-fin-free"}}'
 opencode2 api post /api/session/ses_XXX/prompt --data '{"text":"…"}'
-opencode2 api post /api/session/ses_XXX/wait            # block until idle (prefer over polling messages)
+opencode2 api post /api/experimental/session/ses_XXX/wait  # block until idle (prefer over polling)
 opencode2 api post /api/session/ses_XXX/move --data '{"directory":"/abs/path"}'
 opencode2 api post /api/session/ses_XXX/interrupt       # abort running step
 opencode2 api get /api/session/ses_XXX/inbox            # pending inputs

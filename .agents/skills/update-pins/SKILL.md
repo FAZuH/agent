@@ -30,8 +30,9 @@ gitlink.
 
 ## Not pinned
 
-The five `install_skill` repos (mattpocock/skills, Agents365-ai/365-skills,
-AminBlg/SimpleEnglish, FAZuH/bgrun, miqdadbadjuber/anti-slop) install through
+The six `install_skill` repos (mattpocock/skills, Agents365-ai/365-skills,
+AminBlg/SimpleEnglish, FAZuH/bgrun, miqdadbadjuber/anti-slop,
+DietrichGebert/ponytail) install through
 the `skills` CLI, which has no ref flag and always takes upstream HEAD. They
 move on their own; do not add a pin without switching them off the CLI.
 
