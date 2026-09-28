@@ -1,6 +1,6 @@
 ---
 name: setup-dev-docs
-description: Bootstrap, audit, or update the repo's durable developer docs under docs/dev/ (index, development, testing, architecture, operations). Use ONLY when the user explicitly asks to set up or bootstrap docs/dev, audit or check the developer docs for stale content, or update one named docs/dev page — never during ordinary feature work.
+description: Bootstrap, audit, or update the repo's durable developer docs under docs/dev/ (index, development, testing, architecture, operations). Use ONLY when the user explicitly asks to set up or bootstrap docs/dev, audit or check the developer docs for stale content, or update one named docs/dev page. Never during ordinary feature work.
 ---
 
 # setup-dev-docs
@@ -19,7 +19,7 @@ This skill establishes it, keeps it true, and repairs it. Task facts stay in
 The user drives this skill: they name it, or ask plainly for docs/dev work.
 OpenCode reads only `name` and `description` from skill frontmatter, so a
 true user-invoked skill is not expressible there; the description holds to
-one branch — an explicit user request — and ordinary feature work never
+one branch (an explicit user request), so ordinary feature work never
 fires it.
 
 ## Mode
@@ -60,26 +60,26 @@ Each candidate fact goes to exactly one home:
 | Architecture decisions with rationale | `docs/adr/` |
 | Current ticket facts: objective, status, deviations | `.scratch/` (@session, @task-context) |
 | External research findings | `docs/research/` |
-| Generated navigation or index data | disposable task context — never a durable doc |
+| Generated navigation or index data | disposable task context, never a durable doc |
 
 Done when: every fact you plan to write sits in the row that owns it.
 
 ## 3. Bootstrap
 
-Create only the documents the repository supports — evidence from step 1,
-not a fixed set:
+Create only the documents the repository supports, using evidence from step 1
+and not a fixed set:
 
 | Doc | Write it when the repo has |
 |---|---|
 | `docs/dev/README.md` | two or more docs to index (always first) |
 | `docs/dev/development.md` | a verified build/run/lint path |
 | `docs/dev/testing.md` | a test runner or test directory |
-| `docs/dev/architecture.md` | a module map worth navigating — it points at `docs/adr/` and the code, and restates neither |
+| `docs/dev/architecture.md` | a module map worth navigating: it points at `docs/adr/` and the code, and restates neither |
 | `docs/dev/operations.md` | deploy, release, or runbook steps |
 
 Rules:
 
-- `docs/dev/README.md` is the index; it states the source-of-truth rules —
+- `docs/dev/README.md` is the index; it states the source-of-truth rules:
   what lives in `docs/dev/`, `CONTEXT.md`, `docs/adr/`, `.scratch/`.
 - Every command you write comes from step 1 evidence.
 - A doc with no evidence-backed content stays unwritten; say so in the
@@ -93,14 +93,14 @@ Done when: every created doc rests on verified evidence.
 
 Check every existing `docs/dev/` file:
 
-- **Stale claims** — a documented command, path, or step that contradicts
+- **Stale claims**: a documented command, path, or step that contradicts
   the repo config or tree: fix it in place.
-- **Command verification** — re-check each documented command against the
+- **Command verification**: re-check each documented command against the
   manifests and CI. A command you cannot verify is flagged `unverified`,
   never presented as valid.
-- **Broken links** — resolve every relative link and referenced path; fix
+- **Broken links**: resolve every relative link and referenced path; fix
   or flag.
-- **Duplication** — content that belongs to `CONTEXT.md`, `docs/adr/`, or
+- **Duplication**: content that belongs to `CONTEXT.md`, `docs/adr/`, or
   `.scratch/`: point at its home instead of restating it.
 
 **GATE doc-fix-approval (normal → apply each proposed fix in place):** every
@@ -138,8 +138,8 @@ instead (point there; do not move it).
 
 ## Dependency graph
 
-- step1
-- step2 -> step1
-- step3 -> step2
-- step4 -> step2
-- step5 -> step2
+- 1. inspect before writing
+- 2. classify before placing -> 1
+- 3. bootstrap -> 2
+- 4. audit -> 2
+- 5. update -> 2

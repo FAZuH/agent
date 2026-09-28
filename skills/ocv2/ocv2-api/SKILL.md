@@ -29,21 +29,21 @@ opencode2 api post /api/session/ses_XXX/fork --data '{"boundary":{"type":"throug
 opencode2 api v2.session.list                          # operationId form
 ```
 
-Exit code `0` is success. `204` endpoints return empty body; `200` returns `{"data":…}`. Only `-d`/`-H` are accepted — do not pass curl flags like `-s` or `-X`.
+Exit code `0` is success. `204` endpoints return empty body; `200` returns `{"data":…}`. Only `-d`/`-H` are accepted; never pass curl flags like `-s` or `-X`.
 
 ## Docs
 
-- **Human docs:** `https://opencode.ai/v2/docs/api` — resource tables (session ~40 ops, plugin, agent, etc.) and auth notes.
+- **Human docs:** `https://opencode.ai/v2/docs/api`: resource tables (session ~40 ops, plugin, agent, etc.) and auth notes.
   ```sh
   # Markdown (preferred for agents)
   curl -s -H "Accept: text/markdown" https://opencode.ai/v2/docs/api
   # Or via webfetch with format markdown
   ```
-- **Machine spec:** `https://opencode.ai/v2/openapi.json` — OpenAPI 3.1, 138 operations / 229 schemas, operationIds `v2.*`.
+- **Machine spec:** `https://opencode.ai/v2/openapi.json`: OpenAPI 3.1, 138 operations / 229 schemas, operationIds `v2.*`.
   ```sh
   curl -s https://opencode.ai/v2/openapi.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['paths']['/api/session/{sessionID}/fork'], indent=2))"
   ```
-- **Local discovery:** `opencode2 api get /api/session` etc. are live-probed; `GET /api/plugin` on a plain `opencode2 serve` returns `data: []` even when plugins load (only the service supervisor populates it — see @ocv2-pluginhealth).
+- **Local discovery:** `opencode2 api get /api/session` etc. are live-probed; `GET /api/plugin` on a plain `opencode2 serve` returns `data: []` even when plugins load (only the service supervisor populates it, see @ocv2-pluginhealth).
 
 ## Common session calls (all require `opencode2 api`)
 
@@ -72,29 +72,29 @@ opencode2 api get /api/model                            # list models
 curl -s -u "opencode:$PASSWORD" http://127.0.0.1:PORT/api/plugin
 ```
 
-Password is printed at `opencode2 serve` startup (`server password …`). Bearer/`x-opencode-password` return `401` with empty body — empty responses are usually auth/port, not missing data.
+Password is printed at `opencode2 serve` startup (`server password …`). Bearer/`x-opencode-password` return `401` with empty body, so an empty response is usually auth/port, not missing data.
 
 ## Large responses
 
-Session message lists can exceed the shell tool's output limit (>250KB on long sessions) — the JSON gets truncated mid-string and `python3 json.load` dies with `Unterminated string`. Never pipe a big `message` list into python. Instead:
+Session message lists can exceed the shell tool's output limit (>250KB on long sessions), the JSON gets truncated mid-string and `python3 json.load` dies with `Unterminated string`. Never pipe a big `message` list into python. Instead:
 
-- `GET /api/session/{id}/message/{msgID}` — single message, always small
-- `grep -o '"id":"msg[^"]*"'` — extract just IDs from the list
+- `GET /api/session/{id}/message/{msgID}`: single message, always small
+- `grep -o '"id":"msg[^"]*"'`: extract just IDs from the list
 - `--param limit=N` on list endpoints to bound the page
 
 ## Gotchas
 
 1. **Service vs plain serve:** `GET /api/plugin` and `/api/command` are empty on a plain `serve` even when healthy; verify via the service (`opencode2 api …` without `--standalone`).
-2. **Project discovery needs git:** without `.git` at/above CWD, location resolves to `project: global` and project config is skipped silently. Note these endpoints report the SERVICE's default location regardless of your cwd, and `?location.directory=` / `--param location.directory=` are accepted but IGNORED (v2.0.3, live-verified on `/api/plugin`, `/api/command`, `/api/agent` — byte-identical results). So a project's `.opencode/` plugins, commands, and agents never show up here; use the server log or `opencode2 debug agents|config` from inside the project.
+2. **Project discovery needs git:** without `.git` at/above CWD, location resolves to `project: global` and project config is skipped silently. Note these endpoints report the SERVICE's default location regardless of your cwd, and `?location.directory=` / `--param location.directory=` are accepted but IGNORED (v2.0.3, live-verified on `/api/plugin`, `/api/command`, `/api/agent`: byte-identical results). So a project's `.opencode/` plugins, commands, and agents never show up here; use the server log or `opencode2 debug agents|config` from inside the project.
 3. **Config key `plugins`:** v1 `plugin` is auto-translated; new entries should use `"plugins"`; both may coexist.
-4. **Boundary forms:** `POST /api/session/{id}/fork` requires `{"boundary":{"type":"through"}}` or `{"type":"before","messageID":"msg_…"}`. `through` without `messageID` is valid — server fills the last message (live-verified). `before` without `messageID` is `InvalidRequestError`.
-5. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}` — `variant` optional, `id`+`providerID` required.
-6. **No curl-style flags:** `opencode2 api` rejects `-w`/`-o` (`Unrecognized flag`) and has no timeout flag. Redirect the body to a file and parse it (`> out.json`); wrap poll-loop calls in `timeout N opencode2 api …` — a hung child blocked a plugin poll loop for 15.5 minutes.
+4. **Boundary forms:** `POST /api/session/{id}/fork` requires `{"boundary":{"type":"through"}}` or `{"type":"before","messageID":"msg_…"}`. `through` without `messageID` is valid (the server fills the last message, live-verified). `before` without `messageID` is `InvalidRequestError`.
+5. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}`: `variant` optional, `id`+`providerID` required.
+6. **No curl-style flags:** `opencode2 api` rejects `-w`/`-o` (`Unrecognized flag`) and has no timeout flag. Redirect the body to a file and parse it (`> out.json`); wrap poll-loop calls in `timeout N opencode2 api …`, because a hung child blocked a plugin poll loop for 15.5 minutes.
 7. **Interactive commands need a subcommand:** bare `opencode` (or its `opencode2` compatibility wrapper) launches the TUI and blocks the shell tool until timeout. Use the v2 binary with an explicit subcommand such as `api`, `models`, `auth list`, or `run`.
 
 ## Related
 
-- @ocv2-sessions — full fork→switch→verify→talk→wait flow
-- @ocv2-move — `POST /api/session/{id}/move` for changing project directory
-- @ocv2-pluginhealth — `GET /api/plugin` diagnosis
-- @notes — durable notes for OpenCode v2 quirks, tool behavior, and host-specific guidance
+- @ocv2-sessions: full fork→switch→verify→talk→wait flow
+- @ocv2-move: `POST /api/session/{id}/move` for changing project directory
+- @ocv2-pluginhealth: `GET /api/plugin` diagnosis
+- @notes: durable notes for OpenCode v2 quirks, tool behavior, and host-specific guidance

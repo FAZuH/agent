@@ -1,17 +1,22 @@
 ---
 name: ocv2-sessions
-description: Fork an OpenCode v2 session and control the fork — switch agent & model, verify, send prompts, and poll the outcome. Use when the user says "fork this session", "fork before this message", "switch the model/agent in the fork", or wants to verify a fork/model/agent change and talk to the new session.
+description: >-
+  Fork an OpenCode v2 session and control the fork, switching its agent and
+  model, verifying, sending prompts, and polling the outcome. Use when the
+  user says "fork this session", "fork before this message", "switch the
+  model/agent in the fork", or wants to verify a fork change and talk to the
+  new session.
 ---
 
 # Fork & control an OpenCode v2 session
 
-Fork creates a child session by copying projected history through or before a message boundary. The new session is independent — you then switch its agent/model, verify, and talk to it via the session API. All calls go through `opencode2 api` (handles auth to the background service) — see the @ocv2-api skill for the CLI itself.
+Fork creates a child session by copying projected history through or before a message boundary. The new session is independent, so you then switch its agent/model, verify, and talk to it via the session API. All calls go through `opencode2 api` (handles auth to the background service); see the @ocv2-api skill for the CLI itself.
 
 ## Scripts (preferred)
 
-`scripts/` wraps every call below — use it instead of raw `opencode2 api`
-for consistency. stdout carries the result (safe for `$(...)`); progress
-goes to stderr. All scripts exit 0 on success and 2 on usage/API errors
+`scripts/` wraps every call below; use it instead of raw `opencode2 api` for
+consistency. stdout carries the result (safe for `$(...)`), progress goes to
+stderr. All scripts exit 0 on success and 2 on usage/API errors
 (`oc-wait` exits 1 on failed/timeout):
 
 - `oc-fork.sh SESSION [--through MSG | --before MSG]` → child `ses_…` (§2)
@@ -26,11 +31,11 @@ Message-list responses go through a tempfile inside the scripts: piped
 
 ## 1. Resolve the source session
 
-Read `Current conversation session ID` from the environment block — `ses_…`. Ask if missing.
+Read `Current conversation session ID` from the environment block: `ses_…`. Ask if missing.
 
 ## 2. Fork
 
-`POST /api/session/{sessionID}/fork` — `v2.session.fork`. Requires `boundary`.
+`POST /api/session/{sessionID}/fork`: `v2.session.fork`. Requires `boundary`.
 
 ```sh
 # Fork entire history (server resolves to last message; simplest)
@@ -48,24 +53,24 @@ Response `200`:
 {"data":{"id":"ses_NEW","fork":{"sessionID":"ses_OLD","boundary":{"type":"through","messageID":"msg_…"}},"agent":"…","model":{…}}}
 ```
 
-Save `ses_NEW`. Message IDs are from `GET /api/session/{id}/message` — newest first; use the target `msg_…` for `before`.
+Save `ses_NEW`. Message IDs come from `GET /api/session/{id}/message` (newest first); use the target `msg_…` for `before`.
 
 ## 3. Switch agent / model (optional, in the fork)
 
 Agent and model are per-session. Switch the **fork**, not the parent.
 
 ```sh
-# Agent — chat vs build etc.
+# Agent: chat vs build etc.
 opencode2 api post /api/session/ses_NEW/agent --data '{"agent":"chat"}'   # or "build", "orchestrator", etc.
-# 204 on success — no body
+# 204 on success, no body
 
 # Model
 opencode2 api post /api/session/ses_NEW/model --data '{"model":{"providerID":"opencode","id":"ling-3.0-flash-fin-free"}}'
-# 204 — variant is optional; {id,providerID} required
+# 204, variant is optional; {id,providerID} required
 # Example edge model: --data '{"model":{"providerID":"opencode","id":"muse-spark-1.2-contributor-free","variant":"xhigh"}}'
 ```
 
-Both produce system messages in the fork: `type: agent-switched` (`agent`, `previous`) and `type: model-switched` (`model`, `previous`) / `type: model-selected` in older builds. `chat` mode is discussion-only — it has no `shell`/`edit` tools; prompts that expect shell calls will fail with `Unknown tool: shell`.
+Both produce system messages in the fork: `type: agent-switched` (`agent`, `previous`) and `type: model-switched` (`model`, `previous`) / `type: model-selected` in older builds. `chat` mode is discussion-only and has no `shell`/`edit` tools, so prompts that expect shell calls will fail with `Unknown tool: shell`.
 
 ## 4. Verify
 
@@ -80,7 +85,7 @@ opencode2 api get /api/session/ses_NEW/message | head -c 4000
 ## 5. Talk to the fork
 
 ```sh
-opencode2 api post /api/session/ses_NEW/prompt --data '{"text":"Hello from the fork — confirm your session ID, agent, and model."}'
+opencode2 api post /api/session/ses_NEW/prompt --data '{"text":"Hello from the fork. Confirm your session ID, agent, and model."}'
 # 200 → {data:{id:msg_…,sessionID, type:user, delivery:steer|queue}}
 ```
 
@@ -104,9 +109,9 @@ If you need the message ID, it is the newest `type: assistant` after wait. In `c
 
 ## Notes
 
-- Only projected history is copied. `through` includes the boundary message; `before` excludes it. Using `{"type":"through"}` without `messageID` is valid — server fills the last `msg_…` (live-verified: returned `msg_05b8678fe001TF8ShnW5CvM6vA`).
+- Only projected history is copied. `through` includes the boundary message; `before` excludes it. Using `{"type":"through"}` without `messageID` is valid (the server fills the last `msg_…`, live-verified: returned `msg_05b8678fe001TF8ShnW5CvM6vA`).
 - Switching does not affect the parent. Child sessions are not moved by `POST /api/session/{id}/move`; spawn fresh subagents after a move.
-- Verify via `GET /api/session/{id}` is authoritative; `GET /api/project/current` may return `/` from a detached shell — rely on the system-update environment block after move.
+- Verify via `GET /api/session/{id}` is authoritative; `GET /api/project/current` may return `/` from a detached shell, so rely on the system-update environment block after move.
 - Inbox: a prompt sent while the session is busy goes to `GET /api/session/{id}/inbox` with `delivery: steer|queue`. `queue` is the default after interrupt; `steer` is queued but waits for idle. Use `POST /api/session/{id}/interrupt` to abort a stuck `chat` shell loop, then `DELETE /api/session/{id}/inbox/{inboxID}` to drop a stuck queued item.
-- Resumed sessions do NOT notify the parent: when you RESUME a subagent session (steer/queue a prompt into an existing `ses_…`) instead of spawning a fresh one, the parent conversation does not get a completion notification when the resumed agent finishes. The `subagent` tool's "you will be notified when it completes" applies only to a newly-spawned session, not to a resumed one. To know when a resumed session is idle, **poll `GET /api/session/{sessionID}`** and read `.data.outcome` (and `.data.time.idle`); the outcome flips to `succeeded` / `failed` when the loop stops. Poll `outcome` in a loop rather than waiting on a notification. Resume whenever the same unit of work continues across a model/quota switch, then poll — do not rely on a parent callback.
+- Resumed sessions do NOT notify the parent: when you RESUME a subagent session (steer/queue a prompt into an existing `ses_…`) instead of spawning a fresh one, the parent conversation does not get a completion notification when the resumed agent finishes. The `subagent` tool's "you will be notified when it completes" applies only to a newly-spawned session, not to a resumed one. To know when a resumed session is idle, **poll `GET /api/session/{sessionID}`** and read `.data.outcome` (and `.data.time.idle`); the outcome flips to `succeeded` / `failed` when the loop stops. Poll `outcome` in a loop rather than waiting on a notification. Resume whenever the same unit of work continues across a model/quota switch, then poll rather than relying on a parent callback.
 - For warm delegation policy and the required fork → switch → first-prompt order, use @forkflow.

@@ -1,12 +1,9 @@
 ---
 name: commit
-description: Plan commit grouping and propose conventional commit messages without committing. Use whenever the user asks to commit, group changes, check what would commit, review staged diffs, or write commit messages — even when they do not name this skill. Proposes one type(scope): description message per logical group and hands them to the orchestrator; never runs git add/commit/push itself.
+description: Plan commit grouping and propose one conventional commit message per logical group, without committing. Use whenever the user asks to commit, group changes, check what would commit, review staged diffs, or write commit messages, even when they do not name this skill. Proposes the groups and hands them to the orchestrator; never runs git add/commit/push itself.
 ---
 
 # Commit
-
-Plan the commit grouping and propose one conventional message per logical
-group. This skill only plans; the orchestrator executes with the user.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -17,7 +14,7 @@ group. This skill only plans; the orchestrator executes with the user.
 
 **GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups
 requires user approval. The `/finish` command wrapper grants that approval
-when its argument begins with `auto` — that is `auto` mode for this
+when its argument begins with `auto`: that is `auto` mode for this
 invocation (see the @gate skill). In auto mode, the orchestrator may stage
 and commit each proposed logical group without asking. In all other modes,
 the orchestrator must propose the groups and wait for confirmation.
@@ -36,9 +33,9 @@ and hand off.
 
 Check if this directory is a git repository (`git rev-parse --is-inside-work-tree`). If it is not a repository, skip all commit steps.
 
-Read the commit docs of the project, if any. Find and grep for commit docs before proposing commits: search for `CONTRIBUTING.md`, `docs/commits*`, any `COMMITTING.md`/`COMMIT*.md`, `docs/dev/commit-scopes.md`, and the commit section of `AGENTS.md` or `CLAUDE.md`. Use glob and grep across the whole repo — including `docs/` — to locate them. Read the docs before you write a commit message. Check the last 10 commits with `git log --oneline -10`. Base the message on those docs. Do not invent conventions that the project does not have.
+Read the commit docs of the project, if any. Find and grep for commit docs before proposing commits: search for `CONTRIBUTING.md`, `docs/commits*`, any `COMMITTING.md`/`COMMIT*.md`, `docs/dev/commit-scopes.md`, and the commit section of `AGENTS.md` or `CLAUDE.md`. Use glob and grep across the whole repo, including `docs/`, to locate them. Read the docs before you write a commit message. Check the last 10 commits with `git log --oneline -10`. Base the message on those docs. Do not invent conventions that the project does not have.
 
-When the repo has a commit-scopes vocabulary (`docs/dev/commit-scopes.md` or equivalent), load the @commit-scopes skill and follow its scope rules: closed vocabulary, singular, real-slice, never colliding with a type, ≤8 chars. Every group picks a scope from that table or takes no scope. If the docs are missing or poor, say so. When no existing scope fits, follow @commit-scopes to propose the new scope — GATE `new-scope` is `always`, so propose name + definition + example subject and wait for explicit approval before committing with it. One example is a new commit scope.
+When the repo has a commit-scopes vocabulary (`docs/dev/commit-scopes.md` or equivalent), load the @commit-scopes skill and follow its scope rules: closed vocabulary, singular, real-slice, never colliding with a type, ≤8 chars. Every group picks a scope from that table or takes no scope. If the docs are missing or poor, say so. When no existing scope fits, follow @commit-scopes to propose the new scope: GATE `new-scope` is `always`, so propose name + definition + example subject and wait for explicit approval before committing with it. One example is a new commit scope.
 
 Identify the files that you changed this session. Only those files belong in the commit groups you propose.
 

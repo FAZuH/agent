@@ -1,20 +1,16 @@
 ---
 name: pr-watchmerge
-description: Watch a pull request's CI checks and merge it automatically once they pass. Use whenever the user wants to watch PR CI/checks and merge when green, auto-merge, wait for checks then merge, "watch the PR and merge it", or merge a PR as soon as its CI passes. Also trigger when the user says "merge once green", "watch CI then merge", "merge after checks pass", or wants a PR merged immediately on success without manual review. Do NOT use for general PR creation or review — those belong to pr-creator / code-review.
+description: Watch a pull request's CI checks to completion and merge it as soon as they pass. Use whenever the user says "watch the PR and merge it", "merge once green", "watch CI then merge", "merge after checks pass", or wants a PR merged on success without manual review. Not for PR creation (pr-creator) or review (code-review).
 ---
 
 # PR watch-and-merge
 
-Watch a pull request's CI runs to completion, then merge it immediately if everything is green. This saves the user from babysitting the checks tab — you monitor progress and merge the moment CI passes.
+This saves the user from babysitting the checks tab: you monitor progress and merge the moment CI passes.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the rules in the *Safety rules* section
 > at the bottom.
-
-## When to use
-
-The user wants a PR merged as soon as its CI/checks pass, without them having to watch or click merge themselves. Common triggers: "watch the PR and merge when green", "merge once CI passes", "wait for checks then auto-merge", "watch CI and merge if it passes".
 
 ## Workflow
 
@@ -43,7 +39,8 @@ Watch the in-progress run(s) until they finish. Use `--exit-status` so the watch
 gh run watch <run-id> --exit-status
 ```
 
-If there are multiple runs, watch each one. `gh run watch` with no id follows the most recent run for the current branch — fine when there's a single workflow run to track.
+If there are multiple runs, watch each one. `gh run watch` with no id follows the most recent run for the current branch, which is fine when there's a single workflow run to
+track.
 
 Use OpenCode's built-in `shell` tool with `background: true` for each long-running watch. The tool returns immediately and notifies the session when the command finishes. Wait for that notification instead of polling, then run the final-state checks below.
 
@@ -58,35 +55,47 @@ gh pr checks
 
 Check whether the PR can be merged: `gh pr view <pr> --json mergeable` (MERGEABLE / CONFLICTING / UNKNOWN). If it's **CONFLICTING**:
 
-- Inspect the conflicts (`git fetch`, then `git merge-base`, or the files GitHub lists). Decide whether the conflict is **simple** — pure textual/trivial overlaps (e.g. adjacent lines, whitespace, moving the same unchanged block) with **no actual behavior change** to the merged result.
-- If it's a **simple conflict**, resolve it directly: fix the conflict markers by hand or `git checkout --theirs/--ours` per file as appropriate, keep both sides' intended logic, commit the resolution, and push. The PR becomes mergeable again — proceed to merge.
-- If the conflict is **non-trivial** — it changes behavior, needs judgment about which side wins, or you can't be confident the resolution preserves intent — do NOT guess. Stop and report the conflict to the user with the details and wait for their instructions.
+- Inspect the conflicts (`git fetch`, then `git merge-base`, or the files GitHub lists). Decide whether the conflict is **simple**: pure textual/trivial overlaps (e.g. adjacent lines, whitespace, moving the same unchanged block) with **no actual behavior change** to the merged result.
+- If it's a **simple conflict**, resolve it directly: fix the conflict markers by hand or `git checkout --theirs/--ours` per file as appropriate, keep both sides' intended logic, commit the resolution, and push. The PR becomes
+mergeable again; proceed to merge.
+- If the conflict is **non-trivial**, meaning it changes behavior, needs judgment about which side wins, or you can't be confident the resolution preserves intent, do NOT guess. Stop and report the conflict to the user with the details and wait for their instructions.
 
 Only resolve a conflict when you're confident the resolution is behavior-preserving and unambiguous. When in doubt, report and wait.
 
 ### 4. Merge if green
 
-If every check/run is green (SUCCESS) and the PR is mergeable, merge immediately:
+If every check/run is green (SUCCESS) and the PR is mergeable, merge immediately.
+
+**First, settle the merge commit message.** A merge that lands on an
+integration branch needs the markers that branch's release flow reads. Under
+@branch-flow, a merge into `main` must carry `[no ci]` (it queues the work
+without shipping it) and uses a merge commit, never a squash. The squash path
+collapses the branch's commits and loses that marker:
 
 ```bash
-gh pr merge --delete-branch
+gh pr merge --delete-branch --merge --subject "Merge pull request #N from <owner>/<branch> [no ci]"
 ```
 
-Use the repo's conventional merge strategy — typically a merge commit (`--merge`, the default) rather than squash, unless the repo's history shows it uses rebase or squash. Do not squash by default. `--delete-branch` cleans up the remote branch on merge.
+Check the repo's own branch rules before merging: `gh api repos/{owner}/{repo}/branches/main` for
+a `main`-flowing repo, or load @branch-flow when one exists. When the target is
+not an integration branch, `gh pr merge --delete-branch` alone is correct.
+
+If the PR title is a usable subject, let GitHub build the message and append the
+marker, rather than typing the whole thing by hand.
 
 If any check **failed**, do NOT merge. Stop and report the failure to the user with the failing run/check details, and let them decide next steps. Never merge a PR with failing CI unless the user explicitly overrides.
 
 ## Dependency graph
 
-- step1
-- step2 -> step1
-- step3 -> step1
-- step4 -> step2, step3
+- 1. identify the PR and its checks
+- 2. watch the runs to completion -> 1
+- 3. resolve conflicts (if any) -> 1
+- 4. merge if green -> 2, 3
 
 ## Safety rules
 
 - Never merge a PR with failing checks. Only merge when every run is green, or when the PR has no checks at all.
 - If the PR is a draft, stop and surface the blocker rather than force-merging.
-- Resolve conflicts only when they are simple and behavior-preserving (no actual behavior change). For non-trivial or ambiguous conflicts, do NOT guess — report to the user and wait for instructions.
-- Respect branch protection and merge-queue semantics — if `gh pr merge` requires admin or reports that requirements aren't met, surface that to the user instead of bypassing with `--admin` unless the user explicitly authorizes it.
+- Resolve conflicts only when they are simple and behavior-preserving (no actual behavior change). For non-trivial or ambiguous conflicts, do NOT guess: report to the user and wait for instructions.
+- Respect branch protection and merge-queue semantics. If `gh pr merge` requires admin or reports that requirements aren't met, surface that to the user instead of bypassing with `--admin`, unless the user explicitly authorizes it.
 - Report the merge result (PR number, merge commit, or failure reason) back to the user when done.
