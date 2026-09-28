@@ -80,6 +80,7 @@ the category directory never reaches the installed name.
 - **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` and `uninstall.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
 - ⭐ **[skill-doctor](../skills/meta/skill-doctor/SKILL.md)**: Audit skill references, names, collisions, and source drift.
+- **[review-agent](../skills/meta/review-agent/SKILL.md)**: Two-axis review of a diff, a file, or another agent definition, run inside the permission-scoped `review` subagent.
 
 ## Shared
 
