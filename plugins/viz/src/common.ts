@@ -1,8 +1,8 @@
 /**
- * Shared helpers for the learn visual authoring loops (write_/edit_/render_
- * trios for SVG and Mermaid, registered by plugins/learn-viz-tools.ts):
- * subprocess runner, per-session managed source file, exact-match editor,
- * and publishing a chosen render into <worktree>/viz with a unique filename.
+ * Shared helpers for the viz authoring loops (write_/edit_/render_ trios for
+ * SVG and Mermaid, registered by ./index.ts): subprocess runner, per-session
+ * managed source file, exact-match editor, and publishing a chosen render into
+ * <worktree>/viz with a unique filename.
  *
  * Ported from the pi visual-tools extension's _common.ts. Differences vs the
  * original: macOS PATH extras dropped (Linux binaries live in /usr/bin),
@@ -13,13 +13,13 @@
 import { spawn } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
 
-export const RENDER_TIMEOUT_MS_DEFAULT = 120_000
+const RENDER_TIMEOUT_MS_DEFAULT = 120_000
 
 /** Transient session/preview files live outside any vault: only PUBLISHED
  *  PNGs ever land inside the learner's project (viz/). */
-export const STAGING_ROOT = join(tmpdir(), "opencode", "viz-tools")
+const STAGING_ROOT = join(tmpdir(), "opencode", "viz-tools")
 export const FILES_DIRNAME = "viz"
 
 export interface RunResult {
@@ -105,7 +105,7 @@ export function applyEdit(current: string, oldText: string, newText: string): { 
   if (oldText === newText) throw new Error("`old_text` and `new_text` are identical.")
   const first = current.indexOf(oldText)
   if (first === -1) {
-    throw new Error("`old_text` not found in the current source — match it exactly.")
+    throw new Error("`old_text` not found in the current source; match it exactly.")
   }
   const second = current.indexOf(oldText, first + 1)
   if (second !== -1) {
@@ -115,7 +115,7 @@ export function applyEdit(current: string, oldText: string, newText: string): { 
       n++
       i = current.indexOf(oldText, i + oldText.length)
     }
-    throw new Error(`\`old_text\` appears ${n} times — add surrounding context to make it unique.`)
+    throw new Error(`\`old_text\` appears ${n} times; add surrounding context to make it unique.`)
   }
   const updated = current.slice(0, first) + newText + current.slice(first + oldText.length)
   return { updated, index: first }
@@ -148,5 +148,3 @@ export function publish(pngPath: string, slug: string, filesDir?: string): { fil
   copyFileSync(pngPath, dest)
   return { filename, path: dest }
 }
-
-export { existsSync, join, mkdirSync, readFileSync, writeFileSync }

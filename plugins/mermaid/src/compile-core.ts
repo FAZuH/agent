@@ -11,7 +11,7 @@ const DEFAULT_FORMAT = "png"
 
 const FORMATS = new Set(["svg", "png", "pdf"])
 
-export const SPACING_PRESETS: Record<string, Record<string, unknown> | null> = {
+const SPACING_PRESETS: Record<string, Record<string, unknown> | null> = {
   roomy: {
     layout: { nodeSpacing: 140, rankSpacing: 220 },
     stateDiagram: { padding: 80, textHeight: 30 },

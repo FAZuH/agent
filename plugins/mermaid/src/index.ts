@@ -44,7 +44,7 @@ export default {
       tools.add({
         name: "mermaid-compile",
         description:
-          "Compile a Mermaid .mmd diagram to PNG/SVG/PDF using mmdc (mermaid-cli). Validates the diagram and exports to docs/diagrams/ (or a custom output dir). Use whenever a .mmd file needs rendering, or after editing an existing diagram. Applies a roomy spacing preset unless the diagram carries its own %%{init}%% directive. PNG is the default output (SVG is fragile and breaks easily).",
+          "Compile a Mermaid .mmd diagram to PNG/SVG/PDF with mmdc and export it to docs/diagrams/. Use whenever a .mmd file needs rendering, or after editing an existing diagram. PNG is the default format (SVG breaks easily in downstream viewers).",
         input: {
           type: "object",
           properties: {
@@ -86,7 +86,7 @@ export default {
       tools.add({
         name: "mermaid-doctor",
         description:
-          "Validate Mermaid diagram syntax by parsing AND rendering every mermaid block in given files through headless Chromium + mermaid@11. Scans .html/.htm/.md/.markdown/.txt/.mmd (directories walked recursively). Reports per-diagram pass/fail with the parser's REAL error messages and file:line locations. Catches what naive checks miss: parse errors, render-time runtime errors, and blocks that silently fail to initialize. Use after writing or editing any HTML/Markdown containing mermaid diagrams.",
+          "Validate Mermaid syntax in the given files by parsing AND rendering every diagram through headless Chromium + mermaid@11 (rendering is what catches blocks that parse but never initialize). Reports per-diagram pass/fail with the parser's real error and file:line. Use after writing or editing any HTML/Markdown containing mermaid diagrams.",
         input: {
           type: "object",
           properties: {
@@ -110,10 +110,7 @@ export default {
               ...(typeof input.render === "boolean" ? { render: input.render } : {}),
               ...(typeof input.timeout_ms === "number" ? { timeout_ms: input.timeout_ms } : {}),
             }
-            const { report } = await runDoctor(args, {
-              baseDir: await projectDir(tctx),
-            })
-            return { content: report }
+            return { content: await runDoctor(args, { baseDir: await projectDir(tctx) }) }
           } catch (error) {
             return {
               content: `❌ mermaid-doctor failed: ${error instanceof Error ? error.message : String(error)}`,
