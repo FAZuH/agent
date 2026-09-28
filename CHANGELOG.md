@@ -1,3 +1,5 @@
+## [0.11.7](https://github.com/FAZuH/agent/compare/v0.11.6...v0.11.7) (2026-09-28)
+
 ## [0.11.6](https://github.com/FAZuH/agent/compare/v0.11.5...v0.11.6) (2026-09-28)
 
 ## [0.11.5](https://github.com/FAZuH/agent/compare/v0.11.4...v0.11.5) (2026-09-27)
@@ -45,18 +47,4 @@
 
 * **script:** find a self-installed opencode off the PATH ([d1272d4](https://github.com/FAZuH/agent/commit/d1272d46e123ac31c42527e5a6f1449f28b5b849))
 * **script:** find cargo in a non-login shell ([6a786d3](https://github.com/FAZuH/agent/commit/6a786d324bb7089cfa08db48bf5a21f8b1338314))
-
-## [0.11.2](https://github.com/FAZuH/agent/compare/v0.11.1...v0.11.2) (2026-09-25)
-
-
-### Features
-
-* add owned uninstaller ([674f3f2](https://github.com/FAZuH/agent/commit/674f3f28bbfe9ddb26640d6159765d3a2a44a2e1))
-
-
-### Bug Fixes
-
-* **ocv2:** require explicit opencode subcommands ([e48d81f](https://github.com/FAZuH/agent/commit/e48d81f229ff7e90261d4c1df947302ceb4163ee))
-* **skill:** guard gh --body-file against empty replacement files ([303262b](https://github.com/FAZuH/agent/commit/303262b273d87536d563392a49248d15b7c9412b))
-* **skill:** harden delegation and worktree guidance ([8648385](https://github.com/FAZuH/agent/commit/8648385c9e96316e6400cc991691bbb4972e7c6d))
 
