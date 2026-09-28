@@ -1,9 +1,15 @@
 ---
 name: rust-idioms
-description: Type-driven design patterns for Rust — newtype and smart constructors (parse, don't validate), acceptance traits, typestate, capability tokens, extension traits, sealed traits and closed vocabularies, RAII guards and drop bombs, error design (thiserror/anyhow, error-as-data, panic-only-on-unrecoverable-state policy and message wording), and dispatch design (generics vs dyn vs enum). Use whenever the user mentions any of these patterns, asks to design Rust types or a Rust API, or wants a Rust code review — even if they never say "idioms". Findings should lead with the most specific term from the oop skill.
+description: >-
+  Type-driven design patterns for Rust: newtypes and smart constructors,
+  typestate, capability tokens, extension and sealed traits, RAII guards,
+  error design (thiserror/anyhow, error-as-data, panic policy), and generics
+  vs dyn vs enum dispatch. Use when designing Rust types or an API, or
+  reviewing Rust code, even without saying "idioms". Lead each finding with
+  the most specific @oop term.
 ---
 
-# Rust idioms — encode the domain in types
+# Rust idioms: encode the domain in types
 
 One invariant drives every pattern here:
 
@@ -11,28 +17,21 @@ One invariant drives every pattern here:
 
 Push constraints out of documentation and discipline and into the type
 system. A function signature that accepts `&str` promises nothing; a
-signature that accepts `&Email` promises the value was validated — once,
-at the boundary, by the compiler's help.
+signature that accepts `&Email` promises the value was validated once, at
+the boundary, by the compiler's help.
 
 The cost is authoring time and API surface. Every pattern below has a
-"When not to apply" section — the failure mode is not missing the
-pattern, it is applying it where the domain has no real constraint
+"When not to apply" section. The failure mode is not missing the pattern, it
+is applying it where the domain has no real constraint
 (Speculative generality, YAGNI).
 
 When reviewing, lead each finding with the most specific term from the
-`oop` skill — Primitive obsession, Leaky abstraction, Temporal coupling,
-Anemic domain model, Shotgun surgery — then name the idiom that fixes it.
+`oop` skill (Primitive obsession, Leaky abstraction, Temporal coupling,
+Anemic domain model, Shotgun surgery), then name the idiom that fixes it.
 
-## Relationship to the other skills
-
-| Skill | Scope |
-|---|---|
-| `oop` | Findings vocabulary (language-agnostic) |
-| **`rust-idioms`** | Type-level design patterns (this skill) |
-| `rust-tea` | UI architecture (Model/Msg/Update/View/Effect/Host) |
-
-`rust-tea` uses these idioms internally: message enums are closed
-vocabularies, ports are capabilities, effect payloads are error-as-data.
+`rust-tea` (UI architecture, Model/Msg/Update/View/Effect/Host) uses these
+idioms internally: message enums are closed vocabularies, ports are
+capabilities, effect payloads are error-as-data.
 
 ## Decision table
 
@@ -56,29 +55,18 @@ vocabularies, ports are capabilities, effect payloads are error-as-data.
 | Idiom | Skip when |
 |---|---|
 | Newtype | One-off internal helper, prototyping, a type with a single use site (YAGNI) |
-| Typestate | Trivial transitions, runtime-determined state, state kept in collections — an enum + `match` is simpler |
+| Typestate | Trivial transitions, runtime-determined state, state kept in collections: an enum + `match` is simpler |
 | Extension trait | You own the type (use an inherent impl), or one caller would do |
-| Sealed trait / enum | The point of the trait *is* downstream extension — document it instead |
+| Sealed trait / enum | The point of the trait *is* downstream extension: document it instead |
 | Capability tokens | Access control is not actually a requirement (Speculative generality) |
-| Custom error taxonomy | Small app with one failure story — `anyhow` everywhere is fine |
-| Generics/`dyn` | One implementation exists and a second is hypothetical — write the concrete type |
+| Custom error taxonomy | Small app with one failure story: `anyhow` everywhere is fine |
+| Generics/`dyn` | One implementation exists and a second is hypothetical: write the concrete type |
 
-## Which doc to load
-
-| Need | Read |
-|---|---|
-| Newtype, smart constructors, parse-don't-validate, acceptance traits | `references/newtype.md` |
-| Typestate, builders, enum-state comparison, capability tokens | `references/typestate.md` |
-| Extension traits, import hygiene, upstream-collision risk | `references/extension-traits.md` |
-| Sealed traits, closed vocabularies, `#[non_exhaustive]` | `references/sealed-traits.md` |
-| RAII guards, drop bombs, Drop rules | `references/raii.md` |
-| thiserror vs anyhow, source chains, error-as-data, panics, wording | `references/errors.md` |
-| Generics vs `dyn` vs enum dispatch, object safety | `references/dispatch.md` |
-
-Read only what the task needs. `SKILL.md` + the decision table cover most
-reviews; load the specific reference for the pattern being written.
+Read only what the task needs. `SKILL.md` plus the decision table cover most
+reviews; load the reference named in that table's last column for the pattern
+being written.
 
 Crates are mentioned as accelerators (`thiserror`, `anyhow`, `nutype`,
-`secrecy`, `scopeguard`, `enum_dispatch`) — verify their current state
+`secrecy`, `scopeguard`, `enum_dispatch`). Verify their current state
 against docs before recommending; the *patterns* are std-level and do not
 age.

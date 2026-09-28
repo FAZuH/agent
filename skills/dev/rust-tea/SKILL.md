@@ -1,9 +1,15 @@
 ---
 name: rust-tea
-description: Renderer-agnostic The Elm Architecture (TEA / MVU) for Rust — Model state, Message enums, one pure Update, pure View, declarative Effects, and a Host that owns the event loop. Use this whenever the user mentions TEA, Elm architecture, MVU, model–message–update–view, state-machine UI, Rust GUI or TUI architecture, iced boot/update/view/subscription, ratatui/crossterm loops, or asks to scaffold, extend, or review a Rust UI app — even if they never say "TEA". Framework examples for iced and ratatui live in examples/.
+description: >-
+  The Elm Architecture (TEA/MVU) for Rust, renderer-agnostic: Model state,
+  exhaustive Message enums, one pure Update, pure View, declarative Effects,
+  and a Host owning the event loop. Use whenever the user mentions TEA, Elm
+  architecture, MVU, model-message-update-view, state-machine UI, Rust GUI
+  or TUI architecture, iced, ratatui/crossterm, or asks to scaffold, extend,
+  or review a Rust UI app, even without saying "TEA".
 ---
 
-# Rust TEA — The Elm Architecture in Rust
+# Rust TEA: The Elm Architecture in Rust
 
 The Elm Architecture (TEA, also called MVU) structures a UI as a one-way
 dataflow:
@@ -26,13 +32,13 @@ dataflow:
 ```
 
 Events become `Message` values. `Update` is the only code that mutates the
-`Model`, and it never performs side effects — it returns them as data
+`Model`, and it never performs side effects: it returns them as data
 (`Effect`s). The `View` reads the model and renders. The `Host` owns the
 loop, collects real-world events into messages, and executes effects.
 
-These rules hold regardless of renderer — iced, ratatui/crossterm, egui,
+These rules hold regardless of renderer: iced, ratatui/crossterm, egui,
 Dioxus, Slint, or a hand-rolled loop. When reviewing or discussing this
-architecture, use the vocabulary from the @oop skill; load @oop when 
+architecture, use the vocabulary from the @oop skill; load @oop when
 writing findings.
 
 ## The six invariants
@@ -57,19 +63,18 @@ If code breaks one of these, it is a finding, not a style preference.
 
 | Need | Read |
 |---|---|
-| The core contract, message promotion, dispatch loop | `references/tea-core.md` |
+| The core contract, skeleton stubs, message promotion, dispatch loop | `references/patterns.md` |
 | Layer/module layout, pure core, dependency direction | `references/layering.md` |
 | Designing effects, running them, async and blocking work | `references/effects.md` |
 | Testing a TEA app (test doubles, injection points) | `references/testing.md` |
-| Basic skeletons (traits, enums, structs) | `references/patterns.md` |
 | iced idioms | `examples/iced.md` |
 | ratatui/crossterm idioms | `examples/ratatui.md` |
 
-Read only what the task needs. `SKILL.md` + `tea-core.md` cover most work.
+Read only what the task needs. `SKILL.md` plus `patterns.md` cover most work.
 
 ## Update shape: free function or trait method (guideline, not rule)
 
-Both forms satisfy the invariants. Choose per host and model size — do not
+Both forms satisfy the invariants. Choose per host and model size; do not
 force one style onto a codebase that already picked the other.
 
 | Form | Shape | Prefer when |
@@ -84,7 +89,7 @@ m.update(msg) }`). The wrapper is an Adapter, not a violation.
 
 Nested sub-models are also a guideline, not a requirement. Split the model
 when one struct accumulates unrelated concerns (God object smell); keep it
-flat while the concerns stay small (KISS). See `tea-core.md` for the
+flat while the concerns stay small (KISS). See `patterns.md` for the
 promotion pattern that stitches nested messages back into one top-level
 enum.
 
@@ -103,7 +108,7 @@ Work top-down. Each step names the principle it protects.
    (Primitive obsession).
 3. **Define the effect vocabulary.** One `enum Effect` describing every
    side effect the app can perform (`PlaySound(Alarm)`, `SaveConfig`,
-   `SendNotification`). Data only — no closures, no futures.
+   `SendNotification`). Data only: no closures, no futures.
 4. **Define the ports.** `trait EffectHandler { fn execute(&mut self,
    effect: Effect) -> Vec<Msg>; }` and, for hand-rolled hosts, `trait
    Runner { fn run(&mut self) -> Result<(), AppError>; }`. The core is
@@ -115,17 +120,17 @@ Work top-down. Each step names the principle it protects.
 6. **Implement update, view, host.** `update` as free function or trait
    method (see table above). `view(&self)` pure. Host owns loop + input +
    effect dispatch; it translates each `Effect` into real work and feeds
-   returned messages back into `update` (dispatch loop in `tea-core.md`).
+   returned messages back into `update` (dispatch loop in `patterns.md`).
 7. **Test the core.** Unit-test `update` and model methods through the
    public API with a no-op effect handler. See `testing.md`.
 
 ## Add a feature
 
 One conceptual change touches exactly one place per layer (Open/Closed
-Principle — extend by adding, do not edit unrelated code):
+Principle: extend by adding, do not edit unrelated code):
 
 1. Add a `Msg` variant carrying the intent's data.
-2. Handle it in the owning model's `update` — mutate state, return
+2. Handle it in the owning model's `update`: mutate state, return
    `Effect`s.
 3. Translate new sub-model commands at the top level (`translate_*`
    method) into top-level `Effect`s if the sub-model cannot know them.
@@ -133,7 +138,7 @@ Principle — extend by adding, do not edit unrelated code):
    messages (`ConfigSaved`, `TaskResult`) for follow-up.
 5. Render any new state in `view`.
 
-If step 2 or 4 forces edits across many modules for one concept, stop —
+If step 2 or 4 forces edits across many modules for one concept, stop:
 that is Shotgun surgery. Fix the vocabulary first (usually a missing
 message variant or a missing effect).
 
@@ -141,44 +146,30 @@ message variant or a missing effect).
 
 Lead each finding with the most specific @oop term.
 
-- **God object** — one model or one `update` holding unrelated concerns.
+- **God object**: one model or one `update` holding unrelated concerns.
   Fix: split into sub-models with their own message types.
-- **Anemic domain model** — model is a data bag; a service mutates it.
+- **Anemic domain model**: model is a data bag; a service mutates it.
   Fix: move transitions onto the model as methods.
-- **Leaky abstraction** — UI code importing persistence, audio, or
+- **Leaky abstraction**: UI code importing persistence, audio, or
   platform crates directly. Fix: route through an `Effect` and a port.
-- **Hidden dependency** — update or view constructs its own IO (opening
+- **Hidden dependency**: update or view constructs its own IO (opening
   files, spawning threads). Fix: inject the port; return an `Effect`.
-- **Layer violation** — core importing renderer/runtime types. Fix: invert
+- **Layer violation**: core importing renderer/runtime types. Fix: invert
   the dependency (Dependency Inversion Principle).
-- **Divergent change** — adding one setting requires edits in config
+- **Divergent change**: adding one setting requires edits in config
   struct, message enum, view, and validation. Fix: a single registry
   (const table or enum with attributes) that all four derive from.
-- **Temporal coupling** — caller must call `hydrate` before `apply`. Fix:
+- **Temporal coupling**: caller must call `hydrate` before `apply`. Fix:
   encode ordering in the host's boot sequence or the model's API.
-- **Speculative generality** — ports, traits, or generics with no current
+- **Speculative generality**: ports, traits, or generics with no current
   second implementation. Fix: delete until a real need appears (YAGNI).
-- **Command–Query Separation** — a method both mutates and returns derived
+- **Command–Query Separation**: a method both mutates and returns derived
   state. Fix: split, or make the mutation return a diff/outcome value.
 
-## Guardrails
-
-| Smell | Where the fix lives |
-|---|---|
-| Blocking IO inside `update` or `view` | `references/effects.md` |
-| Effects that capture closures or futures | `references/effects.md` |
-| Model state duplicated between host and core | `references/layering.md` |
-| Untestable update (needs real files/sockets) | `references/testing.md` |
-| Message enum with `&str` payloads doing double duty | `references/tea-core.md` |
-
-## Examples
-
-`examples/` holds framework-specific idioms extracted from two real Rust
-TEA codebases. They are inspiration, not contracts — the invariants above
-are the contract.
-
-- `examples/iced.md` — iced 0.14: `application(boot, update, view)`,
-  `Task`/`Subscription`, a field registry driving view + search.
-- `examples/ratatui.md` — ratatui 0.30 + crossterm: hand-rolled loop,
-  composed sub-models behind an `Updateable` trait, `EffectHandler`
-  adapter, terminal redraw discipline.
+`examples/iced.md` (iced 0.14: `application(boot, update, view)`,
+`Task`/`Subscription`, a field registry driving view + search) and
+`examples/ratatui.md` (ratatui 0.30 + crossterm: hand-rolled loop, composed
+sub-models behind an `Updateable` trait, `EffectHandler` adapter, terminal
+redraw discipline) hold framework-specific idioms from two real Rust TEA
+codebases. They are inspiration, not contracts: the six invariants above are
+the contract.

@@ -1,6 +1,12 @@
 ---
 name: secrets-argv
-description: Keep secrets out of process argv when running commands that take credentials (ansible task args, CLI flags, curl URLs). Use whenever writing or reviewing a command, task, or role that passes a password/token/key as a flag value — argv is world-readable via /proc/<pid>/cmdline and ps, and is captured in shell history, audit logs, and tool transcripts. Covers the private-tempfile pattern for Ansible, raw shell, and curl. Not for secrets in config files, env files, or logs (use logging-guidelines for log redaction).
+description: >-
+  Keep secrets out of process argv, which is world-readable via
+  /proc/<pid>/cmdline and ps, and is captured in shell history, audit logs,
+  and tool transcripts. Use when a command, task, or role passes a password,
+  token, or key as a flag value: stage it in a 0600 tempfile, a protected
+  config file, or stdin instead. Covers Ansible, raw shell, and curl. Not
+  for secrets in config, env, or logs (see @logging-guidelines).
 ---
 
 # secrets-argv
@@ -45,7 +51,7 @@ logs, and agent transcripts.
 
 The essential bits:
 
-- `no_log: true` **and** `diff: false` on every task that touches the secret —
+- `no_log: true` **and** `diff: false` on every task that touches the secret;
   `no_log` alone still shows diffs.
 - argv carries only the file **path** (`--auth-file=…`, `--auth-key=file:…`).
 - Cleanup in an `always` block so failure paths don't leave the file behind.
@@ -63,18 +69,18 @@ tool --auth-file="$AUTH"   # not: tool --password="$SECRET"
 ### curl / HTTP
 
 PUT the payload in a file and use `--data-binary @file`, or `-K` (config
-file) for header tokens — never `curl -H "Authorization: Bearer $TOKEN"`.
+file) for header tokens. Never `curl -H "Authorization: Bearer $TOKEN"`.
 
 ## Preference order
 
 1. The tool's native secret-file/stdin option (`--auth-key=file:…`,
-   `--password-stdin`, `-K`) — no staging needed.
+   `--password-stdin`, `-K`): no staging needed.
 2. Protected tempfile + path (this pattern).
-3. Prompt/askpass — only for interactive flows.
+3. Prompt/askpass, for interactive flows only.
 
 ## Why not env vars?
 
 `FOO=secret cmd` keeps the secret out of argv but it still lands in shell
 history and `xtrace`; env is fine when the secret is already in a guarded
-file (`ENV_FILE`) and you're careful with `set -x` — but the file/stdin
-route is always safer.
+file (`ENV_FILE`) and you're careful with `set -x`, the file/stdin route is
+always safer.
