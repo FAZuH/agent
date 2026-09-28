@@ -238,11 +238,16 @@ jobs:
           TAG="${{ steps.commit.outputs.tag }}"
           git rm --cached -rf --ignore-unmatch node_modules/ version.json
           git commit --amend --no-edit
-          # autopromote merges main into release while this job runs. Rebase so the
-          # branch update is not rejected, and push branch + tag atomically so a
-          # half-landed release (a tag with no commit on the branch) cannot happen.
-          # The window between the fetch and the push stays open, so a merge landing
-          # there fails the run loudly instead of corrupting the tag.
+          if [ -n "$TAG" ]; then
+            git tag -f "$TAG"
+          fi
+          # autopromote can merge main into release mid-run. Rebase so the branch
+          # update is not rejected, and push branch and tag together so a tag can
+          # never land without its commit. A merge landing after the fetch still
+          # fails the run, loudly and without moving the tag.
+          git fetch origin release
+          git rebase origin/release
+          git push --atomic origin release --tags
           git fetch origin release
           git rebase origin/release
           if [ -n "$TAG" ]; then
