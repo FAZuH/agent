@@ -20,7 +20,7 @@ orchestrator routes work to.
 
 ## Review
 
-- ⭐ **[review](../agents/review/review.md)** — reviews a diff since a fixed point along Standards and Spec. Never edits the repo; the only file it writes is the handoff for the fixing agent.
+- ⭐ **[review](../agents/review/review.md)** — the permission scope for the [review-agent](../skills/meta/review-agent/SKILL.md) skill, which supplies the method. Reads everything, writes only the handoff.
 - **[malware-check](../agents/review/malware-check.md)** — scans repositories for malware and malicious code patterns.
 - **[pii-check](../agents/review/pii-check.md)** — scans repositories for PII and leaked secrets.
 
