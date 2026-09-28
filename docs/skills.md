@@ -48,6 +48,7 @@ the category directory never reaches the installed name.
 
 ## Dev
 
+- **[app-paths](../skills/dev/app-paths/SKILL.md)**: Resolve app config, data, cache, and state directories through one CLI > env > config file > platform ladder.
 - **[comments](../skills/dev/comments/SKILL.md)**: Write useful comments without narration or change-history noise.
 - **[commit-scopes](../skills/dev/commit-scopes/SKILL.md)**: Create and maintain the closed vocabulary for Conventional Commit scopes.
 - **[design-tradeoffs](../skills/dev/design-tradeoffs/SKILL.md)**: Compare design options with structured tradeoffs.
