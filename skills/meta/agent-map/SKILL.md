@@ -5,10 +5,6 @@ description: Map and maintain this personal-public agent repository. Use when cl
 
 # Agent Map
 
-Use this skill as the portable map for the agent repository. It explains where
-an item belongs, which rules apply, and how a source change reaches a target
-configuration.
-
 This skill is repository guidance. It does not contain machine paths,
 credentials, local target state, or host commands. Keep those facts in the host
 `AGENTS.md` or another host-specific file.

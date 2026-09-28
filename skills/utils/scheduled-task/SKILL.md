@@ -1,6 +1,6 @@
 ---
 name: scheduled-task
-description: Manage scheduled tasks on this machine through systemd user timers ONLY (`systemctl --user`) — add, list, remove, edit, and troubleshoot anything scheduled to run on a schedule. Use this skill whenever the user asks to schedule, run every X, cron, crontab, cron job, recurring task, background job, systemd timer, .timer unit, "on a schedule", backup/sync automation, or asks what is scheduled and when it next runs. Cron requests are translated into systemd user timers. Schedule expressions use OnCalendar syntax, validated with `systemd-analyze calendar` and confirmed with next-run times.
+description: Manage scheduled tasks on this machine through systemd user timers ONLY (`systemctl --user`), never crontab. Use when the user asks to schedule something, run every X, a cron job, a recurring or background task, a systemd timer, backup/sync automation, or asks what is scheduled and when it next runs. Owns the octask CLI, OnCalendar expressions, and the octask- unit prefix. See @scheduled-agent for unattended agent runs.
 ---
 
 # scheduled-task
@@ -10,16 +10,21 @@ timers** (`systemctl --user`). Do not use crontab, anacron, or system-wide
 timers. If the user says "cron job", translate the schedule to an `OnCalendar`
 user timer.
 
+This skill owns the timer mechanics: the `octask` CLI, the `octask-` unit
+prefix, OnCalendar expressions, discovery, editing, and removal. The
+@scheduled-agent skill owns the restricted agent definition an unattended
+`--agent` run requires.
+
 ## The model
 
 Everything this skill manages uses the shared prefix **`octask-`**:
 
 - Units: `~/.config/systemd/user/octask-<name>.service` (the job) and
   `octask-<name>.timer` (the schedule).
-- Discovery: `systemctl --user list-timers 'octask-*' --all` — the prefix is
+- Discovery: `systemctl --user list-timers 'octask-*' --all`. The prefix is
   the discovery mechanism; never create manually named timer pairs.
-- Helper CLI: **`octask`** — a Rust binary, canonical source at
-  `~/Projects/agent/scripts` (GitHub `FAZuH/agent`); install from a clone with
+- Helper CLI: **`octask`**, a Rust binary, canonical source at
+  `~/Projects/agent/scripts` (GitHub `FAZuH/agent`). Install from a clone with
   `cargo install --path scripts` (lands on `$PATH` as `~/.cargo/bin/octask`):
 
   ```bash
@@ -47,14 +52,11 @@ Everything this skill manages uses the shared prefix **`octask-`**:
   ```
 
   Without `--model`, agent runs use the `model:` field from the agent's
-  frontmatter. Passing `--model` overrides it (→ `opencode run --model
-  <provider/model> --agent <id>`); without it, the server may fall back to
-  its catalog default (currently `opencode-go/hy4-preview`), so always set
-  `--model` explicitly for cost-controlled unattended runs.
+  frontmatter. Passing `--model` overrides it. Without either, the server
+  falls back to its catalog default, which is not a cheap unattended model.
 
   > **Agent runs are unattended.** The agent cannot answer permission prompts,
-  > so it MUST be deny-all-by-default with a narrow allowlist (see
-  > [permissions](https://opencode.ai/v2/docs/agents/#permissions)). Use the
+  > so it MUST be deny-all-by-default with a narrow allowlist. Use the
   > @scheduled-agent skill to write the restricted agent definition before
   > scheduling with `--agent`.
 
@@ -78,7 +80,7 @@ octask units, other timers and their next run, anything inactive or failed
    | `Mon *-*-* 03:00:00` | Mondays at 03:00 |
    | `*-*-* 00/12:00:00` | twice a day, every 12 hours |
 
-2. Validate it: `systemd-analyze calendar "<expr>"` — shows parse + next runs.
+2. Validate it: `systemd-analyze calendar "<expr>"` shows parse and next runs.
 3. Add and enable:
    ```bash
    octask add <name> --oncalendar "<expr>" --exec "<command>" --persistent
@@ -97,13 +99,13 @@ every N hours). For "once per 12 hours with a stagger" use
 
 ## Removing and editing
 
-- Remove: `octask remove <name>` — stops, disables, deletes both unit files,
+- Remove: `octask remove <name>` stops, disables, deletes both unit files, and
   reloads the daemon. Use `--dry-run` first for anything you are unsure about.
-- Pause: `octask disable <name>` — stops and disables the timer but keeps the
+- Pause: `octask disable <name>` stops and disables the timer but keeps the
   units; re-enable later with `octask enable <name>`.
-- Inspect: `octask show <name>` — parsed task values (agent, model, prompt,
-  schedule, …) plus next run.
-- Edit: `octask edit <name> [options]` — changes agent flags (`--model`,
+- Inspect: `octask show <name>` prints parsed task values (agent, model,
+  prompt, schedule, and so on) plus next run.
+- Edit: `octask edit <name> [options]` changes agent flags (`--model`,
   `--no-model`, `--prompt`, `--agent`), schedule (`--oncalendar`, `--delay` /
   `--no-delay`, `--persistent` / `--no-persistent`), `--description`,
   `--workdir`, `--timeout`; common fields also work on `--exec` tasks.
@@ -112,11 +114,11 @@ every N hours). For "once per 12 hours with a stagger" use
 
 ## Export / import
 
-- `octask export [name ...] [--file <path>]` — JSON backup of one, several,
-  or all tasks (no names = all) to stdout, or `--file` for a file.
-- `octask import [--file <path>] [--force] [--no-enable]` — recreate tasks
-  from exported JSON (`--file` or stdin); replays through `octask add` so
-  all validation still applies. Refuses to overwrite without `--force`;
+- `octask export [name ...] [--file <path>]` writes a JSON backup of one,
+  several, or all tasks (no names = all) to stdout, or to `--file`.
+- `octask import [--file <path>] [--force] [--no-enable]` recreates tasks
+  from exported JSON (`--file` or stdin). It replays through `octask add` so
+  all validation still applies, refuses to overwrite without `--force`, and
   preserves the exported enabled state unless `--no-enable`.
 
 ## Troubleshooting
