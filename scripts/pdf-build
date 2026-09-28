@@ -44,11 +44,11 @@ diagrams=(*.mmd)
 shopt -u nullglob
 
 # Content hashes, not mtimes: touching a file must not trigger a rebuild.
+hash() { sha256sum "$1" | cut -d' ' -f1; }
 state=$(
-  sha256sum "$0" | cut -d' ' -f1
-  printf '%s\t%s\n' "$(sha256sum "$doc" | cut -d' ' -f1)" "$doc"
-  for f in ${diagrams[@]+"${diagrams[@]}"}; do
-    printf '%s\t%s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$f"
+  hash "$0"
+  for f in "$doc" ${diagrams[@]+"${diagrams[@]}"}; do
+    printf '%s\t%s\n' "$(hash "$f")" "$f"
   done
 )
 

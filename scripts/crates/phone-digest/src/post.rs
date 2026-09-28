@@ -39,7 +39,7 @@ pub struct Item {
 
 /// One Discord message per element: `# Phone digest — N notifications` plus
 /// the `<t:<epoch>:R>` generation line open the FIRST chunk only, tier
-/// sections follow, `(cont.)` headers resume later chunks — all counted in
+/// sections follow, `(cont.)` headers resume later chunks, all counted in
 /// characters like Python's `len(str)`. Never splits a line, so a tier
 /// header always lands whole.
 pub fn render_chunks(items: &[Item], epoch: i64) -> Vec<String> {
@@ -108,7 +108,7 @@ fn tier_label(tier: &str) -> &str {
 }
 
 /// Collapse whitespace, truncate to `cap` characters, then defuse mass
-/// mentions — the Python order, so a truncated `@everyone@` stays cut.
+/// mentions, in the Python order, so a truncated `@everyone@` stays cut.
 pub fn clean(text: &str, cap: usize) -> String {
     crate::ingest::cap(text, cap)
         .replace("@everyone", "at-everyone")
@@ -522,7 +522,9 @@ mod tests {
         let home = Path::new("/home/tester");
         assert_eq!(
             webhook_roots(None, home),
-            vec![PathBuf::from("/home/tester/.config/fazuh-agent/secrets/discord")]
+            vec![PathBuf::from(
+                "/home/tester/.config/fazuh-agent/secrets/discord"
+            )]
         );
         assert_eq!(
             webhook_roots(

@@ -1,42 +1,35 @@
 ---
 name: session
 description: >-
-  Manage a feature's session workspace under .scratch/, one date-prefixed
-  directory per feature — plan and spec doc, mattpocock-style tickets,
-  deviation log, and pre-compaction checkpoints. Use when starting a
-  multi-step task and writing an initial plan, resuming or recovering context
-  after a session fork or context compaction, persisting state before
-  compaction, logging deviations during execution, or drafting a spec and
-  splitting it into tickets. The session doc is the single source of truth
-  that keeps work consistent across sessions. The `.scratch/` workspace
-  mechanics (slug format, layout, lifecycle, archiving) live in the @scratch
-  skill.
+  Manage a feature's session workspace under .scratch/, the plan/spec doc,
+  tickets, deviation log, log sections, and pre-compaction checkpoints. Use
+  when starting a multi-step task and writing an initial plan, resuming
+  after a session fork or compaction, persisting state before compaction,
+  logging deviations, or drafting a spec and splitting it into tickets. The
+  session doc is the single source of truth that keeps work consistent
+  across sessions. The `.scratch/` layout, slug format, and lifecycle live
+  in the @scratch skill; the checkpoint and log-section templates live here.
 ---
 
 # session
 
-Every non-trivial feature gets a session workspace in `.scratch/` under a
-date-prefixed slug: `.scratch/<YYYY-MM-DD>_<feature-slug>/`. The doc survives
-session forks and context compactions, so any session can recover the full
-picture — decisions, file layout, deviations, status — from the workspace
-plus the code.
+Every non-trivial feature gets a session workspace in `.scratch/`, and the
+spec doc inside it is the single source of truth for the work.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > skill's numbered procedures: point-and-call narration, live deviation
 > logging, and a post-run report. The `## Interrupted procedures` section it
 > defines lives in this workspace's `spec.md`.
 
-> **Load the @scratch skill first.** It owns the `.scratch/` workspace
-> mechanics — the slug format, directory layout, lifecycle, and archiving of
-> completed features to `.scratch/complete/`. Follow its layout exactly when
-> you read or write `.scratch/` files.
+> **Load the @scratch skill first.** It owns the workspace layout, slug
+> format, and lifecycle. This skill owns what goes *inside* the workspace.
 
 ## Read the workspace first
 
 - **Session start / resume:** read `.scratch/*_*/spec.md` before doing
   anything; it restores where the work stands and what was already decided.
 - **After compaction or fork:** re-read the spec and `checkpoint.md` before
-  continuing — they are the canonical summary of the work.
+  continuing, they are the canonical summary of the work.
 - **Mid-task:** check the deviation log to see what already changed.
 
 ## Writing a plan / spec
@@ -79,22 +72,17 @@ or an edit that anchors on the file's final line and ADDS after it. Never
 anchor an edit on a duplicated phrase mid-file: replace-edits anchored on
 recurring log text silently overwrite an existing entry.
 
-## Interrupted procedures
+## Log sections
 
-A procedure paused mid-run (a user interjection, or any halt that must be
-resumable) gets an entry in a `## Interrupted procedures` section in the same
-`spec.md`. The @following-procedures skill owns the section format; keep it
-alongside the deviation log and update it in place. One entry per interrupted
-procedure.
+Two more sections sit alongside the deviation log in the same `spec.md`. Each
+owning skill below states its entry format; this skill owns where the sections
+go and the empty placeholder in the template above.
 
-## Gate log
-
-Approval-gate decisions (fired, skipped, failed) and run-mode switches
-(`/gate auto`) go to a dedicated `## Gate log` section in the same
-`spec.md` — never the deviation log: a gate skipped in auto mode is
-expected behavior, not a deviation. The @gate skill owns the entry
-format; the template above carries the empty section. Keep it alongside
-the deviation log and append in place.
+- `## Gate log`, approval-gate decisions and run-mode switches. The @gate
+  skill owns the entry format; never fold these into the deviation log.
+- `## Interrupted procedures`, one entry per interrupted procedure, updated
+  in place and never deleted until the procedure resumes and finishes. The
+  @following-procedures skill owns the entry format.
 
 ## Tickets & specs (mattpocock)
 
@@ -107,15 +95,15 @@ the deviation log and append in place.
 `.scratch/` doubles as the local issue tracker. Follow the conventions from
 [`setup-matt-pocock-skills/issue-tracker-local.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md).
 The mattpocock skills use
-`<feature-slug>` as the directory name — on this machine the slug is always
+`<feature-slug>` as the directory name, on this machine the slug is always
 date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
 
-- **Spec** — [@to-spec](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
-- **Tickets** — [@to-tickets](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
+- **Spec**: [@to-spec](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
+- **Tickets**: [@to-tickets](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
   `.scratch/<YYYY-MM-DD>_<feature-slug>/issues/<NN>-<slug>.md`, numbered from
   `01` in dependency order (blockers first). Each ticket has a `Blocked by:`
   line and a `Status:` line (`ready-for-agent` / `claimed` / `resolved`).
-- **Map** — [@wayfinder](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
+- **Map**: [@wayfinder](https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md) writes `.scratch/<YYYY-MM-DD>_<effort>/map.md` and one
   child ticket per decision. The **frontier** is the scan of
   `.scratch/<YYYY-MM-DD>_<effort>/issues/` for files that are open, unblocked,
   and unclaimed; first by number wins.
@@ -141,7 +129,7 @@ update the affected section in place. The doc must always reflect reality.
 Rules:
 
 - Log every change to a decision, file layout, design, or scope.
-- Update the affected section too — the doc reflects reality, it doesn't just
+- Update the affected section too, the doc reflects reality, it doesn't just
   record that reality changed.
 - Date every entry and include enough context to be self-explanatory.
 
@@ -151,15 +139,17 @@ When the session is about to be compacted (context-watch warning, explicit
 request), persist a resume checkpoint so a fresh session can pick up. Assume
 the conversation history is about to be deleted.
 
-1. **Snapshot state** — capture: objective, done, in progress, blocked,
+1. **Snapshot state**: capture: objective, done, in progress, blocked,
    deviations.
-2. **Update `spec.md`** — refresh Objective / Decisions & constraints /
+2. **Update `spec.md`**: refresh Objective / Decisions & constraints /
    File layout / Design / Execution to match reality; append dated entries to
    the Deviation log.
-3. **Write `.scratch/<YYYY-MM-DD>_<feature-slug>/checkpoint.md`** with:
+3. **Write `.scratch/<YYYY-MM-DD>_<feature-slug>/checkpoint.md`** with this
+   exact template (the @prepare-compact skill points here, so a repo that
+   compacts without a `.scratch/` workspace can copy it into `RESUME.md`):
 
 ```markdown
-# Resume checkpoint — <feature>
+# Resume checkpoint: <feature>
 
 ## Goal to re-create
 <the goal objective, verbatim>
@@ -184,14 +174,11 @@ the conversation history is about to be deleted.
   rationale.
 ```
 
-Do NOT write credentials or tokens — note where they live instead (env var,
+Do NOT write credentials or tokens, note where they live instead (env var,
 file path). After compaction, the first action of the fresh session must be to
 re-create the goal from the checkpoint, then continue from the next step.
 
 ## Completing a feature
 
-To archive a finished workspace, follow the @scratch-finish skill: it owns
-the completion checklist and the archive steps — mark remaining items done,
-append an Outcome section, move the spec to `.scratch/complete/`, mark tickets
-resolved, and delete the stale checkpoint. Do not archive until the work ships
-and all its items are done.
+The @scratch-finish skill owns the completion checklist and the archive steps.
+Follow it. Do not archive until the work ships and every item is done.

@@ -1,6 +1,6 @@
 ---
 name: ocv2-unfuck
-description: Verify top-level tool availability before you claim Code Mode lacks shell or subagents — recheck outside the default.execute sandbox. Use when you see Unknown tool inside default.execute, when you catch yourself saying Code Mode has no shell, or before you refuse a direct order to run shell or subagent.
+description: Verify top-level tool availability before claiming Code Mode lacks shell or subagents, by rechecking outside the `default.execute` sandbox. Use when you see `Unknown tool` inside `default.execute`, when you catch yourself saying Code Mode has no shell, or before you refuse a direct order to run shell or subagent.
 ---
 
 # Tool availability self-check (Code Mode sandbox vs top-level)

@@ -1,16 +1,11 @@
 ---
 name: pr-creator
 description: >
-  Creates high-quality pull requests (PRs) that follow the repository's own
-  templates and standards. Handles the whole flow: branch safety, committing
-  changes, finding/reading the PR template (falling back to a bundled generic
-  template when the repo has none), running the repo's standard checks, pushing,
-  and opening the PR with the gh CLI.
-  Use this skill whenever the user asks to create a PR, open a pull request,
-  draft a PR, submit a PR, "make a PR for this", or prepares a branch plus
-  description plus PR — even if they don't name the skill. Also triggers when
-  the user has work-in-progress changes and wants them turned into a pull
-  request. Not for reviewing existing PRs or resolving merge conflicts.
+  Create a pull request that follows the repository's own template. Use
+  whenever the user asks to create, open, draft, or submit a PR, says "make a
+  PR for this", or wants work-in-progress changes turned into a pull request,
+  even if they do not name the skill. Not for reviewing existing PRs or
+  resolving merge conflicts.
 license: MIT
 metadata:
   author: FAZuH (adapted from google-gemini/gemini-cli pr-creator)
@@ -20,13 +15,9 @@ metadata:
 
 # Pull Request Creator
 
-This skill guides the creation of high-quality pull requests that follow the
-repository's own templates and standards.
-
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Principles* section
-> at the bottom.
+> fixed post-run report.
 
 ## Workflow
 
@@ -34,14 +25,14 @@ Follow these steps in order to create a pull request:
 
 ### 1. Branch Management (CRITICAL safety)
 
-Never create a PR from the repository's **default branch** — PRs that come from
+Never create a PR from the repository's **default branch**: PRs that come from
 `main`/`master` are indistinguishable from direct pushes and skip review. Work
 on a dedicated, descriptively named branch instead.
 
-Detect the default branch first (do not hardcode `main` — repos vary):
+Detect the default branch first (do not hardcode `main`: repos vary):
 
 ```bash
-# Primary: ask GitHub directly — authoritative for PR base and merge behavior
+# Primary: ask GitHub directly, authoritative for PR base and merge behavior
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
 # Fallback A: resolve the remote's HEAD ref, e.g. "refs/remotes/origin/main"
 git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null
@@ -50,7 +41,7 @@ git remote show origin 2>/dev/null | grep "HEAD branch"
 ```
 
 Strip `refs/remotes/origin/` from the `symbolic-ref` output to get the branch
-name. If `gh` and the local `symbolic-ref` disagree, trust `gh` — the local
+name. If `gh` and the local `symbolic-ref` disagree, trust `gh`: the local
 ref is a stale cache (refresh it with `git remote set-head origin -a`). If
 there is no remote configured, fall back to checking for the common defaults
 (`main`, then `master`).
@@ -90,8 +81,8 @@ Look for a pull request template in the repository:
 - `.github/pull_request_template.md`
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `.github/PULL_REQUEST_TEMPLATE/` (a directory of templates, e.g. `bug_fix.md`,
-  `feature.md`) — if multiple exist, ask the user which to use or select the
-  most appropriate one based on the context.
+  `feature.md`). If multiple exist, ask the user which to use or select the
+  most appropriate one from the context.
 
 **GATE template-pick (normal → select the most appropriate template based on
 context and note the choice in the PR description):** when multiple templates
@@ -112,8 +103,8 @@ follow its structure.
 Create a PR description that strictly follows the template's structure:
 
 - **Headings**: Keep all headings from the template.
-- **Checklists**: Review each item. Mark `[x]` if genuinely completed. Leave
-  items unchecked (`[ ]`) if not applicable — never check boxes for work you
+- **Checklists**: Review each item. Mark `[x]` if genuinely completed, leave
+  it unchecked (`[ ]`) if not applicable, and never check a box for work you
   haven't done.
 - **Content**: Fill each section with clear, concise summaries of your changes.
 - **Related Issues**: Link any issues fixed or related to this PR (e.g.
@@ -123,8 +114,8 @@ Create a PR description that strictly follows the template's structure:
   line so that issue auto-closes when the PR merges. Include every issue the PR
   resolves, one per line (`Closes #12`, `Closes #34`). Use `Closes` (not
   `Fixes`) so the issue is closed automatically on merge. Only add issues the
-  PR genuinely resolves — do not list merely-related or tracking issues you
-  don't want auto-closed.
+  PR genuinely resolves, never merely-related or tracking ones you don't want
+  auto-closed.
 
 Follow the template's own guidance for sections that don't apply: the bundled
 `reference/pr-template.md` instructs omitting non-applicable sections entirely
@@ -132,8 +123,8 @@ Follow the template's own guidance for sections that don't apply: the bundled
 
 ### 6. Preflight Checks
 
-Before creating the PR, run the repository's *own* standard checks — build,
-lint, and tests. Don't assume a specific command; discover what the repo
+Before creating the PR, run the repository's *own* standard checks (build,
+lint, tests). Don't assume a specific command; discover what the repo
 defines:
 
 - `package.json` scripts (`lint`, `test`, `typecheck`, `build`, `check`, …)
@@ -143,7 +134,7 @@ defines:
 - CI workflow files (`.github/workflows/`) for the canonical commands
 
 Run the checks the repo itself uses. If the repo defines no such checks, note
-that in the PR and proceed — don't invent a check the project doesn't have.
+that in the PR and proceed; don't invent a check the project doesn't have.
 
 Then confirm the PR will contain only this branch's work. A local base branch
 can sit ahead of its remote, and those commits ride along silently:
@@ -154,12 +145,12 @@ git log --oneline origin/<base>..HEAD   # every commit listed here lands in the 
 ```
 
 If that list holds commits you did not author for this branch, local base work
-is being carried into the PR. Stop and ask — whether to push, rebase, or
+is being carried into the PR. Stop and ask: whether to push, rebase, or
 re-target is the user's call, not a detail to decide for them.
 
 ### 7. Push Branch
 
-Push the current branch to the remote. Double-check the branch name first —
+Push the current branch to the remote. Double-check the branch name first:
 pushing the default branch is the one irreversible mistake here.
 
 ```bash
@@ -186,8 +177,8 @@ rm "$body"
 ```
 
 - **Never pass an unverified path to `--body-file`.** The flag replaces the body
-  with the file's contents, so a missing or empty file silently wipes it — the
-  call succeeds and the damage is only visible afterwards. Create the file with
+  with the file's contents, so a missing or empty file silently wipes it:
+  the call succeeds and the damage is only visible afterwards. Create the file with
   `mktemp` in the same command that uses it, assert `test -s` before the call,
   and never append (`>>`) onto a path that may not exist, because that
   *recreates* the file as empty. Keep cross-session drafts under
@@ -199,25 +190,16 @@ rm "$body"
 
 ## Dependency graph
 
-- step1
-- step2 -> step1
-- step3
-- step4 -> step3
-- step5 -> step4
-- step6
-- step7 -> step1, step2
-- step8 -> step5, step6, step7
-
-## Principles
-
-- **Safety First**: NEVER push to the default branch. This is the highest
-  priority — check before every push.
-- **Compliance**: Never ignore the PR template. It exists for a reason; if the
-  repo lacks one, use `reference/pr-template.md` so the PR still reads well.
-- **Completeness**: Fill out all relevant sections.
-- **Accuracy**: Don't check boxes for tasks you haven't done.
+- 1. branch management
+- 2. commit changes
+- 3. locate template -> 1
+- 4. read template -> 3
+- 5. draft description -> 4
+- 6. preflight checks -> 2
+- 7. push branch -> 1, 6
+- 8. create PR -> 5, 7
 
 ## References
 
-- `reference/pr-template.md` — bundled generic PR template, used only when the
+- `reference/pr-template.md`: bundled generic PR template, used only when the
   repository has no template of its own.

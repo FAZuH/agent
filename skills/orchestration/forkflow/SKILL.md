@@ -17,8 +17,7 @@ durable contract remains its spec and, when used, its @task-context packet.
 
 ## One-shot
 
-`scripts/oc-delegate.sh` runs the whole delegation procedure in one call —
-fork → switch agent → first prompt → wait → print the reply:
+`scripts/oc-delegate.sh` runs the whole delegation procedure in one call: fork → switch agent → first prompt → wait → print the reply:
 
 ```sh
 scripts/oc-delegate.sh ses_SOURCE --agent implement \
@@ -31,7 +30,7 @@ Exit 0 only when the child turn succeeds. It reuses the @ocv2-sessions
 scripts. The manual steps below stay as the fallback and the reference.
 
 For a plain Q&A fork that keeps the parent's agent and model (no switch),
-`scripts/oc-ask.sh` is the one-shot — fork at the latest message → prompt →
+`scripts/oc-ask.sh` is the one-shot, fork at the latest message → prompt →
 wait → print the reply:
 
 ```sh
@@ -105,26 +104,16 @@ of a child that already ran a turn.
 
 ## Unattended fleets
 
-The default loop is foreground: fork → prompt → poll → report. When children
-run for hours unattended (overnight fleets), three things are not optional —
-and the wake loop itself belongs to the long-horizon skill:
-
-- **Dispatch ledger.** Keep a `children.txt` beside the session record — one
-  line per child: sessionID, agent, dispatch epoch, state. The ledger rule
-  below still holds; the file is what a heartbeat or a recovering
-  orchestrator can re-read without context.
-- **Per-generation completion markers.** If the wake layer records a `.done`
-  marker per child, key it by dispatch epoch or delete it on every
-  re-dispatch. A stale marker from generation 1 silently suppresses the
-  finish-wake for generation 2.
-- **Stall detection.** `outcome` alone cannot tell a slow child from a dead
-  one. Alert when a child has produced no new message for ~45 min (re-notify
-  hourly), instead of waiting for an outcome that may never arrive.
+The default loop is foreground: fork → prompt → poll → report. For unattended
+fleets (overnight batches) the dispatch ledger, per-generation completion
+markers, and stall detection are not optional; @long-horizon owns those
+requirements and the wake loop, since they are liveness concerns rather than
+fork mechanics.
 
 Poll recipe for long runs: `GET /api/session/{child}` `.data.outcome` (null
-= busy). Message lists are newest-first and mix agent voices — filter to
-`agent != orchestrator`, iterate from index 0, and save large message JSON
-to a file before parsing.
+= busy). Message lists are newest-first and mix agent voices, so filter to
+`agent != orchestrator`, iterate from index 0, and save large message JSON to a
+file before parsing.
 
 ## Ledger and fallback
 

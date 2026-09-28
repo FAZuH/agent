@@ -24,14 +24,6 @@ export interface Failure {
   error: string
 }
 
-export interface DoctorMeta {
-  ok: boolean
-  total: number
-  passed: number
-  failed: number
-  failures: Failure[]
-}
-
 export interface DoctorArgs {
   paths?: string[]
   raw?: string
@@ -183,9 +175,7 @@ async function extractDiagrams(files: string[]): Promise<Diagram[]> {
  * Every rejection is reported; a silent catch here turns a config problem into
  * an unfalsifiable "not resolvable".
  */
-async function resolvePlaywright(
-  extraDirs: string[],
-): Promise<{ chromium: any; from: string }> {
+async function resolvePlaywright(): Promise<{ chromium: any; from: string }> {
   const tried: string[] = []
   const reasons: string[] = []
   const globalDirs = [
@@ -196,7 +186,6 @@ async function resolvePlaywright(
     ...(process.env.MERMAID_DOCTOR_PLAYWRIGHT_PATH
       ? [path.resolve(process.env.MERMAID_DOCTOR_PLAYWRIGHT_PATH)]
       : []),
-    ...extraDirs,
     ...globalDirs,
     process.cwd(),
   ]
@@ -223,7 +212,7 @@ async function resolvePlaywright(
   throw new Error(
     `playwright not resolvable.\n  tried: ${tried.join(", ")}\n  reasons:\n    ${
       reasons.filter((r) => !r.endsWith(": absent")).join("\n    ") ||
-      `(every candidate was absent. Install playwright in one of those dirs — the first is ${globalDirs[0]}, and a symlink there works too — or set MERMAID_DOCTOR_PLAYWRIGHT_PATH in the environment that launches the opencode2 service. It does NOT belong in opencode.json: that config has no "env" key, and the entry is ignored (verified 2026-09-13: the service process env never saw it).`
+      `(every candidate was absent. Install playwright in one of those dirs (the first is ${globalDirs[0]}; a symlink there works too), or set MERMAID_DOCTOR_PLAYWRIGHT_PATH in the environment that launches the opencode2 service. It does NOT belong in opencode.json: that config has no "env" key, and the entry is ignored (verified 2026-09-13: the service process env never saw it).`
     }`,
   )
 }
@@ -251,12 +240,9 @@ function cleanError(e: unknown): string {
   return lines.join(" | ").slice(0, 300)
 }
 
-// Engine behind the mermaid-doctor tool registered in ./index.ts. Returns
-// the human-readable report plus structured metadata.
-export async function runDoctor(
-  args: DoctorArgs,
-  opts?: { baseDir?: string; extraDirs?: string[] },
-): Promise<{ report: string; meta?: DoctorMeta }> {
+// Engine behind the mermaid-doctor tool registered in ./index.ts. Returns the
+// human-readable report.
+export async function runDoctor(args: DoctorArgs, opts?: { baseDir?: string }): Promise<string> {
   const baseDir = opts?.baseDir || process.cwd()
   const doRender = args.render !== false
   const deadline = Date.now() + (args.timeout_ms ?? 15000)
@@ -268,15 +254,13 @@ export async function runDoctor(
     } else if (args.paths?.length) {
       diagrams = await extractDiagrams(await collectFiles(args.paths, baseDir))
     } else {
-      return { report: "No input: provide paths (files/directories) or raw diagram source." }
+      return "No input: provide paths (files/directories) or raw diagram source."
     }
   } catch (e) {
-    return { report: `Scan failed: ${e instanceof Error ? e.message : String(e)}` }
+    return `Scan failed: ${e instanceof Error ? e.message : String(e)}`
   }
   if (diagrams.length === 0) {
-    return {
-      report: `No mermaid blocks found in ${args.paths!.length} path(s). Supported: <pre/div class="mermaid"> in HTML, fenced \`\`\`mermaid blocks, .mmd files.`,
-    }
+    return `No mermaid blocks found in ${args.paths!.length} path(s). Supported: <pre/div class="mermaid"> in HTML, fenced \`\`\`mermaid blocks, .mmd files.`
   }
 
   let browser: any
@@ -286,7 +270,7 @@ export async function runDoctor(
   const failures: Failure[] = []
 
   try {
-    const pw = await resolvePlaywright(opts?.extraDirs ?? [])
+    const pw = await resolvePlaywright()
     engineFrom = pw.from
     browser = await pw.chromium.launch({ headless: true })
     page = await browser.newPage()
@@ -354,16 +338,14 @@ export async function runDoctor(
       }
     }
   } catch (e) {
-    return { report: `Engine failure: ${e instanceof Error ? e.message : String(e)}` }
+    return `Engine failure: ${e instanceof Error ? e.message : String(e)}`
   } finally {
     await page?.close().catch(() => {})
     await browser?.close().catch(() => {})
   }
 
   const total = diagrams.length
-  const failed = failures.length
-  const passed = total - failed
-  const ok = failed === 0
+  const passed = total - failures.length
   const rel = (f: string) => (f.startsWith("(") ? f : path.relative(baseDir, f) || f)
 
   const lines: string[] = [
@@ -374,8 +356,5 @@ export async function runDoctor(
   if (total <= 20) for (const d of okList) lines.push(`ok   ${rel(d.file)}:${d.line} [${d.index}]`)
   else lines.push(`… ${okList.length} further diagrams passed`)
 
-  return {
-    report: lines.join("\n"),
-    meta: { ok, total, passed, failed, failures },
-  }
+  return lines.join("\n")
 }

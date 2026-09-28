@@ -1,5 +1,5 @@
-//! Rust port of the three phone digest scripts: `phone-notify-ingest`
-//! (`serve`), `phone-inbox-drain` (`drain`) and `phone-digest-post` (`post`).
+//! Android notification ingest (`serve`), inbox drain (`drain`) and Discord
+//! digest poster (`post`).
 
 pub mod drain;
 pub mod ingest;
@@ -33,11 +33,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Cmd {
-    /// run the tailnet notification ingest server (was phone-notify-ingest)
+    /// run the tailnet notification ingest server
     Serve(ServeArgs),
-    /// print the inbox to stdout and park it under drained/ (was phone-inbox-drain)
+    /// print the inbox to stdout and park it under drained/
     Drain(DrainArgs),
-    /// post a notification digest to Discord (was phone-digest-post)
+    /// post a notification digest to Discord
     Post(PostArgs),
 }
 
@@ -65,7 +65,7 @@ pub struct DrainArgs {
 pub struct PostArgs {
     /// {"items": [{"app": str, "title": str, "gist": str, "tier": str}]}
     pub json: String,
-    /// ping the user (mention them in the first message) — pass when any
+    /// ping the user (mention them in the first message), pass when any
     /// item is agent-originated
     #[arg(long)]
     pub ping: bool,

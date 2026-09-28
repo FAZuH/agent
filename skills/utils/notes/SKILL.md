@@ -5,11 +5,14 @@ description: Read and maintain durable notes for tools, CLIs, APIs, scheduled ag
 
 # Notes
 
-Keep durable, machine-specific knowledge in `{{USER_HOME}}/.config/fazuh-agent/notes/`. Use one Markdown file per tool or system. Read the matching note before changing that system. If no note exists, create one when the task produces knowledge that will help later.
+One Markdown file per tool or system, in
+`{{USER_HOME}}/.config/fazuh-agent/notes/`. Read the matching note before
+changing that system. Create one when the task produces knowledge that will
+help later.
 
 ## OpenCode v2 findings
 
-The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.md`. A skill that needs an OpenCode v2 finding calls this skill and reads that note. It does not keep a second copy of the findings.
+The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.md`. A skill that needs a finding calls this skill and reads that note rather than keeping a second copy.
 
 ## Write a note
 
@@ -36,9 +39,3 @@ The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.m
 5. Keep secrets out of notes. Refer to the secret by purpose, not by value.
 6. After editing, read the note again and confirm that the next agent can find
    the claim with a search for the tool or feature name.
-
-## Host-specific rules
-
-A note can define its own `How to update this note` section. Follow that section
-when it exists. The common rules above apply to entries that do not define a
-different format.

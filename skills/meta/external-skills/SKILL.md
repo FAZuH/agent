@@ -5,11 +5,10 @@ description: Install, update, list, or remove upstream-owned (External class) ag
 
 # External Skills
 
-Manage upstream-owned skills: install,
-update, list, remove. These live in `~/.agents/skills/` and are owned
-upstream — updated through the CLI, never hand-edited.
+Upstream-owned skills live in `~/.agents/skills/`. Update them through the CLI,
+never by hand-editing.
 
-## Rule 0 — check the CLI first
+## Rule 0: check the CLI first
 
 Flags drift. Before any install, run `npx skills --help` and use what it
 reports. Known-good forms (long = short): `--global` = `-g`,
@@ -17,7 +16,7 @@ reports. Known-good forms (long = short): `--global` = `-g`,
 
 ## Install
 
-Global, for OpenCode (the default — available in every session):
+Global, for OpenCode (the default, available in every session):
 
 ```bash
 npx skills add <owner/repo> --global --agent opencode --yes
@@ -31,9 +30,9 @@ npx skills add <owner/repo> --global --agent opencode --yes --skill '*'     # ev
 npx skills add <owner/repo> --global --agent opencode --list                # preview what a repo offers, install nothing
 ```
 
-Project-level (omit `--global`) only when the skill is repo-specific.
-Never install the same repo global AND project-level — OpenCode registers
-the same ids twice.
+Project-level (omit `--global`) only when the skill is repo-specific. Never
+install the same repo both global and project-level, OpenCode registers the
+same ids twice.
 
 ## Update, list, remove
 
@@ -52,16 +51,16 @@ npx skills remove <name> --global --agent opencode --yes
   install with `--agent opencode`.
 - **Config roots shadow it.** If @skill-doctor flags a `collision` between
   `~/.config/opencode/skills/<name>` and `~/.agents/skills/<name>`, the
-  config copy wins and the npx copy is dead weight — remove the shadowed
+  config copy wins and the npx copy is dead weight. Remove the shadowed
   npx copy.
 - After install or update, restart OpenCode so the new copies are picked up.
 
-## Fallback — CLI rejects the repo (`No valid skills found`)
+## Fallback: CLI rejects the repo (`No valid skills found`)
 
 The CLI strictly parses `SKILL.md` frontmatter. An upstream `description:`
-with unquoted colons (`requests: cut, trim, …`) is invalid YAML, so the
-install reports `Skipped …/SKILL.md — YAML parse error` and installs
-nothing (exit code stays 0 — check the output, not the code). When that
+with unquoted colons (`requests: cut, trim, ...`) is invalid YAML, so the
+install reports `Skipped .../SKILL.md - YAML parse error` and installs
+nothing. The exit code stays 0, so check the output, not the code. When that
 happens:
 
 ```bash
@@ -73,8 +72,8 @@ cp -r /tmp/opencode/<repo>/scripts /tmp/opencode/<repo>/references ~/.agents/ski
 
 Then verify: `opencode2 api get /api/skill | grep -o '"id":"<skill>"'`,
 plus `python3 ~/.agents/skills/<skill>/scripts/<tool>.py --help`.
-A manual copy is invisible to `npx skills list/update` — once upstream
-quotes the description, re-run the CLI install to bring it under
-management. Caveat: OpenCode serves the skill's `content` but drops an
-unparseable `description`, so it may not auto-trigger on mention
-until upstream fixes the frontmatter — invoke it by name meanwhile.
+A manual copy is invisible to `npx skills list/update`. Once upstream quotes
+the description, re-run the CLI install to bring it under management. Caveat:
+OpenCode serves the skill's `content` but drops an unparseable `description`,
+so it may not auto-trigger on mention until upstream fixes the frontmatter.
+Invoke it by name meanwhile.

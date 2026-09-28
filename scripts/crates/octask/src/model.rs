@@ -5,7 +5,6 @@ use anyhow::bail;
 
 use crate::sys::PREFIX;
 use crate::sys::norm_name;
-use crate::sys::read_string;
 use crate::sys::unbq;
 use crate::sys::unit_paths;
 use crate::sys::unsq;
@@ -78,7 +77,7 @@ pub fn timer_text(t: &Task) -> String {
     s
 }
 
-fn property(content: &str, key: &str) -> String {
+pub fn property(content: &str, key: &str) -> String {
     content
         .lines()
         .find_map(|l| l.strip_prefix(key).map(|v| v.to_owned()))
@@ -96,9 +95,9 @@ fn properties(content: &str, key: &str) -> Vec<String> {
 /// a unit is missing or the ExecStart shape is unrecognized.
 pub fn load_task(dir: &Path, name: &str) -> Result<Task> {
     let (service, timer) = unit_paths(dir, name);
-    let svc = read_string(&service)
+    let svc = std::fs::read_to_string(&service)
         .map_err(|_| anyhow::anyhow!("edit: no service unit for '{PREFIX}{name}' (octask list)"))?;
-    let tmr = read_string(&timer).map_err(|_| {
+    let tmr = std::fs::read_to_string(&timer).map_err(|_| {
         anyhow::anyhow!("edit: no timer unit for '{PREFIX}{name}' (re-add the task)")
     })?;
 

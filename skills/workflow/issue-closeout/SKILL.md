@@ -1,12 +1,10 @@
 ---
 name: issue-closeout
-description: "Connect merged work back to the issues it resolved: collect issue references from a merged PR, post one closeout comment naming the PR and merge SHA plus the relevant commit SHAs, and close the issues that the work fully resolves. Use after merging a PR (manually or via pr-watchmerge), when a session's commits resolve tracked issues, or whenever the user asks to link/close issues for landed work. GitHub auto-close keywords (`Closes #N`) fire ONLY when a PR merges into the repository's DEFAULT branch — on version/release branches this skill is what closes the loop."
+description: "Connect merged work back to the issues it resolved: one comment per issue naming the PR, merge SHA, and the commits that addressed it, then close what the work fully resolves. Use after merging a PR, by hand or via pr-watchmerge, and whenever a session's commits resolve tracked issues. Required on non-default merge bases, where GitHub's `Closes #N` auto-close silently fails."
 ---
 
 # Issue closeout
 
-After work lands, every referenced issue gets a connection to what actually
-shipped: the PR, the merge SHA, and the specific commits that addressed it.
 Do the steps in order. Skip entirely when the PR body references no issues
 and the conversation named none.
 
@@ -26,7 +24,7 @@ Deduplicate. For each issue, decide the intent:
   do not close.
 
 When the PR body used `Closes #N`, treat it as resolved intent even if the
-merge base was not the default branch — that is exactly the case where
+merge base was not the default branch, which is exactly the case where
 GitHub's auto-close silently failed.
 
 ## 2. Post the closeout comment
@@ -48,7 +46,7 @@ gh issue close <n>
 ```
 
 Skip any issue that already carries an equivalent closeout comment or is
-already closed — never double-post.
+already closed; never double-post.
 
 ## Rules
 
@@ -56,5 +54,5 @@ already closed — never double-post.
   for partial or related work.
 - Never widen an issue's scope in the closeout comment; if scope changed,
   say so in one sentence and link the follow-up instead.
-- On non-default merge bases, do not rely on `Closes #N` auto-close — this
+- On non-default merge bases, do not rely on `Closes #N` auto-close; this
   skill replaces it.

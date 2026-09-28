@@ -1,17 +1,22 @@
 ---
 name: oop
-description: Standard OOP and software-architecture vocabulary — principles, smells, patterns, and metrics. Use when you want findings, reviews, or design discussions phrased in standard OOP terms (use oop terms, SRP, encapsulation, dependency inversion, god object, etc.) instead of metaphor vocabulary.
+description: >-
+  Standard OOP and software-architecture vocabulary: principles, smells,
+  patterns, and metrics. Use when you want findings, reviews, or design
+  discussions phrased in standard OOP terms (use oop terms, SRP,
+  encapsulation, dependency inversion, god object, etc.) instead of metaphor
+  vocabulary.
 ---
 
 # OOP vocabulary
 
-Standard object-oriented and software-architecture terminology for codebase analysis, reviews, and design discussions. When this skill is loaded, every finding title, benefit statement, recommendation, and diagram label uses the terms below — never metaphor vocabulary like "deep/shallow module", "seam", "leverage", "locality", or "deletion test". If a source document speaks in metaphors, restate its points silently in standard terms; do not quote the metaphors back.
+Standard object-oriented and software-architecture terminology for codebase analysis, reviews, and design discussions. When this skill is loaded, every finding title, benefit statement, recommendation, and diagram label uses the terms below, never metaphor vocabulary like "deep/shallow module", "seam", "leverage", "locality", or "deletion test". If a source document speaks in metaphors, restate its points silently in standard terms; do not quote the metaphors back.
 
 ## Rules
 
 - Lead each finding with the most specific applicable term from the lists below.
 - Do not coin new metaphor names. The lists below are closed: if nothing fits exactly, use plain descriptive language ("this class mixes parsing and persistence"), never a new coinage.
-- Language only — this skill changes how findings are worded, not what work is done.
+- Language only: this skill changes how findings are worded, not what work is done.
 
 ## Principles
 
@@ -24,7 +29,7 @@ Standard object-oriented and software-architecture terminology for codebase anal
 - **Dependency Injection**: collaborators are supplied from outside rather than constructed internally.
 - **High cohesion, low coupling**: related logic lives together; unrelated logic minimally connected.
 - **Single source of truth**: each piece of knowledge is represented in exactly one place.
-- **DRY (Don't Repeat Yourself)**: duplicated knowledge amplifies change — every copy must be edited in sync.
+- **DRY (Don't Repeat Yourself)**: duplicated knowledge amplifies change, so every copy must be edited in sync.
 - **Separation of concerns**: distinct responsibilities live in distinct modules.
 - **Law of Demeter**: an object talks only to its immediate collaborators, not to strangers reached through them.
 - **Composition over inheritance**: behavior is assembled from parts instead of inherited hierarchies.
@@ -64,9 +69,9 @@ Standard object-oriented and software-architecture terminology for codebase anal
 
 ## Testability & metrics
 
-- **Test through the public API**: tests exercise the interface, never internals — internals may then change freely.
+- **Test through the public API**: tests exercise the interface, never internals, so internals may change freely.
 - **Injection point**: a replaceable collaborator enabling test doubles.
 - **Hidden dependency**: a collaborator obtained internally, impossible to substitute in tests.
 - **Test double**: stand-in implementation used to isolate the unit under test.
 - **Cyclomatic complexity**: branch count as a size proxy for a unit.
-- **Change amplification**: how many edits one concept-change costs — the inverse of DRY payoff.
+- **Change amplification**: how many edits one concept-change costs, the inverse of DRY payoff.

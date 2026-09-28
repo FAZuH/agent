@@ -1,14 +1,14 @@
 ---
 name: workflows
-description: Concrete workflows for the orchestrator agent — feature implementation/bug fixes, unit & integration tests, hard-bug diagnosis, documentation/decisions, visual verification, and the subagent routing table. This skill summarize each workflow, the routing table, and when to use each. Use when acting as orchestrator and about to route or run a piece of work, or when a task does not obviously fit a named workflow.
+description: The task-to-subagent routing table and the concrete workflow procedures for the orchestrator agent, as state machines in `reference/`. Use when acting as orchestrator and about to route a piece of work, or when a task does not obviously fit a named workflow. Delegation rules live in @orchestrate.
 ---
 
 # workflows
 
-Assumes the `mattpocock/skills` set and this repo (`fazuh/agent`) are installed as
-skills on this machine. Skill names below refer to installed skills directly.
+Assumes the `mattpocock/skills` set and this repo (`fazuh/agent`) are installed
+as skills on this machine. Skill names below refer to installed skills directly.
 
-This skill separates the orchestrator's concrete workflows from the agent prompt so the prompt stays lean. The full procedures live as state machines in `reference/` — load the matching file and follow it. This file only summarises each workflow and when to use it, plus the routing table you use to pick a subagent.
+This skill separates the orchestrator's concrete workflows from the agent prompt so the prompt stays lean. The full procedures live as state machines in `reference/`, load the matching file and follow it. This file only summarises each workflow and when to use it, plus the routing table you use to pick a subagent.
 
 ## Subagent routing
 
@@ -39,7 +39,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Bootstrap/audit/update `docs/dev/` | @setup-dev-docs (skill) | Use yourself on an explicit user request only |
 | Plan commit grouping + propose messages (no commit) | @commit (skill) | Use yourself; restate groups to the user for approval, then commit yourself |
 | Gated self-improvement check (retro + doctor, offers sweep) | @self-improve (skill) | Use yourself |
-| Pick the right workflow when unsure | @ask-matt (skill) | Use yourself — router over the skills |
+| Pick the right workflow when unsure | @ask-matt (skill) | Use yourself, router over the skills |
 | Maintain CONTEXT.md glossary + ADRs | @domain-modeling (skill) | Use yourself; @grill-with-docs runs it |
 | Turn a thread into a spec | @to-spec (skill) | Use yourself after @grilling |
 | Split a plan/spec into tracer tickets | @to-tickets (skill) | Use yourself; per project once setup ran |
@@ -71,9 +71,8 @@ subagent.
 
 ## Ticket context and durable docs
 
-- Non-trivial ticket work: after research/design synthesis, run @task-context — create or refresh the `.scratch/<date>_<task>/context-packet.md`, then pass each worker its role projection in the delegation prompt (`implement` / `review` / `research-discovery`), never raw research transcripts.
+- Non-trivial ticket work: after research/design synthesis, run @task-context before the first delegation, then pass each worker its role projection and the packet path in the delegation prompt, never raw research transcripts. The packet is a derived view; the spec stays the task's source of truth.
 - Durable developer docs (`docs/dev/`) change only through @setup-dev-docs, on an explicit user request; ordinary feature work writes task context instead.
-- Warm delegation: use @forkflow when its capability probe passes. This is an execution accelerator, not a replacement for the ticket spec or @task-context. The setup-dev-docs/task-context session orchestration remains deferred.
 
 ## Loading rules
 

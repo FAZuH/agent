@@ -4,7 +4,7 @@ description: Commit changes, summarize session, and suggest next steps. Pass an 
 
 Opencode "/finish" command was invoked.
 
-Load and follow the @finish skill — it defines the full end-of-session workflow (update relevant docs, plan commit grouping and propose commit messages, summarize the session, suggest next steps). Execute its steps in order.
+Load and follow the @finish skill. It defines the full end-of-session workflow (update relevant docs, plan commit grouping and propose commit messages, summarize the session, suggest next steps). Execute its steps in order.
 
 Arguments:
 <finish_command_arguments>
@@ -16,24 +16,24 @@ Interpret the user argument as follows:
 - Argument beginning with `auto`: auto mode for this invocation. Remove the leading `auto` token and treat any remaining text as extra instructions for all steps below.
 - Any other text: treat it as extra instructions for all steps below, commit interactively
 
-**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups requires user approval. This argument is the approval: when it begins with `auto`, the gate skips for this invocation — infer the best message for each group and commit without asking. It never persists beyond this command and never passes to any other request, agent, or conversation. When the argument is anything else — including no argument — the gate fires: propose the message and wait for explicit confirmation. When in doubt, do not commit; propose and wait. (Vocabulary: the @gate skill.)
+**GATE commit-approval (normal → commit each group with the inferred conventional message):** staging and committing the session's logical groups requires user approval. This argument is the approval: when it begins with `auto`, the gate skips for this invocation: infer the best message for each group and commit without asking. It never persists beyond this command and never passes to any other request, agent, or conversation. When the argument is anything else, including no argument, the gate fires: propose the message and wait for explicit confirmation. When in doubt, do not commit; propose and wait. (Vocabulary: the @gate skill.)
 
 Follow the skill's steps in order:
 
 ## 1. Update relevant docs
 
-Follow the skill's step 1 exactly — discover and update the relevant docs, or say nothing needs a change and skip.
+Follow the skill's step 1 exactly: discover and update the relevant docs, or say nothing needs a change and skip.
 
 ## 2. Commit changes
 
-Follow the skill's step 2 exactly: inspect git read-only, identify the files changed this session, split the changes into one commit per logical group, and propose one `type(scope): description` message per group. You must NOT run `git add` or `git commit` on your own unless the argument begins with `auto` (see GATE commit-approval above).
+Follow the skill's step 2 exactly: inspect git read-only, identify the files changed this session, split the changes into one commit per logical group, and propose one `type(scope): description` message per group (see GATE commit-approval above for when you may actually run them).
 
 - If auto-commit mode is active (argument begins with `auto`), infer the best message for each group. Commit each group without asking, passing the remaining argument text as extra instructions.
 - If interactive mode is active (argument does not begin with `auto`, including no argument), there is no commit permission. Propose one message for each group. Then stop and wait for the next message from the user. Do not run `git add` or `git commit` for that group until the user confirms it. If the user wants a change, propose the new message and wait again. Do not run any other group until the current one is resolved. Do not proceed to step 3 until the current group is resolved.
 
 ## 3. Archive the completed `.scratch/` workspace
 
-Follow the skill's step 3 exactly — delegate the mechanics to @scratch-finish: verify the work is genuinely done, mark remaining checklist items, append the Outcome block, move the workspace to `.scratch/complete/`, and delete the stale checkpoint.
+Follow the skill's step 3 exactly: delegate the mechanics to @scratch-finish: verify the work is genuinely done, mark remaining checklist items, append the Outcome block, move the workspace to `.scratch/complete/`, and delete the stale checkpoint.
 
 ## 4. Summarize the session
 

@@ -1,10 +1,11 @@
 ---
 name: design-tradeoffs
 description: >-
-  Compare design options with structured tradeoff analysis. Use when the user
-  asks about options, tradeoffs, pros/cons, comparing alternatives, deciding
-  between approaches, deliberating a choice, or weighing approaches for
-  architecture, technology, implementation, UI, or API design.
+  Compare 3-5 design options on named dimensions, present the comparison as
+  a table, and recommend one with the signal that would change the answer.
+  Use when the user asks about options, tradeoffs, pros/cons, comparing
+  alternatives, deciding between approaches, or weighing architecture,
+  technology, implementation, UI, or API design.
 ---
 
 # Design Tradeoffs
@@ -27,15 +28,15 @@ Do not include options that violate hard constraints unless you flag them explic
 
 For every option, produce this template:
 
-**What it is** — one or two sentences.
+**What it is**: one or two sentences.
 
-**Strengths** — bullet list. Why you'd pick it.
+**Strengths**: bullet list. Why you'd pick it.
 
-**Weaknesses** — bullet list. Why you'd avoid it.
+**Weaknesses**: bullet list. Why you'd avoid it.
 
-**Best for** — specific scenarios where this option shines.
+**Best for**: specific scenarios where this option shines.
 
-**Worst for** — specific scenarios where this option is painful.
+**Worst for**: specific scenarios where this option is painful.
 
 ## 4. Cross-cutting comparison
 
@@ -56,7 +57,7 @@ Compare all options side by side on relevant dimensions. Pick from this list the
 
 Present the comparison as a markdown table:
 
-- **Dimensions phrased positively** — name them so ✅ always means "good".
+- **Dimensions phrased positively**: name them so ✅ always means "good".
   (e.g., "No nginx" not "Nginx complexity"; "No CORS" not "CORS needed".)
 - **Boolean values** use ✅ (yes/good) and ❌ (no/bad).
 - **Non-boolean values** (image size, effort, risk level) use plain text.
@@ -64,4 +65,4 @@ Present the comparison as a markdown table:
 
 ## 5. Recommend
 
-Given the user's context, state which option you'd pick and why. Then name one concrete signal that would change your recommendation — this helps the user know what to watch for.
+Given the user's context, state which option you'd pick and why. Then name one concrete signal that would change your recommendation, so the user knows what to watch for.

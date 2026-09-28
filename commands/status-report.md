@@ -1,5 +1,5 @@
 ---
-description: Display a status report of the current session: progress, issues, tracked items, and remaining tasks. Then wait for user instructions.
+description: "Display a status report of the current session: progress, issues, tracked items, and remaining tasks. Then wait for user instructions."
 ---
 
 Produce a concise status report of the current session. Gather information from these sources in order:
@@ -14,13 +14,8 @@ Run `get_goal_history` to see recent checkpoints and lifecycle history.
 
 ## 3. Summarize current state
 
-From your own context (this conversation), compile a report covering:
-
-- **Current objective** — what is being worked on right now
-- **Progress** — what's been done so far (key accomplishments, files changed)
-- **Issues/blocks** — any problems encountered, decisions pending, external blockers
-- **Tracked items** — what the todo list shows (use the todowrite tool to read current todos if applicable)
-- **Next up** — what remains to be done
+From your own context (this conversation), fill the report format in step 4. Use
+the `todowrite` tool to read the current todo list for the remaining items.
 
 ## 4. Report to user
 

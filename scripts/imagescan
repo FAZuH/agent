@@ -15,12 +15,10 @@ If image is omitted, capture the whole screen automatically.
 
 Model: $DEFAULT_MODEL (override with -m/--model)
 
-0 answer       5 math
-1 code         6 obsidian
-2 diagram      7 ocr
-3 handwriting  8 summarize
-4 latex        9 translate
 EOF
+  for i in "${!COMMANDS[@]}"; do
+    printf '%s %s\n' "$i" "${COMMANDS[i]}"
+  done
 }
 
 die() {
@@ -46,7 +44,7 @@ while (($#)); do
     -m*) model="${1#-m}"; shift ;;
     --model=*) model="${1#--model=}"; shift ;;
     -h|--help) usage; exit 0 ;;
-    --) shift; (($# <= 2)) || die "expected a command and optional image"; [[ -n ${1-} ]] && selection="$1"; [[ -n ${2-} ]] && image="$2"; break ;;
+    --) shift; (($# <= 2)) || die "expected a command and optional image"; selection="${1-}"; image="${2-}"; break ;;
     -*) die "unknown option: $1" ;;
     *)
       if [[ -z "$selection" ]]; then
@@ -73,11 +71,7 @@ else
   key="${selection##*/}"
   key="${key#imagescan-}"
   key="${key%.md}"
-  valid=0
-  for command_name in "${COMMANDS[@]}"; do
-    [[ "$key" == "$command_name" ]] && valid=1 && break
-  done
-  ((valid)) || die "unknown ImageScan command: $selection"
+  [[ " ${COMMANDS[*]} " == *" $key "* ]] || die "unknown ImageScan command: $selection"
 fi
 
 command_file="$COMMAND_DIR/imagescan-$key.md"
@@ -91,11 +85,7 @@ fi
 [[ -s "$image" ]] || die "image not found or empty: $image"
 
 # opencode run sends slash commands literally, so use the stored template to keep -m authoritative.
-prompt="$(awk '
-  NR == 1 && $0 == "---" { frontmatter = 1; next }
-  frontmatter && $0 == "---" { frontmatter = 0; body = 1; next }
-  body { print }
-' "$command_file")"
+prompt="$(awk '/^---$/ { f++; next } f >= 2' "$command_file")"
 [[ -n "$prompt" ]] || die "command template is empty: $command_file"
 
 notify "$key" "Running $model"

@@ -2,25 +2,14 @@
  * md-link core — single source of truth for the Obsidian live-mirror pair.
  *
  * Consumers:
- *   plugins/md-link/index.ts (server: mirrors assistant replies)
- *   plugins/md-link/tui.ts   (TUI: ctrl+alt+n / /md-link toggle)
+ *   src/index.ts (server: mirrors assistant replies)
+ *   src/tui.ts   (TUI: ctrl+alt+n / /md-link toggle)
  *
- * This repo is cloned as a project's `.opencode` directory; plugins/md-link/
- * auto-loads server-side as a package dir, while tui.ts needs an explicit
- * entry in cli.json.
+ * The root index.ts and tui.ts are entry shims for opencode's dir-based
+ * plugin discovery; all logic lives in src/.
  *
- * State file contract (~/.config/fazuh-agent/data/md-link-state.json):
- *   {
- *     "defaultDir": "/abs/dir" | null,          // fallback output dir
- *     "keep": 25 | null,                        // prune mirrors to N newest replies
- *     "sessions": { "<sessionID>": "/abs/dir" } // "" dir = use defaultDir
- *     "titles": { "<sessionID>": "<sanitized>" }// title fixed at toggle-ON
- *     "files": { "<sessionID>": "<filename>" }  // resolved name (authoritative)
- *     "persist": true|false                     // true = mirrors survive TUI exit
- *     "openWith": "<argv template>"             // opener; {path} raw, {uri} encoded;
- *                                               // absent = xdg-open obsidian:// URI
- *     "openOnEnable": true|false                // true = open the mirror when toggled ON
- *   }
+ * State file: ~/.config/fazuh-agent/data/md-link-state.json, shape per
+ * MdLinkState below.
  *
  * Filenames are `link_<Title>.md` (title fixed at enable time so session
  * renames never orphan content), `link_<Title>_<suffix>.md` on collision,
@@ -138,12 +127,6 @@ export function isEnabled(st: MdLinkState, sessionID: string): boolean {
   return sessionID in st.sessions
 }
 
-/** Add a session (read-modify-write). Preserves any dir already recorded. */
-export function enableSession(st: MdLinkState, sessionID: string, dir = ""): void {
-  if (!(sessionID in st.sessions)) st.sessions[sessionID] = dir
-  saveState(st)
-}
-
 /** Remove a session (read-modify-write). Also drops its title/filename record. */
 export function disableSession(st: MdLinkState, sessionID: string): void {
   delete st.sessions[sessionID]
@@ -222,6 +205,20 @@ export function messageText(m: any): string {
   return text.trim()
 }
 
+/** Session messages, newest-first. Shared by the poller (index.ts) and the
+ * toggle backfill (tui.ts) so both tolerate the array and {data} shapes. */
+export async function fetchMessages(sessionID: string): Promise<any[]> {
+  const proc = Bun.spawn(["opencode2", "api", "get", `/api/session/${sessionID}/message`], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const out = await new Response(proc.stdout).text()
+  await proc.exited
+  const parsed = JSON.parse(out)
+  const items = Array.isArray(parsed) ? parsed : parsed?.data
+  return Array.isArray(items) ? items : []
+}
+
 /** True if the file contains a block whose marker starts with `<!-- msg:<key>` */
 export function hasBlock(file: string, key: string): boolean {
   try {
@@ -239,31 +236,20 @@ export function hasBlock(file: string, key: string): boolean {
  */
 export function appendMessage(
   file: string,
-  opts: { text: string; markerKey?: string | null; replace?: boolean },
+  opts: { text: string; markerKey: string; replace?: boolean },
   keep: number | null,
 ): AppendResult {
-  const key = opts.markerKey ?? null
+  const key = opts.markerKey
   try {
-    if (key && hasBlock(file, key)) {
+    if (hasBlock(file, key)) {
       if (!opts.replace) return "duplicate"
       return replaceBlock(file, key, opts.text) ? "updated" : "duplicate"
     }
-    if (key === null && hasBlockLoose(file, opts.text)) return "duplicate"
-    const time = clock()
-    const marker = key ? `<!-- msg:${key} -->\n` : ""
-    appendFileSync(file, `${marker}**${time}**\n\n${opts.text.trim()}\n\n`, "utf-8")
+    appendFileSync(file, `<!-- msg:${key} -->\n**${clock()}**\n\n${opts.text.trim()}\n\n`, "utf-8")
     pruneMirror(file, keep)
     return "written"
   } catch {
     return "failed"
-  }
-}
-
-function hasBlockLoose(file: string, text: string): boolean {
-  try {
-    return readFileSync(file, "utf-8").includes(text.trim().slice(0, 80))
-  } catch {
-    return false
   }
 }
 

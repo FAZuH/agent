@@ -17,6 +17,7 @@ use crate::sys::ok;
 use crate::sys::require_name;
 use crate::sys::stdin_slurp;
 use crate::sys::unit_dir;
+use crate::sys::units_exist;
 
 #[derive(Parser, Clone, Default, Debug)]
 pub struct ExportArgs {
@@ -94,9 +95,7 @@ pub fn export(args: &ExportArgs) -> Result<()> {
             continue;
         }
         seen.push(name.clone());
-        if !crate::sys::units_exist(&dir, &name) {
-            bail!("export: no units found for 'octask-{name}' (octask list)");
-        }
+        crate::basic::require_units(&dir, "export", &name)?;
         let t = load_task(&dir, &name)?;
         let enabled = ok(
             "systemctl",
@@ -241,7 +240,7 @@ pub fn import(args: &ImportArgs) -> Result<()> {
     for t in items {
         let iname = norm_name(t.get("name").and_then(Value::as_str).unwrap_or_default());
         require_name(&iname)?;
-        if crate::sys::units_exist(&dir, &iname) && !args.force {
+        if units_exist(&dir, &iname) && !args.force {
             bail!(
                 "import: {}/octask-{iname}.service already exists (use --force to overwrite)",
                 dir.display()

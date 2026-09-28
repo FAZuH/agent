@@ -4,7 +4,7 @@
 Usage: himalaya-gen-config
 Skips test_* accounts. Passwords stay in the env files and are referenced
 via password.command, never embedded. Hand edits to config.toml are lost
-on regeneration — put per-account tweaks in the env files' send_as key.
+on regeneration: put per-account tweaks in the env files' send_as key.
 """
 import glob
 import os

@@ -6,12 +6,12 @@ use anyhow::bail;
 
 use crate::model::load_task;
 use crate::model::managed_names;
+use crate::model::property;
 use crate::sys::PREFIX;
 use crate::sys::home;
 use crate::sys::next_run;
 use crate::sys::norm_name;
 use crate::sys::ok;
-use crate::sys::read_string;
 use crate::sys::require_name;
 use crate::sys::run;
 use crate::sys::stdout_soft;
@@ -24,7 +24,7 @@ fn timer_unit(name: &str) -> String {
     format!("{PREFIX}{name}.timer")
 }
 
-fn require_units(dir: &Path, verb: &str, name: &str) -> Result<()> {
+pub fn require_units(dir: &Path, verb: &str, name: &str) -> Result<()> {
     if !units_exist(dir, name) {
         bail!("{verb}: no units found for '{PREFIX}{name}' (octask list)");
     }
@@ -100,20 +100,20 @@ pub fn list() -> Result<()> {
     println!("== managed tasks ==");
     let names = managed_names(&dir);
     if names.is_empty() {
-        println!("  (none — nothing managed by octask yet)");
+        println!("  (none, nothing managed by octask yet)");
         return Ok(());
     }
     let home_str = home().to_string_lossy().into_owned();
     for name in names {
         let (service, _) = unit_paths(&dir, &name);
-        let svc = read_string(&service).unwrap_or_default();
+        let svc = std::fs::read_to_string(&service).unwrap_or_default();
         let tag = if svc.contains("--agent") {
             "agent"
         } else {
             "task"
         };
-        let workdir = first_property(&svc, "WorkingDirectory=").unwrap_or_default();
-        let mut desc = first_property(&svc, "Description=").unwrap_or_default();
+        let workdir = property(&svc, "WorkingDirectory=");
+        let mut desc = property(&svc, "Description=");
         if let Some(rest) = desc.strip_prefix(&format!("{PREFIX}{name}: ")) {
             desc = rest.to_owned();
         }
@@ -134,15 +134,9 @@ pub fn list() -> Result<()> {
         } else {
             &desc
         };
-        println!("  [{tag}] {name} — {shown}{suffix}");
+        println!("  [{tag}] {name}: {shown}{suffix}");
     }
     Ok(())
-}
-
-fn first_property(content: &str, key: &str) -> Option<String> {
-    content
-        .lines()
-        .find_map(|l| l.strip_prefix(key).map(|v| v.to_owned()))
 }
 
 pub fn enable(name: &str) -> Result<()> {
@@ -156,7 +150,7 @@ pub fn enable(name: &str) -> Result<()> {
     )?;
     let next = next_run(&name);
     let next = if next.is_empty() { "unknown" } else { &next };
-    println!("enabled {} — next run: {next}", timer_unit(&name));
+    println!("enabled {}: next run {next}", timer_unit(&name));
     Ok(())
 }
 
@@ -169,7 +163,7 @@ pub fn disable(name: &str) -> Result<()> {
         &["--user", "disable", "--now", &timer_unit(&name)],
     )?;
     println!(
-        "disabled {} (units kept — re-enable with: octask enable {name})",
+        "disabled {} (units kept, re-enable with: octask enable {name})",
         timer_unit(&name)
     );
     Ok(())
