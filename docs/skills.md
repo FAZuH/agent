@@ -36,6 +36,7 @@ the category directory never reaches the installed name.
 
 ## Workflow
 
+- **[branch-flow](../skills/workflow/branch-flow/SKILL.md)**: Route work between the unstable `main` and the stable `release`, using the `[no ci]` gate and the release trigger commit.
 - **[changelog](../skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version.
 - **[commit](../skills/workflow/commit/SKILL.md)**: Plan commit grouping and propose conventional commit messages.
 - **[deep-research](../skills/workflow/deep-research/SKILL.md)**: Investigate a narrow external question and capture one cited findings file.
