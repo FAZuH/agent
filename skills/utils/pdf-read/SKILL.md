@@ -1,5 +1,5 @@
 ---
-name: read-pdf
+name: pdf-read
 description: Parse and read PDF files and extract structured data (tables, text, columns). Supports tabular PDFs via pdfplumber, keyword search via ripgrep-all (rga), and any PDF via image rendering. Use when the user asks to read, extract data from, or search a PDF file.
 license: MIT
 ---

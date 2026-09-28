@@ -48,6 +48,7 @@ the category directory never reaches the installed name.
 
 ## Dev
 
+- **[app-paths](../skills/dev/app-paths/SKILL.md)**: Resolve app config, data, cache, and state directories through one CLI > env > config file > platform ladder.
 - **[comments](../skills/dev/comments/SKILL.md)**: Write useful comments without narration or change-history noise.
 - **[commit-scopes](../skills/dev/commit-scopes/SKILL.md)**: Create and maintain the closed vocabulary for Conventional Commit scopes.
 - **[design-tradeoffs](../skills/dev/design-tradeoffs/SKILL.md)**: Compare design options with structured tradeoffs.
@@ -66,7 +67,8 @@ the category directory never reaches the installed name.
 - **[notes](../skills/utils/notes/SKILL.md)**: Read and maintain durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behavior.
 - **[omarchy-plugin-install](../skills/utils/omarchy-plugin-install/SKILL.md)**: Install an Omarchy shell plugin end to end, including malware review and dotfiles persistence.
 - **[plan-confirm](../skills/utils/plan-confirm/SKILL.md)**: Present large plans or audits for grouped confirmation.
-- **[read-pdf](../skills/utils/read-pdf/SKILL.md)**: Read PDFs and extract text, tables, images, and structured data.
+- **[pdf-read](../skills/utils/pdf-read/SKILL.md)**: Read PDFs and extract text, tables, images, and structured data.
+- **[pdf-write](../skills/utils/pdf-write/SKILL.md)**: Author and build Markdown documents to PDF with Pandoc and LaTeX, then verify the output visually.
 - **[scheduled-agent](../skills/utils/scheduled-agent/SKILL.md)**: Schedule restricted unattended agents with systemd user timers.
 - **[scheduled-task](../skills/utils/scheduled-task/SKILL.md)**: Manage scheduled tasks with `octask` and systemd user timers.
 

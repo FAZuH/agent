@@ -38,14 +38,14 @@ Understand the task before touching anything.
 ```mermaid
 flowchart LR
   T[Task lands] --> A[ask-matt picks the skill]
-  A --> O[agent-map, read-pdf, triage orient you]
+  A --> O[agent-map, pdf-read, triage orient you]
   O --> R[deep-research, research gather facts]
   R --> D[Decide]
 ```
 
 - **ask-matt** — which existing skill or flow fits this situation.
 - **agent-map** — where an item belongs in this repository and which rules it follows.
-- **read-pdf** — pull text, tables, or figures out of a spec or a paper.
+- **pdf-read** — pull text, tables, or figures out of a spec or a paper.
 - **triage** — move an issue or an external pull request to a state where an agent can pick it up.
 - **setup-matt-pocock-skills** — one-time tracker and doc layout setup.
 - **deep-research** — one narrow external question, one cited findings file.
