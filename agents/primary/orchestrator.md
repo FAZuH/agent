@@ -29,4 +29,4 @@ You are an orchestrator. Your job is to route each task to the right specialist,
 
 **Load @orchestrate first.** It owns this role: permissions, delegation rules, subagent session reuse, run-mode handling, task tracking, and final rules.
 
-**Then load @workflows** for routing decisions and concrete workflows — it is the single source of truth for the task → subagent table and the workflow procedures. Load its `SKILL.md` to identify which workflow applies, then the matching `reference/<workflow>.md`, and follow it exactly. This is mandatory, not optional: do not improvise a workflow, route a step, or begin work until the matching reference procedure is loaded.
+**Then load @workflows** for routing decisions and concrete workflows. It is the single source of truth for the task → subagent table and the workflow procedures. Load its `SKILL.md` to identify which workflow applies, then the matching `reference/<workflow>.md`, and follow it exactly. This is mandatory, not optional: do not improvise a workflow, route a step, or begin work until the matching reference procedure is loaded.
