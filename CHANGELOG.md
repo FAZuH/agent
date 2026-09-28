@@ -1,3 +1,12 @@
+## [0.11.8](https://github.com/FAZuH/agent/compare/v0.11.7...v0.11.8) (2026-09-28)
+
+
+### Features
+
+* **script:** add pdf-build ([190d426](https://github.com/FAZuH/agent/commit/190d426369e7b67ccef76ee6bcf5949f55efbbce))
+* **skill:** add app-paths skill ([e1782b0](https://github.com/FAZuH/agent/commit/e1782b0ea6f17a536d0a2e04fb0d9f0aad2237d8))
+* **skill:** add pdf-write skill ([7ee901b](https://github.com/FAZuH/agent/commit/7ee901b9224356a1639104a39fa5227df97ad9a5))
+
 ## [0.11.7](https://github.com/FAZuH/agent/compare/v0.11.6...v0.11.7) (2026-09-28)
 
 ## [0.11.6](https://github.com/FAZuH/agent/compare/v0.11.5...v0.11.6) (2026-09-28)
@@ -32,19 +41,4 @@
 * **ocv2:** correct session wait endpoint path ([0087d76](https://github.com/FAZuH/agent/commit/0087d7695655eb5e7c8eaaa6447b068327d14542))
 * **skill:** hash rendered skill sources to avoid false drift ([7dc9584](https://github.com/FAZuH/agent/commit/7dc95846568aceddc57ef1eec376003a62d9f25f))
 * **skill:** warn against broad git clean across sessions ([9bdf703](https://github.com/FAZuH/agent/commit/9bdf703897c1d94ad581586ad8bb8f43d51fc5ae))
-
-## [0.11.3](https://github.com/FAZuH/agent/compare/v0.11.2...v0.11.3) (2026-09-27)
-
-
-### Features
-
-* add the update-pins skill ([fc00e69](https://github.com/FAZuH/agent/commit/fc00e69c801469dc276f8f1e19a656cbc6ccb817))
-* **script:** pin the npm, cargo, and git versions install.sh fetches ([2d5316a](https://github.com/FAZuH/agent/commit/2d5316a054165d8ea5662d4b25fad0147401352d))
-* **skill:** add update-fazuh-agent and record the repo path on push ([5e0a5fa](https://github.com/FAZuH/agent/commit/5e0a5fa620dc7ee56a243bfdb601b45a44ced789))
-
-
-### Bug Fixes
-
-* **script:** find a self-installed opencode off the PATH ([d1272d4](https://github.com/FAZuH/agent/commit/d1272d46e123ac31c42527e5a6f1449f28b5b849))
-* **script:** find cargo in a non-login shell ([6a786d3](https://github.com/FAZuH/agent/commit/6a786d324bb7089cfa08db48bf5a21f8b1338314))
 
