@@ -21,7 +21,7 @@ Format: `type(scope): summary` or `type: summary`.
 | `ocv2`     | `skills/ocv2/**`                                     |
 | `plugin`   | `plugins/**`                                         |
 | `command`  | `commands/**`                                        |
-| `script`   | `sync.sh`, `install.sh`, `uninstall.sh`, `.agent-values.example`, `targets.conf`, `tags.conf`, `.agent-sync.json`, `.gitignore` entries about them |
+| `script`   | `scripts/**` (deployed executables) plus manager machinery: `sync.sh`, `install.sh`, `uninstall.sh`, `.agent-values.example`, `targets.conf`, `tags.conf`, `.agent-sync.json`, `.gitignore` entries about them |
 | `release`  | Version bumps and changelog materialization produced by the release workflow (`chore(release)`) |
 
 No scope = repo-wide: README, `docs/`, `.github/`, `dev.sh`, and any change

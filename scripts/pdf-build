@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Build a Markdown paper to PDF, rendering its Mermaid diagrams first.
+# Repeat runs skip the work when the tool and every input are unchanged.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: pdf-build [path]
+
+Render every .mmd in the target directory to .png with mmdc, then build one
+Markdown file to .pdf with pandoc. path may be a directory (builds main.md
+inside it) or a .md file. Defaults to main.md in the current directory.
+
+State lives in pdf-build.lock: delete it to force a rebuild.
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+  usage
+  exit 0
+  ;;
+esac
+
+target="${1:-main.md}"
+if [ -d "$target" ]; then
+  dir="$target"
+  doc="main.md"
+else
+  dir="$(dirname "$target")"
+  doc="$(basename "$target")"
+fi
+cd "$dir"
+
+[ -f "$doc" ] || {
+  echo "pdf-build: no such file: $dir/$doc" >&2
+  exit 1
+}
+
+lock="pdf-build.lock"
+
+shopt -s nullglob
+diagrams=(*.mmd)
+shopt -u nullglob
+
+# Content hashes, not mtimes: touching a file must not trigger a rebuild.
+state=$(
+  sha256sum "$0" | cut -d' ' -f1
+  printf '%s\t%s\n' "$(sha256sum "$doc" | cut -d' ' -f1)" "$doc"
+  for f in ${diagrams[@]+"${diagrams[@]}"}; do
+    printf '%s\t%s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$f"
+  done
+)
+
+if [ -f "$lock" ] && [ "$(cat "$lock")" = "$state" ]; then
+  echo "up to date, nothing to do"
+  exit 0
+fi
+
+for src in ${diagrams[@]+"${diagrams[@]}"}; do
+  out="${src%.mmd}.png"
+  echo "==> $out"
+  mmdc -i "$src" -o "$out" -b white -w 1600
+done
+
+out="${doc%.md}.pdf"
+echo "==> $out"
+pandoc -i "$doc" -o "$out"
+
+printf '%s\n' "$state" > "$lock"
+echo "==> $lock updated"
