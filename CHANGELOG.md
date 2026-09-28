@@ -1,3 +1,10 @@
+## [0.12.1](https://github.com/FAZuH/agent/compare/v0.12.0...v0.12.1) (2026-09-28)
+
+
+### Features
+
+* **skill:** move the review method into a review-agent skill ([f1d1e66](https://github.com/FAZuH/agent/commit/f1d1e66cf149cdd2728be69b17fffbf841ce87b1))
+
 ## [0.12.0](https://github.com/FAZuH/agent/compare/v0.11.8...v0.12.0) (2026-09-28)
 
 
@@ -17,17 +24,4 @@
 ## [0.11.7](https://github.com/FAZuH/agent/compare/v0.11.6...v0.11.7) (2026-09-28)
 
 ## [0.11.6](https://github.com/FAZuH/agent/compare/v0.11.5...v0.11.6) (2026-09-28)
-
-## [0.11.5](https://github.com/FAZuH/agent/compare/v0.11.4...v0.11.5) (2026-09-27)
-
-
-### Features
-
-* **agent:** give the review subagent the write its handoff needs ([3bbd889](https://github.com/FAZuH/agent/commit/3bbd88985bddd681f272908b78a874333de456c8))
-
-
-### Bug Fixes
-
-* keep the release token out of the git remote URL ([2a425e4](https://github.com/FAZuH/agent/commit/2a425e4544a6e64006d8ed54f2bdd3541149fa68))
-* **script:** install only the six documented ponytail skills ([d4d426e](https://github.com/FAZuH/agent/commit/d4d426ef4a7acc4eb7bb6c91f21f141c3ca39282))
 
