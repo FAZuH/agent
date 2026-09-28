@@ -4,25 +4,19 @@ description: >-
   How to run a numbered procedure step-by-step without skipping steps:
   point-and-call narration, live deviation logging, and a fixed post-run
   report. Load this skill ONLY when a procedural skill tells you to load it.
-  Never on its own — it is not a general instruction. Do not trigger on
+  Never on its own: it is not a general instruction. Do not trigger on
   ordinary multi-step tasks.
 ---
 
 # following-procedures
 
-This skill governs how you run numbered procedures. A procedural skill tells
-you to load it; it does not trigger by itself.
-
-## When this applies
-
-- Only procedures that explicitly say to load the @following-procedures
-  skill.
-- Never on its own. Do not apply narration or reporting to non-procedural
-  work.
+This skill governs how you run numbered procedures. Only a procedure that says
+to load it gets this treatment; do not apply narration or reporting to
+non-procedural work.
 
 ## Before starting
 
-1. Read the whole procedure — every numbered step — top to bottom before
+1. Read the whole procedure, every numbered step, top to bottom, before
    doing step 1.
 2. Read the dependency graph. Note which steps depend on which.
 3. Note the rules section at the bottom; the procedure header points at it.
@@ -32,7 +26,7 @@ you to load it; it does not trigger by itself.
 
 For each step, in one terse line, state:
 
-- `STEP n/N — <action> — next: <step n+1 name>`
+- `STEP n/N: <action>; next: <step n+1 name>`
 
 Emit at step boundaries only, not per tool call. If the harness has no visible
 narration, keep the line in your working notes.
@@ -46,7 +40,7 @@ narration, keep the line in your working notes.
 
 ## Deviation log
 
-Keep a running list as you work. Write entries immediately — never reconstruct
+Keep a running list as you work. Write entries immediately; never reconstruct
 them from memory at the end.
 
 Entry format:
@@ -81,7 +75,7 @@ The `## Interrupted procedures` section holds one entry per interruption:
 
 ```markdown
 ## Interrupted procedures
-- [date] <procedure> — paused at step n
+- [date] <procedure>: paused at step n
   - done: <steps already completed>
   - next: <step n+1>
   - notes: <anything needed to resume>
@@ -94,12 +88,12 @@ never delete an entry until the procedure is resumed and finished.
 
 In this fixed order, in your final message:
 
-1. **Completed** — what the procedure produced.
-2. **Deviations** — every logged deviation.
-3. **Hiccups** — every logged hiccup.
-4. **Failed / skipped** — failed steps, and steps skipped because of them,
+1. **Completed**: what the procedure produced.
+2. **Deviations**: every logged deviation.
+3. **Hiccups**: every logged hiccup.
+4. **Failed / skipped**: failed steps, and steps skipped because of them,
    with reasons.
-5. **Next** — what to do next: the concrete follow-ups this run leaves open,
+5. **Next**: what to do next: the concrete follow-ups this run leaves open,
    or `none`.
 
 The run report is a final message to the user. It is not session state; do not

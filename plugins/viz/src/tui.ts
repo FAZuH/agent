@@ -75,7 +75,7 @@ export default {
         toast(
           res.value
             ? `Viz output dir set → ${res.value}${isAbsolute(res.value) ? "" : " (relative to project)"}`
-            : "Viz output dir cleared — publishing into the session project's viz/",
+            : "Viz output dir cleared: publishing into the session project's viz/",
         )
       } catch (e: any) {
         toast(`Cannot open dialog: ${e?.message ?? e}`, "error")

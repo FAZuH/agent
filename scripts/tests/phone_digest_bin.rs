@@ -34,5 +34,8 @@ fn post_still_rejects_bad_json_with_the_ping_flag() {
     let (code, out, err) = phone_digest(&["post", "not json", "--ping"]);
     assert_eq!(code, Some(1));
     assert_eq!(out, "");
-    assert_eq!(err, "phone-digest: argument must be {\"items\": [...]} JSON\n");
+    assert_eq!(
+        err,
+        "phone-digest: argument must be {\"items\": [...]} JSON\n"
+    );
 }

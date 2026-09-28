@@ -1,6 +1,6 @@
 ---
 name: pdf-write
-description: Author and build documents to PDF with Pandoc and LaTeX — papers, reports, assignment write-ups. Covers LaTeX math inside Markdown, image and Mermaid diagram embedding, page layout, LaTeX format repair, and mandatory visual verification of the output. Use when the user asks to write a paper or report, convert Markdown to PDF, or fix a PDF that built badly.
+description: Author and build documents to PDF with Pandoc and LaTeX (papers, reports, assignment write-ups). Use when the user asks to write a paper or report, convert Markdown to PDF, or fix a PDF that built badly. Covers LaTeX math inside Markdown, Mermaid diagram embedding, page layout, LaTeX format repair, and mandatory visual verification of the output.
 license: MIT
 ---
 
@@ -73,7 +73,7 @@ fails the build or renders as a box. Write `$\Theta(nm)$` and `$\ne$`.
 - Render the diagram and **look at it** before embedding. Two failure shapes
   seen in practice: a top-to-bottom flowchart 20 nodes tall, unusable on a
   page; and edges bundled through a shared subgraph border, unreadable.
-  Fix by restructuring — group into phases side by side, or reduce node count.
+  Fix by restructuring: group into phases side by side, or reduce node count.
 - Scale images to the page. On A4 with 15 mm margins the text block is about
   186 mm wide, so a 1584x1104 diagram at `width=100%` is roughly 130 mm tall
   and will push itself onto a page of its own.
@@ -90,7 +90,7 @@ fmtutil-sys --all --byfmt pdflatex   # or xelatex
 Check before assuming: `command -v pandoc mmdc`, and read the actual error
 text. Never install TeX packages to fix a build you have not diagnosed.
 
-## Verify before delivering — mandatory
+## Verify before delivering: mandatory
 
 A build that exits 0 is not a verification. Run all three:
 
@@ -109,6 +109,5 @@ problem to the user and stop.
 
 ## Related
 
-- `pdf-read` — extract text, tables, and figures back out of a PDF, including
-  course slides you are citing.
-- `mermaid-doctor` — validate diagram syntax before compiling.
+- `pdf-read` for extracting text, tables, and figures back out of a PDF.
+- `mermaid-doctor` to validate diagram syntax before compiling.

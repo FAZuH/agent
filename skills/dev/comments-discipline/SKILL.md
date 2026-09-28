@@ -1,11 +1,18 @@
 ---
-name: comment-discipline
-description: Enforce a strict comment-writing standard when writing or editing any code, config file, or dotfile (Lua, shell, Rust, Python, tmux.conf, hypr conf, etc). Use this whenever you are about to write a comment, whenever the user asks you to add comments, and whenever you are editing a file that already has comments — even if the user's request has nothing to do with commenting. Prevents narration comments ("what" restatements), decision-log comments ("pinned", "fixed", "was slower"), graveyard comments about removed/dropped code, and change-history comments addressed to a future reader who won't see the conversation. Also use when the user says "de-slop", "clean up comments", "why are there so many comments", or asks you to review/audit an existing file's comments.
+name: comments-discipline
+description: >-
+  Decide whether a comment earns its line, and delete the ones that do not:
+  narration ("what" restatements), decision-log comments ("pinned", "fixed",
+  "was slower"), graveyard references to removed code, change-history
+  banners, and section-divider decoration. Use whenever you are about to
+  write a comment, whenever you edit a file that already has comments (even
+  for an unrelated change), and whenever the user asks to add, clean up, or
+  audit comments ("de-slop", "why are there so many comments").
 ---
 
 # Comment Discipline
 
-Default to zero comments. A comment is a cost — another line to read, another thing that can go stale — and it is only worth that cost when the code cannot carry the information itself.
+Default to zero comments. A comment is a cost (another line to read, another thing that can go stale), and it is only worth that cost when the code cannot carry the information itself.
 
 ## The one test
 
@@ -42,7 +49,7 @@ natural_scroll = true, -- inverted-feel fix (direction only)
 scroll_factor = 0.4, -- pinned: Omarchy out-of-box speed (HyDE's 0.2 was slower)
 ```
 
-These are commit-message content, not code content. If the *value itself* needs justification going forward (e.g. "0.4, not the default 0.2 — 0.2 causes visible input lag on this trackpad"), that's a real why-comment and is allowed. But "pinned" / "HyDE's was slower" / "fix" tell the reader nothing they can act on six months from now — they only make sense with the diff open.
+These are commit-message content, not code content. If the *value itself* needs justification going forward (e.g. "0.4, not the default 0.2: 0.2 causes visible input lag on this trackpad"), that's a real why-comment and is allowed. But "pinned" / "HyDE's was slower" / "fix" tell the reader nothing they can act on six months from now. They only make sense with the diff open.
 
 Test: strip out any word that only means something in the context of "compared to before" (pinned, fixed, restored, was X, now Y, no longer). What's left, if anything, might be a real comment.
 
@@ -65,9 +72,9 @@ Multi-line banners recording when/why a file was ported, migrated, or touched, a
 -- restored. `omarchy refresh tmux` clobbers this.
 -- =====================================================
 ```
-Exception: a one-line warning that a tool will silently overwrite the file IS a real constraint (someone needs to know before they debug why their edit vanished) — keep only that sentence, delete the rest:
+Exception: a one-line warning that a tool will silently overwrite the file IS a real constraint (someone needs to know before they debug why their edit vanished). Keep only that sentence, delete the rest:
 ```
--- ✅ `omarchy refresh tmux` overwrites this file — edits here won't survive a refresh.
+-- ✅ `omarchy refresh tmux` overwrites this file: edits here won't survive a refresh.
 ```
 
 ### 5. Restating scope/inventory
@@ -87,7 +94,7 @@ Comments listing what a section does or doesn't cover, when the code itself is t
 def get_user(user_id: int) -> User:
     """Gets the user with the given user_id and returns a User."""
 ```
-A docstring is allowed only for public API surface where callers can't see the implementation, and even then it should say something the signature doesn't: units, ownership of returned objects, error conditions, side effects, thread-safety — not a restatement of the name.
+A docstring is allowed only for public API surface where callers can't see the implementation, and even then it should say something the signature doesn't: units, ownership of returned objects, error conditions, side effects, thread-safety, not a restatement of the name.
 
 ## What survives
 
@@ -100,17 +107,17 @@ A docstring is allowed only for public API surface where callers can't see the i
 
 ## Workflow
 
-**When writing new code/config:** apply the one test to every comment before it's written. If in doubt, don't write it — deleting a comment silently costs nothing; the user will ask if they actually wanted an explanation.
+**When writing new code/config:** apply the one test to every comment before it's written. If in doubt, don't write it. Deleting a comment silently costs nothing; the user will ask if they actually wanted an explanation.
 
-**When asked to add comments:** still apply the test per-line. "Add comments to this" is not permission to narrate — write only what survives.
+**When asked to add comments:** still apply the test per-line. "Add comments to this" is not permission to narrate. Write only what survives.
 
-**When editing a file that already has comments (even for an unrelated change):** don't add new violations near your edit, but don't go rewrite unrelated existing comments unless asked — that's a separate cleanup pass, not incidental to the task.
+**When editing a file that already has comments (even for an unrelated change):** don't add new violations near your edit, but don't go rewrite unrelated existing comments unless asked. That is a separate cleanup pass, not incidental to the task.
 
 **When asked to clean up / de-slop / audit an existing file's comments:** go comment-by-comment in file order:
 1. Apply the one test.
-2. If it fails, delete it outright — don't soften it into a shorter version of the same banned category.
+2. If it fails, delete it outright. Don't soften it into a shorter version of the same banned category.
 3. If it passes but is longer than it needs to be, cut it to the single sentence that carries the why.
-4. If deleting a comment would leave genuinely unclear code (the comment was compensating for bad naming or a non-obvious structure), don't just delete it — flag it back to the user as a naming/structure issue, since the fix is in the code, not the comment.
+4. If deleting a comment would leave genuinely unclear code (the comment was compensating for bad naming or a non-obvious structure), don't just delete it. Flag it back to the user as a naming/structure issue, since the fix is in the code, not the comment.
 5. Report a one-line count at the end: kept / cut / flagged. Don't narrate each decision unless asked.
 
 Never touch the code itself during a comment cleanup pass unless step 4 applies and the user agrees to the refactor.

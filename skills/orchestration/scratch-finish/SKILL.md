@@ -1,48 +1,39 @@
 ---
 name: scratch-finish
 description: >-
-  Archive a completed `.scratch/` session workspace: verify the feature is
-  genuinely done, mark remaining checklist items done, append an Outcome
-  section to the spec, move it to `.scratch/complete/`, mark tickets resolved,
-  and delete the stale checkpoint. Load this when a `.scratch/` workspace's
-  work is finished and needs archiving, or from any skill that completes a
-  workspace (finish, session, worktree-close). The `.scratch/` mechanics —
-  verifying the repo uses `.scratch/`, the slug format, and the layout — live
-  in the @scratch skill; load that first if the workspace is unknown.
+  Archive a completed `.scratch/` session workspace: run the completion
+  checklist, append an Outcome section, move the spec to `.scratch/complete/`,
+  mark tickets resolved, delete the stale checkpoint. Load this when a
+  workspace's work has finished, or from any skill that completes one
+  (finish, session, worktree-close). The `.scratch/` layout and slug format
+  live in the @scratch skill.
 ---
 
 # Archive a completed `.scratch/` workspace
 
 This skill is the single home for the completion checklist and the archive
-steps of a `.scratch/` session workspace. Other skills (`finish`, @session)
-and the @scratch skill itself reference it instead of restating the steps.
+steps. Other skills (`finish`, @session) and the @scratch skill itself
+reference it instead of restating the steps.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
 > fixed post-run report. Always follow the gate in the *Completion checklist*
 > section below.
 
-## Load @scratch for the mechanics
-
-The @scratch skill owns the `.scratch/` workspace mechanics — how to verify
-the repo uses `.scratch/`, the slug format, and the directory layout. Load it
-first if you need any of that. This skill only covers finishing and archiving.
-
-## Does the repo use `.scratch/`?
-
-Verify before assuming: `ls .scratch/` or glob `.scratch/*/spec.md`. If the
-repo has no `.scratch/` workspace, this skill does not apply — do not invent
-one. Report that there is nothing to archive and stop.
+> **Load the @scratch skill first** for the workspace mechanics: how to verify
+> the repo uses `.scratch/`, the slug format, and the directory layout. This
+> skill only covers finishing and archiving.
 
 ## Completion checklist
 
-Archive a workspace only when every condition holds:
+If the repo has no `.scratch/` workspace, report that there is nothing to
+archive and stop. Otherwise archive only when every condition holds:
 
 - all checklist items on the spec are done;
 - all tickets under `issues/` are `Status: resolved` (or no tickets exist);
 - the work is merged/shared (commits landed or PR merged) or the user
   confirms it is complete;
-- verification passed (tests, lint, build, browser check — whatever the spec
+- verification passed (tests, lint, build, browser check, whatever the spec
   demands).
 
 If any condition is false, do **not** archive. Report what remains and keep

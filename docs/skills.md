@@ -50,12 +50,12 @@ the category directory never reaches the installed name.
 ## Dev
 
 - **[app-paths](../skills/dev/app-paths/SKILL.md)**: Resolve app config, data, cache, and state directories through one CLI > env > config file > platform ladder.
-- **[comments](../skills/dev/comments/SKILL.md)**: Write useful comments without narration or change-history noise.
+- **[comments-discipline](../skills/dev/comments-discipline/SKILL.md)**: Write useful comments without narration or change-history noise.
 - **[commit-scopes](../skills/dev/commit-scopes/SKILL.md)**: Create and maintain the closed vocabulary for Conventional Commit scopes.
 - **[design-tradeoffs](../skills/dev/design-tradeoffs/SKILL.md)**: Compare design options with structured tradeoffs.
 - **[gui-test-guidelines](../skills/dev/gui-test-guidelines/SKILL.md)**: Write reliable GUI, browser, and accessibility tests.
 - **[improve-architecture-oop](../skills/dev/improve-architecture-oop/SKILL.md)**: Apply the OOP vocabulary to architecture analysis and reports.
-- **[logging-guidelines](../skills/dev/logging-guidelines/SKILL.md)**: Design structured logs, safe redaction, correlation, and useful events.
+- **[logging-guidelines](../skills/dev/logging-guidelines/SKILL.md)**: Emit one wide event per unit of work, with high-cardinality context, redaction, injection-safe fields, trace correlation, and sampling.
 - **[oop](../skills/dev/oop/SKILL.md)**: Use standard OOP and architecture vocabulary.
 - **[readme](../skills/dev/readme/SKILL.md)**: Standardize README structure and house style.
 - **[rust-idioms](../skills/dev/rust-idioms/SKILL.md)**: Apply type-driven Rust design patterns.
@@ -77,7 +77,7 @@ the category directory never reaches the installed name.
 
 - ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Map and maintain this personal-public agent repository.
 - ⭐ **[update-fazuh-agent](../skills/meta/update-fazuh-agent/SKILL.md)**: Update the installed setup from the agent repository: pull, redeploy, verify.
-- **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` forward after checking each remote.
+- **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` and `uninstall.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
 - ⭐ **[skill-doctor](../skills/meta/skill-doctor/SKILL.md)**: Audit skill references, names, collisions, and source drift.
 
@@ -94,10 +94,10 @@ These skills are loaded only when another skill or agent references them.
 
 - **[ocv2-api](../skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API.
 - **[ocv2-compact](../skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session and wait for its summary.
-- **[ocv2-models](../skills/ocv2/ocv2-models/SKILL.md)**: Pick and switch models through the v2 API.
+- **[ocv2-models](../skills/ocv2/ocv2-models/SKILL.md)**: Pick a free model when the session account is dry, with `AGENTS.md` as the override point.
 - **[ocv2-sessions](../skills/ocv2/ocv2-sessions/SKILL.md)**: Fork and control OpenCode v2 sessions.
 - **[ocv2-move](../skills/ocv2/ocv2-move/SKILL.md)**: Move a v2 session to another project directory.
-- **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin status and errors.
+- **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin loading: what loaded, why it failed, whether `setup()` ran, and what hot-reloads.
 - **[ocv2-unfuck](../skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.
 
 Run `./sync.sh list` to see the deployed skills, and

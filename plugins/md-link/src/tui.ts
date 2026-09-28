@@ -34,6 +34,7 @@ import {
   appendMessage,
   DEFAULT_OPENER,
   disableSession,
+  fetchMessages,
   isEnabled,
   isSafeName,
   loadState,
@@ -141,16 +142,7 @@ async function backfillLatestTurn(
   enabledAt: number,
 ): Promise<boolean> {
   try {
-    const proc = Bun.spawn(["opencode2", "api", "get", `/api/session/${sessionID}/message`], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const out = await new Response(proc.stdout).text()
-    await proc.exited
-
-    const parsed = JSON.parse(out)
-    const items: any[] = Array.isArray(parsed) ? parsed : (parsed?.data ?? [])
-    for (const m of items) {
+    for (const m of await fetchMessages(sessionID)) {
       if (m?.type !== "assistant") continue
       const created = Number(m?.time?.created ?? 0)
       if (created && enabledAt - created < 15_000) continue // likely still streaming
@@ -301,7 +293,7 @@ export default {
         if (t.length > 0) {
           const n = Number(t)
           if (!Number.isInteger(n) || n < 1 || n > 500) {
-            toast(`Invalid count "${t}" — use 1..500 or empty`, "error")
+            toast(`Invalid count "${t}": use 1..500 or empty`, "error")
             return
           }
           keep = n
@@ -342,8 +334,8 @@ export default {
         saveState(st)
         toast(
           st.persist
-            ? "Persistent mirrors ON — survive TUI exit, resume next launch"
-            : "Persistent mirrors OFF — mirrors deleted on TUI exit",
+            ? "Persistent mirrors ON: survive TUI exit, resume next launch"
+            : "Persistent mirrors OFF: mirrors deleted on TUI exit",
           st.persist ? "info" : "warning",
         )
       } catch (e: any) {
@@ -373,7 +365,7 @@ export default {
       const st = loadState()
       const file = sessionID && typeof sessionID === "string" ? mirrorFile(st, sessionID, pwd()) : null
       if (!file || !isEnabled(st, sessionID as string) || !existsSync(file)) {
-        toast("No mirror for this session — toggle it ON first (ctrl+alt+n)", "warning")
+        toast("No mirror for this session; toggle it ON first (ctrl+alt+n)", "warning")
         return
       }
       const res = await launchOpener(st, file)
@@ -412,7 +404,7 @@ export default {
         else st.openOnEnable = st.openOnEnable === false
         saveState(st)
         toast(
-          st.openOnEnable ? "Auto-open ON — mirrors open on toggle" : "Auto-open OFF — open with ctrl+alt+o",
+          st.openOnEnable ? "Auto-open ON: mirrors open on toggle" : "Auto-open OFF: open with ctrl+alt+o",
           st.openOnEnable ? "info" : "warning",
         )
       } catch (e: any) {
@@ -432,14 +424,14 @@ export default {
           .map((sid) => sessionRow(st, sid))
           .sort((a, b) => b.mtime - a.mtime)
         if (rows.length === 0) {
-          toast("No mirrored sessions — toggle one ON with ctrl+alt+n")
+          toast("No mirrored sessions; toggle one ON with ctrl+alt+n")
           return
         }
         const fail = (e: any) => toast(`Cannot open dialog: ${e?.message ?? e}`, "error")
         let picked: string | undefined
         try {
           picked = await ctx.ui.dialog.select({
-            title: `Mirrored sessions (${rows.length}) — delete which?`,
+            title: `Mirrored sessions (${rows.length}): delete which?`,
             placeholder: "esc cancels",
             options: rows.map(({ title, value, description }) => ({ title, value, description })),
           })

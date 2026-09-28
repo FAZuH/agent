@@ -1,14 +1,11 @@
 ---
 name: prepare-compact
 description: >-
-  Prepare the current session for context compaction. Use when the user is
-  about to compact the session context window, asks to compact or prepare
-  for compaction, says the context is getting full or running low, wants to
-  persist state before compacting, or wants a resume checkpoint so work
-  survives a compaction. Persists the session/plan doc, deviations, decisions,
-  todo list, session-critical facts, and the active goal objective, clears
-  the goal, then gates a compact offer — in auto mode it compacts
-  immediately.
+  Persist everything a fresh session needs before a context compaction:
+  the session/plan doc, deviations, the todo list, session-critical facts,
+  and the active goal objective, then clear the goal and gate a compact
+  offer. Use when the user says to compact, the context is getting full, or
+  a resume checkpoint must survive a compaction.
 ---
 
 # prepare-compact
@@ -22,7 +19,7 @@ thorough: assume the conversation history is about to be deleted.
 > fixed post-run report.
 
 > **Load the @scratch skill if the repo uses `.scratch/`.** It owns the
-> `.scratch/` workspace mechanics — layout, slug format, and the
+> `.scratch/` workspace mechanics: layout, slug format, and the
 > `.scratch/complete/` archive location. Follow it when you update the session
 > doc or checkpoint.
 
@@ -33,25 +30,25 @@ layout.
 Do the steps in order. Do not compress or skip facts; the goal is fidelity,
 not brevity.
 
-IMPORTANT: If you lack write access — a read-only agent, Plan mode, or any restriction that
-blocks editing files, updating todos, memory, or clearing the goal — do NOT fail
-silently. Persist whatever you can, and explicitly tell the user in the final
+IMPORTANT: If you lack write access (a read-only agent, Plan mode, or any
+restriction that blocks editing files, updating todos, memory, or clearing the
+goal), do NOT fail silently. Persist whatever you can, and explicitly tell the user in the final
 report which persistence steps could not be performed and what will therefore be
 lost on compaction.
 
 ## 1. Snapshot current state
 
-Run `get_goal` and record the current goal's objective verbatim — the fresh
+Run `get_goal` and record the current goal's objective verbatim; the fresh
 session will need to re-create it. Then, from your own context, capture:
 
-- **Objective** — what is being worked on right now, in one or two sentences.
-- **Done** — what shipped so far: files created/changed, features working,
+- **Objective**: what is being worked on right now, in one or two sentences.
+- **Done**: what shipped so far: files created/changed, features working,
   verification passed.
-- **In progress** — anything half-finished: partial edits, uncommitted work, a
+- **In progress**: anything half-finished: partial edits, uncommitted work, a
   design being worked out.
-- **Blocked** — external blockers, pending decisions, answers you are still
+- **Blocked**: external blockers, pending decisions, answers you are still
   waiting on.
-- **Deviations** — anything that diverged from a plan, spec, or original
+- **Deviations**: anything that diverged from a plan, spec, or original
   request.
 
 ## 2. Update the session doc
@@ -66,7 +63,7 @@ Detect the repo's session-doc convention rather than assuming one:
 - Otherwise, update whatever plan/spec doc the repo already tracks (find it
   by common names: `spec.md`, `plan.md`, `docs/plan/`, `docs/specs/`), if one
   exists. Keep the same section refresh + dated deviation entries.
-- If no session doc exists, do not invent one — skip creation and note it in
+- If no session doc exists, do not invent one. Skip creation and note it in
   the report.
 - If the work is essentially complete, say so and note that the doc should be
   archived (`.scratch/complete/` when the repo uses `.scratch/`, or the
@@ -90,57 +87,30 @@ to be useful. If there are no todos, say so in the report and move on.
 
 Capture anything that is cheap to lose and expensive to rediscover:
 
-- **Environment** — dev servers running (and which subagent/PTY owns them),
+- **Environment**: dev servers running (and which subagent/PTY owns them),
   ports, URLs, relevant PIDs, current git branch and uncommitted files.
-- **Commands** — exact verification commands (build, lint, test, typecheck)
+- **Commands**: exact verification commands (build, lint, test, typecheck)
   and any one-off commands that worked.
-- **Gotchas** — non-obvious findings, dead ends, API quirks, decisions and
+- **Gotchas**: non-obvious findings, dead ends, API quirks, decisions and
   their rationale. If a friction point hit a papercuts log, reference it; do
   not duplicate it.
-- **Secrets** — do NOT write credentials or tokens. Note where they live
+- **Secrets**: do NOT write credentials or tokens. Note where they live
   instead (env var, file path).
 
 ## 5. Update memory (optional)
 
-If this session changed durable, high-signal facts — new project conventions,
-architecture decisions, or workflow changes — update the project or global
+If this session changed durable, high-signal facts (new project conventions,
+architecture decisions, or workflow changes), update the project or global
 memory blocks so they survive without the conversation. Do not add trivia.
 
 ## 6. Write the resume checkpoint
 
 Write the resume checkpoint to `.scratch/<feature-slug>/checkpoint.md` when
 the repo uses the `.scratch/` layout; otherwise write a generic `RESUME.md` at
-the repo root. The checkpoint contains exactly:
-
-```
-# Resume checkpoint — <feature>
-
-## Goal to re-create
-<the goal objective recorded in step 1, verbatim>
-
-## Next step
-<the single next action, with file paths and line numbers if known>
-
-## Verify with
-<exact command or test to confirm state>
-
-## Context to re-read first
-<session doc path, specific files, code sections>
-
-## Open questions
-<anything still unanswered>
-
-## Session facts
-- Environment: dev servers (and which subagent/PTY owns them), ports, PIDs,
-  git branch, uncommitted files.
-- Commands: exact verification commands and any one-off commands that worked.
-- Gotchas: non-obvious findings, dead ends, API quirks, decisions and
-  rationale.
-```
-
-Do NOT write credentials or tokens — note where they live instead (env var,
-file path). After compaction, the first action of the fresh session must be to
-re-create the goal with the recorded objective (create_goal/set_goal), then
+the repo root. The checkpoint's section template lives in the @session skill.
+Do NOT write credentials or tokens: note where they live instead (env var,
+file path). After compaction, the first action of the fresh session must be
+to re-create the goal with the recorded objective (create_goal/set_goal), then
 continue from the resume checkpoint.
 
 ## 7. Clear the goal
@@ -169,17 +139,18 @@ itself; otherwise the user decides whether to compact or continue.
 
 **GATE compact-offer (normal → compact immediately):** after the report,
 offer to compact this session now. Skip this step entirely when the agent is
-not running in OpenCode — the report in step 8 is the end of the procedure.
+not running in OpenCode, the report in step 8 ends the
+  procedure.
 
 Detect the OpenCode harness first:
 
-- **OpenCode v2** — the environment block carries `Current conversation
+- **OpenCode v2**: the environment block carries `Current conversation
   session ID: ses_…`. Compact with the @ocv2-compact skill: from that skill's
   directory run `scripts/oc-compact.sh ses_… --timeout 0`, then end the turn.
   The compaction is a steer: it queues behind the current turn and runs once
-  the session goes idle — waiting synchronously inside the turn always times
+  the session goes idle. Waiting synchronously inside the turn always times
   out.
-- **OpenCode v1** — the `compact_context` tool is available. Call it.
+- **OpenCode v1**: the `compact_context` tool is available. Call it.
 
 When the gate fires (interactive mode), ask with the @gate mechanics: state
 what was persisted and where (step 8), that compaction replaces the
@@ -187,7 +158,7 @@ conversation with the summary, and offer Approve / Abort. Approve → run the
 compaction for the detected harness. Abort → stop; the persisted state stands
 either way.
 
-In auto mode, do not ask — run the compaction immediately after the report.
+In auto mode, do not ask; run the compaction immediately after the report.
 
 ## Dependency graph
 

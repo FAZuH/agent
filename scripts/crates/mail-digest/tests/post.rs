@@ -3,7 +3,7 @@
 //! the generation epoch pinned).
 //!
 //! These read the environment, the filesystem and loopback, so every test
-//! that depends on `CREDENTIALS_DIRECTORY` takes the ENV lock — it serializes
+//! that depends on `CREDENTIALS_DIRECTORY` takes the ENV lock, which serializes
 //! process-global env writes against the other env tests in this binary.
 
 use std::fs;

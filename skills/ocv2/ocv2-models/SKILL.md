@@ -1,9 +1,9 @@
 ---
 name: ocv2-models
-description: Pick a free OpenCode v2 model when the default model's account is dry (402 Insufficient account funds) or the user asks for a free model. Use when a turn dies with "Insufficient account funds", the user says "pick a model", "use a free model", "switch the model", or asks what models opencode2 offers. Lists free models with `opencode2 models | rg -i free`, checks the AGENTS.md `## ocv2-models` preference, and switches the live session via the model endpoint.
+description: Pick a free OpenCode v2 model when the session model's provider account is dry (402 Insufficient account funds) or the user asks for one. Use when a turn dies with "Insufficient account funds", the user says "pick a model" or "use a free model", or asks what models opencode2 offers. A `## ocv2-models` section in AGENTS.md is the override point.
 ---
 
-# ocv2-models — free model discovery & switching
+# ocv2-models: free model discovery and switching
 
 ## 1. AGENTS.md preference first
 
@@ -16,7 +16,7 @@ export PATH="$HOME/.opencode/bin:$PATH"
 opencode2 models | rg -i free
 ```
 
-`opencode2 models` prints every model as `provider/model[:variant]` (~112 entries on beta-19187); the `free` filter is the current free tier. Always re-run — the list changes. Example output (2026-09-06):
+`opencode2 models` prints every model as `provider/model[:variant]` (~112 entries on beta-19187); the `free` filter is the current free tier. Always re-run, the list changes. Example output (2026-09-06):
 
 ```
 cline/z-ai/glm-5.2:free
@@ -35,13 +35,13 @@ tokenrouter/z-ai/glm-5.3-free
 ## 3. Pick
 
 - Task needs image input → a `*vision*` entry (`litellm/free-pro-vision`, `litellm/flash-free-pro-vision`).
-- Otherwise prefer `litellm/*` for chat turns — direct provider, live-verified 2026-09-06 (`free-pro-vision` answered a probe turn normally, cost 0).
-- **Subagent/delegated turns need tool use — `litellm/free-pro` does NOT have it.** It routes to `z-ai/glm-5.2:free`, whose OpenRouter endpoints are filtered out for tool compatibility; the subagent session dies with 404 "Filter by Tool Compatibility" (live-verified 2026-09-22). `tokenrouter/z-ai/glm-5.3-free` listed but had no channel that day. Working subagent pick: `opencode/nemotron-3-ultra-free` (live-verified 2026-09-22 — full tool use across a multi-step provisioning delegation).
+- Otherwise prefer `litellm/*` for chat turns: a direct provider, live-verified 2026-09-06 (`free-pro-vision` answered a probe turn normally, cost 0).
+- **Subagent/delegated turns need tool use: `litellm/free-pro` does NOT have it.** It routes to `z-ai/glm-5.2:free`, whose OpenRouter endpoints are filtered out for tool compatibility; the subagent session dies with 404 "Filter by Tool Compatibility" (live-verified 2026-09-22). `tokenrouter/z-ai/glm-5.3-free` listed but had no channel that day. Working subagent pick: `opencode/nemotron-3-ultra-free` (live-verified 2026-09-22, full tool use across a multi-step provisioning delegation).
 - State the pick and the reason in one line. Don't interview; the AGENTS.md section is the override point.
 
 ## 4. Apply
 
-Model is per-session and sticky from creation; the prompt body's `providerID`/`modelID` keys are IGNORED (finding 2026-09-06) — use the model endpoint:
+Model is per-session and sticky from creation; the prompt body's `providerID`/`modelID` keys are IGNORED (finding 2026-09-06), so use the model endpoint:
 
 ```sh
 # 204 on success
@@ -55,9 +55,9 @@ Headless: `opencode2 run -m litellm/free-pro-vision "..."` (flag format `provide
 
 ## 5. 402 recovery
 
-`Upstream request failed: Insufficient account funds` (402) repeated on assistant messages = the session model's provider account is dry — not a plugin or harness bug. Switch (step 4) and re-prompt; failed messages stay in history with `finish: error`.
+`Upstream request failed: Insufficient account funds` (402) repeated on assistant messages = the session model's provider account is dry, not a plugin or harness bug. Switch (step 4) and re-prompt; failed messages stay in history with `finish: error`.
 
 ## 6. Other model failures
 
-- `opencode2 auth list` can hang with "Model catalog initialization timed out" regardless of version — do not use it for discovery; `opencode2 models` (step 2) works.
-- A child session on a free tier can hit the daily-limit 429 mid-run. Switch that child's model live (`POST /api/session/<sid>/model`, step 4 — per-session and sticky) instead of restarting the work.
+- `opencode2 auth list` can hang with "Model catalog initialization timed out" regardless of version; do not use it for discovery, `opencode2 models` (step 2) works.
+- A child session on a free tier can hit the daily-limit 429 mid-run. Switch that child's model live (`POST /api/session/<sid>/model`, step 4, per-session and sticky) instead of restarting the work.

@@ -63,7 +63,8 @@ const AGENT_PATH_ENV: &str = "PATH=/usr/local/bin:/usr/bin";
 
 /// Full `octask add`: validates, builds the run command, writes units under
 /// `dir` (the real unit dir when `None`), reloads systemd, self-checks and
-/// enables. Returns the lines that would go to stdout.
+/// enables. Returns the lines that would go to stdout, so a caller that
+/// renders elsewhere (`edit --dry-run`) can drop them.
 pub fn install(args: &AddArgs, dir: Option<&Path>) -> Result<Vec<String>> {
     let dir = dir.map_or_else(unit_dir, Path::to_path_buf);
     let mut out = Vec::new();
@@ -175,7 +176,7 @@ pub fn install(args: &AddArgs, dir: Option<&Path>) -> Result<Vec<String>> {
                 crate::sys::config_home().join("opencode/agents").display(),
                 Path::new(&workdir).join(".opencode/agents").display()
             );
-            eprintln!("  the run will fail until the agent exists — create it before enabling");
+            eprintln!("  the run will fail until the agent exists, create it before enabling");
         }
         let quoted = bq(&prompt_in);
         exec_cmd = if model.is_empty() {
@@ -310,8 +311,8 @@ fn prefer_opencode2() -> Result<std::path::PathBuf> {
 }
 
 pub fn add(args: &AddArgs) -> Result<()> {
-    for l in install(args, None)? {
-        println!("{l}");
+    for line in install(args, None)? {
+        println!("{line}");
     }
     Ok(())
 }

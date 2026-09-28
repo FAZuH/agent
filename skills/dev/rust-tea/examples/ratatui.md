@@ -77,7 +77,7 @@ dsp!(self, Msg::Timer(PomodoroMsg::Start(now)), Msg::Router(RouterMsg::GoTo(Page
 ```
 
 Sugar only — the real mechanism is the dispatch loop on `AppCore`
-(`tea-core.md` §6). Keep the macro trivial or skip it.
+(`references/patterns.md` §4). Keep the macro trivial or skip it.
 
 ## 4. The EffectHandler adapter
 
@@ -119,7 +119,7 @@ impl EffectHandler for TuiEffects {
   `Updateable` and gets its own message enum; the top level wraps them
   (`Msg::Timer(PomodoroMsg)`).
 - Sub-model commands are promoted by `translate_*` methods on `AppCore`
-  (`tea-core.md` §3). Optional pattern — a flat model + free-function
+  (`references/patterns.md` §3). Optional pattern — a flat model + free-function
   update is equally valid (see the choice table in `SKILL.md`).
 - A `Router` sub-model owning "which page is active" keeps key routing,
   page rendering, and navigation transitions cohesive instead of

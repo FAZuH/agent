@@ -11,12 +11,12 @@ working directory on the next turn. No restart, no handoff document needed.
 
 ## Steps
 
-1. **Resolve the session ID** — read it from the environment block (`Current
+1. **Resolve the session ID**: read it from the environment block (`Current
    conversation session ID`) or ask the user. It starts with `ses`.
-2. **Resolve the target directory** — use the directory the user named; expand
+2. **Resolve the target directory**: use the directory the user named; expand
    `~` to an absolute path. Verify it exists and is the intended project root
    (for example it contains `.git` or the project files) before moving.
-3. **Call the move endpoint** — prefer `scripts/oc-move.sh <sessionID>
+3. **Call the move endpoint**: prefer `scripts/oc-move.sh <sessionID>
    <directory>`: it resolves `~`/relatives, checks the directory exists,
    calls the endpoint, and reports `/api/project/current`. The raw call:
 
@@ -27,10 +27,10 @@ working directory on the next turn. No restart, no handoff document needed.
 
    Success is exit code 0 (HTTP 204, empty body). Do not pass curl-style flags;
    `opencode2 api` only accepts `-d` and `-H`.
-4. **Verify** — run `opencode2 api get /api/project/current`. A `/` result is
+4. **Verify**: run `opencode2 api get /api/project/current`. A `/` result is
    normal from a detached shell; the authoritative confirmation arrives as a
    system update that sets the new working directory for the session.
-5. **Continue work in the new location** — use absolute paths under the new
+5. **Continue work in the new location**: use absolute paths under the new
    directory until the updated environment lands.
 
 ## Notes
@@ -40,5 +40,5 @@ working directory on the next turn. No restart, no handoff document needed.
 - Child/subagent sessions are not moved by this call. Spawn fresh subagents for
   follow-up work; they inherit the new project.
 - If the old directory no longer exists, shell calls with a default working
-  directory may fail until the environment updates — always set an explicit
+  directory may fail until the environment updates, so always set an explicit
   working directory during that window.

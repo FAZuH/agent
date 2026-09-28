@@ -1,19 +1,16 @@
 ---
 name: update-fazuh-agent
-description: Update this OpenCode setup to the latest state of the agent repository — pull the checkout, redeploy skills, agents, plugins, and commands to the global config, and verify the result. Use when the user says update the agent, pull the latest, sync my setup, refresh the config, upgrade the skills, asks whether the installed setup is current, or names the repo they want updated.
+description: Update this OpenCode setup to the latest state of the agent repository, by pulling the checkout and redeploying skills, agents, plugins, and commands to the global config. Use when the user says update the agent, pull the latest, sync my setup, refresh the config, upgrade the skills, or asks whether the installed setup is current.
 ---
 
 # Update fazuh agent
-
-Bring the installed OpenCode setup in line with the agent repository. The
-checkout path is not fixed: `sync.sh push` records it, and this skill reads it.
 
 > **Load the @following-procedures skill first.** It defines how to run a
 > numbered procedure. Follow the rules in the *Rules* section at the bottom.
 
 ## Find the repository
 
-Every push to the global target writes the checkout path to
+The checkout path is not fixed: every push to the global target writes it to
 `~/.config/opencode/.agent-repo` (one line, the absolute path). Read it; never
 hardcode a path and never guess one.
 
@@ -28,7 +25,7 @@ fall back to a guessed directory.
 ## Steps
 
 1. **Resolve the repository path** with the command above. If it is missing or
-   is not a git repository, stop and report — every later step depends on it.
+   is not a git repository, stop and report, every later step depends on it.
 
 2. **Record the starting state**, so the report can show what moved:
 
@@ -69,10 +66,10 @@ fall back to a guessed directory.
    checks), `plugins/ponytail` (needs a cold restart after push).
 
 7. **Run the repository checks** when the pull touched `scripts/`, `plugins/`,
-   or the Rust workspace: `./dev.sh all` from the checkout. Fix nothing here —
+   or the Rust workspace: `./dev.sh all` from the checkout. Fix nothing here,
    report a red run and let the user decide.
 
-8. **Redeploy the configuration** — the step that makes the update real:
+8. **Redeploy the configuration**, the step that makes the update real:
 
    ```bash
    cd "$repo" && ./sync.sh push -g
@@ -84,7 +81,7 @@ fall back to a guessed directory.
 
 9. **Verify the result:** `./sync.sh diff -g` must report every item in sync. A
    target file that still differs was edited in place after the push; sync keeps
-   it and says so — report the path instead of overwriting it.
+   it and says so, so report the path instead of overwriting it.
 
 10. **Reinstall only when the pull really needs it.** `./install.sh` refreshes
     the external skills and cargo packages, and `./install.sh -b` adds the bonus

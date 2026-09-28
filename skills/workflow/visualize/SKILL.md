@@ -16,22 +16,22 @@ A visual is useful when it makes structure or geometry easier to understand than
 - The idea is a **structure or relationship**: dependencies, a system with parts and arrows, a flow/pipeline, a sequence of exchanges, a state machine, a tree/hierarchy, a comparison, a containment (what's inside vs outside).
 - The idea is **spatial or geometric**: coordinate geometry, a number line, vectors, a function's shape, a physical arrangement.
 
-Do NOT visualize when prose or a single equation already carries it. A decorative diagram that just restates the sentence next to it adds noise and a chance to be wrong. When in doubt, don't — a missing visual is cheaper than a false one.
+Do NOT visualize when prose or a single equation already carries it. A decorative diagram that just restates the sentence next to it adds noise and a chance to be wrong. When in doubt, don't. A missing visual is cheaper than a false one.
 
 ## Choose the maker
 
 Two makers, discovered from `.opencode/agents/`:
 
-- **`mermaid-maker`** — structural/relational visuals: dependency graphs, flowcharts, sequence/state/ER/class diagrams, trees, mindmaps, timelines. This is the default and fits the dependency-graph pedagogy directly.
-- **`svg-maker`** — spatial/geometric visuals Mermaid can't lay out: exact coordinates, geometry figures, number lines, vectors, plots, custom shapes.
+- **`mermaid-maker`**: structural/relational visuals: dependency graphs, flowcharts, sequence/state/ER/class diagrams, trees, mindmaps, timelines. This is the default and fits the dependency-graph pedagogy directly.
+- **`svg-maker`**: spatial/geometric visuals Mermaid can't lay out: exact coordinates, geometry figures, number lines, vectors, plots, custom shapes.
 
 Rule of thumb: if it's *nodes-and-edges / relationships*, use mermaid-maker. If it's *positions-and-shapes / geometry*, use svg-maker.
 
 ## Brief the maker well: one idea, fewest elements
 
-The most common failure is **cramming** — every extra label makes the picture harder to read AND harder to lay out correctly. Before briefing, prune to the fewest elements that carry the idea, and for each ask: *"if I delete this, is the idea still clear?"* If yes, delete it.
+The most common failure is **cramming**: every extra label makes the picture harder to read AND harder to lay out correctly. Before briefing, prune to the fewest elements that carry the idea, and for each ask: *"if I delete this, is the idea still clear?"* If yes, delete it.
 
-Give the maker the concept AND the concrete elements you want — not a vague topic, and not a long checklist.
+Give the maker the concept AND the concrete elements you want, not a vague topic and not a long checklist.
 
 - BAD: "make a diagram about how TCP works"
 - GOOD: "graph TD: a node 'packet' at the top; arrows down to 'ordering' and 'retransmit on loss'; both arrows down into 'reliable stream'. No title. Show that reliability is built FROM packets, not alongside them."
@@ -49,7 +49,7 @@ subagent(agent="mermaid-maker", description="Render mermaid diagram", prompt="<y
 subagent(agent="svg-maker", description="Render SVG picture", prompt="<your minimal, concrete brief>")
 ```
 
-The maker owns its own purpose-built tools (`write_*`/`edit_*`/`render_*`) — it authors the source, renders it to a PNG, **looks at the PNG and iterates until it is correct and clean**, publishes it into the vault with a unique filename, and returns:
+The maker owns its own purpose-built tools (`write_*`/`edit_*`/`render_*`). It authors the source, renders it to a PNG, **looks at the PNG and iterates until it is correct and clean**, publishes it under a unique filename, and returns:
 
 ```
 RESULT:
@@ -57,11 +57,11 @@ filename: viz-<slug>-<timestamp>.png
 path: <cwd>/viz/viz-<slug>-<timestamp>.png
 ```
 
-If it returns `RESULT: NONE`, it couldn't make a correct picture of the brief — simplify or rethink, or decide the visual isn't worth it. Never hand-author or fake a diagram yourself; correctness depends on the maker's render-and-inspect loop.
+If it returns `RESULT: NONE`, it couldn't make a correct picture of the brief; simplify or rethink, or decide the visual isn't worth it. Never hand-author or fake a diagram yourself, because correctness depends on the maker's render-and-inspect loop.
 
 ## Return and embed the visual
 
-Put the embed in the response or note that needs it. When the result belongs in an Obsidian mirror, use the returned **filename** (not the full path) and a display width:
+Put the embed in the response or note that needs it. When the result belongs in an Obsidian mirror, use the returned **filename** (not the full path), which Obsidian resolves from anywhere in the vault, and a display width:
 
 ```
 ![[viz-<slug>-<timestamp>.png|500]]
@@ -73,6 +73,5 @@ That's all. The `md-link` plugin can mirror the response into a linked `.md`, an
 
 - The maker never returns a picture it hasn't **looked at**, so "renders fine but says something false" is caught before it reaches the reader.
 - PNG embed means **what the maker verified is pixel-identical to what the reader sees**, so there is no re-render drift.
-- Unique filenames keep Obsidian's by-filename embed resolution unambiguous.
 
-> The makers render through the global viz plugin (Mermaid via `mmdc` from PATH; SVG via `rsvg-convert`, fallback ImageMagick). You don't render anything yourself — you only brief the maker and embed the filename it returns.
+> The makers render through the global viz plugin (Mermaid via `mmdc` from PATH; SVG via `rsvg-convert`, fallback ImageMagick). You don't render anything yourself. You only brief the maker and embed the filename it returns.

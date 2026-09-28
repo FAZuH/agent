@@ -24,6 +24,7 @@
 
 import {
   appendMessage,
+  fetchMessages,
   hasBlock,
   isEnabled,
   loadState,
@@ -39,18 +40,6 @@ const POLL_MS = 2_500
 const MAX_CATCHUP = 10
 /** Marker key of the live "agent is thinking" block (msg_* / qa-* never clash). */
 const THINKING = "thinking"
-
-async function fetchMessages(sessionID: string): Promise<any[]> {
-  const proc = Bun.spawn(["opencode2", "api", "get", `/api/session/${sessionID}/message`], {
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const out = await new Response(proc.stdout).text()
-  await proc.exited
-  const parsed = JSON.parse(out)
-  const items = Array.isArray(parsed) ? parsed : parsed?.data
-  return Array.isArray(items) ? items : [] // newest-first
-}
 
 /** Sessions the service currently reports as running, or null when the probe
  * failed — callers then leave existing indicators as they are rather than
@@ -256,7 +245,7 @@ export const mdLinkPlugin = {
     })
 
     } else {
-      console.error("[md-link] ctx.tool.hook unavailable — Q&A capture disabled")
+      console.error("[md-link] ctx.tool.hook unavailable, Q&A capture disabled")
     }
 
     return () => {

@@ -1,13 +1,18 @@
-use std::path::Path;
-
 use anyhow::Result;
 use anyhow::bail;
 use clap::Parser;
 
 use crate::add::AddArgs;
 use crate::add::install;
+use crate::model::Task;
 use crate::model::load_task;
+use crate::sys::PREFIX;
+use crate::sys::diff_files;
+use crate::sys::norm_name;
+use crate::sys::ok;
+use crate::sys::require_name;
 use crate::sys::unit_dir;
+use crate::sys::unit_paths;
 
 #[derive(Parser, Clone, Default, Debug)]
 pub struct EditArgs {
@@ -54,7 +59,7 @@ fn auto_description(agent: &str, workdir: &str) -> String {
 /// What `edit` hands to add as `--description`: the explicit override, or the
 /// current description with its model suffix (and the auto form) stripped so
 /// add rebuilds the parts it owns.
-pub fn description_for_add(explicit: Option<&str>, cur: &crate::model::Task) -> String {
+pub fn description_for_add(explicit: Option<&str>, cur: &Task) -> String {
     if let Some(d) = explicit {
         return d.to_owned();
     }
@@ -74,7 +79,7 @@ pub fn description_for_add(explicit: Option<&str>, cur: &crate::model::Task) -> 
     cur.description.clone()
 }
 
-pub fn merged_add_args(args: &EditArgs, cur: &crate::model::Task, was_enabled: bool) -> AddArgs {
+pub fn merged_add_args(args: &EditArgs, cur: &Task, was_enabled: bool) -> AddArgs {
     let mut a = AddArgs {
         name: cur.name.clone(),
         force: true,
@@ -163,12 +168,10 @@ pub fn edit(args: &EditArgs) -> Result<()> {
     if args.model.is_some() && args.no_model {
         bail!("edit: --model and --no-model conflict");
     }
-    let name = crate::sys::norm_name(&args.name);
-    crate::sys::require_name(&name)?;
+    let name = norm_name(&args.name);
+    require_name(&name)?;
     let dir = unit_dir();
-    if !crate::sys::units_exist(&dir, &name) {
-        bail!("edit: no units found for 'octask-{name}' (octask list)");
-    }
+    crate::basic::require_units(&dir, "edit", &name)?;
     let cur = load_task(&dir, &name)?;
 
     if !cur.is_agent
@@ -179,25 +182,19 @@ pub fn edit(args: &EditArgs) -> Result<()> {
         );
     }
 
-    let was_enabled = crate::sys::ok(
+    let was_enabled = ok(
         "systemctl",
-        &["--user", "is-enabled", &format!("octask-{name}.timer")],
+        &["--user", "is-enabled", &format!("{PREFIX}{name}.timer")],
     );
     let add_args = merged_add_args(args, &cur, was_enabled);
 
     if args.dry_run {
-        let root = Path::new("/tmp/opencode");
-        std::fs::create_dir_all(root)?;
-        let tmp = tempfile::Builder::new()
-            .prefix("octask-edit.")
-            .tempdir_in(root)?;
+        let tmp = tempfile::Builder::new().prefix("octask-edit.").tempdir()?;
         let tmp_path = tmp.path();
-        let mut quiet = install(&add_args, Some(tmp_path))?;
-        quiet.clear();
-        let (real_service, real_timer) = crate::sys::unit_paths(&dir, &name);
+        drop(install(&add_args, Some(tmp_path))?);
+        let (real_service, real_timer) = unit_paths(&dir, &name);
         for real in [real_service, real_timer] {
-            let gen_path = tmp_path.join(real.file_name().unwrap());
-            crate::sys::diff_files(&real, &gen_path);
+            diff_files(&real, &tmp_path.join(real.file_name().unwrap()));
         }
         println!("dry-run: no changes written");
         return Ok(());

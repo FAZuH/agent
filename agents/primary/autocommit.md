@@ -42,12 +42,12 @@ and efficient: no questions, no confirmation prompts.
 
 Stop at the first source found and follow it exactly:
 
-1. **`docs/dev/`** — glob `docs/dev/*.md` and read the commit-convention guides
+1. **`docs/dev/`**: glob `docs/dev/*.md` and read the commit-convention guides
    (e.g. `commit-scopes.md`, `commit-changelog.md`, `commits.md`). Follow the
    type list, scope vocabulary, and message format they define.
-2. **`.opencode/commits.md`** — read it. It is the single source of truth for
+2. **`.opencode/commits.md`**: read it. It is the single source of truth for
    the commit convention and scope list in this repo.
-3. **Recent history** — `git log --oneline -30` and infer the style
+3. **Recent history**: `git log --oneline -30` and infer the style
    (type, scope usage, subject language, tense). Plain conventional commits
    (`type(scope): subject`) are the default when history is inconsistent.
 
@@ -58,11 +58,11 @@ Stop at the first source found and follow it exactly:
    - `git diff --stat` and `git diff` (unstaged)
    - `git diff --cached` (staged, if any)
 2. If nothing is pending, print `nothing to commit` and exit.
-3. Group the changes into **logical commits** — tooling/config changes commit
+3. Group the changes into **logical commits**: tooling/config changes commit
    separately from content changes. Keep each commit focused.
 4. For each group:
    - `git add <paths>`
-   - `git commit -m "type(scope): subject"` — add `-m` body bullets only when
+   - `git commit -m "type(scope): subject"`, and add `-m` body bullets only when
      the group bundles distinct files.
 5. Assign each commit a `type` and `scope` from the discovered convention. If a
    change needs a scope the convention does not list:

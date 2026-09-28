@@ -125,7 +125,7 @@ mod tests {
         let fresh = drained.join("456.jsonl");
         std::fs::write(&fresh, "y")?;
 
-        // inbox is missing, so nothing drains — but the prune still ran
+        // inbox is missing, so nothing drains, but the prune still ran
         assert_eq!(drain(dir.path())?, "");
         assert!(!stale.exists());
         assert!(fresh.exists());

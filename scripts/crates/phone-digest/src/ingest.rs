@@ -57,17 +57,13 @@ pub struct Inbox {
 }
 
 impl Inbox {
-    pub fn new(state_dir: PathBuf, token: String) -> Self {
-        Self { state_dir, token }
-    }
-
     fn load(config: &ServeConfig) -> Result<Self> {
         let token = fs::read_to_string(&config.token_file)
             .with_context(|| format!("missing {}", config.token_file.display()))?;
-        Ok(Self::new(
-            config.state_dir.clone(),
-            token.trim().to_string(),
-        ))
+        Ok(Self {
+            state_dir: config.state_dir.clone(),
+            token: token.trim().to_string(),
+        })
     }
 
     pub fn handle(&self, mut request: Request) {
@@ -307,7 +303,7 @@ pub fn now_ts() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
-/// `{"ts","app","title","text"}` — key order and non-ASCII bytes as json.dumps
+/// `{"ts","app","title","text"}`: key order and non-ASCII bytes as json.dumps
 /// (ensure_ascii=False) writes them.
 pub fn json_line(app: &str, title: &str, text: &str) -> String {
     format!(

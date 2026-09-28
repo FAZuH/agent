@@ -1,6 +1,6 @@
 ---
 name: scheduled-agent
-description: Schedule unattended OpenCode agent runs on systemd user timers — run an agent headlessly on a schedule (auto-commit vaults, periodic reviews, digests). Use when the user asks to run an agent automatically, on a timer, unattended, periodically (e.g. "auto-commit every 12 hours", "run the reviewer nightly"), or to set up headless `opencode run` automation. Includes writing the restricted least-privilege agent definition (deny-all-by-default permissions) that such runs require. Uses the octask- unit prefix; pairs with the scheduled-task skill for listing/removal.
+description: Schedule an unattended OpenCode agent run on a systemd user timer, and write the restricted deny-all-by-default agent definition it needs. Use when the user asks to run an agent automatically, on a timer, headlessly, or to set up `opencode run` automation. Timer mechanics (the octask CLI, OnCalendar, listing, removal) live in the @scheduled-task skill.
 ---
 
 # scheduled-agent
@@ -11,28 +11,29 @@ human, and (2) a **timer** that invokes `opencode run --agent <id>`. Live
 example on this machine: `notes-autocommit.timer` running the `autocommit`
 agent (see "Reference implementation").
 
-Everything scheduled uses the `octask-` prefix (same namespace as the
-@scheduled-task skill) — `octask list`, `octask remove`, `octask
-enable`/`disable`, and `octask logs` manage these runs too.
+This skill owns the agent definition and the verification of an unattended
+run. The @scheduled-task skill owns the timer mechanics: the `octask` CLI,
+OnCalendar expressions, listing, editing, and removal. It also owns the
+`octask-` unit prefix both skills share.
 
-## Step 1 — write the restricted agent definition
+## Step 1: write the restricted agent definition
 
-Unattended runs can never answer permission prompts. The agent MUST be
-deny-all-by-default with a narrow allowlist, or it is not safe to schedule
-(see [permissions](https://opencode.ai/v2/docs/agents/#permissions) — V2
-ordered-array `permissions`, broad `*` deny first, narrow allows after).
+Unattended runs can never answer permission prompts, so the agent MUST be
+deny-all-by-default with a narrow allowlist (V2 ordered-array `permissions`:
+broad `*` deny first, narrow allows after, see
+[permissions](https://opencode.ai/v2/docs/agents/#permissions)).
 
 Create a Markdown agent file:
 
 - Project/vault-scoped agent → `<project>/.opencode/agents/<name>.md`
 - Available in every project → `~/.config/opencode/agents/<name>.md`
 
-Template (V2 `permissions` ordered-array format, last matching rule wins —
+Template (V2 `permissions` ordered-array format, last matching rule wins:
 broad deny FIRST, exceptions AFTER):
 
 ```md
 ---
-description: <one line — what it does unattended>
+description: <one line: what it does unattended>
 model: <cheap model, e.g. opencode/muse-spark-1.2-contributor-free>
 mode: primary
 steps: 30
@@ -69,27 +70,27 @@ the allowlist it must stay within, and when to exit without acting.>
 
 Rules and gotchas:
 
-- **`mode: primary`** is required — `opencode run --agent <id>` selects the
-  agent as the session's main agent; `subagent`-mode agents cannot be
+- **`mode: primary`** is required: `opencode run --agent <id>` selects the
+  agent as the session's main agent, and `subagent`-mode agents cannot be
   selected.
 - **Last matching rule wins.** Broad `"*"` deny goes first, narrow allows
   after, and specific denies (e.g. `git push*`) last of all.
-- **`ask` is unusable unattended** — no human answers it. Treat every rule you
+- **`ask` is unusable unattended**, no human answers it. Treat every rule you
   would write as `ask` as `deny`.
 - Shell resources match **raw command text** (`~`/`$HOME` are NOT expanded for
   `shell`; they ARE expanded for `read`/`edit` resources). Match the literal
   command, e.g. `git *`.
 - Deny destructive commands explicitly after the broad allow: `git push*`,
   `git reset*`, `git checkout*`, `git clean*`.
-- Keep the `model` cheap and `steps` low — unattended runs must fail cheap.
+- Keep the `model` cheap and `steps` low, unattended runs must fail cheap.
 - **Gates run in auto only if you configure it.** A headless run cannot
-  answer `question` forms — they get auto-dismissed, so any gate that fires
+  answer `question` forms, so they get auto-dismissed and any gate that fires
   makes the gated action not happen. The run mode comes only from the user:
   bake "run in auto mode" into the agent's system prompt when you want
-  `normal`/`subagent` gates to skip (and note `always` gates still fire and
-  will fail the action — configure the permissions to make that impossible
-  instead). If you leave it out, that is a configuration problem on your
-  side, not something the run detects. See the @gate skill.
+  `normal`/`subagent` gates to skip (`always` gates still fire and will fail
+  the action, so configure the permissions to make that impossible instead).
+  If you leave it out, that is a configuration problem on your side, not
+  something the run detects. See the @gate skill.
 - **Binary selection matters**: the script prefers `~/.opencode/bin/opencode2`
   (the v2 beta that owns the service DB). Older builds (e.g. `/usr/bin/opencode`
   1.18.x) fail against the migrated DB with `no such column: project_id`. If
@@ -97,11 +98,10 @@ Rules and gotchas:
 - The body (system prompt) must state the narrow task and explicitly forbid
   everything else ("You may edit only X. Never push. Exit if nothing to do.").
 
-## Step 2 — schedule the run
+## Step 2: schedule the run
 
-Use the unified `octask` CLI (Rust binary). If missing, clone
-`https://github.com/FAZuH/agent` and run `cargo install --path scripts`; the
-local source is `~/Projects/agent/scripts`:
+Timer mechanics live in @scheduled-task (the `octask` CLI, OnCalendar
+expressions, discovery, removal). Load it for those. The agent-run form:
 
 ```bash
 octask add <name> \
@@ -113,31 +113,20 @@ octask add <name> \
   --persistent --dirty-only --delay 30min
 ```
 
-Options: `--oncalendar` (default every 12 h), `--persistent` (catch up after
-the machine was off — prefer it), `--dirty-only` (skip the run when the git
-worktree is clean), `--delay <span>` (→ `RandomizedDelaySec=`, staggers runs
-that share a schedule), `--model <provider/model>` (→ `opencode run --model
-<model>`; without it the run falls back to the agent's `model:` frontmatter
-and then the server's catalog default — currently `opencode-go/hy4-preview` —
-so pass `--model` explicitly for cheap unattended runs), `--timeout <sec>`
-(default 600), `--no-enable` (create without enabling), `--force` (overwrite).
+`--dirty-only` skips the run when the worktree is clean, which is what an
+autocommit-style task wants. Pass `--model` explicitly: without it the run
+falls back to the agent's `model:` frontmatter and then the server's catalog
+default, which is not a cheap unattended model.
 
-The script pre-flights: workdir exists and is a git repo, `opencode` binary
-resolution (`~/.opencode/bin/opencode2` preferred, PATH fallback), and the
-agent definition exists (`~/.config/opencode/agents/<id>.md` or
-`<workdir>/.opencode/agents/<id>.md`) — it warns loudly if not. It also runs
-`systemd-analyze verify` on the generated units. The service runs with a
-trimmed `PATH=/usr/local/bin:/usr/bin` and `WorkingDirectory`.
+## Step 3: verify BEFORE trusting it
 
-## Step 3 — verify BEFORE trusting it
-
-1. One manual run: `systemctl --user start octask-<name>.service` — watch it:
-   `octask logs <name> -f` (or `journalctl --user -u octask-<name>.service -n 50 -f`)
+1. One manual run: `systemctl --user start octask-<name>.service`, then watch
+   it with `octask logs <name> -f`.
 2. Check the agent actually did the right thing (and nothing else). A timer
    reaching `Finished`, exit 0, or a clean tree can mask an instant failure
    (e.g. `Invalid API key` when a contributor-free model needs interactive
-   auth) — read the run's output, not just the exit status.
-3. `octask list` → confirm the timer is enabled and note the NEXT run.
+   auth), so read the run's output, not just the exit status.
+3. `octask list` to confirm the timer is enabled and note the NEXT run.
 4. Only then leave it enabled.
 
 ## Reference implementation
@@ -152,10 +141,8 @@ Use it as the pattern for new autocommit-style schedules.
 
 - Agent definition is deny-all-by-default with a narrow allowlist, documented
   `mode: primary`, cheap model, low `steps`, and destructive commands denied.
-- The timer used the `octask-` prefix and a validated OnCalendar expression.
 - One manual run completed successfully and its side effects were inspected
   before the schedule was left enabled.
-- `Persistent=true` decision was made deliberately (catch-up or not).
 
 ## Report
 

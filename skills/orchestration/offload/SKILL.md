@@ -42,7 +42,7 @@ Remote paths are never assumed from the local layout. First run confirms
 Memory template:
 
 ```markdown
-# offload memory — <project>
+# offload memory: <project>
 
 - remote_host: <ssh host>
 - local_root: <abs path>
@@ -94,12 +94,12 @@ Memory template:
    - Store `check_override` ONLY when remote genuinely differs (extra
      feature flags, memory limits). Empty is the normal case.
    - The check command must match CI exactly: in a cargo workspace use
-     `cargo test --workspace` — bare `cargo test` skips crate members and
+     `cargo test --workspace`: bare `cargo test` skips crate members and
      false-greens a red run (both test and clippy).
    Done when a fresh agent could derive the exact remote command from
    `check_source` + `check_override` alone.
 5. **Write memory + gitignore**: write `.opencode/offload.md`, then ensure
-   it is ignored — if `.gitignore` does not already cover `.opencode/`,
+   it is ignored. If `.gitignore` does not already cover `.opencode/`,
    append `.opencode/offload.md`. Done when `git check-ignore
    .opencode/offload.md` succeeds and the file exists.
 
@@ -121,10 +121,10 @@ single-shot commands. On a flaky link:
 - Set ssh keepalives in `~/.ssh/config` for that host: `ServerAliveInterval
   15` + `ServerAliveCountMax 4` (kill dead connections early) and
   `ConnectTimeout 10` (fail fast on probes).
-- Probe before big work: `ssh -o BatchMode=yes <host> 'true'` — a 10s timeout
+- Probe before big work: `ssh -o BatchMode=yes <host> 'true'`. A 10s timeout
   on the probe means the link is down right now, not that the host is.
 - Seed large trees with `git bundle` (single resumable file) or
-  `rsync --partial` (resumes an interrupted transfer) — never one long
+  `rsync --partial` (resumes an interrupted transfer). Never one long
   transfer that restarts from zero on drop.
 - Keep long work detached in tmux on the remote (step 3), so an ssh drop
   kills a connection, not the check.
@@ -155,11 +155,11 @@ ssh <remote-host> 'chmod +x <remote-script>; tmux kill-session -t <name> 2>/dev/
   do NOT appear in any console/TUI elsewhere. Use it for unattended batches
   monitored via log/tmux.
 - WITHOUT `--standalone` the run goes through the remote user's background
-  service and appears in that user's console/TUI — only when that service
+  service and appears in that user's console/TUI. Only when that service
   is healthy.
 - Sessions are PER-USER: a batch run as one remote user is never visible
   in another user's console.
-- No `gh` CLI on the remote — embed ticket text in the brief.
+- No `gh` CLI on the remote: embed ticket text in the brief.
 - Monitor: `tmux attach -t <name>` (Ctrl-b d to detach) or `tail -f` the
   log. Done when the session is gone and the log tail holds the final
   report.
@@ -181,30 +181,30 @@ rsync -a --no-o --no-g --exclude='.git' <other-excludes-from-memory> \
 
 **GATE in-place-pullback (always → stage in a detached worktree instead):**
 rsync straight onto the live tree is allowed ONLY after the user explicitly
-approves it for that specific sync — e.g. after verifying zero local
+approves it for that specific sync, for example after verifying zero local
 divergence since the push. State what will be overwritten before asking.
 
 Single-writer discipline: while a remote batch owns the branch, edit
-nothing locally. Commits are ALWAYS made locally after review — never on
+nothing locally. Commits are ALWAYS made locally after review, never on
 the remote. Done when the reviewed remote diff is applied locally and the
 staging worktree is removed.
 
 ## Rules
 
-- Only sync/check/batch through `.opencode/offload.md` memory — never invent
+- Only sync/check/batch through `.opencode/offload.md` memory: never invent
   host paths per run.
 - Exclude `.git` with NO trailing slash. Worktree checkouts carry `.git` as
   a FILE (gitdir pointer); `--exclude='.git/'` matches directories only, so
   the pointer file overwrites the remote repo's real `.git` directory and
   kills the clone. Repair if it happens: fresh clone, swap in its `.git`,
   point the branch at the right ref (`git update-ref`), `git read-tree HEAD`
-  (NEVER `--hard` — it destroys WIP), then status must show the expected
+  (NEVER `--hard`: it destroys WIP), then status must show the expected
   WIP entries.
 - Cold builds are slow (empty remote target dir); later runs are incremental.
-- Credentials and config the remote run needs must already exist there — if
+- Credentials and config the remote run needs must already exist there. If
   new absolute paths appear in local config, mirror those targets too.
 - Headless `opencode run` failures with `UnexpectedStatus` mean the
-  background service path was used without a healthy service — prefer
+  background service path was used without a healthy service: prefer
   `--standalone`.
 - Keep toolchain parity: when the local toolchain bumps, update the remote
   and refresh `toolchain_notes` + `last_verified`.

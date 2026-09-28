@@ -15,18 +15,13 @@ readiness work with conflict resolution; it does not silently change behavior.
 
 ## Workflow
 
-Run these steps in order.
-
 ### 1. Run the session finish workflow
 
-Read and follow the @finish skill first. Complete its documentation, session-archive, summary, and commit
-proposal steps. The finish skill does not grant commit or push permission; keep
-its proposed commit groups available for the orchestrator.
+Read and follow the @finish skill first. Keep its proposed commit groups available for the orchestrator.
 
 ### 2. Load the PR workflow
 
-Read and follow the @pr-creator skill before creating, updating, or pushing the PR. Treat its branch-safety,
-template, checks, and push rules as authoritative.
+Read and follow the @pr-creator skill before creating, updating, or pushing the PR. Treat its branch-safety, template, checks, and push rules as authoritative.
 
 ### 3. Identify the worktree and PR
 
@@ -77,8 +72,8 @@ After each resolution:
 conflict signals, flag every auto-resolved choice in the report):** resolving
 a conflict where either side changes behavior, public API, persisted data,
 compatibility, security, performance characteristics, or user-visible
-semantics — or where the correct side cannot be established from the existing
-code, tests, issue, or PR description — is the user's call, not yours.
+semantics, or where the correct side cannot be established from the existing
+code, tests, issue, or PR description, is the user's call, not yours.
 (Vocabulary: the @gate skill.)
 
 Explain the conflicting choices, the likely behavior or compatibility impact,
@@ -88,13 +83,8 @@ user answers.
 ### 7. Finish the worktree
 
 When the PR is conflict-free and checks pass, report the PR URL, branch, checks,
-and whether the worktree is safe to remove. Follow the @worktree skill's
-cleanup rules if the user explicitly asks to remove the worktree:
-
-- Verify the branch is merged, or get explicit confirmation before discarding
-  an unmerged branch.
-- Run `git worktree remove` and branch deletion from the main tree.
-- Verify `git worktree list` and preserve main-tree untracked state.
+and whether the worktree is safe to remove. If the user wants it removed, follow
+the @worktree skill's "Finishing / cleanup" section.
 
 ## Dependency graph
 
@@ -108,9 +98,5 @@ cleanup rules if the user explicitly asks to remove the worktree:
 
 ## Safety rules
 
-- Never resolve a semantic conflict by guessing.
-- Never force-remove a worktree with uncommitted or unmerged work without
-  explicit user confirmation.
 - Never push the default branch; follow @pr-creator branch-safety rules.
-- Never claim a PR is ready until mergeability and relevant checks have been
-  verified after the final push.
+- Never claim a PR is ready until mergeability and relevant checks have been verified after the final push.

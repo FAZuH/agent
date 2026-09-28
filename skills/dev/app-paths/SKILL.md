@@ -1,6 +1,13 @@
 ---
 name: app-paths
-description: Resolve per-application directory paths (config, data, cache, state) through one precedence ladder — CLI flag > env var > config file > platform default. Use when writing or reviewing code that locates a config file, stores app data, picks a cache directory, or needs config/env/CLI overrides for a path. Covers the dirs and directories crates, XDG semantics, and injecting paths in tests instead of writing to the real home directory.
+description: >-
+  Resolve per-application directory paths (config, data, cache, state)
+  through one precedence ladder: CLI flag > env var > config file > platform
+  default. Use when writing or reviewing code that locates a config file,
+  stores app data, picks a cache directory, or needs config/env/CLI
+  overrides for a path. Covers the dirs and directories crates, XDG
+  semantics, and injecting paths in tests instead of writing to the real
+  home directory.
 license: MIT
 ---
 
@@ -13,10 +20,10 @@ directory once at startup, through one ladder, and pass the result down.
 
 Highest wins:
 
-1. **CLI flag** — `--data-dir /mnt/big`
-2. **Env var** — `MYAPP_DATA_DIR=/mnt/big`
-3. **Config file** — `data_dir = "/mnt/big"` in the config file
-4. **Platform default** — from the OS convention
+1. **CLI flag**: `--data-dir /mnt/big`
+2. **Env var**: `MYAPP_DATA_DIR=/mnt/big`
+3. **Config file**: `data_dir = "/mnt/big"` in the config file
+4. **Platform default**: from the OS convention
 
 Two different namespaces meet here, and conflating them is the usual bug:
 
@@ -30,9 +37,9 @@ Two different namespaces meet here, and conflating them is the usual bug:
 
 | Kind | Platform default | Holds | Disposable |
 |---|---|---|---|
-| config | `config_dir` | settings, credentials, tokens | no — often read-only in practice |
+| config | `config_dir` | settings, credentials, tokens | no, often read-only in practice |
 | data | `data_dir` | durable user data worth backing up | no |
-| cache | `cache_dir` | anything reconstructable | yes — the user may delete it |
+| cache | `cache_dir` | anything reconstructable | yes, the user may delete it |
 | state | `state_dir` | logs, history, last-run markers | no, but not worth backing up |
 
 Cache is a promise: a user deleting the cache directory must never lose data.
@@ -84,15 +91,7 @@ impl Paths {
         ])
         .ok_or(PathError::NoDataDir)?;
 
-        let cache = first([
-            cli.cache_dir.clone(),
-            env.path("MYAPP_CACHE_DIR"),
-            file.cache_dir.clone(),
-            base.as_ref().and_then(|b| b.cache_dir().map(PathBuf::from)),
-        ])
-        .ok_or(PathError::NoCacheDir)?;
-
-        // ... same shape for state.
+        // cache and state repeat the same four-slot shape.
     }
 }
 ```
@@ -147,21 +146,21 @@ use heck::ToShoutySnakeCase;
 
 The two crates for reading them:
 
-- `figment` — layered config with real precedence and provenance, so an error
+- `figment`: layered config with real precedence and provenance, so an error
   can name the source that supplied a bad value. `Env::prefixed("MYAPP_")`
   plus `Toml::file(...)`; `merge` replaces, `join` only fills gaps. Its `Jail`
   sandboxes env and filesystem for tests.
-- `envy` — the small option. `envy::prefixed("MYAPP_").from_env::<Config>()`.
+- `envy`: the small option. `envy::prefixed("MYAPP_").from_env::<Config>()`.
   Deserialize-only, so it cannot report where a value came from.
 
 ## Reference
 
-- `dirs` — <https://crates.io/crates/dirs>. The low-level crate: free
+- `dirs`: <https://crates.io/crates/dirs>. The low-level crate: free
   functions like `config_dir`, `data_dir`, `cache_dir`, `state_dir`, each
   returning the bare base with no per-app subdirectory. Reach for it when you
   want a base directory and are content to append the application name
   yourself, or when you want a directory kind the `directories` crate does not
   expose.
-- `directories` — <https://crates.io/crates/directories>. Same author, adds
+- `directories`: <https://crates.io/crates/directories>. Same author, adds
   `ProjectDirs`, which appends the per-app subdirectory using each platform's
   own convention. Prefer this for anything user-facing.
