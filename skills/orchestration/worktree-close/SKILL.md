@@ -1,11 +1,12 @@
 ---
 name: worktree-close
-description: Finish a worktree session and clean up the git worktree. Runs the end-of-session finish workflow (update docs, plan and make commits, summarize, suggest next steps), then removes the worktree and its branch, keeping untracked items (.scratch/, .papercuts.jsonl) on the main project dir. Use whenever the user wants to finish/close a worktree, wrap up a worktree session, or says "close the worktree", "finish and clean up the worktree", "merge and remove the worktree". Works with the worktree-new, worktree-close, and worktree-finish skills. Also use when the user references @worktree-new, @worktree-close, or @worktree-finish.
+description: Finish a worktree session and clean up the git worktree. Runs the end-of-session finish workflow, then removes the worktree and its branch, keeping untracked items (.scratch/, .papercuts.jsonl) on the main project dir. Use when the user says "close the worktree", "finish and clean up the worktree", or "merge and remove the worktree". Also use when the user references @worktree-new, @worktree-close, or @worktree-finish.
 ---
 
 # Worktree close
 
-Finish a worktree session end-to-end: run the finish workflow (docs, commits, summary, next steps), then remove the worktree and its branch. Keeps untracked items (`.scratch/`, `.papercuts.jsonl`) on the main project dir.
+Run the end-of-session finish workflow, then remove the worktree and its branch.
+Keeps untracked items (`.scratch/`, `.papercuts.jsonl`) on the main project dir.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -18,43 +19,27 @@ The user wants to wrap up and clean up a worktree session. Triggers: "close the 
 
 ## Workflow
 
-Run the finish skill's steps in order, then the worktree cleanup.
+### 1. Run the session finish workflow
 
-### 1. Update relevant docs
+Load the @finish skill and follow it exactly. It owns the whole wrap-up:
+discovering and updating the relevant docs, the commit-proposal gate, archiving
+a completed `.scratch/` workspace, the summary, and the next steps. Do not
+restate or duplicate its steps here.
 
-Follow the @finish skill's step 1 — discover and update the relevant docs, or say nothing needs a change and skip.
+### 2. Clean up the worktree
 
-### 2. Commit changes
-
-Follow the @finish skill's step 2: inspect git read-only, identify the files changed this session, split them into one commit per logical group, and propose one `type(scope): description` message per group. Commit permission is **GATE commit-approval (normal → commit each group with the inferred conventional message)** — see the @finish skill / @gate skill. The @finish wrapper grants the approval when its argument begins with `auto` (auto mode for this invocation); otherwise propose and wait for confirmation. Treat any non-`auto` argument as extra instructions, committing interactively.
-
-### 3. Summarize the session
-
-Follow the @finish skill's step 3 exactly.
-
-### 4. Suggest next steps
-
-Follow the @finish skill's step 4 exactly.
-
-### 5. Clean up the worktree
-
-Follow the @worktree skill's "Finishing / cleanup" steps:
-
-1. **Verify the branch is merged** (`git branch --merged <main-branch>`) if the work is meant to be kept. If it has uncommitted or unmerged work, confirm with the user before discarding anything.
-2. **Remove the worktree** from the **main** tree (`git worktree remove <path>`), then delete the branch (`git branch -D <branch>`) once it's gone. Use `--force` only after confirming nothing there is worth keeping.
-3. **Verify**: `git worktree list` shows the worktree gone, and untracked main-tree items (`.scratch/`, `.papercuts.jsonl`) still exist in the main project dir.
+Follow the @worktree skill's "Finishing / cleanup" steps: verify the branch is
+merged, remove the worktree from the **main** tree, delete the branch, then
+verify with `git worktree list` that the worktree is gone and that the
+untracked main-tree items survived.
 
 ## Dependency graph
 
 - step1
 - step2 -> step1
-- step3 -> step2
-- step4 -> step3
-- step5 -> step2
 
 ## Safety rules
 
 - Never remove a worktree that has uncommitted work or an unmerged branch unless the user explicitly confirms it's safe to discard.
 - Never delete the main tree or its untracked files.
 - Always run `git worktree remove`/`git branch -D` from the **main** tree, not from inside the worktree being removed.
-- Respect GATE commit-approval: only commit on your own in auto mode (see @finish skill); otherwise propose and wait.

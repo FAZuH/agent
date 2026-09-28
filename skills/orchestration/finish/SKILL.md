@@ -1,6 +1,6 @@
 ---
 name: finish
-description: "End a working session. Update the relevant docs, archive a completed `.scratch/` session workspace, summarize what was accomplished, suggest next steps, then load @commit (§2) and @self-improve (§6). Use when wrapping up a session or when the user asks to finish or commit the session's work. This skill never runs `git add`/`git commit` itself."
+description: "End a working session: update the relevant docs, load @commit, archive a completed `.scratch/` workspace, summarize what was accomplished, suggest next steps, then load @self-improve. Use when wrapping up a session or when the user asks to finish or commit the session's work. This skill never runs `git add`/`git commit` itself."
 ---
 
 # Finish a session
@@ -21,7 +21,7 @@ primary agent, which asks the user for approval before committing.
 
 ## 1. Update relevant docs
 
-Discover the docs before you write or change anything. Scour the `docs/` directory and all markdown files in it (e.g. ADRs under `docs/adr/`), plus any session/plan docs the repo tracks — commonly under `docs/plan/`, `docs/specs/`, or `.scratch/` (spec, checkpoint, archive). Also look for markdown docs and agent docs. The common names are `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md`, `CONTEXT.md`, and `CLAUDE.md`. Read them first. Build your work on the existing docs. Do not duplicate or contradict them.
+Discover the docs before you write or change anything. Scour the `docs/` directory and all markdown files in it (e.g. ADRs under `docs/adr/`), plus any session/plan docs the repo tracks, commonly under `docs/plan/`, `docs/specs/`, or `.scratch/` (spec, checkpoint, archive). Also look for markdown docs and agent docs. The common names are `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md`, `CONTEXT.md`, and `CLAUDE.md`. Read them first. Build your work on the existing docs. Do not duplicate or contradict them.
 
 Review the conversation. Identify the docs that the changes require. Update the relevant docs. Change the agent docs (`AGENTS.md`, `CONTEXT.md`, `CLAUDE.md`) when the session changes a project convention, a command, a workflow, tooling, or the architecture. If nothing needs a change, say so and skip.
 
@@ -33,16 +33,14 @@ group-then-propose procedure. Return its proposed group messages to the
 primary agent unchanged. The primary agent asks the user for approval before
 committing. Do not restate or duplicate its steps here.
 
-## 3 Archive a completed `.scratch/` workspace
+## 3. Archive a completed `.scratch/` workspace
 
 If the repo uses a `.scratch/` session workspace (see the @scratch skill),
 load the @scratch-finish skill and follow it. It owns the completion
-checklist and the archive steps — append an Outcome section to the spec, move
-it to `.scratch/complete/`, mark tickets resolved, and delete the stale
-checkpoint. Do not restate or duplicate those steps here.
+checklist and the archive steps.
 
-If any completion item is still open, or the work is not merged/confirmed
-complete, do **not** archive. Leave the workspace in place and note in the
+If @scratch-finish finds an open completion item, or the work is not
+merged/confirmed complete, leave the workspace in place and note in the
 summary that it still has open items.
 
 ## 4. Summarize the session
