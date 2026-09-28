@@ -248,12 +248,6 @@ jobs:
           git fetch origin release
           git rebase origin/release
           git push --atomic origin release --tags
-          git fetch origin release
-          git rebase origin/release
-          if [ -n "$TAG" ]; then
-            git tag -f "$TAG"
-          fi
-          git push --atomic origin release --tags
 
       - name: Sync version bump to main
         run: |
