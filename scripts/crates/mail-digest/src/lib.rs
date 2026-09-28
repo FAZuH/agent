@@ -1,15 +1,14 @@
 //! Build the mail digest from agent-supplied data and post it to Discord.
 //!
-//! Port of `mail-digest-post`. The agent only supplies DATA; this module owns
-//! the entire output: grouped by receiver account, tiers ordered urgent →
-//! notable → routine inside each account, field truncation, mass-mention
-//! neutralization. Unknown tiers become routine. The digest carries the tier
-//! as an emoji on each bullet (🔴 urgent / 🟡 notable / 🟢 routine), a
-//! `<t:<epoch>:R>` generation line under the header, and a trailing
-//! `## ⚠️ errors` section; no blank lines. A digest that fits the inline
-//! budget posts as this text; an over-budget digest posts a compact summary
-//! line alongside a markdown file attachment carrying the original
-//! per-account full text.
+//! The agent only supplies DATA; this module owns the entire output: grouped
+//! by receiver account, tiers ordered urgent → notable → routine inside each
+//! account, field truncation, mass-mention neutralization. Unknown tiers
+//! become routine. The digest carries the tier as an emoji on each bullet
+//! (🔴 urgent / 🟡 notable / 🟢 routine), a `<t:<epoch>:R>` generation line
+//! under the header, and a trailing `## ⚠️ errors` section; no blank lines. A
+//! digest that fits the inline budget posts as this text; an over-budget
+//! digest posts a compact summary line alongside a markdown file attachment
+//! carrying the original per-account full text.
 
 use std::collections::BTreeMap;
 use std::env;
@@ -94,7 +93,7 @@ fn clean(text: &str, cap: usize) -> String {
         .replace("@here", "at-here")
 }
 
-/// The script's `str(...)` coercion of whatever JSON value a field holds.
+/// The `str(...)` coercion of whatever JSON value a field holds.
 fn field_str(value: &Value) -> String {
     match value {
         Value::Null => "None".to_string(),
@@ -199,9 +198,8 @@ fn digest_block(mail: &[Mail]) -> Vec<String> {
     lines
 }
 
-/// The detailed body of the original `mail-digest-post`: per-account blocks
-/// with tier sub-headers, `• sender — subject (gist)` bullets. Used only as
-/// the attached markdown over the inline budget.
+/// Per-account blocks with tier sub-headers and `• sender — subject (gist)`
+/// bullets. Used only as the attached markdown over the inline budget.
 fn attachment_block(mail: &[Mail]) -> Vec<String> {
     let mut lines = Vec::new();
     let mut last_tier: Option<usize> = None;

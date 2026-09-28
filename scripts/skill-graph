@@ -198,7 +198,7 @@ function fitMain() {
 }
 // `eles` is the documented core-layout option for laying out a subset: hidden
 // elements (orphans, filtered edge kinds, an ego crop's background) are excluded.
-// fcose is ForceAtlas2 — the model Obsidian's graph view runs — and unlike cose
+// fcose is ForceAtlas2, the model Obsidian's graph view runs, and unlike cose
 // it separates hubs instead of collapsing them into one clump.
 const LAYOUTS = {
   fcose: { name: "fcose", quality: "proof", randomize: true, animate: false,
@@ -365,17 +365,17 @@ runLayout(document.getElementById("layout").value);
 
 def load_graph(path: Path) -> dict:
     if not path.is_file():
-        sys.exit(f"{path} not found — run skill-doctor's scripts/build_graph.py first")
+        sys.exit(f"{path} not found, run skill-doctor's scripts/build_graph.py first")
     try:
         graph = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as exc:
-        sys.exit(f"{path} is not valid JSON ({exc}) — rebuild it with build_graph.py")
+        sys.exit(f"{path} is not valid JSON ({exc}), rebuild it with build_graph.py")
     schema = graph.get("schema")
     if schema != SUPPORTED_SCHEMA:
-        sys.exit(f"{path} declares schema {schema!r}, this viewer speaks {SUPPORTED_SCHEMA} — "
-                 "update skill-doctor (sync.sh push -g) and rebuild the graph")
+        sys.exit(f"{path} declares schema {schema!r}, this viewer speaks {SUPPORTED_SCHEMA}. "
+                 "Update skill-doctor (sync.sh push -g) and rebuild the graph")
     if not graph.get("nodes"):
-        sys.exit(f"{path} has no nodes — rebuild it with build_graph.py")
+        sys.exit(f"{path} has no nodes, rebuild it with build_graph.py")
     graph.setdefault("findings", [])
     return graph
 

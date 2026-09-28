@@ -172,16 +172,6 @@ pub fn stdout_soft(program: &str, args: &[&str]) -> String {
         .unwrap_or_default()
 }
 
-/// stdout when the command succeeds, `None` otherwise.
-pub fn stdout_opt(program: &str, args: &[&str]) -> Option<String> {
-    let out = spawn(program, args).ok()?;
-    if out.status.success() {
-        Some(String::from_utf8_lossy(&out.stdout).trim_end().to_owned())
-    } else {
-        None
-    }
-}
-
 /// Combined stdout+stderr of a failing command, for error reporting.
 pub fn failure_report(program: &str, args: &[&str]) -> Option<String> {
     let out = spawn(program, args).ok()?;
@@ -238,10 +228,6 @@ pub fn diff_files(old_path: &Path, new_path: &Path) {
             _ => break,
         }
     }
-}
-
-pub fn read_string(p: &Path) -> std::io::Result<String> {
-    std::fs::read_to_string(p)
 }
 
 pub fn stdin_slurp() -> Result<String> {
