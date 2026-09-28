@@ -1,3 +1,5 @@
+## [0.11.6](https://github.com/FAZuH/agent/compare/v0.11.5...v0.11.6) (2026-09-28)
+
 ## [0.11.5](https://github.com/FAZuH/agent/compare/v0.11.4...v0.11.5) (2026-09-27)
 
 
@@ -57,12 +59,4 @@
 * **ocv2:** require explicit opencode subcommands ([e48d81f](https://github.com/FAZuH/agent/commit/e48d81f229ff7e90261d4c1df947302ceb4163ee))
 * **skill:** guard gh --body-file against empty replacement files ([303262b](https://github.com/FAZuH/agent/commit/303262b273d87536d563392a49248d15b7c9412b))
 * **skill:** harden delegation and worktree guidance ([8648385](https://github.com/FAZuH/agent/commit/8648385c9e96316e6400cc991691bbb4972e7c6d))
-
-## [0.11.1](https://github.com/FAZuH/agent/compare/v0.11.0...v0.11.1) (2026-09-25)
-
-
-### Features
-
-* add ImageScan notification workflow ([82a8db6](https://github.com/FAZuH/agent/commit/82a8db67c780c621edcdffdfe7fef13c89b52fa8))
-* **command:** add image scanning commands ([59e1d06](https://github.com/FAZuH/agent/commit/59e1d06c89ec54d97c3af43f7cb224799fe3400c))
 
