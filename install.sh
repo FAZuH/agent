@@ -37,8 +37,8 @@ info() { printf '  %s\n' "$1"; }
 step() { printf '\n==> %s\n' "$1"; }
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "missing $1"
+require_command() { # <command> [hint]
+  command -v "$1" >/dev/null 2>&1 || die "missing $1${2:+ — install it with: $2}"
 }
 
 check_opencode() {
@@ -140,10 +140,36 @@ step "Checking prerequisites"
 for command in git cargo npx rsync python3; do
   require_command "$command"
 done
+# Shipped skills shell out to these with no fallback: jq backs the ocv2 and
+# forkflow scripts, gh backs every PR, issue, and release skill.
+require_command jq "pacman -S jq"
+require_command gh "pacman -S github-cli"
 check_opencode
 ((BONUS == 0)) || require_command ffmpeg
 npx --yes "skills@$SKILLS_CLI_VERSION" --help >/dev/null 2>&1 || die "npx skills is unavailable"
 info "required commands found"
+
+# Tools a skill calls only on some paths. Every one of them has a documented
+# fallback or a gate, so a missing tool degrades that skill instead of the
+# install: report it and keep going.
+while IFS=: read -r tool hint; do
+  [[ -n "$tool" ]] || continue
+  command -v "$tool" >/dev/null 2>&1 || info "note: $tool missing — $hint"
+done <<'PACKAGES'
+opencode2:ships with the opencode installer, not with this script
+mmdc:pacman -S mermaid-cli        # visualize, pdf-write
+rsvg-convert:pacman -S librsvg    # visualize
+pandoc:pacman -S pandoc-cli       # pdf-write
+pdflatex:pacman -S texlive-latex-recommended
+xelatex:pacman -S texlive-xetex
+pdftotext:pacman -S poppler       # pdf-read, pdf-write
+pdftoppm:pacman -S poppler
+pdfinfo:pacman -S poppler
+rga:pacman -S ripgrep-all         # pdf-read
+uv:pacman -S uv                   # pdf-read
+clamscan:pacman -S clamav         # malware-check, omarchy-plugin-install
+bun:pacman -S bun-bin             # ocv2-pluginhealth
+PACKAGES
 
 step "Installing required skills"
 install_skill Agents365-ai/365-skills --skill mermaid-skill
