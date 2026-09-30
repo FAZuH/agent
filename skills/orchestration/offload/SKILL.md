@@ -51,7 +51,7 @@ Memory template:
 - check_override: <only when remote genuinely differs; else empty>
 - excludes:
   - .git
-  - target/
+  - target
   - node_modules/
   - .scratch/
   - .papercuts.jsonl
@@ -80,8 +80,8 @@ Memory template:
 2. **Init remote tree**: create `remote_root`, clone or seed it, then set
    `safe.directory` and a git identity there when a fresh clone needs one.
    Done when `git -C <remote_root> status` works over ssh.
-3. **Decide excludes**: start from the universal base (`.git` with NO
-   trailing slash, `target/`, `node_modules/`, `.scratch/`,
+3. **Decide excludes**: start from the universal base (`.git` and `target` with
+   NO trailing slash, `node_modules/`, `.scratch/`,
    `.papercuts.jsonl`), then add per-repo entries from `git status
    --ignored`, `.gitignore`, `du -sh */` for large dirs, and `AGENTS.md`
    hints. Write the final list to memory. Done when every ignored or heavy
@@ -200,6 +200,11 @@ staging worktree is removed.
   point the branch at the right ref (`git update-ref`), `git read-tree HEAD`
   (NEVER `--hard`: it destroys WIP), then status must show the expected
   WIP entries.
+- Exclude `target` with NO trailing slash either. A build wrapper that makes
+  `target/` a symlink (mbx points it at `~/.cache/mbx/targets/v1/<hash>`) slips
+  past `--exclude='target/'`, lands on the remote as a broken symlink, and the
+  first cargo build dies with `failed to create directory: Not a directory
+  (os error 20)`.
 - Cold builds are slow (empty remote target dir); later runs are incremental.
 - Credentials and config the remote run needs must already exist there. If
   new absolute paths appear in local config, mirror those targets too.
