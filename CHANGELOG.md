@@ -1,3 +1,12 @@
+## [0.12.8](https://github.com/FAZuH/agent/compare/v0.12.7...v0.12.8) (2026-09-30)
+
+
+### Features
+
+* **script:** embed the common rules in the host AGENTS.md ([cff09cd](https://github.com/FAZuH/agent/commit/cff09cd91d3d93655cb09dd5ccab7338915c452e))
+* **skill:** add the global-instruction rules skill ([c3b0858](https://github.com/FAZuH/agent/commit/c3b08583666720b88e51bba85d9b6ba616b3fe1f))
+* **skill:** pdf-write assembles PDFs to a matching page width ([0c9340a](https://github.com/FAZuH/agent/commit/0c9340a24b9e8f11be1f215e23bc3bb7557777cf))
+
 ## [0.12.7](https://github.com/FAZuH/agent/compare/v0.12.6...v0.12.7) (2026-09-30)
 
 
@@ -38,11 +47,4 @@
 ### Features
 
 * **skill:** add the post-task report skill ([e1505a6](https://github.com/FAZuH/agent/commit/e1505a6e999652a25f27a6ce46b30011e5c0af16))
-
-## [0.12.3](https://github.com/FAZuH/agent/compare/v0.12.2...v0.12.3) (2026-09-30)
-
-
-### Bug Fixes
-
-* **agent:** deny by default in the unattended autocommit agent ([bf16675](https://github.com/FAZuH/agent/commit/bf166751bb8a847d71dff3727dbd2b4acef10be4))
 
