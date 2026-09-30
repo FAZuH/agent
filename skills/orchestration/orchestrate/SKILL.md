@@ -98,6 +98,11 @@ and system prompt. When you resume, tell the subagent it is continuing,
 reference its last report, and ask for a delta rather than a full re-report, so
 your own context stays lean too.
 
+A long-resumed child can come back as `Subagent completed without a text
+response` having changed nothing. Check the tree against the base commit
+(`git diff --stat`) before believing it, then re-dispatch the same brief to a
+**fresh** session rather than resuming the same one again.
+
 Persist live session ids in the active session doc (via @session): a
 `Subagent sessions` list keyed by agent: `implement: ses_...`,
 `review: ses_...`. Verification and server work use the `implement` session.

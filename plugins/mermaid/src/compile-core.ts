@@ -94,7 +94,7 @@ export async function compile(
       mmdPath,
       "-o",
       outFile,
-      "-w",
+      "--size",
       String(args.width ?? DEFAULT_WIDTH),
       "--backgroundColor",
       args.backgroundColor ?? DEFAULT_BG,

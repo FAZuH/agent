@@ -206,6 +206,9 @@ staging worktree is removed.
   first cargo build dies with `failed to create directory: Not a directory
   (os error 20)`.
 - Cold builds are slow (empty remote target dir); later runs are incremental.
+- `cargo -j N` must go **before** `--`. After it, the jobs flag reaches rustc
+  and the build dies with `unstable-options`; `cargo test -- -j 2` is not a
+  parallel test run.
 - Credentials and config the remote run needs must already exist there. If
   new absolute paths appear in local config, mirror those targets too.
 - Headless `opencode run` failures with `UnexpectedStatus` mean the

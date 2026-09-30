@@ -38,7 +38,10 @@ Run top to bottom when invoked. Do not skip the user gates.
 
 1. **Sweep**: `papercuts -g list --status open` and group the `self::`
    entries by target artifact (one skill / one agent def / one theme per
-   group). Dedup overlapping entries.
+   group). Dedup overlapping entries. Read the **untagged** entries too: a
+   `self::` prefix written in the text counts as the tag, `papercuts` has no
+   way to correct a missing tag, and most of the backlog is untagged, so
+   `--tag self::*` alone hides most of the work.
 2. **Propose**: per group, draft the concrete change (exact edit or diff).
    Check the target is user-owned before drafting: skills in
    `~/Projects/agent/` (source) or `~/.config/opencode/skills/`
