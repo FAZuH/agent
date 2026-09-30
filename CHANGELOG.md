@@ -1,3 +1,10 @@
+## [0.12.5](https://github.com/FAZuH/agent/compare/v0.12.4...v0.12.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **skill:** stop claiming research-discovery waits for approval ([ba1c4e2](https://github.com/FAZuH/agent/commit/ba1c4e211f6e05e1e495b9cbcb60b60709fc3611))
+
 ## [0.12.4](https://github.com/FAZuH/agent/compare/v0.12.3...v0.12.4) (2026-09-30)
 
 
@@ -31,11 +38,4 @@
 ### Features
 
 * **skill:** move the review method into a review-agent skill ([f1d1e66](https://github.com/FAZuH/agent/commit/f1d1e66cf149cdd2728be69b17fffbf841ce87b1))
-
-## [0.12.0](https://github.com/FAZuH/agent/compare/v0.11.8...v0.12.0) (2026-09-28)
-
-
-### Features
-
-* **skill:** add branch-flow skill ([e9379d9](https://github.com/FAZuH/agent/commit/e9379d908d571dbfe36833ebede70a5b78c3b473))
 
