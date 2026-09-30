@@ -107,10 +107,12 @@ every N hours). For "once per 12 hours with a stagger" use
   prompt, schedule, and so on) plus next run.
 - Edit: `octask edit <name> [options]` changes agent flags (`--model`,
   `--no-model`, `--prompt`, `--agent`), schedule (`--oncalendar`, `--delay` /
-  `--no-delay`, `--persistent` / `--no-persistent`), `--description`,
-  `--workdir`, `--timeout`; common fields also work on `--exec` tasks.
-  Preserves custom `--env`, `--dirty-only`, and the timer's enabled state.
-  Use `--dry-run` first to diff without writing.
+  `--no-delay`, `--persistent` / `--no-persistent`), `--dirty-only` /
+  `--no-dirty-only`, `--description`, `--workdir`, `--timeout`; common fields
+  also work on `--exec` tasks. Preserves custom `--env` and the timer's enabled
+  state. Use `--dry-run` first to diff without writing.
+  `--no-dirty-only` is the way out of a dirty-only task whose directory stopped
+  being a git repository; without it every edit fails, `--dry-run` included.
 
 ## Export / import
 
