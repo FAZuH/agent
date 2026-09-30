@@ -1,6 +1,6 @@
 ---
 name: post-task
-description: Close a finished task, procedure, or investigation with a fixed report - Completed, Deviations, Hiccups, Failed / skipped, Needs your decision, Next. Use at the end of any multi-step piece of work, whenever a procedure says to report, and whenever the user asks what happened, what broke, or what is left. Not for a mid-task status update or a one-line answer.
+description: Close a finished task, procedure, or investigation with a fixed report - Completed, Deviations, Hiccups, Failed / skipped, Next, and the open questions in ❓/➡️ blocks at the bottom. Use at the end of any multi-step piece of work, whenever a procedure says to report, and whenever the user asks what happened, what broke, or what is left. Not for a mid-task status update or a one-line answer.
 ---
 
 # post-task
@@ -38,17 +38,33 @@ End the final message with this block. Keep the section order as shown:
 ### Failed / skipped
 1. item
 
-### Needs your decision
-1. item
-
 ### Next
 1. item
-</othermsg>
+
+---
+
+### Needs your decision
+
+❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+
+➡️ <your recommended answer>
+
+---
+
+❓ **Q2** - **<question title>**: <question body>
+
+➡️ <your recommended answer>
 ```
 
 Each section is a list with one item per line. An empty section means `None`,
 in one word. Never pad a section to look thorough, and never merge two
 sections to save a line.
+
+The questions close the message: they are the bottom-most element, after every
+section. Numbering runs `Q1`, `Q2`, … across the whole message and starts again
+only in the next message. The `### Needs your decision` heading is there for
+scanning and appears only when something sits under it — a run with no questions
+puts nothing after the sections: no heading, no `None`, no "let me know".
 
 The report is a final message to the user. It is not session state. Do not
 write it to the session record.
@@ -61,16 +77,38 @@ write it to the session record.
 | Deviations | every entry from the deviation log, with what happened and why | anything you did not log as it happened |
 | Hiccups | every friction entry, with where it went | a fix you did not make |
 | Failed / skipped | each failure, its reason, and each step skipped because of it | a step you silently dropped |
-| Needs your decision | the open choices only the user can make, one question per line with its options | choices you already made for the user, or a generic ask |
 | Next | the concrete follow-ups this run leaves open, or `None` | a generic "let me know" |
+| Needs your decision | the open choices only the user can make, as `❓`/`➡️` blocks | choices you already made for the user, or a generic ask |
 
-## Needs your decision
+## The questions
 
-This section works like @grill-me: it hands the user the questions the run
-had no answer for. Write each item as one pointed question with the
-options, for example a trade-off you deferred, a rejected option that turned
-out to matter, or a fact no source settled. Write `None` when the run leaves
-no choice open.
+The `❓`/`➡️` blocks under `### Needs your decision` are one pointed question
+each with its options, followed by your recommended answer and the reason. Write
+one for a trade-off you deferred, a rejected option that turned out to matter, or
+a fact no source settled. The shape is the one @global-instruction requires for
+every message.
+
+The recommendation is not decoration. It is what lets the user answer with one
+word instead of writing your analysis back, so state it plainly and say why
+rather than listing options and leaving the choice open.
+
+---
+
+## Post Task
+
+### Completed
+1. item
+
+### Needs your decision
+1. item
+
+---
+
+❓ **Q1** - **<question title>**: <question body>
+
+➡️ <your recommended answer>
+
+---
 
 ## Rules
 

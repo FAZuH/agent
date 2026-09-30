@@ -31,6 +31,33 @@ list is working without the rules.
   `cd` to where you already are is noise.
 - Use $latex$ for inline latex, and $$latex$$ for a latex block.
 
+## Questions to the user
+
+When you have anything to ask the user, it goes at the bottom of the message,
+in a numbered list. Always the bottom-most element: the answer first, then the
+report, then the questions, so the last thing on screen is what needs
+answering.
+
+```markdown
+❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+
+➡️ <your recommended answer>
+
+---
+
+❓ **Q2** - **<question title>**: <question body>
+
+➡️ <your recommended answer>
+```
+
+- Numbering runs `Q1`, `Q2`, … across the message and restarts in the next one.
+- Each question is one pointed question with its options, and the `➡️` line is
+  your recommended answer with the reason. The recommendation is what lets the
+  user reply with one word instead of writing your analysis back.
+- Nothing to ask means nothing there: no heading, no `None`, no "let me know".
+- When the message ends in a post-task report, that report's own format carries
+  the questions — see @post-task.
+
 ## Shell discipline
 
 - Serialize writes to the same path. Do not put an `edit`/`write` call and a
