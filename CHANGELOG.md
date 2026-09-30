@@ -1,3 +1,19 @@
+## [0.12.7](https://github.com/FAZuH/agent/compare/v0.12.6...v0.12.7) (2026-09-30)
+
+
+### Bug Fixes
+
+* **agent:** keep audit papercuts out of the audited repo ([a77cc5a](https://github.com/FAZuH/agent/commit/a77cc5a4770a068e3f10c3ff1c271bbecfbeef5c))
+* **ocv2:** the plugin-health probe path did not exist ([b069421](https://github.com/FAZuH/agent/commit/b0694214a455d66b4dce56e83b1204ea783018cb))
+* **plugin:** the mermaid compiler passed a flag v12 removed ([9411322](https://github.com/FAZuH/agent/commit/9411322339b0b1b06f855903f16f27fc745a06e0))
+* **script:** pdf-build passes --size, the v12 diagram width ([5e334ee](https://github.com/FAZuH/agent/commit/5e334ee0616d4520a4df04ff0eb6792f30c2d22a))
+* **script:** require mmdc v12 ([dfe12c4](https://github.com/FAZuH/agent/commit/dfe12c42e4a426792b8b65020f5910db2b5e6779))
+* **script:** say why npx skills is unavailable ([23cf633](https://github.com/FAZuH/agent/commit/23cf6339d4678ed8df08fb53bc6eaeabe3500f61))
+* **skill:** a resumed subagent can return no text ([9f5eb4d](https://github.com/FAZuH/agent/commit/9f5eb4dceafbe0b344bf16e578b029849915ea8a))
+* **skill:** cargo jobs flags belong before -- ([3598af7](https://github.com/FAZuH/agent/commit/3598af7471ec9d4111dd2a8b3674f49e95b1f495))
+* **skill:** sweep the untagged papercuts too ([bfe371a](https://github.com/FAZuH/agent/commit/bfe371a5c70446db61f317981f57d41c940f0809))
+* **skill:** the omarchy install and quickshell traps ([3bc6f70](https://github.com/FAZuH/agent/commit/3bc6f70a47413b276a075b4bfa2756370de65dd4))
+
 ## [0.12.6](https://github.com/FAZuH/agent/compare/v0.12.5...v0.12.6) (2026-09-30)
 
 
@@ -29,17 +45,4 @@
 ### Bug Fixes
 
 * **agent:** deny by default in the unattended autocommit agent ([bf16675](https://github.com/FAZuH/agent/commit/bf166751bb8a847d71dff3727dbd2b4acef10be4))
-
-## [0.12.2](https://github.com/FAZuH/agent/compare/v0.12.1...v0.12.2) (2026-09-30)
-
-
-### Features
-
-* **script:** add a --check mode to install.sh ([58dd5e8](https://github.com/FAZuH/agent/commit/58dd5e8817b7bce50409f9e8672576b425098697))
-* **script:** check the packages the shipped skills call ([77d8d6c](https://github.com/FAZuH/agent/commit/77d8d6c569724b68f6d56c82d1d5787f60cf61f3))
-
-
-### Bug Fixes
-
-* **script:** let octask edit clear a dirty-only task ([029c532](https://github.com/FAZuH/agent/commit/029c53272b6292d93719db6bf5f5a77269d8c331))
 
