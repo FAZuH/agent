@@ -8,8 +8,8 @@ description: Schedule an unattended OpenCode agent run on a systemd user timer, 
 Run an OpenCode agent unattended on a systemd user timer. Two pieces are
 needed: (1) a **restricted agent definition** that is safe to run without a
 human, and (2) a **timer** that invokes `opencode run --agent <id>`. Live
-example on this machine: `notes-autocommit.timer` running the `autocommit`
-agent (see "Reference implementation").
+example on this machine: `octask-autocommit-notes.timer` running the
+`autocommit` agent (see "Reference implementation").
 
 This skill owns the agent definition and the verification of an unattended
 run. The @scheduled-task skill owns the timer mechanics: the `octask` CLI,
@@ -34,7 +34,7 @@ broad deny FIRST, exceptions AFTER):
 ```md
 ---
 description: <one line: what it does unattended>
-model: <cheap model, e.g. opencode/muse-spark-1.2-contributor-free>
+model: <cheap model, e.g. opencode/mimo-v2.6-flash-free>
 mode: primary
 steps: 30
 permissions:
@@ -108,7 +108,7 @@ octask add <name> \
   --agent <agent-id> \
   --prompt "<instruction for the run>" \
   --workdir <project dir> \
-  --model opencode/muse-spark-1.2-contributor-free \
+  --model opencode/mimo-v2.6-flash-free \
   --oncalendar '*-*-* 00/12:00:00' \
   --persistent --dirty-only --delay 30min
 ```
@@ -131,11 +131,12 @@ default, which is not a cheap unattended model.
 
 ## Reference implementation
 
-`~/.config/systemd/user/notes-autocommit.{timer,service}` runs the
+`~/.config/systemd/user/octask-autocommit-notes.{timer,service}` runs the
 `autocommit` agent (defined in `~/.config/opencode/agents/autocommit.md`)
-against `~/Projects/notes` every 12 hours with `--dirty-only` semantics:
-skip when `git status --porcelain` is empty, otherwise commit pending changes.
-Use it as the pattern for new autocommit-style schedules.
+against `~/Work/Notes` daily at midnight with a 30-minute stagger, and with
+`--dirty-only` semantics: skip when `git status --porcelain` is empty, otherwise
+commit pending changes. Use it as the pattern for new autocommit-style
+schedules.
 
 ## Success criteria
 
@@ -147,7 +148,7 @@ Use it as the pattern for new autocommit-style schedules.
 ## Report
 
 ```
-Scheduled octask-notes-commit: agent autocommit in ~/Projects/notes,
-OnCalendar=*-*-* 00/12:00:00 +30min stagger, Persistent, dirty-only.
+Scheduled octask-autocommit-notes: agent autocommit in ~/Work/Notes,
+OnCalendar=*-*-* 00:00:00 +30min stagger, Persistent, dirty-only.
 Manual run OK (1 commit created). Next run: 2026-08-31 00:07 WIT.
 ```
