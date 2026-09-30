@@ -19,8 +19,8 @@
  *
  * The panels live here and nowhere else. The desktop app loads no TUI module, so
  * /jev-settings, /jev-features and /jev-key exist only in the TUI; the
- * server-side commands (/jev-model, /jev-endpoint, /jev-gate, /jev-on,
- * /jev-feature, /jev-status, /jev-log) cover the same ground as text for hosts
+ * server-side commands (/jev-model, /jev-endpoint, /jev-status, /jev-log)
+ * cover the same ground as text for hosts
  * without one. Registering those slash names in both places would shadow a panel
  * with a summary that edits nothing.
  *
@@ -29,7 +29,7 @@
 
 import { appendFileSync } from "node:fs"
 import { join } from "node:path"
-import { FEATURES, featureOn, keySource, loadState, readLog, saveState, setFeature, spend, writeKey, type JevState } from "./state.ts"
+import { FEATURES, featureOn, featureStored, keySource, loadState, pluginEnabled, readLog, saveState, setEnabled, setFeature, spend, writeKey, type JevState } from "./state.ts"
 
 const DATA_DIR = join(process.env.HOME ?? "", ".config", "fazuh-agent", "data")
 
@@ -43,8 +43,9 @@ function summary(): string {
     `endpoint   ${s.endpoint}`,
     `model      ${s.model}`,
     `key        ${key.present ? `present (${key.from})` : "MISSING"}`,
-    `features   ${FEATURES.filter((f) => featureOn(f.key)).map((f) => f.key).join(" ") || "none"}`,
-    `off        ${FEATURES.filter((f) => !featureOn(f.key)).map((f) => f.key).join(" ") || "none"}`,
+    `plugin     ${pluginEnabled() ? "on" : "OFF — nothing is sent and nothing is spent"}`,
+    `features   ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
+    `off        ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
     `thresholds minProbability=${s.minProbability} minMargin=${s.minMargin} gateProbability=${s.gateProbability}`,
     `spend      ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
   ].join("\n")
@@ -69,14 +70,21 @@ export default {
       } catch {}
     }
 
-    const api = () => ({
-      dialog: typeof ctx.ui?.dialog,
-      dialogKeys: Object.keys(ctx.ui?.dialog ?? {}),
-      replace: typeof ctx.ui?.dialog?.replace,
-      select: typeof (ctx.ui?.dialog as any)?.select,
-      DialogSelect: typeof ctx.ui?.DialogSelect,
-      DialogPrompt: typeof ctx.ui?.DialogPrompt,
-    })
+    const api = () => {
+      const ui = ctx.ui ?? {}
+      const dialog: any = ui.dialog ?? {}
+      const types: Record<string, string> = {}
+      for (const key of Object.keys(ui)) types[key] = typeof ui[key]
+      const dialogTypes: Record<string, string> = {}
+      for (const key of Object.keys(dialog)) dialogTypes[key] = typeof dialog[key]
+      return {
+        ctxKeys: Object.keys(ctx),
+        uiKeys: Object.keys(ui),
+        uiTypes: types,
+        dialogKeys: Object.keys(dialog),
+        dialogTypes,
+      }
+    }
 
     const toast = (message: string, variant = "info") => {
       try {
@@ -134,10 +142,12 @@ export default {
 
       const viaHelper = () => {
         persistent = false
-        void ctx.ui.dialog.select({ title, options: rows() }).catch((error: any) => {
-          trace("panel:select-failed", { title, error: String(error?.message ?? error) })
-          toast(`Could not open ${title}: ${error?.message ?? error}`, "error")
-        })
+        void ctx.ui.dialog
+          .select({ title, options: rows() })
+          .catch((error: any) => {
+            trace("panel:select-failed", { title, error: String(error?.message ?? error) })
+            toast(`Could not open ${title}: ${error?.message ?? error}`, "error")
+          })
       }
 
       const render = () => {
@@ -178,6 +188,7 @@ export default {
 
       render()
       trace(`panel:${title}`, { canReplace, rows: rows().length })
+      redraw = render
       return render
     }
 
@@ -212,16 +223,36 @@ export default {
       }
     }
 
+    let redraw: (() => void) | null = null
+
     /**
-     * The feature panel. Six switches, grouped, each flipping in place — the
-     * dialog never closes, so holding enter walks the list.
+     * The feature panel. The master switch on top is the plugin's own on/off —
+     * it does not touch the six below, it just gates them, so the list reads
+     * "on" even while the plugin is off. That is deliberate: you can configure
+     * features with the plugin disabled, and turning it back on restores
+     * exactly what you had.
      */
     function openFeatures(): () => void {
-      const render = panel(
-        "Jev features",
-        () =>
-          FEATURES.map((f) => {
-            const on = featureOn(f.key)
+      redraw = panel("Jev features", () => {
+        const master = pluginEnabled()
+        return [
+          row(
+            "enabled",
+            "Plugin",
+            master ? "on" : "off",
+            () => {
+              const next = setEnabled(!master)
+              toast(
+                next
+                  ? "Jev on. The six switches below decide what it does."
+                  : "Jev off. No tool call is sent and nothing is spent. The six switches keep their values.",
+              )
+              redraw?.()
+            },
+            "Master",
+          ),
+          ...FEATURES.map((f) => {
+            const on = featureStored(f.key)
             return row(
               f.key,
               f.label,
@@ -229,13 +260,14 @@ export default {
               () => {
                 const next = setFeature(f.key, !on)
                 toast(next ? `${f.label} on` : `${f.label} off`)
-                render()
+                redraw?.()
               },
               f.key === "risk_hook" ? "Hooks" : "Tools",
             )
           }),
-      )
-      return render
+        ]
+      })
+      return redraw
     }
 
     /**

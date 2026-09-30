@@ -12,7 +12,7 @@
  */
 
 import { ask, estimateCost, JevError, type JevQuestion, type JevStateBody } from "./jev.ts"
-import { FEATURES, featureOn, keySource, loadState, logCall, readLog, saveState, setFeature, spend, type JevState } from "./state.ts"
+import { FEATURES, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, setFeature, spend, type JevState } from "./state.ts"
 
 const USAGE_NOTE = `Jev decides, you act. Its answer is a signal, not a verdict: weigh it, verify it, and ignore it when your own reading disagrees.`
 
@@ -47,10 +47,11 @@ function failOpen(error: unknown, what: string) {
   return { content: `Jev was not consulted for ${what} (${detail}). Proceed without it — decide using your own judgement.` }
 }
 
-/** A feature the user switched off. Says how to switch it back on. */
+/** The plugin or this feature is off. Nothing was sent, so nothing was spent. */
 function disabled(tool: string, feature: string) {
+  const because = pluginEnabled() ? `feature "${feature}"` : "the Jev plugin is off"
   return {
-    content: `${tool} is turned off (feature "${feature}"). Turn it on with /jev-features, or decide this yourself — nothing was sent and nothing was spent.`,
+    content: `${tool} is turned off (${because}). Turn it on with /jev-features, or decide this yourself — nothing was sent and nothing was spent.`,
   }
 }
 
@@ -376,7 +377,7 @@ function riskHook() {
         const d = result.decisions[0]
         if (blocksCall(d, state.gateProbability)) {
           throw new GateBlock(
-            `jev gate: Jev puts P(risky)=${Number(d.probability).toFixed(2)} on this ${tool} call, at or above the ${state.gateProbability} block threshold. Confirm the action is intended, then retry. Change the threshold or disable with /jev-gate off.`,
+            `jev gate: Jev puts P(risky)=${Number(d.probability).toFixed(2)} on this ${tool} call, at or above the ${state.gateProbability} block threshold. Confirm the action is intended, then retry. Change the threshold or turn the risk_hook feature off in /jev-features.`,
           )
         }
       } catch (error) {
@@ -434,16 +435,17 @@ export default {
     // /jev-settings, /jev-features and /jev-key are deliberately absent: the
     // TUI module owns those names, and a server command of the same name
     // shadows the panel and the key dialog with a summary that edits nothing.
-    // /jev-feature (singular) and /jev-status are the text route for hosts that
-    // load no TUI module. See tui.ts.
+    // A singular /jev-feature used to fill the gap for hosts with no TUI, but it
+    // duplicated the panel badly enough to be more confusing than missing.
+    // /jev-gate and /jev-on are gone for the same reason: the risk hook is the
+    // risk_hook feature switch, and two names for one switch is one too many.
+    // /jev-status, /jev-model, /jev-endpoint and /jev-log remain the text route.
+    // See tui.ts.
     const COMMANDS: Record<string, string> = {
-      "jev-status": "Jev endpoint, model, key source, gate, thresholds, and spend",
+      "jev-status": "Jev endpoint, model, key source, which features are on, thresholds, and spend",
       "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
       "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
-      "jev-gate": "Turn the tool-call risk gate on or off: /jev-gate on|off",
       "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
-      "jev-on": "Turn the risk hook on",
-      "jev-feature": "List the feature switches, or set one: /jev-feature <name> on|off",
     }
 
     for (const [name, description] of Object.entries(COMMANDS)) {
@@ -455,37 +457,6 @@ export default {
             const arg = String(input?.prompt?.text ?? "").trim()
             const state = loadState()
 
-            if (name === "jev-on" || name === "jev-gate") {
-              // Bare /jev-gate reports rather than flipping, so a stray call
-              // cannot silently enable blocking. /jev-on is the explicit opt-in.
-              const want =
-                name === "jev-on" ? true : arg.toLowerCase() === "on" ? true : arg.toLowerCase() === "off" ? false : featureOn("risk_hook")
-              if (arg || name === "jev-on") setFeature("risk_hook", want)
-              return {
-                content: `Risk hook ${want ? "ON — a confident answer at or above gateProbability blocks the call" : "off — no tool call is sent to Jev"}.${
-                  arg || name === "jev-on" ? "" : " Use /jev-on, /jev-gate off, or /jev-features."
-                }`,
-              }
-            }
-            if (name === "jev-feature") {
-              // Text parity for hosts with no TUI panel. The TUI owns
-              // /jev-features; a server /jev-features would shadow it.
-              const [wantName, wantState] = arg.split(/\s+/)
-              if (!wantName) {
-                return {
-                  content: [
-                    ...FEATURES.map((f) => `${featureOn(f.key) ? "on " : "off"}  ${f.label.padEnd(18)} ${f.what}`),
-                    "",
-                    "Set one: /jev-feature <name> on|off",
-                  ].join("\n"),
-                }
-              }
-              const feature = FEATURES.find((f) => f.key === wantName || f.label.toLowerCase() === wantName.toLowerCase())
-              if (!feature) return { content: `No feature named "${wantName}". Known: ${FEATURES.map((f) => f.key).join(", ")}` }
-              if (wantState !== "on" && wantState !== "off") return { content: `Second word must be on or off, not "${wantState}".` }
-              setFeature(feature.key, wantState === "on")
-              return { content: `${feature.label} ${wantState}. ${feature.what}` }
-            }
             if (name === "jev-model") {
               if (!arg) return { content: `Model: ${state.model}` }
               saveState({ model: arg })
@@ -518,8 +489,9 @@ export default {
                 `endpoint  ${state.endpoint}`,
                 `model     ${state.model}`,
                 `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
-                `on        ${FEATURES.filter((f) => featureOn(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-                `off       ${FEATURES.filter((f) => !featureOn(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+                `plugin    ${pluginEnabled() ? "on" : "OFF — every tool refuses, nothing is sent, nothing is spent"}`,
+                `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+                `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
                 `thresholds  minProbability=${state.minProbability} minMargin=${state.minMargin} gateProbability=${state.gateProbability}`,
                 `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
                 "",

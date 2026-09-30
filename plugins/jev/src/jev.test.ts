@@ -3,12 +3,28 @@
  * objects, and the point is the shape checks, not Jev's judgement.
  *
  *   bun test src/jev.test.ts
+ *
+ * The data directory is redirected to a temp one before state.ts loads, because
+ * several tests write settings and the real file is the user's, not the test's.
  */
 
-import { describe, expect, test } from "bun:test"
-import { blocksCall } from "./index.ts"
-import { JevError, normalize, redact } from "./jev.ts"
-import { DEFAULTS, FEATURES, featureMap, type JevState } from "./state.ts"
+import { afterAll, describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
+process.env.JEV_DATA_DIR = scratch
+process.env.JEV_SECRET_DIR = join(scratch, "secrets")
+
+const { blocksCall } = await import("./index.ts")
+const { JevError, normalize, redact } = await import("./jev.ts")
+const { DEFAULTS, FEATURES, featureMap, featureOn, featureStored, loadState, pluginEnabled, setEnabled, setFeature } = await import(
+  "./state.ts"
+)
+type JevState = import("./state.ts").JevState
+
+afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
 const state: JevState = { ...DEFAULTS }
 
@@ -211,5 +227,34 @@ describe("feature switches", () => {
     const map = featureMap({ check: false, bogus_feature: false })
     expect(map.check).toBe(false)
     expect("bogus_feature" in map).toBe(false)
+  })
+})
+
+describe("master switch", () => {
+  test("on by default, and the features default to on except the risk hook", () => {
+    expect(pluginEnabled()).toBe(true)
+    expect(featureStored("risk_hook")).toBe(false)
+    expect(FEATURES.filter((f) => f.key !== "risk_hook").every((f) => featureStored(f.key))).toBe(true)
+  })
+
+  test("turning the plugin off gates every feature without touching their settings", () => {
+    setFeature("check", true)
+    setEnabled(false)
+    for (const f of FEATURES) expect(featureOn(f.key)).toBe(false)
+    // The stored settings are untouched, so turning it back on restores them.
+    expect(featureStored("check")).toBe(true)
+    expect(featureStored("risk_hook")).toBe(false)
+    setEnabled(true)
+    expect(featureOn("check")).toBe(true)
+    expect(featureOn("risk_hook")).toBe(false)
+  })
+
+  test("a feature switched off stays off when the plugin comes back", () => {
+    setFeature("review_rank", false)
+    setEnabled(false)
+    setEnabled(true)
+    expect(featureStored("review_rank")).toBe(false)
+    expect(featureOn("review_rank")).toBe(false)
+    setFeature("review_rank", true)
   })
 })

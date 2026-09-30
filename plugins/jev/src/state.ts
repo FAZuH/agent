@@ -11,8 +11,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const DATA_DIR = join(homedir(), ".config", "fazuh-agent", "data")
-const SECRET_DIR = join(homedir(), ".config", "fazuh-agent", "secrets")
+// Overridable so tests get a throwaway directory instead of the live config.
+// Without this a test that flips a feature rewrites the user's real settings.
+const DATA_DIR = process.env.JEV_DATA_DIR ?? join(homedir(), ".config", "fazuh-agent", "data")
+const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(homedir(), ".config", "fazuh-agent", "secrets")
 
 export const STATE_FILE = join(DATA_DIR, "jev-state.json")
 export const LOG_FILE = join(DATA_DIR, "jev-calls.jsonl")
@@ -48,6 +50,8 @@ export interface JevState {
   keyEnv: string
   /** Key file, read when no env var matched. */
   keyFile: string
+  /** The master switch. Off means the plugin does nothing at all. */
+  enabled: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
   features: Record<string, boolean>
   /** A choice below this top probability is reported as low-confidence. */
@@ -68,6 +72,7 @@ export const DEFAULTS: JevState = {
   model: "typesafe/jev",
   keyEnv: "CMD_API_KEY,JEV_API_KEY",
   keyFile: DEFAULT_SECRET_FILE,
+  enabled: true,
   features: { risk_hook: false },
   minProbability: 0.8,
   minMargin: 0.15,
@@ -96,7 +101,10 @@ export function loadState(): JevState {
   try {
     raw = JSON.parse(readFileSync(STATE_FILE, "utf8"))
   } catch {
-    return { ...DEFAULTS }
+    // A fresh object each time: DEFAULTS.features is module-level, and
+    // setFeature mutates what loadState returns, which would otherwise rewrite
+    // the defaults themselves in memory.
+    return { ...DEFAULTS, features: featureMap(DEFAULTS.features) }
   }
   const str = (value: unknown, fallback: string) => (typeof value === "string" && value.trim() ? value : fallback)
   return {
@@ -104,6 +112,7 @@ export function loadState(): JevState {
     model: str(raw.model, DEFAULTS.model),
     keyEnv: str(raw.keyEnv, DEFAULTS.keyEnv),
     keyFile: str(raw.keyFile, DEFAULTS.keyFile),
+    enabled: raw.enabled !== false,
     features: featureMap(raw.features, raw.gate),
     minProbability: num(raw.minProbability, DEFAULTS.minProbability),
     minMargin: num(raw.minMargin, DEFAULTS.minMargin),
@@ -111,9 +120,30 @@ export function loadState(): JevState {
   }
 }
 
-/** Is a feature on? Read fresh per call, so a toggle takes effect at once. */
-export function featureOn(key: string): boolean {
+/** The master switch. Off means nothing leaves the machine and nothing spends. */
+export function pluginEnabled(): boolean {
+  return loadState().enabled
+}
+
+export function setEnabled(on: boolean): boolean {
+  saveState({ enabled: on })
+  return on
+}
+
+/**
+ * The feature's own setting, ignoring the master switch. For display: you
+ * configure the features while the plugin is off, and they keep their values.
+ */
+export function featureStored(key: string): boolean {
   return loadState().features[key] ?? true
+}
+
+/**
+ * Whether a feature may actually run: the master switch, and then the feature.
+ * Every call site uses this, so turning the plugin off needs no other change.
+ */
+export function featureOn(key: string): boolean {
+  return pluginEnabled() && featureStored(key)
 }
 
 export function setFeature(key: string, on: boolean): boolean {
