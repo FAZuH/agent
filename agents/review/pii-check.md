@@ -42,3 +42,4 @@ When scanning:
 - Use `rg` or `grep` to search for suspicious patterns
 - Flag any file containing wildcard PII (not example/test data) for manual review
 - Consider context: test fixtures using `test@example.com` are fine; real-looking data is not
+- **Recommend rotation only for a credential that is actually committed.** Verify with `git log -p --all` before advising it. A hardcoded IP, internal hostname, or port is a topology leak, not a leaked secret: report it on its own merits and never attach rotation advice to it, or the advice is noise the user learns to skip.
