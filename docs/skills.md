@@ -100,6 +100,7 @@ These skills are loaded only when another skill or agent references them.
 - **[ocv2-models](../skills/ocv2/ocv2-models/SKILL.md)**: Pick a free model when the session account is dry, with `AGENTS.md` as the override point.
 - **[ocv2-sessions](../skills/ocv2/ocv2-sessions/SKILL.md)**: Fork and control OpenCode v2 sessions.
 - **[ocv2-move](../skills/ocv2/ocv2-move/SKILL.md)**: Move a v2 session to another project directory.
+- **[ocv2-plugins](../skills/ocv2/ocv2-plugins/SKILL.md)**: Write v2 plugins: the measured contract, tools, hooks, commands, the TUI surface, and verification.
 - **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin loading: what loaded, why it failed, whether `setup()` ran, and what hot-reloads.
 - **[jev-use](../skills/ocv2/jev-use/SKILL.md)**: Ask Jev instead of deliberating when a decision is a judgement over enumerable options.
 - **[ocv2-unfuck](../skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.

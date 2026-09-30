@@ -152,3 +152,9 @@ comment.
    files).
 4. After fixing, re-run step 1 (service mode) or verify via `/api/command`,
    remembering both see only the global location.
+
+## Writing one instead
+
+This skill answers why a plugin is not working. To author one — the contract,
+tools, hooks, commands, the TUI surface, and how to verify it — read
+@ocv2-plugins.
