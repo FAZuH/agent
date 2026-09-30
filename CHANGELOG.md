@@ -1,3 +1,14 @@
+## [0.12.6](https://github.com/FAZuH/agent/compare/v0.12.5...v0.12.6) (2026-09-30)
+
+
+### Bug Fixes
+
+* **agent:** advise rotation only for a committed credential ([d65cbae](https://github.com/FAZuH/agent/commit/d65cbae0c8275b57eaaac107f576bb759294e405))
+* **ocv2:** the model list is a local catalog, not the API's ([8b4faa6](https://github.com/FAZuH/agent/commit/8b4faa66dc995f9b3ac62af918814f3e8a069ba8))
+* **skill:** exclude target without a trailing slash ([c21bb71](https://github.com/FAZuH/agent/commit/c21bb713e1d871a5ca28a5bf9171255e4e9de1ad))
+* **skill:** keep prose, table and algorithm on one page flow ([4d96e3c](https://github.com/FAZuH/agent/commit/4d96e3c42a426e4b9fb75ea94979c39673a787e5))
+* **skill:** skip the finish steps a merge already satisfied ([a3b011c](https://github.com/FAZuH/agent/commit/a3b011cc1626352ef62fbd07c18e56f02c8faf39)), closes [#7](https://github.com/FAZuH/agent/issues/7)
+
 ## [0.12.5](https://github.com/FAZuH/agent/compare/v0.12.4...v0.12.5) (2026-09-30)
 
 
@@ -31,11 +42,4 @@
 ### Bug Fixes
 
 * **script:** let octask edit clear a dirty-only task ([029c532](https://github.com/FAZuH/agent/commit/029c53272b6292d93719db6bf5f5a77269d8c331))
-
-## [0.12.1](https://github.com/FAZuH/agent/compare/v0.12.0...v0.12.1) (2026-09-28)
-
-
-### Features
-
-* **skill:** move the review method into a review-agent skill ([f1d1e66](https://github.com/FAZuH/agent/commit/f1d1e66cf149cdd2728be69b17fffbf841ce87b1))
 
