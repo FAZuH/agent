@@ -86,6 +86,7 @@ the category directory never reaches the installed name.
 
 These skills are loaded only when another skill or agent references them.
 
+- ⭐ **[global-instruction](../skills/shared/global-instruction/SKILL.md)**: The common, machine-agnostic rules, and the skills every session must load.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
 - **[post-task](../skills/shared/post-task/SKILL.md)**: Close finished work with the five-part report: Completed, Deviations, Hiccups, Failed/skipped, Next.
 - **[gate](../skills/shared/gate/SKILL.md)**: Define approval gates, run modes, and the `GATE` tag format.
