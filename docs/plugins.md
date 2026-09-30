@@ -48,8 +48,8 @@ edits the endpoint, model, key source, and thresholds; `/jev-features` flips the
 six feature switches. Both stay open — arrows move, enter changes one value, esc
 closes — so they read like OpenCode's own settings panel. They are TUI commands,
 since the desktop app loads no TUI module. `/jev-model <id>`,
-`/jev-endpoint <url>`, `/jev-on`, `/jev-gate on|off`, and
-`/jev-feature <name> on|off` do the same as text and work in any host. The key comes from `$CMD_API_KEY`/`$JEV_API_KEY` or a 0600
+`/jev-endpoint <url>` do the same as text and
+work in any host. The key comes from `$CMD_API_KEY`/`$JEV_API_KEY` or a 0600
 file. `/jev-key` writes it from a TUI dialog without echoing or logging it — TUI
 only, so a key can never land in a transcript; `/jev-status` reports the path
 for hosts with no TUI.
@@ -62,16 +62,17 @@ for hosts with no TUI.
   list never exclude code, and every item comes back.
 - **`jev_pick_control`** — picks which extracted on-page control matches a goal.
   Text only; Jev cannot see a page.
-- **`/jev-features`** — flips the six switches: `pick_skill`, `pick_control`,
-  `review_rank`, `check`, `review_gates`, `risk_hook`. A tool whose switch is
-  off refuses before sending anything, so nothing is spent. All on by default
-  except `risk_hook`. The panel stays open as you toggle.
-- **`/jev-gate on|off`** and **`/jev-on`** — shorthand for the `risk_hook`
-  switch. With it on, every
-  `bash`/`edit`/`write`/`apply_patch` call is sent to Jev and logged. A call
-  blocks only when the answer is both **confident** and at or above
-  `gateProbability`; a Jev failure, a low-confidence answer, or a weak one
-  proceeds. Off by default, because a blocked call has no interactive prompt.
+- **`/jev-features`** — the panel. **Plugin** at the top is the master switch: on
+  or off, and it does not touch the six below it. Off means every tool refuses
+  and no tool call is sent, so nothing is spent — while the six keep their
+  values, so you can configure with the plugin disabled and get your setup back
+  when you re-enable it. Below it: `pick_skill`, `pick_control`, `review_rank`,
+  `check`, `review_gates`, `risk_hook`. A tool whose switch is off refuses
+  before sending anything. All on by default except `risk_hook`. With
+  `risk_hook` on, every `bash`/`edit`/`write`/`apply_patch` call is sent to Jev
+  and logged; a call blocks only when the answer is both **confident** and at or
+  above `gateProbability`, so a Jev failure, a low-confidence answer, or a weak
+  one proceeds.
 - **`/jev-log`** — recent calls: what was sent, what came back, what it cost.
 
 Semantic grep is upstream [jegrep](https://github.com/can1357/jegrep), installed
