@@ -26,7 +26,7 @@ Follow the @pr-watchmerge skill on the PR from step 1. If any check fails it sto
 
 ### 3. Close the worktree
 
-The branch is now merged, so it is already gone remotely. Follow the @worktree-close skill: it runs the finish workflow, then removes the local worktree and branch and verifies the untracked main-tree items survived.
+The branch is now merged, so it is already gone remotely. Follow the @worktree-close skill: it runs the finish workflow (skipping the steps this merge already satisfied), then removes the local worktree and branch and verifies the untracked main-tree items survived.
 
 ## Dependency graph
 
