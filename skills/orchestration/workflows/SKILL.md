@@ -26,7 +26,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Start/monitor dev servers | `implement` | Server-only mode; owns PTY lifecycle |
 | Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
 | Read/transcribe image files | `image-viewer` | Vision, read-only |
-| Preliminary codebase discovery | `research-discovery` | Presents its plan and waits for approval; returns `file:line` pointers |
+| Preliminary codebase discovery | `research-discovery` | Starts immediately, no approval gate; returns `file:line` pointers |
 | Deep research (cited findings file) | @deep-research skill → delegates to `research-discovery` | Narrow question against primary sources; writes ONE cited findings `.md`, returns path |
 | Broad web research synthesis | `research-synthesis` | Returns a focused, cited brief in chat |
 | Explore codebase / research | `general` / `explore` | For investigation |
