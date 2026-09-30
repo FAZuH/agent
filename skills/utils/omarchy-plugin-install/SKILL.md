@@ -57,6 +57,30 @@ omarchy plugin validate ~/.config/omarchy/plugins/<plugin-id>
 
 Never touch `/usr/share/omarchy/` (package-owned; updates overwrite it).
 
+`--enable` is best-effort: `omarchy plugin add <url> --enable --yes` can print
+`omarchy-shell is not responding` and leave the plugin **disabled**. Check with
+`omarchy plugin list`; if it is off, `omarchy plugin enable <plugin-id>` works
+and hot-reloads. The add path's in-process reload races; do not read it as the
+shell being down.
+
+## Quickshell plugin gotchas
+
+- `IdleMonitor` and the other idle types come from
+  `import Quickshell.Wayland` — a bare `import Quickshell` fails service load
+  with `IdleMonitor is not a type`, and the only symptom in widget IPC is
+  `service unavailable`.
+- A JS/QML parse error in one plugin takes the **whole shell** down, not just
+  that plugin. Restore the file immediately after probing.
+- Hot-reload registers a new widget but leaves the previous generation's
+  `IpcHandler` bound to the target: the widget logs `Handler was registered
+  but will not be used` and new IPC methods fail with `Function not found`
+  until a full `omarchy-restart-shell`.
+- `omarchy-shell shell summon <id>` reports `no live bar widget` for a
+  third-party plugin widget that is visibly on the bar and whose own open/close
+  IPC works. `Bar.findPanelWidget` does not match plugin widget slots, so
+  hotkey-style summon routing is broken for plugins — bind the widget's own
+  IPC instead.
+
 ## Phase 3: Bar placement
 
 ```bash
