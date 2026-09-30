@@ -25,6 +25,11 @@ BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
 REVERSE_SKILL_REV="cab634bd855fc287f6e420c1f36fd1a6b9245960"
 
+GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
+GLOBAL_INSTRUCTION_SKILL="skills/shared/global-instruction/SKILL.md"
+GI_START="<!-- global-instruction:start -->"
+GI_END="<!-- global-instruction:end -->"
+
 usage() {
   cat <<EOF
 Usage: ${0##*/} [-b] [-c]
@@ -50,6 +55,105 @@ check_opencode() {
   version="$(opencode --version 2>&1)" || die "could not run opencode --version"
   [[ "$version" =~ (^|[[:space:]])v?2(\.|$) ]] || die "OpenCode v2 is required (found: $version)"
   info "opencode $version"
+}
+
+# Print the global-instruction skill's body: everything after the YAML
+# frontmatter, without its surrounding blank lines. The frontmatter is
+# skill-loader metadata, not instructions, and `---` inside AGENTS.md would
+# read as a horizontal rule at worst.
+skill_body() { # <path>
+  awk '
+    NR==1 && $0=="---" {fm=1; next}
+    fm && $0=="---" {fm=0; body=1; next}
+    body {print}
+  ' "$1" | sed '/./,$!d' | tac | sed '/./,$!d' | tac
+}
+
+# Embed the common rules straight into the host AGENTS.md, once under the first
+# heading and once at the end, so they are in context whether the agent reads
+# the top of the file or the bottom. A pointer to the skill cannot do this: the
+# rules are only read when something makes the agent load it, and "NEVER SKIP"
+# has to not depend on that.
+#
+# The block is delimited by markers and rewritten from the skill every run, so
+# editing the skill updates AGENTS.md on the next install instead of leaving two
+# copies to drift. `check` reports drift without writing; --check installs
+# nothing.
+#
+# A file with no `## ` heading has no top, so it gets the one block at the end.
+ensure_global_instruction_ref() { # [check]
+  local skill="$ROOT/$GLOBAL_INSTRUCTION_SKILL"
+  local body
+  local drifted=0
+
+  if [[ ! -f "$GLOBAL_AGENTS_MD" ]]; then
+    info "note: $GLOBAL_AGENTS_MD does not exist, so no rules were embedded"
+    return 0
+  fi
+  if [[ ! -f "$skill" ]]; then
+    info "note: $skill is missing, so no rules were embedded"
+    return 0
+  fi
+  body="$(skill_body "$skill")"
+  if [[ -z "$body" ]]; then
+    info "note: $skill has no body after its frontmatter"
+    return 0
+  fi
+
+  # Drop both existing blocks, then re-insert, so editing the skill updates
+  # AGENTS.md on the next install instead of leaving two copies to drift.
+  #
+  # One line is held back so the blank line on either side of a block is dropped
+  # with it. Printing them makes the file grow by a blank line per run, so the
+  # comparison below never matches and every install rewrites. Holding a line
+  # does not collapse runs of blank lines, so untouched parts of the file come
+  # out byte-identical. A file with no `## ` heading gets both blocks at the end.
+  # A blank line is the empty string in awk, so "is there a held line" needs its
+  # own flag: testing `held != ""` would drop every blank line in the file.
+  awk -v s="$GI_START" -v e="$GI_END" '
+    function flush() { if (has) { print held; has = 0 } }
+    NR == 1 { held = $0; has = 1; next }
+    $0 == s { if (held ~ /^[[:space:]]*$/) has = 0; inblock = 1; next }
+    $0 == e { inblock = 0; next }
+    inblock { next }
+    { flush(); held = $0; has = 1 }
+    END { flush() }
+  ' "$GLOBAL_AGENTS_MD" >"$GLOBAL_AGENTS_MD.tmp" || return 1
+
+  {
+    # No blank line between the heading and the block: the strip above drops a
+    # blank that follows a block, so emitting one here would leave the host's
+    # first heading with a blank line it did not have before.
+    awk -v s="$GI_START" -v e="$GI_END" -v body="$body" '
+      /^## / && !done { print; print s; print ""; print body; print e; done = 1; next }
+      { print }
+    ' "$GLOBAL_AGENTS_MD.tmp"
+    printf '\n%s\n\n%s\n%s\n' "$GI_START" "$body" "$GI_END"
+  } >"$GLOBAL_AGENTS_MD.tmp2" || return 1
+
+  if [[ "${1:-}" == check ]]; then
+    if cmp -s "$GLOBAL_AGENTS_MD.tmp2" "$GLOBAL_AGENTS_MD"; then
+      info "global AGENTS.md embeds the current $GLOBAL_INSTRUCTION_SKILL"
+    else
+      info "note: $GLOBAL_AGENTS_MD is stale or missing the embedded rules"
+    fi
+    rm -f "$GLOBAL_AGENTS_MD.tmp" "$GLOBAL_AGENTS_MD.tmp2"
+    return 0
+  fi
+
+  if cmp -s "$GLOBAL_AGENTS_MD.tmp2" "$GLOBAL_AGENTS_MD"; then
+    drifted=0
+  else
+    mv "$GLOBAL_AGENTS_MD.tmp2" "$GLOBAL_AGENTS_MD" && drifted=1
+  fi
+  rm -f "$GLOBAL_AGENTS_MD.tmp" "$GLOBAL_AGENTS_MD.tmp2"
+
+  if ((drifted)); then
+    info "embedded the $GLOBAL_INSTRUCTION_SKILL rules in $GLOBAL_AGENTS_MD (top and bottom)"
+  else
+    info "global AGENTS.md already embeds the current rules"
+  fi
+  return 0
 }
 
 # mermaid-cli v12 dropped -w/--width for --size, and both pdf-build and the
@@ -231,6 +335,9 @@ checklist() {
 
   check_mmdc
 
+  printf '\nHost configuration\n'
+  ensure_global_instruction_ref check
+
   printf '\nInstalled by this script\n'
   while IFS=: read -r name path; do
     [[ -n "$name" ]] || continue
@@ -302,6 +409,9 @@ install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
 install_skill DietrichGebert/ponytail --skill ponytail ponytail-review ponytail-audit \
   ponytail-debt ponytail-gain ponytail-help
+# Not bonus: global-instruction makes @ponytail and @antislop a mandatory load
+# every session, and a default install that omits either leaves that dangling.
+install_skill miqdadbadjuber/anti-slop
 cargo install --git https://github.com/FAZuH/papercuts --rev "$PAPERCUTS_REV"
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"
 
@@ -312,10 +422,10 @@ cargo install --path "$ROOT/scripts"
 
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g
+ensure_global_instruction_ref
 
 if ((BONUS == 1)); then
   step "Installing bonus skills"
-  install_skill miqdadbadjuber/anti-slop
   install_ffmpeg_skill
   install_reverse_skill
 fi

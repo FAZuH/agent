@@ -123,6 +123,7 @@ flowchart LR
 - **comments-discipline** — comments that earn their place.
 - **wizard** — a script that walks a human through the steps only they can do.
 - **ffmpeg-skill** — cut, caption, convert, and normalise local media.
+- **pdf-write** — build a PDF from Markdown, or assemble scans and existing PDFs to a matching page width, then read the render back.
 
 ### Verify
 

@@ -69,7 +69,7 @@ the category directory never reaches the installed name.
 - **[omarchy-plugin-install](../skills/utils/omarchy-plugin-install/SKILL.md)**: Install an Omarchy shell plugin end to end, including malware review and dotfiles persistence.
 - **[plan-confirm](../skills/utils/plan-confirm/SKILL.md)**: Present large plans or audits for grouped confirmation.
 - **[pdf-read](../skills/utils/pdf-read/SKILL.md)**: Read PDFs and extract text, tables, images, and structured data.
-- **[pdf-write](../skills/utils/pdf-write/SKILL.md)**: Author and build Markdown documents to PDF with Pandoc and LaTeX, then verify the output visually.
+- **[pdf-write](../skills/utils/pdf-write/SKILL.md)**: Build a PDF from Markdown with Pandoc and LaTeX, or assemble and merge existing PDFs and scans to a matching page width, then verify the output visually.
 - **[scheduled-agent](../skills/utils/scheduled-agent/SKILL.md)**: Schedule restricted unattended agents with systemd user timers.
 - **[scheduled-task](../skills/utils/scheduled-task/SKILL.md)**: Manage scheduled tasks with `octask` and systemd user timers.
 
@@ -86,6 +86,7 @@ the category directory never reaches the installed name.
 
 These skills are loaded only when another skill or agent references them.
 
+- ⭐ **[global-instruction](../skills/shared/global-instruction/SKILL.md)**: The common, machine-agnostic rules, and the skills every session must load.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
 - **[post-task](../skills/shared/post-task/SKILL.md)**: Close finished work with the five-part report: Completed, Deviations, Hiccups, Failed/skipped, Next.
 - **[gate](../skills/shared/gate/SKILL.md)**: Define approval gates, run modes, and the `GATE` tag format.
@@ -100,6 +101,7 @@ These skills are loaded only when another skill or agent references them.
 - **[ocv2-sessions](../skills/ocv2/ocv2-sessions/SKILL.md)**: Fork and control OpenCode v2 sessions.
 - **[ocv2-move](../skills/ocv2/ocv2-move/SKILL.md)**: Move a v2 session to another project directory.
 - **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin loading: what loaded, why it failed, whether `setup()` ran, and what hot-reloads.
+- **[jev-use](../skills/ocv2/jev-use/SKILL.md)**: Ask Jev instead of deliberating when a decision is a judgement over enumerable options.
 - **[ocv2-unfuck](../skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.
 
 Run `./sync.sh list` to see the deployed skills, and
