@@ -86,18 +86,8 @@ never delete an entry until the procedure is resumed and finished.
 
 ## After finishing: the run report
 
-In this fixed order, in your final message:
-
-1. **Completed**: what the procedure produced.
-2. **Deviations**: every logged deviation.
-3. **Hiccups**: every logged hiccup.
-4. **Failed / skipped**: failed steps, and steps skipped because of them,
-   with reasons.
-5. **Next**: what to do next: the concrete follow-ups this run leaves open,
-   or `none`.
-
-The run report is a final message to the user. It is not session state; do not
-write it to the session record.
+Hand the report to @post-task. It owns the format and what belongs in each
+section, and it is the single place either shape is written down.
 
 ## Authoring convention (for procedure authors)
 
