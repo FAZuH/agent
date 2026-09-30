@@ -13,6 +13,7 @@ if ! command -v opencode >/dev/null 2>&1 && [[ -x "$HOME/.opencode/bin/opencode"
 fi
 
 BONUS=0
+CHECK=0
 TMP_DIR=""
 
 # Pinned versions of everything this script fetches: the skills CLI from npm,
@@ -20,16 +21,19 @@ TMP_DIR=""
 # skill; it checks the remote and reports the diff before editing.
 SKILLS_CLI_VERSION="1.7.0"
 PAPERCUTS_REV="369b2aeb6f4d6414ddaf2df71d90c8a0419e06bf"
-BGRUN_REV="f246eb8a0f7a91407fd0ea41c0ae398f26a0a9fe"
+BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
 REVERSE_SKILL_REV="cab634bd855fc287f6e420c1f36fd1a6b9245960"
 
 usage() {
   cat <<EOF
-Usage: ${0##*/} [-b]
+Usage: ${0##*/} [-b] [-c]
 
 Install the required OpenCode setup.
-  -b  also install the bonus skills
+  -b           also install the bonus skills
+  -c, --check  print every required command, optional package, and installed
+               artifact as [ok] or [missing], then exit. Installs nothing.
+               Exits 1 if a required item is missing.
 EOF
 }
 
@@ -37,8 +41,8 @@ info() { printf '  %s\n' "$1"; }
 step() { printf '\n==> %s\n' "$1"; }
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "missing $1"
+require_command() { # <command> [hint]
+  command -v "$1" >/dev/null 2>&1 || die "missing $1${2:+ — install it with: $2}"
 }
 
 check_opencode() {
@@ -124,26 +128,151 @@ install_reverse_skill() {
   info "installed reverse-skill to $target"
 }
 
-if [[ ${1:-} == "-b" ]]; then
-  BONUS=1
+# Every check in one place, so `--check` and the install can never disagree.
+# Format: name:package hint:skill that uses it. Blank hint = ships with the OS
+# or the base install.
+required_packages() {
+  cat <<'PACKAGES'
+opencode::the harness every skill runs in
+git::the install itself
+cargo::papercuts, bgrun, octask
+npx::the skills CLI
+rsync::sync.sh
+python3::install.sh, skill-doctor
+jq:pacman -S jq:the ocv2 and forkflow scripts
+gh:pacman -S github-cli:every PR, issue, and release skill
+PACKAGES
+}
+
+# Tools a skill calls only on some paths. Each has a documented fallback or a
+# gate, so a missing one degrades that skill instead of the install.
+optional_packages() {
+  cat <<'PACKAGES'
+ffmpeg:pacman -S ffmpeg:the ffmpeg-skill
+opencode2::the OpenCode v2 API skills
+mmdc:pacman -S mermaid-cli:visualize, pdf-write
+rsvg-convert:pacman -S librsvg:visualize
+pandoc:pacman -S pandoc-cli:pdf-write
+pdflatex:pacman -S texlive-latex-recommended:pdf-write
+xelatex:pacman -S texlive-xetex:pdf-write
+pdftotext:pacman -S poppler:pdf-read, pdf-write
+pdftoppm:pacman -S poppler:pdf-read, pdf-write
+pdfinfo:pacman -S poppler:pdf-write
+rga:pacman -S ripgrep-all:pdf-read
+uv:pacman -S uv:pdf-read
+clamscan:pacman -S clamav:malware-check, omarchy-plugin-install
+bun:pacman -S bun-bin:ocv2-pluginhealth
+PACKAGES
+}
+
+# What the install puts on disk. A path here is anything whose absence means a
+# broken or partial setup, so check them all.
+installed_items() {
+  cat <<ITEMS
+octask:scheduled-task
+papercuts:the papercuts CLI
+bgrun:the bgrun skill and CLI
+skills:$HOME/.config/opencode/skills
+agents:$HOME/.config/opencode/agents
+plugins:$HOME/.config/opencode/plugins
+commands:$HOME/.config/opencode/commands
+values:$ROOT/.agent-values
+reverse-skill:$HOME/.local/share/reverse-skill
+ITEMS
+}
+
+# Print the checklist. Nothing is installed and nothing is written.
+checklist() {
+  local name package skill path version missing=0
+  step "Checklist"
+
+  printf '\nRequired\n'
+  while IFS=: read -r name package skill; do
+    [[ -n "$name" ]] || continue
+    if [[ "$name" == opencode ]]; then
+      if version="$(opencode --version 2>&1)" && [[ "$version" =~ (^|[[:space:]])v?2(\.|$) ]]; then
+        printf '  [ok]      %-16s %s\n' "$name" "$version"
+      else
+        printf '  [MISSING] %-16s %s\n' "$name" "OpenCode v2 is required"
+        missing=1
+      fi
+      continue
+    fi
+    if command -v "$name" >/dev/null 2>&1; then
+      printf '  [ok]      %-16s %s\n' "$name" "$skill"
+    else
+      printf '  [MISSING] %-16s %s\n' "$name" "${package:-not found} — $skill"
+      missing=1
+    fi
+  done < <(required_packages)
+
+  printf '\nOptional — each skill above still runs without its tool\n'
+  while IFS=: read -r name package skill; do
+    [[ -n "$name" ]] || continue
+    if command -v "$name" >/dev/null 2>&1; then
+      printf '  [ok]      %-16s %s\n' "$name" "$skill"
+    else
+      printf '  [missing] %-16s %s\n' "$name" "${package:-not on PATH} — $skill"
+    fi
+  done < <(optional_packages)
+
+  printf '\nInstalled by this script\n'
+  while IFS=: read -r name path; do
+    [[ -n "$name" ]] || continue
+    if [[ "$path" == /* ]]; then
+      if [[ -e "$path" ]]; then
+        printf '  [ok]      %-16s %s\n' "$name" "$path"
+      else
+        printf '  [MISSING] %-16s %s\n' "$name" "$path"
+        missing=1
+      fi
+    elif command -v "$name" >/dev/null 2>&1; then
+      printf '  [ok]      %-16s %-28s %s\n' "$name" "$(command -v "$name")" "$path"
+    else
+      printf '  [MISSING] %-16s %-28s %s\n' "$name" "-" "$path"
+      missing=1
+    fi
+  done < <(installed_items)
+
+  if ((missing == 0)); then
+    printf '\nAll required items are present.\n'
+  else
+    printf '\nRun ./install.sh to install what is missing.\n'
+  fi
+  return "$missing"
+}
+
+while (($#)); do
+  case "$1" in
+    -b) BONUS=1 ;;
+    -c|--check) CHECK=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
   shift
-fi
-case "${1:-}" in
-  -h|--help) usage; exit 0 ;;
-esac
-if (($# != 0)); then
-  usage >&2
-  exit 2
+done
+
+if ((CHECK == 1)); then
+  checklist
+  exit $?
 fi
 
 step "Checking prerequisites"
-for command in git cargo npx rsync python3; do
-  require_command "$command"
-done
+while IFS=: read -r tool package skill; do
+  [[ -n "$tool" && "$tool" != opencode ]] || continue
+  command -v "$tool" >/dev/null 2>&1 || die "missing $tool${package:+ — install it with: $package}"
+done < <(required_packages)
 check_opencode
-((BONUS == 0)) || require_command ffmpeg
 npx --yes "skills@$SKILLS_CLI_VERSION" --help >/dev/null 2>&1 || die "npx skills is unavailable"
 info "required commands found"
+
+while IFS=: read -r tool package skill; do
+  [[ -n "$tool" ]] || continue
+  command -v "$tool" >/dev/null 2>&1 || info "note: $tool missing — $package"
+done < <(optional_packages)
 
 step "Installing required skills"
 install_skill Agents365-ai/365-skills --skill mermaid-skill

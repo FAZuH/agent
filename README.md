@@ -17,11 +17,30 @@
 ### Requirements
 
 - OpenCode v2 on your `PATH`.
-- `git`, `cargo`, `npx`, `rsync`, and `python3`.
+- `git`, `cargo`, `npx`, `rsync`, `python3`, `jq`, and `gh`. The `jq` scripts
+  back the OpenCode v2 and forkflow skills; `gh` backs every PR, issue, and
+  release skill.
 - `ffmpeg` only for the bonus install.
 
 `install.sh` checks these commands. It never installs operating-system packages
 and never calls `sudo`, so install anything missing first and rerun it.
+
+It also reports the tools a skill calls on some paths only — `mmdc`,
+`rsvg-convert`, `pandoc`, `pdflatex`, `xelatex`, `pdftotext`, `pdftoppm`,
+`pdfinfo`, `rga`, `uv`, `clamscan`, `bun`, `opencode2` — with the package that
+provides each. Those are notes, not failures: every skill that uses one has a
+documented fallback, so the install continues.
+
+### Check first
+
+```bash
+./install.sh --check
+```
+
+Prints every required command, optional package, and installed artifact as
+`[ok]` or `[MISSING]`, then exits. Installs nothing, writes nothing, and exits
+`1` when a required item is missing, so it is safe to run on a new machine
+before installing.
 
 ### Install
 
