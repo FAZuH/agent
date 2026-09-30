@@ -15,9 +15,7 @@ The subagent's job:
 
 Tell the subagent:
 - The specific, narrow question: one API, one behaviour, one version claim. "Research X" is too broad and comes back shallow; scope is on the caller.
-- That this is a skill-invoked run: the `research-plan` gate (class
-  `subagent`: see the @gate skill) skips because the question is already
-  decided. The subagent does not ask for a plan first.
+- That it should just start: there is no approval gate, so do not ask it for a plan first.
 - It writes exactly one Markdown file and returns only its path.
 
 ## After it returns
