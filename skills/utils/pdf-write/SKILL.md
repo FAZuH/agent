@@ -27,7 +27,7 @@ work when nothing changed. Delete the lock to force a rebuild.
 The underlying calls, when you need them directly:
 
 ```bash
-mmdc -i diagram.mmd -o diagram.png -b white -w 1600
+mmdc -i diagram.mmd -o diagram.png -b white --size 1600
 pandoc -i main.md -o main.pdf
 ```
 
