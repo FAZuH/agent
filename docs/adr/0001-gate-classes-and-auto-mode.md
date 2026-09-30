@@ -56,5 +56,8 @@ there unless the run is configured for it.
   approval gates and stay untouched.
 - `subagent` currently has one user (research-plan). If it stays
   single-site, demoting the class is the recorded escape hatch.
+- Amended 2026-09-30: `research-plan` is gone — both research subagents start
+  immediately — so the `subagent` class has no users left and the escape hatch
+  above applies to it as written.
 - Future extension candidates, deliberately deferred: scoped auto,
   skip budgets, a gate registry linted by skill-doctor.

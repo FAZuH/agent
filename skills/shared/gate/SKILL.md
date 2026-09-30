@@ -93,7 +93,7 @@ A gate in a procedure or skill is a one-line tag; the mechanics live here.
 ```
 
 - `<id>`: a stable, lowercase-hyphenated name (`commit-approval`,
-  `papercut-file`, `research-plan`). Used in the gate log and re-gates.
+  `papercut-file`, `new-scope`). Used in the gate log and re-gates.
 - `<class>`: `always` | `normal` | `subagent`.
 - `<auto-resolution>`: the concrete thing "proceed" means when the gate
   skips. It is load-bearing: without it, "skip the gate" is ambiguous.
@@ -133,8 +133,8 @@ Entry format (append `- (none yet)` → entries):
 ## Gate log
 - (none yet)
 - [2026-09-02] commit-approval (normal); skipped (auto): committed 3 groups with inferred messages
-- [2026-09-02] research-plan (subagent); skipped (delegated): ran without re-asking
 - [2026-09-02] new-scope (always); fired: approved ("viz")
+- [2026-09-02] papercut-file (normal); skipped (auto): filed 4 entries unprompted
 ```
 
 Fields: date, gate id, class, then the decision: `fired: <outcome>` /

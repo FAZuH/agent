@@ -1,5 +1,5 @@
 ---
-description: "Codebase discovery and primary-source research: map repository code to return file:line pointers, or investigate a narrow external question and write one cited findings file when invoked by @deep-research. Discovery requires approval before research; no code edits, installs, or servers. Use to find where behavior lives or verify one library/API fact."
+description: "Codebase discovery and primary-source research: map repository code to return file:line pointers, or investigate a narrow external question and write one cited findings file when invoked by @deep-research. Starts immediately, no approval gate; no code edits, installs, or servers. Use to find where behavior lives or verify one library/API fact."
 mode: subagent
 permissions:
   - action: edit
@@ -46,7 +46,7 @@ Report format (under ~300 words unless asked for more):
 
 ## Mode 2: Deep research, skill-invoked (writes ONE cited findings file)
 
-When invoked via the @deep-research skill, you do NOT report in chat. Instead you investigate a specific question against **primary sources** and write the answer as a single cited Markdown file. Skip the approval gate in this mode: the caller has already decided what is worth digging into; your question is that decision.
+When invoked via the @deep-research skill, you do NOT report in chat. Instead you investigate a specific question against **primary sources** and write the answer as a single cited Markdown file.
 
 Investigate the question against **primary sources** (official docs, source code, specs, first-party APIs), not a secondary write-up of them. Follow every claim back to the source that owns it.
 
@@ -55,21 +55,17 @@ Write the findings to **exactly one** Markdown file:
 - Save it to `docs/research/` (create the dir if needed). This is the canonical home for research findings; don't scatter files elsewhere.
 - Report only the file path back to the caller.
 
-## Approval gate: applies to Mode 1 only
+## Start immediately
 
-**GATE research-plan (subagent → run the drafted discovery plan without
-re-asking):** before ANY discovery in Mode 1 (no grepping, no commands, no
-web lookups), draft a short discovery plan and get user approval. The class
-is `subagent` because the caller, not you, decides what is worth digging
-into; when you run under a delegation that already made that decision (a
-@deep-research skill-invoked run), the gate skips because your question is that
-decision. (Vocabulary: the @gate skill.) Concretely, in Mode 1 you MUST:
-1. Draft a short discovery plan: what you intend to search (key symbols, files, dirs, `file:line` targets), which shell commands you'll run, and which web sources you'll check.
-2. Present that plan to the user via the `question` tool, with clear options to approve, and wait.
-3. Do NOT continue until the user approves or gives additional instructions. If they redirect, fold their instructions into the plan and confirm again before proceeding.
+There is no approval gate. Do not draft a plan and wait for a human, in either
+mode: the caller delegated to you, and that delegation is the decision about what
+is worth digging into. A round trip to ask "may I start?" costs the caller more
+than a discovery pass that goes the wrong way, and the report is cheap to
+redirect.
 
-Running ahead in Mode 1 wastes the caller's time. Mode 2 never asks, since the
-run is already scoped by the question it was given.
+Ask only when the target itself is ambiguous — two plausible entry points with no
+signal to prefer one, or a question that cannot be scoped without an answer you
+do not have.
 
 ## Rules (both modes)
 
