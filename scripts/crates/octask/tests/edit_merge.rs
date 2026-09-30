@@ -163,6 +163,31 @@ fn disabled_timer_stays_disabled() {
 }
 
 #[test]
+fn dirty_only_toggles_and_otherwise_carries() {
+    let t = agent_task();
+
+    let downgraded = merged_add_args(&edit_args(|e| e.no_dirty_only = true), &t, true);
+    assert!(
+        !downgraded.dirty_only,
+        "a dirty-only task must be downgradable, or edit is stuck once the \
+         workdir stops being a git repository"
+    );
+
+    let set = edit_args(|e| e.dirty_only = true);
+    assert!(merged_add_args(&set, &t, true).dirty_only);
+
+    let plain = edit_args(|_| {});
+    assert!(
+        merged_add_args(&plain, &t, true).dirty_only,
+        "a plain edit must not silently clear the flag"
+    );
+
+    let mut not_dirty = agent_task();
+    not_dirty.dirty = false;
+    assert!(!merged_add_args(&plain, &not_dirty, true).dirty_only);
+}
+
+#[test]
 fn exec_task_rejects_agent_flags() {
     let t = exec_task();
     let a = edit_args(|e| e.prompt = Some("no".into()));

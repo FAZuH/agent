@@ -43,6 +43,10 @@ pub struct EditArgs {
     #[arg(long)]
     pub no_persistent: bool,
     #[arg(long)]
+    pub dirty_only: bool,
+    #[arg(long)]
+    pub no_dirty_only: bool,
+    #[arg(long)]
     pub credential: Vec<String>,
     #[arg(long)]
     pub clear_credentials: bool,
@@ -115,7 +119,13 @@ pub fn merged_add_args(args: &EditArgs, cur: &Task, was_enabled: bool) -> AddArg
         if !new_model.is_empty() {
             a.model = Some(new_model);
         }
-        a.dirty_only = cur.dirty;
+        a.dirty_only = if args.dirty_only {
+            true
+        } else if args.no_dirty_only {
+            false
+        } else {
+            cur.dirty
+        };
     } else {
         a.exec = Some(cur.exec.clone());
         if !new_workdir.is_empty() {
@@ -168,6 +178,9 @@ pub fn edit(args: &EditArgs) -> Result<()> {
     if args.model.is_some() && args.no_model {
         bail!("edit: --model and --no-model conflict");
     }
+    if args.dirty_only && args.no_dirty_only {
+        bail!("edit: --dirty-only and --no-dirty-only conflict");
+    }
     let name = norm_name(&args.name);
     require_name(&name)?;
     let dir = unit_dir();
@@ -187,6 +200,18 @@ pub fn edit(args: &EditArgs) -> Result<()> {
         &["--user", "is-enabled", &format!("{PREFIX}{name}.timer")],
     );
     let add_args = merged_add_args(args, &cur, was_enabled);
+
+    // add::install reports this as an "add" failure and names no way out, but
+    // only edit can clear the flag, so the check and the remedy belong here.
+    if add_args.dirty_only
+        && let Some(workdir) = add_args.workdir.as_deref()
+        && !ok("git", &["-C", workdir, "rev-parse", "--git-dir"])
+    {
+        bail!(
+            "edit: task '{name}' is dirty-only and {workdir} is not a git repository — \
+             pass --no-dirty-only to drop the check, or re-add the task without it"
+        );
+    }
 
     if args.dry_run {
         let tmp = tempfile::Builder::new().prefix("octask-edit.").tempdir()?;
