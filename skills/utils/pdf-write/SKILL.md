@@ -65,6 +65,11 @@ fails the build or renders as a box. Write `$\Theta(nm)$` and `$\ne$`.
   pagination. It is invisible in the Markdown reading, which is the point.
 - **`{ width=NN% }`** on an image is honoured. Full width is rarely right; see
   layout below.
+- **Keep related prose, its table, and its algorithm on the same flow.** A
+  forced `\newpage` before an algorithm strands the prose it explains on the
+  previous page and leaves the algorithm page half empty; more page breaks, not
+  fewer, is what fixes it. Check the rendered page count and page density, not
+  just that the build succeeded.
 
 ## Images and Mermaid
 
@@ -86,6 +91,13 @@ package is missing. Rebuild the format, do not install anything:
 ```bash
 fmtutil-sys --all --byfmt pdflatex   # or xelatex
 ```
+
+If the format is missing because `fmtutil.cnf` has no entry for that engine,
+`--all` cannot build it. Write a temporary `fmtutil.cnf` naming the format and
+build it into the user format tree (`TEXMFVAR`) instead — no install, no sudo.
+A half-installed TeX tree also shows up as missing `.sty`/`.tfm` files
+(`lmodern`, `psnfss`, `lualatex-math`): those are genuinely packages, so
+diagnose before assuming the format was the problem.
 
 Check before assuming: `command -v pandoc mmdc`, and read the actual error
 text. Never install TeX packages to fix a build you have not diagnosed.
