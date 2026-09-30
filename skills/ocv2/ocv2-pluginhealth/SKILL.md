@@ -123,7 +123,7 @@ A plugin can be loaded, listed as healthy, and still fail on every call,
 because nothing in `/api/plugin` executes `setup()`. Run the loader probe:
 
 ```bash
-bun ~/.config/opencode/skills/ocv2/ocv2-pluginhealth/scripts/oc-plugin-load.mjs \
+bun ~/.config/opencode/skills/ocv2-pluginhealth/scripts/oc-plugin-load.mjs \
   ~/Projects/agent/plugins                 # or: <repo>/.opencode/plugins my-tool.ts
 ```
 
