@@ -60,7 +60,7 @@ fi
 for src in ${diagrams[@]+"${diagrams[@]}"}; do
   out="${src%.mmd}.png"
   echo "==> $out"
-  mmdc -i "$src" -o "$out" -b white -w 1600
+  mmdc -i "$src" -o "$out" -b white --size 1600
 done
 
 out="${doc%.md}.pdf"
