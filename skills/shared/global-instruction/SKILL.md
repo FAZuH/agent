@@ -23,6 +23,7 @@ list is working without the rules.
 | `@antislop` | The anti-slop filter for UI, copy, and code-comment work. |
 | `@agent-map` | Repository layout, file classification, skill routing, agent roles, delegation, validation, deployment. Keep machine paths, credentials, installed inventory, and host commands in the host `AGENTS.md`, not here. |
 | `@comments-discipline` | Whether a comment earns its line, and deleting the ones that do not. |
+| `@jev-use` | When a decision is a judgement over enumerable options, ask Jev instead of deliberating: skill choice, control clicks, review order, bounded yes/no claims. |
 
 ## Working habits
 
