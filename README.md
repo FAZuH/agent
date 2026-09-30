@@ -31,6 +31,17 @@ It also reports the tools a skill calls on some paths only — `mmdc`,
 provides each. Those are notes, not failures: every skill that uses one has a
 documented fallback, so the install continues.
 
+### Check first
+
+```bash
+./install.sh --check
+```
+
+Prints every required command, optional package, and installed artifact as
+`[ok]` or `[MISSING]`, then exits. Installs nothing, writes nothing, and exits
+`1` when a required item is missing, so it is safe to run on a new machine
+before installing.
+
 ### Install
 
 ```bash
