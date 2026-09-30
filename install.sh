@@ -266,7 +266,11 @@ while IFS=: read -r tool package skill; do
   command -v "$tool" >/dev/null 2>&1 || die "missing $tool${package:+ — install it with: $package}"
 done < <(required_packages)
 check_opencode
-npx --yes "skills@$SKILLS_CLI_VERSION" --help >/dev/null 2>&1 || die "npx skills is unavailable"
+npx_err="$(mktemp)" || die "could not create a temp file"
+if ! npx --yes "skills@$SKILLS_CLI_VERSION" --help >/dev/null 2>"$npx_err"; then
+  die "npx skills@$SKILLS_CLI_VERSION is unavailable: $(head -c 200 "$npx_err" | tr '\n' ' ')"
+fi
+rm -f "$npx_err"
 info "required commands found"
 
 while IFS=: read -r tool package skill; do
