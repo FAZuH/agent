@@ -1,122 +1,66 @@
 ---
 name: pdf-write
-description: Author and build documents to PDF with Pandoc and LaTeX (papers, reports, assignment write-ups). Use when the user asks to write a paper or report, convert Markdown to PDF, or fix a PDF that built badly. Covers LaTeX math inside Markdown, Mermaid diagram embedding, page layout, LaTeX format repair, and mandatory visual verification of the output.
+description: >
+  Build or assemble a PDF, then prove the result looks right. Authoring: a
+  Markdown paper, report, or assignment write-up through Pandoc and LaTeX, LaTeX
+  math inside Markdown, Mermaid diagrams, or a build that came out wrong.
+  Assembling: images or scans to PDF, merging several PDFs into one submission,
+  making page widths agree across the merged file, or re-merging after one part
+  changed. Use whenever the request ends in a .pdf file.
 license: MIT
 ---
 
 # PDF Writer
 
-Produce a PDF from a Markdown source, and prove the result actually looks
-right. The failure mode is a build that exits 0 and still ships a broken
-document: literal asterisks, unrendered math, a figure alone on a page.
+Produce a PDF, and prove it actually looks right. The failure mode is a build
+that exits 0 and still ships a broken document: literal asterisks, unrendered
+math, a figure alone on a page, a merged file whose pages are four different
+widths.
 
-## Pipeline
+Two branches. Load one reference file and follow it.
 
-One command builds the diagrams and the document:
+| The request is | Load |
+| --- | --- |
+| Write a paper, report, or write-up from Markdown; repair a PDF that built badly; math, Mermaid, or a LaTeX engine error | `reference/authoring.md` |
+| Images or scans to PDF; merge several PDFs; make page widths agree; rebuild after one part changed | `reference/assembling.md` |
 
-```bash
-pdf-build            # main.md in the current directory
-pdf-build path/to    # main.md inside that directory
-pdf-build paper.md   # that specific file
-```
+A submission bundle needs both: author the typed parts, then assemble them.
 
-`pdf-build` renders every `.mmd` to `.png` with `mmdc`, builds the Markdown to
-`.pdf` with Pandoc, and records input hashes in `pdf-build.lock`. It skips the
-work when nothing changed. Delete the lock to force a rebuild.
+## Rules that hold for both
 
-The underlying calls, when you need them directly:
-
-```bash
-mmdc -i diagram.mmd -o diagram.png -b white --size 1600
-pandoc -i main.md -o main.pdf
-```
-
-Keep the `.mmd` sources next to the `.md`, and reference the rendered `.png`
-files relatively (`![alt](diagram.png)`). A PDF that cannot be rebuilt from
-its folder is not finished.
-
-## Math is LaTeX, not inline code and not HTML
-
-Write `$x_i$` and `$$…$$`. Never put math in backticks, and never reach for
-raw HTML to center a formula.
-
-```markdown
-$$
-L[i,j] =
-\begin{cases}
-L[i-1,j-1] + 1 & \text{jika } x_i = y_j, \\[4pt]
-\max\bigl(L[i-1,j],\; L[i,j-1]\bigr) & \text{jika } x_i \ne y_j.
-\end{cases}
-$$
-```
-
-Pandoc's default template loads `amsmath` and `amssymb`, so `cases`, `\text`,
-`\ne`, `\max`, and `\bigl` all work without preamble edits.
-
-**Never type a Unicode math symbol.** A literal `Θ` or `≠` in the source either
-fails the build or renders as a box. Write `$\Theta(nm)$` and `$\ne$`.
-
-## Markdown that survives the LaTeX writer
-
-- **A list needs a blank line before it.** `Teknik ini:` followed directly by
-  `* item` prints the literal asterisks instead of bullets. Blank line, then
-  `- item`.
-- **Raw LaTeX passes through**, so `\newpage` is a legitimate way to control
-  pagination. It is invisible in the Markdown reading, which is the point.
-- **`{ width=NN% }`** on an image is honoured. Full width is rarely right; see
-  layout below.
-- **Keep related prose, its table, and its algorithm on the same flow.** A
-  forced `\newpage` before an algorithm strands the prose it explains on the
-  previous page and leaves the algorithm page half empty; more page breaks, not
-  fewer, is what fixes it. Check the rendered page count and page density, not
-  just that the build succeeded.
-
-## Images and Mermaid
-
-- Quote any Mermaid label containing brackets, commas, or comparison
-  operators. `A["L[i,j] = 0"]` parses; `A[L[i,j] = 0]` is a parse error.
-- Render the diagram and **look at it** before embedding. Two failure shapes
-  seen in practice: a top-to-bottom flowchart 20 nodes tall, unusable on a
-  page; and edges bundled through a shared subgraph border, unreadable.
-  Fix by restructuring: group into phases side by side, or reduce node count.
-- Scale images to the page. On A4 with 15 mm margins the text block is about
-  186 mm wide, so a 1584x1104 diagram at `width=100%` is roughly 130 mm tall
-  and will push itself onto a page of its own.
-
-## When LaTeX itself fails
-
-`I can't find the format file` means the engine's format is missing, not that a
-package is missing. Rebuild the format, do not install anything:
-
-```bash
-fmtutil-sys --all --byfmt pdflatex   # or xelatex
-```
-
-If the format is missing because `fmtutil.cnf` has no entry for that engine,
-`--all` cannot build it. Write a temporary `fmtutil.cnf` naming the format and
-build it into the user format tree (`TEXMFVAR`) instead — no install, no sudo.
-A half-installed TeX tree also shows up as missing `.sty`/`.tfm` files
-(`lmodern`, `psnfss`, `lualatex-math`): those are genuinely packages, so
-diagnose before assuming the format was the problem.
-
-Check before assuming: `command -v pandoc mmdc`, and read the actual error
-text. Never install TeX packages to fix a build you have not diagnosed.
+- **Keep the sources.** The built or merged PDF is a build artifact. The part
+  PDFs, the `.md`, and the `.jpg` scans stay on disk, so a later edit rebuilds
+  one part instead of all of them.
+- **One width across one delivered file.** Unless the user asks otherwise,
+  every page in a single PDF agrees on width. Mixed page boxes are the defect
+  this branch exists to prevent.
+- **Name the output what the user asked for.** `Group B_Tugas 2.pdf` is the
+  name, not a generated one.
+- **Say the merge order out loud** when combining more than two inputs, so a
+  wrong order is caught before the file is read.
 
 ## Verify before delivering: mandatory
 
-A build that exits 0 is not a verification. Run all three:
+A build that exits 0 is not a verification.
 
 ```bash
-pdfinfo main.pdf                       # page count, page size
-pdftotext -layout main.pdf - | head -60  # did the content survive
-pdftoppm -png -r 90 main.pdf /tmp/opencode/page   # then READ the images
+pdfinfo out.pdf                                       # page count, first-page size
+pdfinfo -f 1 -l 20 -box out.pdf | grep MediaBox      # every page's real box
+pdftotext -layout out.pdf - | head -60                # text pages: did the content survive
+pdftoppm -png -r 90 out.pdf /tmp/opencode/page        # then READ the images
 ```
 
-The third step is the one that catches the real defects. Read the rendered
-pages and check: bullets are bullets, math is typeset, no lone figure on a
-near-empty page, no orphaned caption, and nothing spilled past the margin.
+- `pdfinfo` alone reports **page 1 only**. A merged file with mixed sizes needs
+  the `-f 1 -l N -box` form before anyone can claim the widths agree.
+- `pdftotext` returns nothing on a scanned or image page. That is the expected
+  result, not a defect, so text extraction proves nothing there and only
+  reading the render does.
+- Reading the rendered pages is the step that catches the real defects: bullets
+  that printed as literal asterisks, math that stayed raw, a figure alone on a
+  near-empty page, a member list collapsed into one run-on line, content
+  squashed against a re-rendered page box.
 
-If page count or layout is wrong, adjust and rebuild. Do not describe the
+If page count or layout is wrong, fix it and rebuild. Do not describe the
 problem to the user and stop.
 
 ## Related
