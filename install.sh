@@ -24,6 +24,8 @@ PAPERCUTS_REV="369b2aeb6f4d6414ddaf2df71d90c8a0419e06bf"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
 REVERSE_SKILL_REV="cab634bd855fc287f6e420c1f36fd1a6b9245960"
+# jegrep v0.1.3. A tag object dereferences to the commit cargo actually builds.
+JEGREP_REV="c84f4561c081c9bcef494384d69c6e55012ca0da"
 
 GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
 GLOBAL_INSTRUCTION_SKILL="skills/shared/global-instruction/SKILL.md"
@@ -245,6 +247,19 @@ install_reverse_skill() {
   info "installed reverse-skill to $target"
 }
 
+# jegrep is the semantic-grep binary the jev plugin shells out to. It reads
+# OPENROUTER_API_KEY or TYPESAFE_API_KEY, neither of which this machine has; the
+# plugin's loopback shim injects the Command Code key instead, so a missing
+# install only costs use case 3.
+install_jegrep() {
+  if command -v jegrep >/dev/null 2>&1; then
+    info "jegrep already installed"
+    return
+  fi
+  cargo install --git https://github.com/can1357/jegrep --rev "$JEGREP_REV" --locked
+  info "installed jegrep (use it with JEGREP_ENDPOINT_URL pointed at the jev shim)"
+}
+
 # Every check in one place, so `--check` and the install can never disagree.
 # Format: name:package hint:skill that uses it. Blank hint = ships with the OS
 # or the base install.
@@ -278,7 +293,8 @@ pdfinfo:pacman -S poppler:pdf-write
 rga:pacman -S ripgrep-all:pdf-read
 uv:pacman -S uv:pdf-read
 clamscan:pacman -S clamav:malware-check, omarchy-plugin-install
-bun:pacman -S bun-bin:ocv2-pluginhealth
+bun:pacman -S bun-bin:ocv2-pluginhealth, the jev plugin
+jegrep::the jev plugin's semantic grep
 PACKAGES
 }
 
@@ -428,6 +444,7 @@ if ((BONUS == 1)); then
   step "Installing bonus skills"
   install_ffmpeg_skill
   install_reverse_skill
+  install_jegrep
 fi
 
 printf '\nInstallation complete. Restart OpenCode to load the configuration.\n'
