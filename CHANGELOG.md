@@ -1,3 +1,10 @@
+## [0.12.4](https://github.com/FAZuH/agent/compare/v0.12.3...v0.12.4) (2026-09-30)
+
+
+### Features
+
+* **skill:** add the post-task report skill ([e1505a6](https://github.com/FAZuH/agent/commit/e1505a6e999652a25f27a6ce46b30011e5c0af16))
+
 ## [0.12.3](https://github.com/FAZuH/agent/compare/v0.12.2...v0.12.3) (2026-09-30)
 
 
@@ -31,13 +38,4 @@
 ### Features
 
 * **skill:** add branch-flow skill ([e9379d9](https://github.com/FAZuH/agent/commit/e9379d908d571dbfe36833ebede70a5b78c3b473))
-
-## [0.11.8](https://github.com/FAZuH/agent/compare/v0.11.7...v0.11.8) (2026-09-28)
-
-
-### Features
-
-* **script:** add pdf-build ([190d426](https://github.com/FAZuH/agent/commit/190d426369e7b67ccef76ee6bcf5949f55efbbce))
-* **skill:** add app-paths skill ([e1782b0](https://github.com/FAZuH/agent/commit/e1782b0ea6f17a536d0a2e04fb0d9f0aad2237d8))
-* **skill:** add pdf-write skill ([7ee901b](https://github.com/FAZuH/agent/commit/7ee901b9224356a1639104a39fa5227df97ad9a5))
 
