@@ -5,7 +5,7 @@ scope. Do not invent one on your own.
 
 **GATE new-scope (always → never skipped; propose name + definition + example
 subject and wait for explicit approval):** committing with a scope outside
-this closed vocabulary is a convention change — the gate fires in every run
+this closed vocabulary is a convention change, so the gate fires in every run
 mode, including auto. When nothing fits, propose the new scope to the user
 with a one-line definition and **wait for explicit approval** before
 committing with it. (Vocabulary: the @gate skill.)
@@ -36,7 +36,7 @@ that genuinely spans several components.
   commits; only fall back to no scope when splitting is impossible.
 - New scopes require user approval first: propose name + definition + example
   subject, then wait. Never commit with an unapproved scope.
-- Old commit subjects are never rewritten to match this list — the vocabulary
+- Old commit subjects are never rewritten to match this list. The vocabulary
   applies from its introduction onward.
 
 ## Examples

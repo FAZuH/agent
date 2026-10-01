@@ -1,4 +1,4 @@
-# Jev port to OpenCode — build record
+# Jev port to OpenCode: build record
 
 Written before any code, then kept current as the port landed. Everything here
 was verified against the live machine or a primary source on 2026-09-30;
@@ -31,8 +31,8 @@ instead, read off `plugins/viz/src/index.ts` and `plugins/md-link/src/index.ts`:
 
 `execute` returns `{ content: string }` and takes a single JSON-Schema `input`,
 not `(args, context)` with a Zod schema. A bare string returns throws
-`s is not an Object` at the harness while the call itself still succeeds — read
-the call log, not the error. Filed as papercut `pc_2a38bf0f51a4`.
+`s is not an Object` at the harness while the call itself still succeeds, so
+read the call log rather than the error. Filed as papercut `pc_2a38bf0f51a4`.
 
 ### The TUI surface is wrong in the type definitions too
 
@@ -51,7 +51,7 @@ So `dialog.select` and `dialog.prompt` are real and documented nowhere;
 `dialog.replace` and the JSX components are documented and absent. The
 consequence is concrete: a plugin cannot build a dialog that survives a
 selection, because the only non-closing primitive (`replace`, or possibly
-`set`) is unreachable, and every host dialog component is unreachable too —
+`set`) is unreachable, and every host dialog component is unreachable too.
 `@opentui/solid` and therefore `createComponent` is not installed for local dir
 plugins, only for npm plugins. That is why `/jev-features` closes on every
 change, and it is tracked in
@@ -81,12 +81,12 @@ Content-Type: application/json
 | Decisions path | a `/systemone` path under the provider's API root | provider docs; an unauthenticated probe returned 401, which proves the route exists |
 | Dead path | a sibling `/decisions` path under an older `alpha` root → **404** | live probe |
 | Wire model id | provider-specific, e.g. `typesafe/jev` | the provider's model page, not any list endpoint |
-| Host-facing model id | namespaced, e.g. `<provider>/typesafe/jev` | `opencode2 models` — **not** the wire value |
+| Host-facing model id | namespaced, e.g. `<provider>/typesafe/jev` | `opencode2 models`, **not** the wire value |
 | Auth header | `Authorization: Bearer <key>` | provider API docs |
 | Plan gate | provider-specific: some tiers cannot reach the model at all | provider FAQ |
 | Price | provider-specific, per million input tokens, output free | provider pricing |
 | Context | 32K (state plus the longest question) | provider model page |
-| Interactive use | **Never** — absent from `/model`, cannot drive a session | provider FAQ |
+| Interactive use | **Never**: absent from `/model`, cannot drive a session | provider FAQ |
 
 The wire id and the host-facing id are different strings. The provider's
 catalogue list (86 OpenAI-style entries on the one verified) omits the model
@@ -102,7 +102,7 @@ carries nobody's billing details. The concrete values live in
 
 | Type | `criteria` in | Answer out |
 | --- | --- | --- |
-| `noul` | optional `{true, false}` | `{ type, noul }` — the probability of **yes** |
+| `noul` | optional `{true, false}` | `{ type, noul }`, the probability of **yes** |
 | `choice` | `{ label: meaning }`, 2–255 labels | `{ type, choice, probabilities, confidence }` |
 | `score` | ordered `string[]`, 2–10 levels | `{ type, score, probabilities, legend, confidence }` |
 
@@ -112,7 +112,7 @@ are different quantities and must not be compared to one threshold.
 
 ## Credential
 
-Not a separate mechanism — the provider is a normal OpenCode credential, the
+Not a separate mechanism: the provider is a normal OpenCode credential, the
 same shape as `opencode-go`. But OpenCode will not hand it to a plugin:
 
 | Store | Contents |
@@ -134,9 +134,9 @@ a key as an argument: anything after a slash command lands in the transcript, so
 
 | Repo | What it gave |
 | --- | --- |
-| `wuyoscar/jev-skill` | `scripts/jev.py` — the validation rules ported into `ask()`; the install doc is OpenCode-aware but its five-skill release is a source preview, not the published v0.2.0 (11 skills) |
+| `wuyoscar/jev-skill` | `scripts/jev.py`: the validation rules ported into `ask()`; the install doc is OpenCode-aware but its five-skill release is a source preview, not the published v0.2.0 (11 skills) |
 | `n23eos/jev-skills` | catalog-then-choose shape for the skill picker; `--live` / `--private` / `--follow-up` split; confirms TypeSafe Choice caps at 255 with one reserved for `none` |
-| `shitianfang/jev-use` | `src/dispatch.ts` — the pre-call/post-call escalation contract. Its central idea: `producesContent` and non-enumerable options are the LLM's, everything else is Jev's |
+| `shitianfang/jev-use` | `src/dispatch.ts`: the pre-call/post-call escalation contract. Its central idea: `producesContent` and non-enumerable options are the LLM's, everything else is Jev's |
 | `Kmasterrr/use-jev` | confirmed the request/response wire shapes; notes the endpoint moved to `/systemone` |
 | `ellipsis-dev/blink` | not used (jegrep chosen instead) |
 | `can1357/jegrep` | `--endpoint local` + `JEGREP_ENDPOINT_URL` sends **no** Authorization header, which is why a shim is needed; withholds credential files by name *and* content |
@@ -161,12 +161,12 @@ a key as an argument: anything after a slash command lands in the transcript, so
 
 | # | Use case | Status |
 | --- | --- | --- |
-| 1 | Skill decision | **live** — `jev_pick_skill` over SKILL.md frontmatter |
-| 2 | Digest priority | **deferred** — recurring $ cost against $0 value; [issue #2](https://github.com/FAZuH/agent/issues/2) |
-| 3 | File explorer | **live** — upstream `jegrep` + auth shim, bonus-tier install |
-| 4 | Review | **live** — `jev_review_rank`, sorted not filtered |
-| 5 | Browser use | **live** — `jev_pick_control` over extracted control text |
-| 6 | Tool hooks | **live** — advisory, `risk_hook` off by default, subagent reach tested |
+| 1 | Skill decision | **live**: `jev_pick_skill` over SKILL.md frontmatter |
+| 2 | Digest priority | **deferred**: recurring $ cost against $0 value; [issue #2](https://github.com/FAZuH/agent/issues/2) |
+| 3 | File explorer | **live**: upstream `jegrep` + auth shim, bonus-tier install |
+| 4 | Review | **live**: `jev_review_rank`, sorted not filtered |
+| 5 | Browser use | **live**: `jev_pick_control` over extracted control text |
+| 6 | Tool hooks | **live**: advisory, `risk_hook` off by default, subagent reach tested |
 
 ## What was verified with real requests
 
@@ -176,7 +176,7 @@ is not a correct decision, so the checks that matter are the answers:
 | Tool | What a real run showed |
 | --- | --- |
 | `jev_check` | Answered **no** to "is the root cause confirmed or still a hypothesis?", confidently. Correct: a repeated failure is not confirmation. |
-| `jev_pick_skill` | Picked the right skill with P=1.00 on a real roster. Given a near-duplicate decoy it returned the same pick at P=0.54 and **reported low confidence** — the abstention is the feature working, not failing. |
+| `jev_pick_skill` | Picked the right skill with P=1.00 on a real roster. Given a near-duplicate decoy it returned the same pick at P=0.54 and **reported low confidence**. The abstention is the feature working, not failing. |
 | `jev_review_rank` | Ranked four real files with the two containing real logic at the top. All four came back; none were dropped. |
 | `jev_pick_control` | Picked the right control on a real sign-in page, and the click was confirmed to land on the page it named. |
 | `jegrep` via the shim | Returned ranked hits across the repo and found the two agent files a permissions question pointed at. |
@@ -208,14 +208,14 @@ independent of this one:
    intended behaviour.
 
 So the hook does reach subagent tool calls on this version. The reported bypass
-is not reproducible here. One session, one subagent, one call — enough to
+is not reproducible here. One session, one subagent, one call is enough to
 contradict the claim, not enough to call the boundary airtight.
 
 ## Not verified
 
 - The risk hook's **block** path has still never executed end to end in a live
   session. Every observed call scored below the threshold, so the hook has only
-  ever been observed failing open — correctly. `blocksCall` (the block decision)
+  ever been observed failing open, correctly. `blocksCall` (the block decision)
   and the hook's fail-open catch are unit-tested; the wiring around them is not.
   To prove the block, turn the `risk_hook` feature on in `/jev-features` and
   make a call that genuinely warrants refusal.
@@ -230,4 +230,4 @@ contradict the claim, not enough to call the boundary airtight.
   `ctx`; the pixels are not.
 - The wire model id was confirmed by live authenticated calls (see the results
   above). What was once open here was whether the *host-facing* namespaced id was
-  the value to put in `state.model` — it is not; the wire value is.
+  the value to put in `state.model`: it is not. The wire value is.

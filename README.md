@@ -25,9 +25,9 @@
 `install.sh` checks these commands. It never installs operating-system packages
 and never calls `sudo`, so install anything missing first and rerun it.
 
-It also reports the tools a skill calls on some paths only — `mmdc`,
+It also reports the tools a skill calls on some paths only (`mmdc`,
 `rsvg-convert`, `pandoc`, `pdflatex`, `xelatex`, `pdftotext`, `pdftoppm`,
-`pdfinfo`, `rga`, `uv`, `clamscan`, `bun`, `opencode2` — with the package that
+`pdfinfo`, `rga`, `uv`, `clamscan`, `bun`, `opencode2`), with the package that
 provides each. Those are notes, not failures: every skill that uses one has a
 documented fallback, so the install continues.
 
@@ -65,29 +65,29 @@ From an upstream, installed through the
 Never hand-edit these copies; update them from their owner. The CLI takes
 upstream `HEAD` and cannot pin a ref, so these move on their own.
 
-- [mattpocock/skills](https://github.com/mattpocock/skills) — 18 engineering
+- [mattpocock/skills](https://github.com/mattpocock/skills): 18 engineering
   skills: `ask-matt`, `code-review`, `codebase-design`, `diagnosing-bugs`,
   `domain-modeling`, `grill-with-docs`, `implement`,
   `improve-codebase-architecture`, `prototype`, `research`,
   `resolving-merge-conflicts`, `setup-matt-pocock-skills`, `tdd`, `to-spec`,
   `to-tickets`, `triage`, `wayfinder`, `wizard`.
-- [mattpocock/skills](https://github.com/mattpocock/skills) — 6 productivity
+- [mattpocock/skills](https://github.com/mattpocock/skills): 6 productivity
   skills: `grill-me`, `grilling`, `handoff`, `to-questionnaire`, `wait-what`,
   `writing-for-agents`.
-- [Agents365-ai/365-skills](https://github.com/Agents365-ai/365-skills) —
+- [Agents365-ai/365-skills](https://github.com/Agents365-ai/365-skills):
   `mermaid-skill`.
-- [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish) —
+- [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish):
   `simple-english`.
-- [FAZuH/bgrun](https://github.com/FAZuH/bgrun) — the `bgrun` skill and the
+- [FAZuH/bgrun](https://github.com/FAZuH/bgrun): the `bgrun` skill and the
   `bgrun` CLI, which runs a command as a systemd user unit.
-- [FAZuH/papercuts](https://github.com/FAZuH/papercuts) — the `papercuts` CLI,
+- [FAZuH/papercuts](https://github.com/FAZuH/papercuts): the `papercuts` CLI,
   installed with `cargo install`.
-- [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) — the
+- [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail): the
   `plugins/ponytail/upstream` submodule, the `fazuh.ponytail` plugin that wraps
   it, and 6 skills: `ponytail`, `ponytail-review`, `ponytail-audit`,
   `ponytail-debt`, `ponytail-gain`, `ponytail-help`.
 
-Add `-b` to also install the bonus items — `anti-slop` for filtering generic AI
+Add `-b` to also install the bonus items: `anti-slop` for filtering generic AI
 output, `ffmpeg-skill` for editing media locally, and `reverse-skill` for
 reverse engineering and authorized security work:
 
@@ -97,18 +97,18 @@ reverse engineering and authorized security work:
 
 Both skills come from an upstream:
 
-- [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) — 6
+- [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop): 6
   skills: `antislop`, `antislop-code`, `antislop-copywriting`, `antislop-human`,
   `antislop-layoutmobile`, `antislop-ui`.
-- [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) —
+- [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill):
   `ffmpeg-skill`, copied by hand and checked with its own doctor script.
 
 `reverse-skill` is a repository, not a skill package, so it is cloned whole into
 `~/.local/share/reverse-skill` and its tool index is refreshed there. Upstream
 says to use it from the full checkout, not from a copy of `skills/`:
 
-- [zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill) — a
-  ~45-module routing pack for APK, binary, JS, malware, CTF, and pentest work.
+- [zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill): a
+  49-module routing pack for APK, binary, JS, malware, CTF, and pentest work.
   Open the checkout as a workspace, or point a session at its `RULES.md` and
   `skills/<name>/SKILL.md`. The tools it drives (Java, Node, Python, jadx,
   radare2, and the rest) stay optional; the tool index only reports which ones
@@ -119,7 +119,7 @@ says to use it from the full checkout, not from a copy of `skills/`:
 `install.sh` pins everything it fetches outside the `skills` CLI: the CLI's npm
 version, and the papercuts, bgrun, ffmpeg-skill, and reverse-skill commits. The
 pin block sits at the top of `install.sh`. To move one, load the `update-pins`
-skill — it checks each remote, shows the diff between the pinned and current
+skill: it checks each remote, shows the diff between the pinned and current
 commit, and only edits after you approve. `uninstall.sh` mirrors the CLI pin
 because a newer CLI cannot remove what it did not write.
 
@@ -150,15 +150,15 @@ does not appear or a plugin is not loaded.
 
 ## Docs
 
-- [Skills](docs/skills.md) — all 66 skills, one line each
-- [Skill Guide](docs/skill-guide.md) — which skills to load at each phase of a change
-- [Agents](docs/agents.md) — all 17 agent definitions, by role
-- [Plugins](docs/plugins.md) — the four OpenCode plugins, plus the command definitions in `commands/`
-- [Jev](docs/jev.md) — the decision-model plugin: what it guarantees, what it costs, how to point it at another provider
-- [Commit and Changelog](docs/dev/commit-changelog.md) — how this repository writes commits and changelog entries
-- [Commit Scopes](docs/dev/commit-scopes.md) — the closed vocabulary of Conventional Commit scopes
-- [Gate Classes and Auto Mode](docs/adr/0001-gate-classes-and-auto-mode.md) — why approval gates are split into classes
-- [Jev Port Notes](docs/dev/jev-port-notes.md) — the jev build record: live results, the v2 plugin contract, what is still unproven
+- [Skills](docs/skills.md): all 68 skills, one line each
+- [Skill Guide](docs/skill-guide.md): which skills to load at each phase of a change
+- [Agents](docs/agents.md): all 17 agent definitions, by role
+- [Plugins](docs/plugins.md): the five OpenCode plugins, plus the command definitions in `commands/`
+- [Jev](docs/jev.md): the decision-model plugin: what it guarantees, what it costs, how to point it at another provider
+- [Commit and Changelog](docs/dev/commit-changelog.md): how this repository writes commits and changelog entries
+- [Commit Scopes](docs/dev/commit-scopes.md): the closed vocabulary of Conventional Commit scopes
+- [Gate Classes and Auto Mode](docs/adr/0001-gate-classes-and-auto-mode.md): why approval gates are split into classes
+- [Jev Port Notes](docs/dev/jev-port-notes.md): the jev build record: live results, the v2 plugin contract, what is still unproven
 
 ## License
 
