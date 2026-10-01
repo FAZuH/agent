@@ -16,7 +16,7 @@ cannot quietly break it.
 
 - **One error class may stop the host.** If a plugin is allowed to block
   anything, give that one outcome its own error class and rethrow only that.
-  Every other error — transport, shape, and your own bugs — falls through to a
+  Every other error (transport, shape, and your own bugs) falls through to a
   handler that logs and returns. A `catch` that rethrows "unexpected" errors is
   fail-*closed* wearing a fail-open hat.
 - **Wrap the whole I/O.** `fetch` in a try/catch and the very next
@@ -34,7 +34,7 @@ cannot quietly break it.
 ## Never let a score exclude
 
 If the plugin ranks or scores, it returns **every item it was given, ordered**.
-No score, no threshold, and no failed sub-call may remove a row — a low score
+No score, no threshold, and no failed sub-call may remove a row. A low score
 means "nothing stood out", not "skip it", and the item nobody scored is exactly
 the one to distrust.
 
@@ -63,7 +63,7 @@ the master switch works everywhere with no per-tool wiring:
 
 ```ts
 featureStored(key)   // raw, for display
-featureOn(key)       // master && stored, for enforcement — every call site
+featureOn(key)       // master && stored, for enforcement at every call site
 ```
 
 ## Settings
@@ -75,7 +75,7 @@ featureOn(key)       // master && stored, for enforcement — every call site
 - **Resolution order**: env vars in a configured list, then a file. Report which
   one matched; never the value.
 - **Fill every known key on load.** A partial or old settings file must not
-  change behaviour silently, and an unknown key must not invent a switch —
+  change behaviour silently, and an unknown key must not invent a switch:
   build the map from the known list and ignore the rest.
 - **Return a fresh object from the loader.** Returning a module-level default by
   reference lets a setter rewrite the defaults in memory, and the bug only
@@ -87,10 +87,10 @@ featureOn(key)       // master && stored, for enforcement — every call site
   as a command argument: anything after a slash command lands in the
   transcript. A dialog is the write path; the text route reports the path and
   the command to fill it.
-- Store it 0600, and `chmod` after writing — a `mode` on `writeFileSync` applies
+- Store it 0600, and `chmod` after writing: a `mode` on `writeFileSync` applies
   only at creation, so a pre-existing file keeps its old permissions.
-- **Redact before send, on every path.** Credential-shaped text — private key
-  blocks, bearer tokens, `api_key = …` assignments — stripped recursively.
+- **Redact before send, on every path.** Credential-shaped text (private key
+  blocks, bearer tokens, `api_key = …` assignments) stripped recursively.
   A shim or proxy that forwards a body is a send path too, and the one most
   likely to carry file contents.
 - **Anything holding a payload is 0600**: the call log, the trace log, the
@@ -126,7 +126,7 @@ slow leak, not an emergency.
   touching subordinates, an invalid number keeps the old value instead of
   writing a NaN that JSON turns into null.
 - Keep stubs honest. A stub that encodes your assumption is a test of the
-  assumption. When a stub passes and the real host fails, the stub is wrong —
+  assumption. When a stub passes and the real host fails, the stub is wrong:
   log the real shape and fix the stub.
 
 ## Keep the record honest

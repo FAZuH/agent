@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-move.sh — re-pin an OpenCode v2 session to another project directory.
+# oc-move.sh: re-pin an OpenCode v2 session to another project directory.
 # Wraps POST /api/session/{id}/move (204, empty body), then reports
 # GET /api/project/current. Prints the new directory to stdout. See SKILL.md.
 set -euo pipefail
@@ -39,5 +39,5 @@ printf 'moved %s → %s\n' "$SESSION" "$DIR" >&2
 
 CUR=$(opencode2 api get /api/project/current 2>/dev/null || true)
 printf 'project/current: %s\n' "$(jq -r '.data.directory // .data // "?"' <<<"$CUR" 2>/dev/null)" >&2
-printf 'a "/" result is normal from a detached shell — the session picks up the new directory next turn\n' >&2
+printf 'a "/" result is normal from a detached shell. The session picks up the new directory next turn\n' >&2
 printf '%s\n' "$DIR"

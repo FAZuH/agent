@@ -35,7 +35,7 @@ tokenrouter/z-ai/glm-5.3-free
 The catalog is local, not the API's list: `opencode/space-bunny-free` is
 accepted by `POST /api/session` and runs, yet `opencode2 models` on the same
 install does not show it. When the user names a model, absence from this list is
-not evidence against it — apply it and read back the error rather than silently
+not evidence against it. Apply it and read back the error rather than silently
 substituting a different one.
 
 ## 3. Pick

@@ -28,7 +28,7 @@ external service, holds settings, or can block the host needs one more thing:
 plugins/<name>/
   package.json    # type: module; exports "." -> src/index.ts, "./tui" -> src/tui.ts
   index.ts        # re-exports src/index.ts
-  tui.ts          # re-exports src/tui.ts  — the CLI resolves <plugin-dir>/tui
+  tui.ts          # re-exports src/tui.ts, which the CLI resolves <plugin-dir>/tui
   src/
 ```
 
@@ -38,7 +38,7 @@ plugins/<name>/
 `sync.sh` discovers `plugins/*` and copies the directory to
 `~/.config/opencode/plugins/`. A repository edit is not live until
 `./sync.sh push -g`. OpenCode v2 hot-reloads plugins, so a restart is rarely
-the fix — `ocv2-pluginhealth` is the skill for loading questions.
+the fix: `ocv2-pluginhealth` is the skill for loading questions.
 
 **A local dir plugin gets no `node_modules`.** No `solid-js`, no
 `@opentui/solid`, no `createComponent`, and therefore no JSX. This is the single
@@ -66,7 +66,7 @@ export default {
 
 - `input` is a **JSON Schema object**, not a Zod schema.
 - `execute` returns **`{ content: string }`**. Returning a bare string throws
-  `s is not an Object` at the harness *while the tool call still succeeds* — so
+  `s is not an Object` at the harness *while the tool call still succeeds*, so
   the model sees a result and you see an error. Read your own log, not the
   error. This is the most common way a v1 habit silently half-works here.
 - The call context (`tctx`) is separate from the plugin context. Tools get
@@ -82,7 +82,7 @@ ctx.tool.hook("execute.before", async (event: any) => {
 ```
 
 Keyed on `event.tool`. On v2.0.20 these reach tool calls made by `task`
-subagents, so a policy hook covers subagent work — verified live, one session
+subagents, so a policy hook covers subagent work, verified live, one session
 and one subagent, which is enough to refute a bypass report and not enough to
 call the boundary airtight.
 
@@ -165,7 +165,7 @@ trace(JSON.stringify({
 ```
 
 This is one line and it ends hours of guessing. A plugin that renders a panel
-should write its own diagnostics: a TUI failure is otherwise **silent** — the
+should write its own diagnostics: a TUI failure is otherwise **silent**: the
 command runs, throws, and the keymap swallows it, so the symptom is "nothing
 happens" with no error anywhere.
 

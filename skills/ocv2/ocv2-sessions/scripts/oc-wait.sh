@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-wait.sh — wait for an OpenCode v2 session's turn to finish.
+# oc-wait.sh: wait for an OpenCode v2 session's turn to finish.
 # Polls GET /api/session/{id} .data.outcome (the /wait endpoint is
 # unavailable on the deployed server). Prints the final outcome.
 set -euo pipefail
@@ -67,7 +67,7 @@ while :; do
     failed)    printf 'outcome: failed (%ss)\n' "$(( $(date +%s) - START ))"; exit 1 ;;
   esac
   if [[ $(date +%s) -ge $DEADLINE ]]; then
-    printf 'oc-wait: timeout after %ss — session %s still running (last outcome: %s); re-arm with: oc-wait.sh %s\n' \
+    printf 'oc-wait: timeout after %ss, session %s still running (last outcome: %s); re-arm with: oc-wait.sh %s\n' \
       "$TIMEOUT" "$SESSION" "${OUTCOME:-none}" "$SESSION" >&2
     exit 3
   fi

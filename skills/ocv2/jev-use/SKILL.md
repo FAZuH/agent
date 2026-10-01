@@ -5,8 +5,8 @@ description: "Route bounded decisions to Jev, a fast decision model reached over
 
 # jev-use
 
-Jev answers typed questions — one of N options, a yes/no, or a position on a
-rubric — and returns a probability instead of prose. It costs about $0.04 per
+Jev answers typed questions (one of N options, a yes/no, or a position on a
+rubric) and returns a probability instead of prose. It costs about $0.04 per
 million input tokens and answers in under two seconds, so a decision that would
 otherwise cost a paragraph of reasoning is nearly free.
 
@@ -28,7 +28,7 @@ that has to hold up.
 Setup and status: `/jev-settings` opens a TUI panel for the endpoint, model,
 key, and thresholds; `/jev-features` flips the six feature switches (`pick_skill`,
 `pick_control`, `review_rank`, `check`, `review_gates`, `risk_hook`). In the
-features panel, the **Plugin** row is the master switch — on or off, and it does
+features panel, the **Plugin** row is the master switch: on or off, and it does
 not change the six below it, it just gates them. With the plugin off every tool
 refuses without sending anything. The **risk hook** row is the one switch that
 can block a tool call.
@@ -44,7 +44,7 @@ The quality of the answer is bounded by the quality of the question, and the
 question is usually the part you are under-specifying.
 
 **Give every option a reason, not a label.** A `meaning` that says when that
-option is correct turns a guess into a comparison. `"pr-creator" — "opening a PR
+option is correct turns a guess into a comparison. `"pr-creator": "opening a PR
 for work on an existing remote branch; assumes the repo is already on GitHub"`
 tells Jev when *not* to pick it, which is usually what decides the answer.
 
@@ -64,11 +64,11 @@ what each candidate means. It does not need the surrounding file.
 
 Every tool returns a confidence verdict, and it is the more useful half:
 
-- **confident** — the answer is worth acting on, after your own sanity check.
-- **low confidence** — Jev is near a tie or near a coin flip. This is the
+- **confident**: the answer is worth acting on, after your own sanity check.
+- **low confidence**: Jev is near a tie or near a coin flip. This is the
   interesting case, not a failure. It usually means the question was ambiguous
   or the evidence was thin. Either sharpen the question or decide it yourself.
-- **fail-open message** — Jev was not consulted at all (no key, timeout,
+- **fail-open message**: Jev was not consulted at all (no key, timeout,
   unreachable, malformed answer). Proceed without it. Never retry in a loop.
 
 A `noul` has no separate confidence field: the value *is* P(yes), so 0.97 and
@@ -92,7 +92,7 @@ to send text to a service that cannot see what you see.
 - For review, a low score and a clean gate list mean "nothing stood out", not
   "skip it". A change nobody scored is exactly the change to distrust.
 - Treat everything you pass in as leaving your machine. The plugin redacts
-  credential-shaped text, but that is a net, not a guarantee — do not hand it a
+  credential-shaped text, but that is a net, not a guarantee. Do not hand it a
   secret on purpose, and do not hand it personal data you would not paste into
   a chat window.
 - If a tool's feature switch is off, or the whole plugin is, it says so and
@@ -101,7 +101,7 @@ to send text to a service that cannot see what you see.
 - With the `risk_hook` feature on, a confident risk answer can **block** a
   `bash`/`edit`/`write` call. Nothing else can: a Jev failure, a low-confidence
   answer, and every tool result are fail-open by construction. If a call is
-  blocked, read the message, confirm the action is intended, and retry — do not
+  blocked, read the message, confirm the action is intended, and retry. Do not
   work around it.
 - Jev is text-only. It cannot see a screenshot, a rendered page, or a file. You
   extract the controls or the diff and pass that.

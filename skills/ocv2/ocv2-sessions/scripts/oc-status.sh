@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-status.sh — one-line status of an OpenCode v2 session.
+# oc-status.sh: one-line status of an OpenCode v2 session.
 # GET /api/session/{id} → compact JSON: agent, model, outcome, tokens, cost.
 set -euo pipefail
 

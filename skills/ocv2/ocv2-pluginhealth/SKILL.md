@@ -155,6 +155,6 @@ comment.
 
 ## Writing one instead
 
-This skill answers why a plugin is not working. To author one — the contract,
-tools, hooks, commands, the TUI surface, and how to verify it — read
+This skill answers why a plugin is not working. To author one (the contract,
+tools, hooks, commands, the TUI surface, and how to verify it), read
 @ocv2-plugins.
