@@ -1,83 +1,62 @@
 ---
 name: global-instruction
-description: The common, machine-agnostic operating rules for every session - the skills that must always load, the working habits, shell discipline, and the papercuts contract. Load this first in every session; the host AGENTS.md names it. Use when the user says "global instructions", when a rule's full text is needed rather than the host one-liner, or in any repo whose AGENTS.md points here.
+description: The common, machine-agnostic operating rules for every session: the skills that must always load, the working habits, shell discipline, and the papercuts contract. Load this first in every session; the host AGENTS.md names it. Use when the user says "global instructions", when a rule's full text is needed rather than the host one-liner, or in any repo whose AGENTS.md points here.
 ---
 
 # Global Instruction
 
-The machine-agnostic half of the host `AGENTS.md`. That file keeps only what is
-true of one host (sudo, the npm supply chain, machine paths, model selection)
-and points here for everything else. Nothing below names a path, a credential,
-or a host command; that split is the whole reason this skill exists, and
-@agent-map is the rule that draws it.
+Common rules for every session, on any machine. The host AGENTS.md keeps only
+what is true of one host (paths, credentials, installed commands) and points
+here for the rest.
 
 ## Mandatory skill load
 
-Load these before the first tool call, every session. The host `AGENTS.md`
-carries the pointer and nothing else forces them, so a session that skips this
-list is working without the rules.
+Load these before the first tool call, every session:
 
 | Skill | Owns |
 |---|---|
-| `@ponytail` | The ladder: skip what need not exist, reuse what already exists, stdlib and native before dependencies. |
-| `@antislop` | The anti-slop filter for UI, copy, and code-comment work. |
-| `@agent-map` | Repository layout, file classification, skill routing, agent roles, delegation, validation, deployment. Keep machine paths, credentials, installed inventory, and host commands in the host `AGENTS.md`, not here. |
-| `@comments-discipline` | Whether a comment earns its line, and deleting the ones that do not. |
-| `@jev-use` | When a decision is a judgement over enumerable options, ask Jev instead of deliberating: skill choice, control clicks, review order, bounded yes/no claims. |
-| `@prompt-user` | The bottom of a message that needs the user: 🏁 procedures with steps, ❓ questions with a recommended answer. |
+| `@ponytail` | The ladder: skip what need not exist, reuse what exists, stdlib and native before dependencies. |
+| `@antislop` | The anti-slop filter for UI, copy, and code comments. |
+| `@agent-map` | Repo layout, file classification, skill routing, delegation. |
+| `@comments-discipline` | Whether a comment earns its line. |
+| `@jev-use` | A judgement over enumerable options goes to Jev, not to deliberation. |
+| `@prompt-user` | The bottom of a message that needs the user: 🏁 procedures, ❓ questions. |
 
 ## Working habits
 
-- Check the current working directory first. Starting every shell call with a
-  `cd` to where you already are is noise.
+- Check the current working directory first.
 - Use $latex$ for inline latex, and $$latex$$ for a latex block.
 
 ## Shell discipline
 
-- Serialize writes to the same path. Do not put an `edit`/`write` call and a
-  shell read-modify-write for one file in the same parallel batch. A later
-  write can silently undo the earlier one.
-- Never kill by `pkill -f <pattern>` - the pattern matches the invoking
-  wrapper's own cmdline and kills it instead of the victim. Kill the captured
-  `$!`/PID and verify with `ps -e -o pid,args | grep -F <exact path>`.
-- `git commit` with explicit pathspecs. `git commit -m` commits the whole
-  index, which may hold the user's staged work from another concern.
+- Serialize writes to one path: never batch an edit with a shell
+  read-modify-write of the same file; the later write can undo the earlier one.
+- Never kill with `pkill -f <pattern>`: the pattern matches the invoking
+  wrapper's own cmdline. Kill the captured PID, then verify with
+  `ps -e -o pid,args | grep -F <exact path>`.
+- `git commit` with explicit pathspecs. `git commit -m` commits the whole index,
+  which may hold staged work from another concern.
 - Write commit messages to a file, then `git commit -F <file>` in its own call.
-  Never chain the message-file `rm` into the same command line; it runs before
-  git reads it.
-- Before editing a repo config file, check it is not a symlink (`ls -l`, or
-  `git ls-files -s` for mode 120000). The edit tool writes through the link
-  into the shared target; state the resolved target when it matters.
+  Never chain the message-file `rm` into that command line.
+- Before editing a repo config file, check it is not a symlink. The edit tool
+  writes through the link into the shared target.
 
 ## Papercuts
 
-The `papercuts` CLI ships with this repository's `install.sh`, so the contract
-below is part of the install, not an optional habit.
+The `papercuts` CLI ships with this repository's `install.sh`. When you hit
+friction (a dead-end tool call, a broken link, a confusing setup step, a flaky
+command, a misleading error), file it before moving on:
 
-When you hit friction during work - a dead-end tool call, a broken link, a
-confusing or undocumented setup step, a flaky command, a stale cache, a
-misleading error, a non-obvious gotcha - file it before moving on:
-
-- `papercuts add "<what you were doing > what got in the way (guess at cause/fix is a bonus)>"` - one or two sentences.
-- Attach `--cmd` / `--exit` / `--stderr-file` when filing tool failures. Never
-  feed raw env dumps.
-- Severity: `minor` (default) for annoyances, `major` for time sinks,
-  `blocker` for hard walls.
-- `papercuts schema` prints the full machine contract: commands, flags, env
-  vars, exit codes. `papercuts doctor` validates the log file.
-
-File it in the moment, even though none of these block progress - the backlog
-is what shows where the setup needs sanding down. Do not stop working to file.
-
-This is not a bug tracker. A papercut is friction, not a tracked defect.
-
-- Repo store: `.papercuts.jsonl` at the repo root, append-only JSONL. Check
-  `git status` / `.gitignore` before assuming it is tracked.
-  `papercuts resolve <id>` marks one fixed.
-- Global store: `papercuts -g` for friction whose fix lives outside this repo -
-  skills, agent definitions, opencode config, tools, agent behavior. Tag
-  self-improvement entries with the reserved namespace (`self::skill`,
-  `self::agent-def`, `self::tool`, `self::process`); @papercut-sweep sweeps
-  them. Repo sanding stays repo-local.
-- To clear the backlog: `papercuts list --format md`, then fix the small
-  recurring ones first.
+- `papercuts add "<what you were doing > what got in the way>"`, one or two
+  sentences. Attach `--cmd` / `--exit` / `--stderr-file` for tool failures.
+  Never feed raw env dumps.
+- Severity: `minor` by default, `major` for time sinks, `blocker` for walls.
+- File in the moment; do not stop working. This is friction, not a bug tracker.
+- Repo store: `.papercuts.jsonl` at the repo root, append-only. Check
+  `git status` before assuming it is tracked. `papercuts resolve <id>` marks
+  one fixed.
+- Global store: `papercuts -g`, tagged `self::skill` / `self::agent-def` /
+  `self::tool` / `self::process`; @papercut-sweep sweeps them. Repo sanding
+  stays repo-local.
+- `papercuts schema` prints the machine contract; `papercuts doctor` validates
+  the log file. Clear the backlog with `papercuts list --format md`.
