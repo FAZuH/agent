@@ -9,6 +9,7 @@ fi
 DRY_RUN=0
 REMOVE_EXTERNAL_PACKAGES=0
 REMOVE_EXTERNAL_SKILLS=0
+REMOVE_EMBEDDED_RULES=0
 
 EXTERNAL_SKILLS=(
   mermaid-skill
@@ -38,7 +39,6 @@ Remove this repository's installed files from the current user account.
 
 Default:
   - Remove sync-managed skills, agents, plugins, commands, and scripts.
-  - Remove the rules this installer embedded in ~/.config/opencode/AGENTS.md.
   - Uninstall the local Cargo package 'agent'.
   - Keep OpenCode, papercuts, bgrun, external skills, OS packages, and this
     checkout.
@@ -48,6 +48,8 @@ Options:
   --external-packages    Also uninstall papercuts and bgrun from this installer.
   --external-skills      Also remove the external skills installed by install.sh,
                          including the reverse-skill checkout.
+  --embedded-rules       Also remove the rules this installer embedded in
+                         ~/.config/opencode/AGENTS.md; the default keeps them.
 EOF
 }
 
@@ -179,6 +181,7 @@ while (($#)); do
     --dry-run) DRY_RUN=1; shift ;;
     --external-packages) REMOVE_EXTERNAL_PACKAGES=1; shift ;;
     --external-skills) REMOVE_EXTERNAL_SKILLS=1; shift ;;
+    --embedded-rules) REMOVE_EMBEDDED_RULES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
   esac
@@ -201,7 +204,9 @@ else
 fi
 
 remove_sync_files
-remove_global_instruction_ref
+if ((REMOVE_EMBEDDED_RULES)); then
+  remove_global_instruction_ref
+fi
 remove_agent_package
 if ((REMOVE_EXTERNAL_PACKAGES)); then
   remove_external_packages
