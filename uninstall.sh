@@ -38,6 +38,7 @@ Remove this repository's installed files from the current user account.
 
 Default:
   - Remove sync-managed skills, agents, plugins, commands, and scripts.
+  - Remove the rules this installer embedded in ~/.config/opencode/AGENTS.md.
   - Uninstall the local Cargo package 'agent'.
   - Keep OpenCode, papercuts, bgrun, external skills, OS packages, and this
     checkout.
@@ -66,6 +67,43 @@ remove_sync_files() {
     bash "$ROOT/sync.sh" remove -g -n >/dev/null
     bash "$ROOT/sync.sh" remove -g
   fi
+}
+
+# The installer embeds the global-instruction rules in the host AGENTS.md
+# between these markers. install.sh is not sourceable (it installs as it reads),
+# so the markers and the strip are repeated here; keep the two in step.
+GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
+GI_START='<!-- global-instruction:start -->'
+GI_END='<!-- global-instruction:end -->'
+
+remove_global_instruction_ref() {
+  if [[ ! -f "$GLOBAL_AGENTS_MD" ]]; then
+    return 0
+  fi
+  if ! grep -qF "$GI_START" "$GLOBAL_AGENTS_MD"; then
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    info "would remove the embedded rules from $GLOBAL_AGENTS_MD"
+    return 0
+  fi
+  # Same hold-one-line rule as install.sh: drop the blank line with the block, or
+  # the file keeps a trailing one after every uninstall.
+  local tmp="$GLOBAL_AGENTS_MD.untmp"
+  awk -v s="$GI_START" -v e="$GI_END" '
+    function flush() { if (has) { print held; has = 0 } }
+    NR == 1 { held = $0; has = 1; next }
+    $0 == s { if (held ~ /^[[:space:]]*$/) has = 0; inblock = 1; next }
+    $0 == e { inblock = 0; next }
+    inblock { next }
+    { flush(); held = $0; has = 1 }
+    END { flush() }
+  ' "$GLOBAL_AGENTS_MD" >"$tmp" && mv "$tmp" "$GLOBAL_AGENTS_MD" || {
+    rm -f "$tmp"
+    info "could not rewrite $GLOBAL_AGENTS_MD; the embedded rules were kept"
+    return 0
+  }
+  info "removed the embedded rules from $GLOBAL_AGENTS_MD"
 }
 
 remove_agent_package() {
@@ -163,6 +201,7 @@ else
 fi
 
 remove_sync_files
+remove_global_instruction_ref
 remove_agent_package
 if ((REMOVE_EXTERNAL_PACKAGES)); then
   remove_external_packages
