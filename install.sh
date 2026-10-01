@@ -71,18 +71,14 @@ skill_body() { # <path>
   ' "$1" | sed '/./,$!d' | tac | sed '/./,$!d' | tac
 }
 
-# Embed the common rules straight into the host AGENTS.md, once under the first
-# heading and once at the end, so they are in context whether the agent reads
-# the top of the file or the bottom. A pointer to the skill cannot do this: the
-# rules are only read when something makes the agent load it, and "NEVER SKIP"
-# has to not depend on that.
+# Embed the common rules straight into the host AGENTS.md, at the bottom, once.
+# A pointer to the skill cannot do this: the rules are only read when something
+# makes the agent load it, and "NEVER SKIP" has to not depend on that.
 #
 # The block is delimited by markers and rewritten from the skill every run, so
-# editing the skill updates AGENTS.md on the next install instead of leaving two
-# copies to drift. `check` reports drift without writing; --check installs
+# editing the skill updates AGENTS.md on the next install instead of leaving a
+# stale copy to drift. `check` reports drift without writing; --check installs
 # nothing.
-#
-# A file with no `## ` heading has no top, so it gets the one block at the end.
 ensure_global_instruction_ref() { # [check]
   local skill="$ROOT/$GLOBAL_INSTRUCTION_SKILL"
   local body
@@ -102,14 +98,16 @@ ensure_global_instruction_ref() { # [check]
     return 0
   fi
 
-  # Drop both existing blocks, then re-insert, so editing the skill updates
-  # AGENTS.md on the next install instead of leaving two copies to drift.
+  # Drop any existing block, then re-append one at the bottom, so editing the
+  # skill updates AGENTS.md on the next install instead of leaving a stale copy
+  # to drift. This also migrates a file written by the older two-copy installer:
+  # both its blocks are removed here and only the bottom one comes back.
   #
-  # One line is held back so the blank line on either side of a block is dropped
-  # with it. Printing them makes the file grow by a blank line per run, so the
-  # comparison below never matches and every install rewrites. Holding a line
-  # does not collapse runs of blank lines, so untouched parts of the file come
-  # out byte-identical. A file with no `## ` heading gets both blocks at the end.
+  # One line is held back so the blank line before a block is dropped with it.
+  # Printing them makes the file grow by a blank line per run, so the comparison
+  # below never matches and every install rewrites. Holding a line does not
+  # collapse runs of blank lines, so untouched parts of the file come out
+  # byte-identical.
   # A blank line is the empty string in awk, so "is there a held line" needs its
   # own flag: testing `held != ""` would drop every blank line in the file.
   awk -v s="$GI_START" -v e="$GI_END" '
@@ -123,13 +121,7 @@ ensure_global_instruction_ref() { # [check]
   ' "$GLOBAL_AGENTS_MD" >"$GLOBAL_AGENTS_MD.tmp" || return 1
 
   {
-    # No blank line between the heading and the block: the strip above drops a
-    # blank that follows a block, so emitting one here would leave the host's
-    # first heading with a blank line it did not have before.
-    awk -v s="$GI_START" -v e="$GI_END" -v body="$body" '
-      /^## / && !done { print; print s; print ""; print body; print e; done = 1; next }
-      { print }
-    ' "$GLOBAL_AGENTS_MD.tmp"
+    cat "$GLOBAL_AGENTS_MD.tmp"
     printf '\n%s\n\n%s\n%s\n' "$GI_START" "$body" "$GI_END"
   } >"$GLOBAL_AGENTS_MD.tmp2" || return 1
 
@@ -151,7 +143,7 @@ ensure_global_instruction_ref() { # [check]
   rm -f "$GLOBAL_AGENTS_MD.tmp" "$GLOBAL_AGENTS_MD.tmp2"
 
   if ((drifted)); then
-    info "embedded the $GLOBAL_INSTRUCTION_SKILL rules in $GLOBAL_AGENTS_MD (top and bottom)"
+    info "embedded the $GLOBAL_INSTRUCTION_SKILL rules at the bottom of $GLOBAL_AGENTS_MD"
   else
     info "global AGENTS.md already embeds the current rules"
   fi
@@ -249,7 +241,7 @@ install_reverse_skill() {
 
 # jegrep is the semantic-grep binary the jev plugin shells out to. It reads
 # OPENROUTER_API_KEY or TYPESAFE_API_KEY, neither of which this machine has; the
-# plugin's loopback shim injects the Command Code key instead, so a missing
+# plugin's loopback shim injects the provider key instead, so a missing
 # install only costs use case 3.
 install_jegrep() {
   if command -v jegrep >/dev/null 2>&1; then
