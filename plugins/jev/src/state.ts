@@ -1,0 +1,262 @@
+/**
+ * Runtime state for the jev plugin: endpoint, model, key location, thresholds.
+ *
+ * Nothing here names a provider. The defaults describe one working deployment,
+ * but every field is a setting, because the wire model id and the endpoint path
+ * are provider-specific and there is no portable default for either. Read fresh
+ * on every call so a change takes effect without a restart.
+ */
+
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+
+// Overridable so tests get a throwaway directory instead of the live config.
+// Without this a test that flips a feature rewrites the user's real settings.
+const DATA_DIR = process.env.JEV_DATA_DIR ?? join(homedir(), ".config", "fazuh-agent", "data")
+const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(homedir(), ".config", "fazuh-agent", "secrets")
+
+export const STATE_FILE = join(DATA_DIR, "jev-state.json")
+export const LOG_FILE = join(DATA_DIR, "jev-calls.jsonl")
+/** Default key location, overridable so another provider can use another file. */
+export const DEFAULT_SECRET_FILE = join(SECRET_DIR, "jev_api_key")
+
+/**
+ * A toggleable piece of behaviour. `key` is what lands in the state file and
+ * what the code checks; `label` and `what` are the panel's rows. Keeping the
+ * list here means the panel cannot drift from what the plugin honours.
+ */
+export interface Feature {
+  key: string
+  label: string
+  what: string
+}
+
+export const FEATURES: Feature[] = [
+  { key: "pick_skill", label: "Skill picker", what: "jev_pick_skill — which skill to load" },
+  { key: "pick_control", label: "Control picker", what: "jev_pick_control — which on-page control to click" },
+  { key: "review_rank", label: "Review ranking", what: "jev_review_rank — review priority per changed file" },
+  { key: "check", label: "Yes/no check", what: "jev_check — one bounded question about a piece of text" },
+  { key: "review_gates", label: "Review rule gates", what: "The seven rule checks inside jev_review_rank. Ranking still works without them." },
+  { key: "risk_hook", label: "Risk hook", what: "Asks Jev whether each bash/edit/write is irreversible or leaks a secret" },
+]
+
+export interface JevState {
+  /**
+   * The wire protocol. "systemone" posts state plus questions and reads an
+   * answers object. "chat" speaks an Ollama-style /api/chat, turns the same
+   * questions into a prompt, and parses the reply back into the same answers,
+   * so the validation and the confidence maths are unchanged.
+   */
+  protocol: "systemone" | "chat"
+  /** Full URL of the decisions or chat endpoint. Empty until configured. */
+  endpoint: string
+  /** The provider's wire model id, which is not the host's namespaced id. */
+  model: string
+  /** Comma-separated env var names, checked in order before the key file. */
+  keyEnv: string
+  /** Key file, read when no env var matched. */
+  keyFile: string
+  /**
+   * Whether the model reasons before answering. Some chat models spend
+   * ~50s a call with it on and 3-12s without, so it ships off.
+   */
+  think: boolean
+  /** The master switch. Off means the plugin does nothing at all. */
+  enabled: boolean
+  /** Feature switches, keyed from FEATURES. Absent means on. */
+  features: Record<string, boolean>
+  /** A choice below this top probability is reported as low-confidence. */
+  minProbability: number
+  /** A choice below this gap to the runner-up is reported as low-confidence. */
+  minMargin: number
+  /**
+   * The risk gate blocks a call at or above this probability, and the review
+   * tool warns on a gate at or above it. One number, two uses, on purpose:
+   * they are the same judgement at different scales. Only honoured when the
+   * answer is also confident, so a weak high probability cannot block.
+   */
+  gateProbability: number
+}
+
+/**
+ * Endpoint and model are empty on purpose. Both are provider-specific and
+ * neither has a portable default, so a fresh install configures them once in
+ * `/jev-settings` rather than shipping someone else's billing details.
+ */
+export const DEFAULTS: JevState = {
+  protocol: "systemone",
+  endpoint: "",
+  model: "",
+  keyEnv: "JEV_API_KEY",
+  keyFile: DEFAULT_SECRET_FILE,
+  think: false,
+  enabled: true,
+  features: { risk_hook: false },
+  minProbability: 0.8,
+  minMargin: 0.15,
+  gateProbability: 0.7,
+}
+
+const num = (raw: unknown, fallback: number): number =>
+  typeof raw === "number" && Number.isFinite(raw) ? raw : fallback
+
+/**
+ * Fill every known feature, so an old or partial state file cannot silently
+ * enable or disable one. Only keys in FEATURES are honoured — that is what
+ * stops a typo in the JSON from inventing a switch.
+ */
+export function featureMap(raw: unknown, legacyGate?: unknown): Record<string, boolean> {
+  // `gate` was the risk hook before it became a feature. An unmigrated file
+  // still has it, and reading only `features` would silently drop an enabled
+  // gate — the one switch that can stop a tool call.
+  const stored = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
+  if (typeof legacyGate === "boolean") stored.risk_hook ??= legacyGate
+  return Object.fromEntries(FEATURES.map((f) => [f.key, stored[f.key] ?? DEFAULTS.features[f.key] ?? true]))
+}
+
+export function loadState(): JevState {
+  let raw: any
+  try {
+    raw = JSON.parse(readFileSync(STATE_FILE, "utf8"))
+  } catch {
+    // A fresh object each time: DEFAULTS.features is module-level, and
+    // setFeature mutates what loadState returns, which would otherwise rewrite
+    // the defaults themselves in memory.
+    return { ...DEFAULTS, features: featureMap(DEFAULTS.features) }
+  }
+  const str = (value: unknown, fallback: string) => (typeof value === "string" && value.trim() ? value : fallback)
+  return {
+    endpoint: str(raw.endpoint, DEFAULTS.endpoint),
+    model: str(raw.model, DEFAULTS.model),
+    keyEnv: str(raw.keyEnv, DEFAULTS.keyEnv),
+    keyFile: str(raw.keyFile, DEFAULTS.keyFile),
+    protocol: raw.protocol === "chat" ? "chat" : "systemone",
+    think: raw.think === true,
+    enabled: raw.enabled !== false,
+    features: featureMap(raw.features, raw.gate),
+    minProbability: num(raw.minProbability, DEFAULTS.minProbability),
+    minMargin: num(raw.minMargin, DEFAULTS.minMargin),
+    gateProbability: num(raw.gateProbability, DEFAULTS.gateProbability),
+  }
+}
+
+/** The master switch. Off means nothing leaves the machine and nothing spends. */
+export function pluginEnabled(): boolean {
+  return loadState().enabled
+}
+
+export function setEnabled(on: boolean): boolean {
+  saveState({ enabled: on })
+  return on
+}
+
+/**
+ * The feature's own setting, ignoring the master switch. For display: you
+ * configure the features while the plugin is off, and they keep their values.
+ */
+export function featureStored(key: string): boolean {
+  return loadState().features[key] ?? true
+}
+
+/**
+ * Whether a feature may actually run: the master switch, and then the feature.
+ * Every call site uses this, so turning the plugin off needs no other change.
+ */
+export function featureOn(key: string): boolean {
+  return pluginEnabled() && featureStored(key)
+}
+
+export function setFeature(key: string, on: boolean): boolean {
+  if (!FEATURES.some((f) => f.key === key)) throw new Error(`unknown jev feature: ${key}`)
+  const next = loadState()
+  next.features[key] = on
+  saveState({ features: next.features })
+  return on
+}
+
+export function saveState(patch: Partial<JevState>): JevState {
+  const next = { ...loadState(), ...patch }
+  mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
+  return next
+}
+
+/** Where the key came from, for status output. The value is never returned. */
+export function keySource(): { present: boolean; from: string } {
+  const state = loadState()
+  for (const name of state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)) {
+    if ((process.env[name] ?? "").trim()) return { present: true, from: `$${name}` }
+  }
+  try {
+    if (existsSync(state.keyFile) && readFileSync(state.keyFile, "utf8").trim()) {
+      return { present: true, from: state.keyFile }
+    }
+  } catch {}
+  return { present: false, from: "none" }
+}
+
+export function resolveKey(): string | null {
+  const state = loadState()
+  for (const name of state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const value = (process.env[name] ?? "").trim()
+    if (value) return value
+  }
+  try {
+    if (existsSync(state.keyFile)) {
+      const value = readFileSync(state.keyFile, "utf8").trim()
+      if (value) return value
+    }
+  } catch {}
+  return null
+}
+
+/** Write the key to the configured file at 0600. Used by /jev-key. */
+export function writeKey(value: string): string {
+  const target = loadState().keyFile
+  mkdirSync(dirnameOf(target), { recursive: true })
+  writeFileSync(target, `${value}\n`, { encoding: "utf8", mode: 0o600 })
+  chmodSync(target, 0o600)
+  return target
+}
+
+function dirnameOf(path: string): string {
+  const i = path.lastIndexOf("/")
+  return i > 0 ? path.slice(0, i) : "."
+}
+
+/** Append one line per call. Never records the key. */
+export function logCall(entry: Record<string, unknown>): void {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true })
+    // 0600: a logged payload is a shell command or file body, redacted but not
+    // secret-free, and this is the same directory as the key.
+    writeFileSync(LOG_FILE, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, { flag: "a", mode: 0o600 })
+    chmodSync(LOG_FILE, 0o600)
+  } catch {}
+}
+
+export function readLog(limit = 40): any[] {
+  try {
+    return readFileSync(LOG_FILE, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .slice(-limit)
+      .reverse()
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line)]
+        } catch {
+          return []
+        }
+      })
+  } catch {
+    return []
+  }
+}
+
+export function spend(): { calls: number; tokens: number; usd: number } {
+  const rows = readLog(1000)
+  const tokens = rows.reduce((sum, row: any) => sum + (row.inputTokens ?? 0), 0)
+  return { calls: rows.length, tokens, usd: (tokens / 1_000_000) * 0.04 }
+}

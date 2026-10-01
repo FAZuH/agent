@@ -89,6 +89,7 @@ These skills are loaded only when another skill or agent references them.
 - ⭐ **[global-instruction](../skills/shared/global-instruction/SKILL.md)**: The common, machine-agnostic rules, and the skills every session must load.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
 - **[post-task](../skills/shared/post-task/SKILL.md)**: Close finished work with the five-part report: Completed, Deviations, Hiccups, Failed/skipped, Next.
+- **[prompt-user](../skills/shared/prompt-user/SKILL.md)**: The shape of the bottom-of-message prompts: 🏁 procedures with steps, ❓ questions with a recommended answer.
 - **[gate](../skills/shared/gate/SKILL.md)**: Define approval gates, run modes, and the `GATE` tag format.
 - **[scratch](../skills/shared/scratch/SKILL.md)**: Define the `.scratch/` workspace lifecycle and layout.
 - **[worktree](../skills/shared/worktree/SKILL.md)**: Define safe git worktree creation and cleanup mechanics.
@@ -100,6 +101,7 @@ These skills are loaded only when another skill or agent references them.
 - **[ocv2-models](../skills/ocv2/ocv2-models/SKILL.md)**: Pick a free model when the session account is dry, with `AGENTS.md` as the override point.
 - **[ocv2-sessions](../skills/ocv2/ocv2-sessions/SKILL.md)**: Fork and control OpenCode v2 sessions.
 - **[ocv2-move](../skills/ocv2/ocv2-move/SKILL.md)**: Move a v2 session to another project directory.
+- **[ocv2-plugins](../skills/ocv2/ocv2-plugins/SKILL.md)**: Write v2 plugins: the measured contract, tools, hooks, commands, the TUI surface, and verification.
 - **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin loading: what loaded, why it failed, whether `setup()` ran, and what hot-reloads.
 - **[jev-use](../skills/ocv2/jev-use/SKILL.md)**: Ask Jev instead of deliberating when a decision is a judgement over enumerable options.
 - **[ocv2-unfuck](../skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.

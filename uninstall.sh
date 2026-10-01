@@ -9,6 +9,7 @@ fi
 DRY_RUN=0
 REMOVE_EXTERNAL_PACKAGES=0
 REMOVE_EXTERNAL_SKILLS=0
+REMOVE_EMBEDDED_RULES=0
 
 EXTERNAL_SKILLS=(
   mermaid-skill
@@ -47,6 +48,8 @@ Options:
   --external-packages    Also uninstall papercuts and bgrun from this installer.
   --external-skills      Also remove the external skills installed by install.sh,
                          including the reverse-skill checkout.
+  --embedded-rules       Also remove the rules this installer embedded in
+                         ~/.config/opencode/AGENTS.md; the default keeps them.
 EOF
 }
 
@@ -66,6 +69,43 @@ remove_sync_files() {
     bash "$ROOT/sync.sh" remove -g -n >/dev/null
     bash "$ROOT/sync.sh" remove -g
   fi
+}
+
+# The installer embeds the global-instruction rules in the host AGENTS.md
+# between these markers. install.sh is not sourceable (it installs as it reads),
+# so the markers and the strip are repeated here; keep the two in step.
+GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
+GI_START='<!-- global-instruction:start -->'
+GI_END='<!-- global-instruction:end -->'
+
+remove_global_instruction_ref() {
+  if [[ ! -f "$GLOBAL_AGENTS_MD" ]]; then
+    return 0
+  fi
+  if ! grep -qF "$GI_START" "$GLOBAL_AGENTS_MD"; then
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    info "would remove the embedded rules from $GLOBAL_AGENTS_MD"
+    return 0
+  fi
+  # Same hold-one-line rule as install.sh: drop the blank line with the block, or
+  # the file keeps a trailing one after every uninstall.
+  local tmp="$GLOBAL_AGENTS_MD.untmp"
+  awk -v s="$GI_START" -v e="$GI_END" '
+    function flush() { if (has) { print held; has = 0 } }
+    NR == 1 { held = $0; has = 1; next }
+    $0 == s { if (held ~ /^[[:space:]]*$/) has = 0; inblock = 1; next }
+    $0 == e { inblock = 0; next }
+    inblock { next }
+    { flush(); held = $0; has = 1 }
+    END { flush() }
+  ' "$GLOBAL_AGENTS_MD" >"$tmp" && mv "$tmp" "$GLOBAL_AGENTS_MD" || {
+    rm -f "$tmp"
+    info "could not rewrite $GLOBAL_AGENTS_MD; the embedded rules were kept"
+    return 0
+  }
+  info "removed the embedded rules from $GLOBAL_AGENTS_MD"
 }
 
 remove_agent_package() {
@@ -141,6 +181,7 @@ while (($#)); do
     --dry-run) DRY_RUN=1; shift ;;
     --external-packages) REMOVE_EXTERNAL_PACKAGES=1; shift ;;
     --external-skills) REMOVE_EXTERNAL_SKILLS=1; shift ;;
+    --embedded-rules) REMOVE_EMBEDDED_RULES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
   esac
@@ -163,6 +204,9 @@ else
 fi
 
 remove_sync_files
+if ((REMOVE_EMBEDDED_RULES)); then
+  remove_global_instruction_ref
+fi
 remove_agent_package
 if ((REMOVE_EXTERNAL_PACKAGES)); then
   remove_external_packages

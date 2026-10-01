@@ -154,9 +154,11 @@ does not appear or a plugin is not loaded.
 - [Skill Guide](docs/skill-guide.md) — which skills to load at each phase of a change
 - [Agents](docs/agents.md) — all 17 agent definitions, by role
 - [Plugins](docs/plugins.md) — the four OpenCode plugins, plus the command definitions in `commands/`
+- [Jev](docs/jev.md) — the decision-model plugin: what it guarantees, what it costs, how to point it at another provider
 - [Commit and Changelog](docs/dev/commit-changelog.md) — how this repository writes commits and changelog entries
 - [Commit Scopes](docs/dev/commit-scopes.md) — the closed vocabulary of Conventional Commit scopes
 - [Gate Classes and Auto Mode](docs/adr/0001-gate-classes-and-auto-mode.md) — why approval gates are split into classes
+- [Jev Port Notes](docs/dev/jev-port-notes.md) — the jev build record: live results, the v2 plugin contract, what is still unproven
 
 ## License
 
