@@ -49,7 +49,7 @@ six feature switches. Both stay open — arrows move, enter changes one value, e
 closes — so they read like OpenCode's own settings panel. They are TUI commands,
 since the desktop app loads no TUI module. `/jev-model <id>`,
 `/jev-endpoint <url>` do the same as text and
-work in any host. The key comes from `$CMD_API_KEY`/`$JEV_API_KEY` or a 0600
+work in any host. The key comes from `$JEV_API_KEY` or a 0600
 file. `/jev-key` writes it from a TUI dialog without echoing or logging it — TUI
 only, so a key can never land in a transcript; `/jev-status` reports the path
 for hosts with no TUI.

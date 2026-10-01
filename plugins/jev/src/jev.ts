@@ -113,6 +113,133 @@ export function buildPayload(state: JevState, stateBody: JevStateBody, questions
   return { model: state.model, state: redact(stateBody), questions: redact(questions) as Record<string, JevQuestion> }
 }
 
+/**
+ * The chat transport's prompt. It has to ask for exactly the same answer shape
+ * System One returns, because everything downstream - the validation, the
+ * confidence maths, the thresholds - is written against that shape.
+ *
+ * Criteria are load-bearing here, not decoration. A small model answers the
+ * surface topic rather than the question's polarity unless the criteria name
+ * what true and false mean, so every question's criteria go into the prompt.
+ */
+export function chatPrompt(stateBody: JevStateBody, questions: Record<string, JevQuestion>): string {
+  const lines: string[] = [
+    "You are a decision model. Answer only with JSON, one answer per id, and nothing else.",
+    "",
+    'Return exactly: {"answers":{ "<id>": <answer object> }}',
+    "Each id below states the exact answer object it must return. Use it verbatim:",
+    "",
+  ]
+  for (const [id, q] of Object.entries(questions)) {
+    lines.push(`- ${id}: ${JSON.stringify(q.instructions)}`)
+    // The shape goes next to the question, not in the preamble. A small model
+    // copies the shape it sees nearest the question, and one that only reads
+    // the preamble echoes the id into the type field.
+    // A small model copies the placeholder instead of filling it, so a choice
+    // and a score name their actual labels. A template of <label> comes back
+    // verbatim; a list of real ones comes back filled in.
+    if (q.type === "noul") lines.push('  answer: {"type":"noul","noul":<probability that yes is true, 0 to 1>}')
+    else if (q.type === "choice") {
+      const labels = labelsOf(q.criteria)
+      lines.push(`  answer: {"type":"choice","choice":"<one of: ${labels.join(", ")}>","probabilities":{${labels.map((l) => `"${l}":<0..1>`).join(",")}}}`)
+      lines.push("  The probabilities cover every label and sum to 1. The choice is the highest one.")
+    } else {
+      const levels = labelsOf(q.criteria)
+      lines.push(`  answer: {"type":"score","score":<one of: ${levels.map((_, i) => i).join(", ")}>,"probabilities":{${levels.map((_, i) => `"${i}":<0..1>`).join(",")}}}`)
+      lines.push("  The probabilities cover every level and sum to 1.")
+    }
+    const crit = q.criteria
+    if (Array.isArray(crit)) crit.forEach((level, i) => lines.push(`  level ${i} = ${JSON.stringify(level)}`))
+    else if (crit) {
+      if (crit.true) lines.push(`  true = ${JSON.stringify(crit.true)}`)
+      if (crit.false) lines.push(`  false = ${JSON.stringify(crit.false)}`)
+    }
+  }
+  lines.push("", `state: ${JSON.stringify(redact(stateBody))}`)
+  return lines.join("\n")
+}
+
+/** Strip a markdown fence, which some chat models wrap their JSON in. */
+function unfence(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  return (fenced ? fenced[1] : text).trim()
+}
+
+/**
+ * Map a reply's answers onto the questions that were asked.
+ *
+ * A small model often invents its own keys — asked for `verdict` it answers
+ * `1`. When the keys line up, use them. When they do not but the count does,
+ * map by position, because the prompt lists the questions in order and the
+ * model answers them in that order. Otherwise fail: guessing which answer
+ * belongs to which question would put a confident-looking value on the wrong
+ * question, which is worse than no answer.
+ */
+function rekey(reply: Record<string, any>, questions: Record<string, JevQuestion>): Record<string, any> {
+  const asked = Object.keys(questions)
+  const got = Object.keys(reply)
+  if (asked.every((id) => id in reply)) return reply
+  if (asked.length === got.length) {
+    return Object.fromEntries(asked.map((id, i) => [id, reply[got[i]]]))
+  }
+  throw new JevError(
+    `Jev answered ${got.length} of ${asked.length} questions, keyed ${got.map((k) => JSON.stringify(k)).join(", ")}`,
+    "bad-answer",
+  )
+}
+
+/** Post one chat request and return the model's reply content. */
+async function postChat(state: JevState, prompt: string, timeoutMs: number): Promise<string> {
+  let response: Response
+  try {
+    // No Authorization header: a chat endpoint needs none, and a key that
+    // happens to be configured is left out rather than sent to a host that did
+    // not ask for one.
+    response = await fetch(state.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: state.model,
+        stream: false,
+        think: state.think,
+        options: { temperature: 0 },
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+    throw new JevError(
+      timedOut ? `Jev timed out after ${timeoutMs}ms` : `Jev unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      timedOut ? "timeout" : "network",
+    )
+  }
+
+  let text: string
+  try {
+    // Headers can arrive and the body then die. That rejects with a TypeError,
+    // not a JevError, so it has to be caught here or the caller cannot tell a
+    // Jev problem from its own bug.
+    text = await response.text()
+  } catch (error) {
+    throw new JevError(`Jev response body failed: ${error instanceof Error ? error.message : String(error)}`, "network")
+  }
+  if (!response.ok) {
+    const hint = response.status === 404 ? ` (no model "${state.model}" at this endpoint - check /jev-model and /jev-endpoint)` : ""
+    throw new JevError(`Jev HTTP ${response.status}${hint}: ${text.slice(0, 300)}`, "http")
+  }
+
+  let body: any
+  try {
+    body = JSON.parse(text)
+  } catch {
+    throw new JevError("Jev returned non-JSON", "shape")
+  }
+  const content = body?.message?.content
+  if (typeof content !== "string" || !content.trim()) throw new JevError("Jev chat reply had no message content", "shape")
+  return content
+}
+
 export function normalize(id: string, question: JevQuestion, answer: any, state: JevState): Decision {
   if (!answer || typeof answer !== "object") throw new JevError(`${id}: no answer object`, "bad-answer")
   if (answer.type !== question.type) {
@@ -207,6 +334,22 @@ export function normalize(id: string, question: JevQuestion, answer: any, state:
 }
 
 /**
+ * The key is required on the systemone transport and optional on chat, which
+ * needs no auth at all. Split out so the protocol branch reads as intent
+ * rather than as a missing check.
+ */
+function require_key(): string {
+  const key = resolveKey()
+  if (key) return key
+  const state = loadState()
+  const names = state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)
+  throw new JevError(
+    `No Jev key found. Set $${names[0] ?? "JEV_API_KEY"}, or run /jev-key to write ${state.keyFile}.`,
+    "no-key",
+  )
+}
+
+/**
  * One call, any number of questions over one shared state. Throws JevError on
  * every failure path; the caller fails open.
  *
@@ -219,75 +362,132 @@ export async function ask(
   opts: { timeoutMs?: number; log?: boolean } = {},
 ): Promise<JevResult> {
   const state = loadState()
-  const key = resolveKey()
-  if (!key) {
-    const names = state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)
+  // Unconfigured is a state, not a bug: say which setting is missing rather
+  // than posting an empty URL or letting the model see a bare TypeError.
+  if (!state.endpoint || !state.model) {
+    const missing = [!state.endpoint && "endpoint", !state.model && "model"].filter(Boolean).join(" and ")
     throw new JevError(
-      `No Jev key found. Set $${names[0] ?? "JEV_API_KEY"}, or run /jev-key to write ${state.keyFile}.`,
+      `Jev is not configured: no ${missing}. Set ${!state.endpoint ? "/jev-endpoint" : "/jev-model"} in /jev-settings.`,
       "no-key",
     )
   }
-
+  // The chat transport needs no key, so the check is protocol-conditional.
+  const key = state.protocol === "chat" ? resolveKey() : require_key()
   const payload = buildPayload(state, stateBody, questions)
   const started = Date.now()
-  const timeoutMs = opts.timeoutMs ?? 30_000
+  // A local model spends 8-13s a call where a hosted one spends 1-2s, and the
+  // cost grows with the question count, so the default scales rather than
+  // assuming the fast provider.
+  const timeoutMs = opts.timeoutMs ?? Math.max(30_000, Object.keys(questions).length * 15_000)
 
-  let response: Response
-  try {
-    response = await fetch(state.endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(timeoutMs),
-    })
-  } catch (error) {
-    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
-    throw new JevError(
-      timedOut ? `Jev timed out after ${timeoutMs}ms` : `Jev unreachable: ${error instanceof Error ? error.message : String(error)}`,
-      timedOut ? "timeout" : "network",
-    )
+  let answers: any
+  let inputTokens = 0
+  let sent: unknown = payload
+
+  if (state.protocol === "chat") {
+    // Same questions, a different wire. The prompt carries the redacted state,
+    // so what leaves the machine is what the log records.
+    const prompt = chatPrompt(stateBody, questions)
+    sent = { protocol: "chat", model: state.model, think: state.think, prompt }
+    const content = await postChat(state, prompt, timeoutMs)
+    let parsed: any
+    try {
+      parsed = JSON.parse(unfence(content))
+    } catch {
+      throw new JevError(`Jev chat reply was not JSON: ${unfence(content).slice(0, 200)}`, "shape")
+    }
+    if (!parsed?.answers || typeof parsed.answers !== "object") throw new JevError("Jev chat reply had no answers object", "shape")
+    answers = rekey(parsed.answers, questions)
+    // A score's legend is the question's own criteria restated, so a chat model
+    // that omits it loses nothing. Synthesizing it here keeps the validation
+    // that catches a mangled legend on the systemone transport, where the
+    // provider returns one and it is not redundant.
+    for (const [id, q] of Object.entries(questions)) {
+      const a = answers[id]
+      if (q.type === "score" && a && !a.legend && Array.isArray(q.criteria)) {
+        a.legend = q.criteria
+      }
+    }
+    inputTokens = Number(parsed?.prompt_eval_count ?? 0)
+  } else {
+    let response: Response
+    try {
+      response = await fetch(state.endpoint, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    } catch (error) {
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+      throw new JevError(
+        timedOut ? `Jev timed out after ${timeoutMs}ms` : `Jev unreachable: ${error instanceof Error ? error.message : String(error)}`,
+        timedOut ? "timeout" : "network",
+      )
+    }
+
+    let text: string
+    try {
+      // Headers can arrive and the body then die. That rejects with a TypeError,
+      // not a JevError, so it has to be caught here or the caller cannot tell a
+      // Jev problem from its own bug.
+      text = await response.text()
+    } catch (error) {
+      throw new JevError(`Jev response body failed: ${error instanceof Error ? error.message : String(error)}`, "network")
+    }
+    if (!response.ok) {
+      // 401/403 usually means the key, the model id, or the account's plan for
+      // that model. Name the setting that fixes it instead of guessing.
+      const hint =
+        response.status === 401 || response.status === 403
+          ? ` (check the key, the model id "${state.model}", and whether the account may use it — /jev-model, /jev-key)`
+          : response.status === 404
+            ? ` (endpoint not found — check /jev-endpoint, it must be the provider's decisions path)`
+            : ""
+      throw new JevError(`Jev HTTP ${response.status}${hint}: ${text.slice(0, 300)}`, "http")
+    }
+
+    let body: any
+    try {
+      body = JSON.parse(text)
+    } catch {
+      throw new JevError("Jev returned non-JSON", "shape")
+    }
+    if (body?.error) throw new JevError(`Jev error: ${JSON.stringify(body.error).slice(0, 300)}`, "http")
+    if (!body?.answers || typeof body.answers !== "object") throw new JevError("Jev returned no answers object", "shape")
+    answers = body.answers
+    inputTokens = Number(body?.usage?.input_tokens ?? 0)
   }
 
-  let text: string
-  try {
-    // Headers can arrive and the body then die. That rejects with a TypeError,
-    // not a JevError, so it has to be caught here or the caller cannot tell a
-    // Jev problem from its own bug.
-    text = await response.text()
-  } catch (error) {
-    throw new JevError(`Jev response body failed: ${error instanceof Error ? error.message : String(error)}`, "network")
-  }
-  if (!response.ok) {
-    // 401/403 usually means the key, the model id, or the account's plan for
-    // that model. Name the setting that fixes it instead of guessing.
-    const hint =
-      response.status === 401 || response.status === 403
-        ? ` (check the key, the model id "${state.model}", and whether the account may use it — /jev-model, /jev-key)`
-        : response.status === 404
-          ? ` (endpoint not found — check /jev-endpoint, it must be the provider's decisions path)`
-          : ""
-    throw new JevError(`Jev HTTP ${response.status}${hint}: ${text.slice(0, 300)}`, "http")
-  }
-
-  let body: any
-  try {
-    body = JSON.parse(text)
-  } catch {
-    throw new JevError("Jev returned non-JSON", "shape")
-  }
-  if (body?.error) throw new JevError(`Jev error: ${JSON.stringify(body.error).slice(0, 300)}`, "http")
-  if (!body?.answers || typeof body.answers !== "object") throw new JevError("Jev returned no answers object", "shape")
-
-  const decisions = Object.entries(questions).map(([id, q]) => normalize(id, q, body.answers[id], state))
   const elapsedMs = Date.now() - started
-  const inputTokens = Number(body?.usage?.input_tokens ?? 0)
-
-  if (opts.log !== false) {
+  let decisions: Decision[]
+  try {
+    decisions = Object.entries(questions).map(([id, q]) => normalize(id, q, answers[id], state))
+  } catch (error) {
+    // Logged, not swallowed: the raw reply is the only way to see what the
+    // model actually returned, and a validation failure is a finding about the
+    // prompt rather than a bug in this plugin.
     logCall({
+      protocol: state.protocol,
       model: state.model,
       endpoint: state.endpoint,
       questions: Object.fromEntries(Object.entries(questions).map(([id, q]) => [id, q.type])),
-      sent: payload,
+      sent,
+      received: typeof answers === "object" ? answers : String(answers).slice(0, 400),
+      error: error instanceof JevError ? error.message : String(error),
+      inputTokens,
+      elapsedMs,
+    })
+    throw error
+  }
+
+  if (opts.log !== false) {
+    logCall({
+      protocol: state.protocol,
+      model: state.model,
+      endpoint: state.endpoint,
+      questions: Object.fromEntries(Object.entries(questions).map(([id, q]) => [id, q.type])),
+      sent,
       decisions,
       inputTokens,
       elapsedMs,

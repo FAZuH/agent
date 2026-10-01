@@ -76,25 +76,27 @@ Content-Type: application/json
                             "criteria": ... } } }
 ```
 
-| Fact | Value | Source |
+| Fact | Value | How it was established |
 | --- | --- | --- |
-| Endpoint | `https://api.commandcode.ai/provider/v1/systemone` | `commandcode.ai/models/jev`; probe returned 401 (route exists) |
-| Dead path | `/provider/v1/alpha/decisions` → **404** | live probe |
-| **Wire model id** | **`typesafe/jev`** | `commandcode.ai/models/jev` response block |
-| OpenCode model id | `commandcode/typesafe/jev` | `opencode2 models` — **not** the wire value |
-| Auth header | `Authorization: Bearer <key>` | Command Code provider API docs |
-| Plan gate | GOAT and above | Command Code FAQ |
-| Price | $0.04 / M input, output free | Command Code pricing block |
-| Context | 32K (state + longest question) | Command Code model page |
-| Interactive use | **Never** — not in `/model`, cannot drive a session | Command Code FAQ |
+| Decisions path | a `/systemone` path under the provider's API root | provider docs; an unauthenticated probe returned 401, which proves the route exists |
+| Dead path | a sibling `/decisions` path under an older `alpha` root → **404** | live probe |
+| Wire model id | provider-specific, e.g. `typesafe/jev` | the provider's model page, not any list endpoint |
+| Host-facing model id | namespaced, e.g. `<provider>/typesafe/jev` | `opencode2 models` — **not** the wire value |
+| Auth header | `Authorization: Bearer <key>` | provider API docs |
+| Plan gate | provider-specific: some tiers cannot reach the model at all | provider FAQ |
+| Price | provider-specific, per million input tokens, output free | provider pricing |
+| Context | 32K (state plus the longest question) | provider model page |
+| Interactive use | **Never** — absent from `/model`, cannot drive a session | provider FAQ |
 
-The wire id and the OpenCode id are different strings. The public
-`GET /provider/v1/models` (86 OpenAI-style entries) omits jev entirely, so the
-wire id is only discoverable from the model page. Papercut `pc_bb8d10bce66a`.
+The wire id and the host-facing id are different strings. The provider's
+catalogue list (86 OpenAI-style entries on the one verified) omits the model
+entirely, so the wire id is only discoverable from the model page. Papercut
+`pc_bb8d10bce66a`.
 
-None of this is hardcoded in the plugin. Endpoint, wire model id, key env vars,
-and key file are all settings; the code names no provider, and the table above
-is `DEFAULTS` — one working deployment, not a requirement.
+None of this is in the plugin. Endpoint, wire model id, key env var, and key
+file are all settings and all ship **empty**, so the code names no provider and
+carries nobody's billing details. The concrete values live in
+`~/.config/fazuh-agent/data/jev-state.json` on the machine that configured them.
 
 ### Answer shapes
 
@@ -110,19 +112,19 @@ are different quantities and must not be compared to one threshold.
 
 ## Credential
 
-Not a separate mechanism — `commandcode` is a normal OpenCode credential, the
+Not a separate mechanism — the provider is a normal OpenCode credential, the
 same shape as `opencode-go`. But OpenCode will not hand it to a plugin:
 
 | Store | Contents |
 | --- | --- |
 | `~/.local/share/opencode/auth.json` | `google`, `openai`, `opencode-go` only |
-| `~/.local/share/opencode/opencode.db` → `credential` table | 12 rows incl. `integration_id='commandcode'`, `active=1` |
+| `~/.local/share/opencode/opencode.db` → `credential` table | 12 rows, including the provider's own `integration_id`, `active=1` |
 
 So a plugin calling the provider API directly needs the key in hand. Resolution
-order, read fresh per call: each env var in `keyEnv` (default
-`CMD_API_KEY,JEV_API_KEY`) in order, then `keyFile` (default
-`~/.config/fazuh-agent/secrets/commandcode_api_key`, mode 0600), then fail open
-with a message naming the setting to fix. Both are settable in `/jev-settings`.
+order, read fresh per call: each env var in `keyEnv` (default `JEV_API_KEY`) in
+order, then `keyFile` (default
+`~/.config/fazuh-agent/secrets/jev_api_key`, mode 0600), then fail open with a
+message naming the setting to fix. Both are settable in `/jev-settings`.
 
 The user pastes the key themselves. There is deliberately no command that takes
 a key as an argument: anything after a slash command lands in the transcript, so
@@ -226,7 +228,6 @@ contradict the claim, not enough to call the boundary airtight.
 - The TUI panels have never been seen rendered by anything but a person. Their
   structure, state writes, and dialog lifecycle are exercised against a fake
   `ctx`; the pixels are not.
-- The wire model id `typesafe/jev` is confirmed by live authenticated calls
-  (see the live results above). What was once open here was whether the
-  *OpenCode-facing* id `commandcode/typesafe/jev` was the value to put in
-  `state.model` — it is not; the wire value is.
+- The wire model id was confirmed by live authenticated calls (see the results
+  above). What was once open here was whether the *host-facing* namespaced id was
+  the value to put in `state.model` — it is not; the wire value is.

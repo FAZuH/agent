@@ -46,14 +46,52 @@ the endpoint path differ per provider and neither has a portable default.
 
 | Setting | Default | Change it with |
 | --- | --- | --- |
-| `endpoint` | Command Code's `/systemone` path | `/jev-endpoint <url>`, or `/jev-settings` |
-| `model` | the provider's **wire** model id | `/jev-model <id>`, or `/jev-settings` |
-| `keyEnv` | `CMD_API_KEY,JEV_API_KEY` | `/jev-settings` |
-| `keyFile` | `~/.config/fazuh-agent/secrets/commandcode_api_key` | `/jev-settings` |
+| `protocol` | `systemone` | toggle in `/jev-settings` |
+| `endpoint` | **empty — you set this first** | `/jev-endpoint <url>`, or `/jev-settings` |
+| `model` | **empty — you set this first** | `/jev-model <id>`, or `/jev-settings` |
+| `keyEnv` | `JEV_API_KEY` | `/jev-settings` |
+| `keyFile` | `~/.config/fazuh-agent/secrets/jev_api_key` | `/jev-settings` |
+| `think` | `false` | toggle in `/jev-settings` |
 | `enabled` | `true` | `/jev-features` |
 | `minProbability` | `0.8` | `/jev-settings` |
 | `minMargin` | `0.15` | `/jev-settings` |
 | `gateProbability` | `0.7` | `/jev-settings` |
+
+Endpoint and model ship empty on purpose. Both are provider-specific and neither
+has a portable default, so the plugin carries nobody's billing details and
+refuses every call with a message naming the setting to set. Any provider that
+speaks the System One `/systemone` shape works.
+
+## Two wire protocols
+
+`protocol` picks how the questions travel.
+
+**`systemone`** — the default. Posts `{ model, state, questions }` and reads an
+`answers` object back. Needs a key.
+
+**`chat`** — for a provider that speaks an Ollama-style `/api/chat`. The same
+questions become one prompt, and the reply is parsed back into the same answers,
+so the validation and the confidence maths are unchanged. Needs no key, and none
+is sent even if one is configured.
+
+Three things a small chat model gets wrong, all handled in the parser, and all
+found by running it rather than assuming:
+
+| What it does | What the parser does |
+| --- | --- |
+| Invents its own answer keys — asked for `verdict` it answers `1` | matches by key when the keys line up, by position when they do not, and fails when the count does not match |
+| Echoes the question id into the `type` field | states the exact answer object next to each question, not in a preamble |
+| Copies a placeholder like `"<winning label>"` verbatim | names the real labels in the shape, so it fills numbers in rather than copying |
+| Omits a score's `legend` | synthesizes it from the question's own criteria, which is what the legend is |
+
+`think` controls whether a chat model reasons before answering. It ships off
+because a thinking model spent **51s** a call where the same model without it
+spent **3–13s**.
+
+A chat model's answers are graded but less certain than a hosted one's, so a
+`minProbability` tuned for a hosted provider reports low confidence more often.
+That is the threshold working honestly, not a fault — but a provider change may
+want the threshold looked at.
 
 The key is resolved at call time, first match wins: each env var in `keyEnv` in
 order, then `keyFile`. `/jev-status` shows which one is in use, never the value.
@@ -63,9 +101,10 @@ app loads no TUI module, so those three names do not exist there. The text
 commands — `/jev-status`, `/jev-model`, `/jev-endpoint`, `/jev-log` — work
 anywhere.
 
-The model id is the provider's own string, not the host's namespaced one. For
-Command Code that is `typesafe/jev`; `commandcode/typesafe/jev` is what
-`/model` would show you and is **not** the value to put in `model`.
+The model id is the **provider's own wire string**, not the namespaced id the host
+shows in `/model`. A provider's catalogue list may omit the model entirely, so
+the wire id often has to come from that provider's model page rather than from
+any list you can query.
 
 ## Commands
 
@@ -128,13 +167,14 @@ to you; the hook will not block on it.
 
 ## Cost
 
-$0.04 per million input tokens; output is free. A call typically costs well under
-a tenth of a cent. Sixteen live calls over the whole port — 7348 input tokens —
-came to **$0.000294**.
+Provider-specific. `/jev-status` shows the running total for whichever provider
+is configured, and `/jev-log` shows it per call. A feature switched off refuses
+before the request, so it costs nothing, and the `chat` protocol is free
+whatever the provider.
 
-`/jev-status` shows the running total, and `/jev-log` shows it per call. A feature
-switched off refuses before the request, so it costs nothing. Latency is
-0.6–2.0s per call, and it is a POST, so it happens while you wait.
+Latency is provider- and protocol-specific: a hosted `systemone` call runs
+0.6–2.0s, a local `chat` call runs 3–13s with thinking off and far longer with it
+on. Every call is a POST, so it happens while you wait.
 
 ## Pointing it at another provider
 
@@ -169,7 +209,7 @@ supervises it.
 | `~/.config/fazuh-agent/data/jev-state.json` | every setting, 0600 |
 | `~/.config/fazuh-agent/data/jev-calls.jsonl` | one line per call: payload, answers, cost, 0600 |
 | `~/.config/fazuh-agent/data/jev-tui.log` | TUI diagnostics, written on every panel open |
-| `~/.config/fazuh-agent/secrets/commandcode_api_key` | the key, 0600 |
+| `~/.config/fazuh-agent/secrets/jev_api_key` | the key, 0600 |
 | `plugins/jev/src/jev.ts` | the client, redaction, and answer validator |
 | `plugins/jev/src/state.ts` | settings, key resolution, the call log |
 | `plugins/jev/src/tui.ts` | the two panels and the key dialog |

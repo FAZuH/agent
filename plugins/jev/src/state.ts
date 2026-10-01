@@ -19,7 +19,7 @@ const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(homedir(), ".config", "faz
 export const STATE_FILE = join(DATA_DIR, "jev-state.json")
 export const LOG_FILE = join(DATA_DIR, "jev-calls.jsonl")
 /** Default key location, overridable so another provider can use another file. */
-export const DEFAULT_SECRET_FILE = join(SECRET_DIR, "commandcode_api_key")
+export const DEFAULT_SECRET_FILE = join(SECRET_DIR, "jev_api_key")
 
 /**
  * A toggleable piece of behaviour. `key` is what lands in the state file and
@@ -42,7 +42,14 @@ export const FEATURES: Feature[] = [
 ]
 
 export interface JevState {
-  /** Full URL of the decisions endpoint. */
+  /**
+   * The wire protocol. "systemone" posts state plus questions and reads an
+   * answers object. "chat" speaks an Ollama-style /api/chat, turns the same
+   * questions into a prompt, and parses the reply back into the same answers,
+   * so the validation and the confidence maths are unchanged.
+   */
+  protocol: "systemone" | "chat"
+  /** Full URL of the decisions or chat endpoint. Empty until configured. */
   endpoint: string
   /** The provider's wire model id, which is not the host's namespaced id. */
   model: string
@@ -50,6 +57,11 @@ export interface JevState {
   keyEnv: string
   /** Key file, read when no env var matched. */
   keyFile: string
+  /**
+   * Whether the model reasons before answering. Some chat models spend
+   * ~50s a call with it on and 3-12s without, so it ships off.
+   */
+  think: boolean
   /** The master switch. Off means the plugin does nothing at all. */
   enabled: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
@@ -67,11 +79,18 @@ export interface JevState {
   gateProbability: number
 }
 
+/**
+ * Endpoint and model are empty on purpose. Both are provider-specific and
+ * neither has a portable default, so a fresh install configures them once in
+ * `/jev-settings` rather than shipping someone else's billing details.
+ */
 export const DEFAULTS: JevState = {
-  endpoint: "https://api.commandcode.ai/provider/v1/systemone",
-  model: "typesafe/jev",
-  keyEnv: "CMD_API_KEY,JEV_API_KEY",
+  protocol: "systemone",
+  endpoint: "",
+  model: "",
+  keyEnv: "JEV_API_KEY",
   keyFile: DEFAULT_SECRET_FILE,
+  think: false,
   enabled: true,
   features: { risk_hook: false },
   minProbability: 0.8,
@@ -112,6 +131,8 @@ export function loadState(): JevState {
     model: str(raw.model, DEFAULTS.model),
     keyEnv: str(raw.keyEnv, DEFAULTS.keyEnv),
     keyFile: str(raw.keyFile, DEFAULTS.keyFile),
+    protocol: raw.protocol === "chat" ? "chat" : "systemone",
+    think: raw.think === true,
     enabled: raw.enabled !== false,
     features: featureMap(raw.features, raw.gate),
     minProbability: num(raw.minProbability, DEFAULTS.minProbability),

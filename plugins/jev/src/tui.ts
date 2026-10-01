@@ -140,10 +140,27 @@ export default {
       const canReplace = typeof ctx.ui?.dialog?.replace === "function" && typeof ctx.ui?.DialogSelect === "function"
       let persistent = false
 
+      /**
+       * A row's action, held until the select has finished closing.
+       *
+       * `dialog.select` resolves on selection and its own teardown clears the
+       * dialog stack. An action run inside `onSelect` — opening a prompt, for
+       * one — is therefore wiped by that teardown, which is why selecting a row
+       * used to do nothing at all. Holding the action and running it from the
+       * promise means the stack is already clear when it starts.
+       *
+       * Declared beside `redraw` at setup scope so `row` can reach it.
+       */
       const viaHelper = () => {
         persistent = false
+        pending = null
         void ctx.ui.dialog
           .select({ title, options: rows() })
+          .then(async () => {
+            const action = pending
+            pending = null
+            if (action) await action()
+          })
           .catch((error: any) => {
             trace("panel:select-failed", { title, error: String(error?.message ?? error) })
             toast(`Could not open ${title}: ${error?.message ?? error}`, "error")
@@ -195,15 +212,16 @@ export default {
     /**
      * A text row. `footer` is the right-hand value column, which is what makes
      * this read like the settings panel instead of a list of sentences.
+     *
+     * `onSelect` is recorded rather than run: see `panel`'s `pending`.
      */
-    function row(value: string, title: string, footer: string | undefined, onSelect: () => void, category?: string) {
-      return { title, value, footer, category, onSelect }
+    function row(value: string, title: string, footer: string | undefined, onSelect: () => void | Promise<void>, category?: string) {
+      return { title, value, footer, category, onSelect: () => { pending = onSelect } }
     }
 
     /**
-     * A prompt, then back to the panel. `ctx.ui.dialog.prompt()` is the host's
-     * own helper and it resolves with the typed value, which is what I need;
-     * the panel is redrawn afterwards so you land back on the list.
+     * A prompt, then back to the panel. Runs after the panel has closed, which
+     * is what stops the closing teardown from wiping the prompt.
      */
     async function ask(back: () => void, props: Record<string, unknown>): Promise<void> {
       try {
@@ -224,6 +242,12 @@ export default {
     }
 
     let redraw: (() => void) | null = null
+    /**
+     * The action the selected row wants, run once the panel has closed.
+     * `dialog.select` resolves on selection and clears the stack, so an action
+     * started inside `onSelect` gets wiped before it draws.
+     */
+    let pending: (() => void | Promise<void>) | null = null
 
     /**
      * The feature panel. The master switch on top is the plugin's own on/off —
@@ -280,10 +304,26 @@ export default {
         const key = keySource()
         const money = spend()
         return [
+          row("protocol", "Protocol", s.protocol === "chat" ? "chat (/api/chat)" : "systemone (/systemone)", () => {
+            const next = s.protocol === "chat" ? "systemone" : "chat"
+            saveState({ protocol: next })
+            toast(
+              next === "chat"
+                ? "Chat protocol. The same questions become a prompt, and the reply is parsed back into answers. No key is sent."
+                : "System One protocol. Posts state and questions, reads an answers object. Needs a key.",
+            )
+            render()
+          }, "Provider"),
+          row("think", "Thinking", s.think ? "on — slow, may judge better" : "off", () => {
+            const next = !s.think
+            saveState({ think: next })
+            toast(next ? "Thinking on. Some chat models spend ~50s a call with it on." : "Thinking off.")
+            render()
+          }, "Provider"),
           row("endpoint", "Endpoint", s.endpoint, () =>
             ask(render, {
               title: "Endpoint",
-              description: "The provider's decisions endpoint, e.g. https://host/v1/systemone",
+              description: s.protocol === "chat" ? "The chat endpoint, e.g. http://host/api/chat" : "The provider's decisions endpoint, e.g. https://host/v1/systemone",
               value: s.endpoint,
               onConfirm: (v: string) => saveState({ endpoint: v.trim() }),
             }),
