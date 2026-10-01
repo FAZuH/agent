@@ -63,7 +63,7 @@ is worth digging into. A round trip to ask "may I start?" costs the caller more
 than a discovery pass that goes the wrong way, and the report is cheap to
 redirect.
 
-Ask only when the target itself is ambiguous — two plausible entry points with no
+Ask only when the target itself is ambiguous: two plausible entry points with no
 signal to prefer one, or a question that cannot be scoped without an answer you
 do not have.
 
