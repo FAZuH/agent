@@ -8,9 +8,9 @@ description: The shape of everything the user must read or act on at the bottom 
 The bottom of a message that needs something from the user has one fixed shape.
 The reader knows where to look without reading it twice. Two kinds:
 
-- **Procedure** (`🏁 P1`) — the user has to *do* something: run a command,
+- **Procedure** (`🏁 P1`): the user has to *do* something: run a command,
   click through a dashboard, restart a service. Steps, numbered.
-- **Question** (`❓ Q1`) — the user has to *decide* something. The options go
+- **Question** (`❓ Q1`): the user has to *decide* something. The options go
   in the question body; the `➡️` line is your recommended answer and the
   reason. The recommendation is what lets them reply with one word instead of
   writing your analysis back.
@@ -50,6 +50,6 @@ Nothing to prompt means nothing there: no heading, no `None`, no "let me know".
 - Numbering runs `P1`, `P2`, … and `Q1`, `Q2`, … across the message and
   restarts in the next one.
 - One pointed item per block: one procedure with its steps, one question with
-  its options. A question that fits in one word gets no block — just ask.
+  its options. A question that fits in one word gets no block. Just ask.
 - When the message ends in a post-task report, the report's own format carries
-  the prompts — see @post-task.
+  the prompts. See @post-task.

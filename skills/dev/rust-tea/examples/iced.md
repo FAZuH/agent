@@ -1,10 +1,10 @@
-# example — iced
+# example: iced
 
-How the TEA invariants land on **iced** (checked against iced 0.14 —
+How the TEA invariants land on **iced** (checked against iced 0.14;
 verify against your `Cargo.toml` before copying APIs). Extracted from a
 real iced + layershell settings app; the source map at the end points
 into `~/Projects/hyprlay` for deep dives. These are idioms, not contract
-— the invariants in `SKILL.md` are the contract.
+the invariants in `SKILL.md` are the contract.
 
 Contents:
 
@@ -39,7 +39,7 @@ fn boot() -> (Model, Task<Message>) {
 ```
 
 - The four free functions are iced's contract; your `Model` is still the
-  single owner of state — all six invariants hold unchanged.
+  single owner of state, and all six invariants hold unchanged.
 - `boot` batches async hydration; results arrive as messages. The model
   starts in a default/`Loading` state and reacts to results, so there is
   no "must call hydrate first" ordering rule (Temporal coupling removed).
@@ -93,8 +93,8 @@ fn subscribe(_model: &Model) -> Subscription<Message> {
 }
 ```
 
-Subscriptions are pub/sub message sources — time, keyboard, window
-events — batched into one. They belong in the shell; the core only sees
+Subscriptions are pub/sub message sources: time, keyboard, window
+events, batched into one. They belong in the shell; the core only sees
 the resulting messages.
 
 ## 5. View: data-driven field registry
@@ -126,13 +126,13 @@ pub const FIELDS: &[Field] = &[ /* one row per setting */ ];
 - Commit on Enter (validate → update config → return save effect),
   discard on Esc, dirty = `config != config_snapshot`.
 - One lookup rule per widget type (numbers read drafts, everything else
-  reads config) — never render ad hoc from both.
+  reads config): never render ad hoc from both.
 
 ## 7. Single source of truth in a domain crate
 
 Types like `Bounds`, `Key`, `Mode` live in the pure domain crate
 (`crates/<app>-core`); GUI, daemon, and tray all derive from it. When two
-frontends compute the same fact differently, that is Divergent change —
+frontends compute the same fact differently, that is Divergent change:
 move the fact into core.
 
 ## 8. Multi-window / multi-surface apps
@@ -140,7 +140,7 @@ move the fact into core.
 - One top-level `Model`; route per-surface messages through variant
   wrappers (`Message::Overlay(OverlayMsg)`); per-surface state lives as
   sub-models on the top model.
-- The daemon side is its own model with its own update loop — same
+- The daemon side is its own model with its own update loop, the same
   invariants, different host. Shared vocabulary (commands, outcomes)
   lives in the domain crate.
 

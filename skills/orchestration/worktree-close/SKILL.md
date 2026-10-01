@@ -27,7 +27,7 @@ a completed `.scratch/` workspace, the summary, and the next steps. Do not
 restate or duplicate its steps here.
 
 Skip the steps a merge already satisfied. You usually arrive here from
-@pr-to-close, which only hands over once the PR is merged — so the docs scour
+@pr-to-close, which only hands over once the PR is merged, so the docs scour
 and the commit proposal are no-ops, and re-running them invites an agent to
 "update" docs for work that is already merged. What is left is the archive and
 the summary.

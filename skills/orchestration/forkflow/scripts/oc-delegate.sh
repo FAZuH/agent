@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-delegate.sh — one-shot warm delegation: fork → switch agent → prompt → wait.
+# oc-delegate.sh: one-shot warm delegation, fork → switch agent → prompt → wait.
 # Implements the @forkflow handoff in a single call. Reuses the ocv2-sessions
 # scripts (resolved in both the repo layout and the flattened deploy layout).
 # Only the child's reply text goes to stdout; everything else goes to stderr.
@@ -59,7 +59,7 @@ SESS=""
 for cand in "$HERE/../../../ocv2/ocv2-sessions/scripts" "$HERE/../../ocv2-sessions/scripts"; do
   if [[ -x "$cand/oc-fork.sh" ]]; then SESS="$cand"; break; fi
 done
-[[ -n "$SESS" ]] || die "ocv2-sessions scripts not found — sync the ocv2-sessions skill first"
+[[ -n "$SESS" ]] || die "ocv2-sessions scripts not found, sync the ocv2-sessions skill first"
 
 CHILD=$("$SESS/oc-fork.sh" "$SOURCE" "--$BOUNDARY" "$BOUNDARY_MSG") || exit 2
 printf 'child: %s\n' "$CHILD" >&2
@@ -81,7 +81,7 @@ set +e
 RC=$?
 set -e
 if [[ $RC -eq 3 ]]; then
-  printf 'oc-delegate: timed out — child %s still running; re-arm with: oc-wait.sh %s\n' \
+  printf 'oc-delegate: timed out, child %s still running; re-arm with: oc-wait.sh %s\n' \
     "$CHILD" "$CHILD" >&2
   exit 3
 elif [[ $RC -ne 0 ]]; then
@@ -103,5 +103,5 @@ printf 'reply: %s\n' "$RID" >&2
 if [[ -n "$RTEXT" ]]; then
   printf '%s\n' "$RTEXT"
 else
-  printf '(no extractable text — dump with: oc-msgs.sh %s --full %s)\n' "$CHILD" "$RID" >&2
+  printf '(no extractable text, dump with: oc-msgs.sh %s --full %s)\n' "$CHILD" "$RID" >&2
 fi

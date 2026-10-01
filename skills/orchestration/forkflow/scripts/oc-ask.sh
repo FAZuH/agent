@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-ask.sh — one-shot context-inherited Q&A fork: fork → prompt → wait.
+# oc-ask.sh: one-shot context-inherited Q&A fork, fork → prompt → wait.
 # Like oc-delegate.sh but NO agent/model switch: the child keeps the parent's
 # agent and model, so the question is answered in the same context. Use
 # oc-delegate.sh when the child needs a different agent.
@@ -47,7 +47,7 @@ SESS=""
 for cand in "$HERE/../../../ocv2/ocv2-sessions/scripts" "$HERE/../../ocv2-sessions/scripts"; do
   if [[ -x "$cand/oc-fork.sh" ]]; then SESS="$cand"; break; fi
 done
-[[ -n "$SESS" ]] || die "ocv2-sessions scripts not found — sync the ocv2-sessions skill first"
+[[ -n "$SESS" ]] || die "ocv2-sessions scripts not found, sync the ocv2-sessions skill first"
 
 CHILD=$("$SESS/oc-fork.sh" "$SOURCE") || exit 2
 printf 'child: %s\n' "$CHILD" >&2
@@ -67,7 +67,7 @@ set +e
 RC=$?
 set -e
 if [[ $RC -eq 3 ]]; then
-  printf 'oc-ask: timed out — child %s still running; re-arm with: oc-wait.sh %s\n' \
+  printf 'oc-ask: timed out, child %s still running; re-arm with: oc-wait.sh %s\n' \
     "$CHILD" "$CHILD" >&2
   exit 3
 elif [[ $RC -ne 0 ]]; then
@@ -89,5 +89,5 @@ printf 'reply: %s\n' "$RID" >&2
 if [[ -n "$RTEXT" ]]; then
   printf '%s\n' "$RTEXT"
 else
-  printf '(no extractable text — dump with: oc-msgs.sh %s --full %s)\n' "$CHILD" "$RID" >&2
+  printf '(no extractable text, dump with: oc-msgs.sh %s --full %s)\n' "$CHILD" "$RID" >&2
 fi

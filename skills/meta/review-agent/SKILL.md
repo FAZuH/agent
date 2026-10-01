@@ -7,7 +7,7 @@ description: Review a diff, a single file, or another agent definition along two
 
 The review **method**. The `review` subagent is the **permission scope** it runs
 inside: read, glob, grep, `git`, `gh`, subagents, and one write to the OS temp
-directory. Keep the two apart — the method changes often, the permissions
+directory. Keep the two apart: the method changes often, the permissions
 almost never.
 
 If you are the `review` subagent, you already have the scope: run the procedure
@@ -19,7 +19,7 @@ yourself there; the scope is the point.
 
 | Target | Pinned by | Spec source |
 |---|---|---|
-| Diff | a fixed point — commit, branch, tag, merge-base. Ask if none was given. | issue refs in the commit log, a user-supplied path, a PRD or spec under `docs/` or `.scratch/` |
+| Diff | a fixed point (commit, branch, tag, merge-base). Ask if none was given. | issue refs in the commit log, a user-supplied path, a PRD or spec under `docs/` or `.scratch/` |
 | One file | the path | the file's own docs plus the siblings it has to agree with |
 | An agent definition | the path | its `description` against what the body is actually asked to do |
 
@@ -30,7 +30,7 @@ target.
 
 - Resolve the fixed point and capture `git diff <fixed-point>...HEAD` and `git log <fixed-point>..HEAD --oneline`. A non-empty diff is a precondition.
 - If the fixed point lands inside an in-progress merge or rebase conflict, stop and say @resolving-merge-conflicts is the right skill: review is for resolved diffs.
-- Name the standards sources — `CODING_STANDARDS.md`, `CONTRIBUTING.md`, `AGENTS.md` — plus the @code-review smell baseline. Surgical-change discipline is a useful second lens: no overcomplication, surface the assumptions.
+- Name the standards sources (`CODING_STANDARDS.md`, `CONTRIBUTING.md`, `AGENTS.md`) plus the @code-review smell baseline. Surgical-change discipline is a useful second lens: no overcomplication, surface the assumptions.
 - Name the spec source, or state that there is none. `docs/agents/issue-tracker.md` missing is not a blocker; the Spec axis reports "no spec available" instead.
 
 ## The two axes
@@ -42,7 +42,7 @@ rerank across axes, and never edit what you are reviewing.
 
 Then over the same target:
 
-- @ponytail-review — what to delete, what the standard library or the platform
+- @ponytail-review: what to delete, what the standard library or the platform
   already does. One line per finding. Do not apply the cuts.
 - @antislop for UI or copy, @antislop-code for code comments. Report only the
   rules they break.

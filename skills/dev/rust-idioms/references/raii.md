@@ -1,4 +1,4 @@
-# RAII — guards, drop bombs, and cleanup that cannot be forgotten
+# RAII: guards, drop bombs, and cleanup that cannot be forgotten
 
 Contents:
 
@@ -14,7 +14,7 @@ Contents:
 
 Resource Acquisition Is Initialization: a resource's lifetime is bound
 to a value; releasing happens in `Drop`. The compiler inserts the drop
-at scope end, on early return, and on unwinding — cleanup is not a
+at scope end, on early return, and on unwinding. Cleanup is not a
 discipline, it is a semantics.
 
 std is built on it: `MutexGuard` releases the lock, `File` closes the
@@ -32,7 +32,7 @@ impl<'a> Transaction<'a> {
         Transaction { conn, done: false }
     }
 
-    /// Consumes self — after commit, the transaction no longer exists.
+    /// Consumes self: after commit, the transaction no longer exists.
     pub fn commit(mut self) -> Result<(), DbError> {
         self.conn.exec("COMMIT")?;
         self.done = true;
@@ -43,7 +43,7 @@ impl<'a> Transaction<'a> {
 impl Drop for Transaction<'_> {
     fn drop(&mut self) {
         if !self.done {
-            self.conn.exec("ROLLBACK");   // early return, `?`, panic — all covered
+            self.conn.exec("ROLLBACK");   // early return, `?`, panic: all covered
         }
     }
 }
@@ -96,17 +96,17 @@ impl Drop for CriticalSection {
 ```
 
 Use for genuine contract violations (a code path that must never be
-taken). The `scopeguard` crate packages the ad-hoc version — `defer!`
+taken). The `scopeguard` crate packages the ad-hoc version (`defer!`
 and `guard` for one-off cleanup closures (verify current API).
 
 ## 4. Drop rules
 
-- **`Drop` must not panic** — a panic during unwinding aborts the
+- **`Drop` must not panic**: a panic during unwinding aborts the
   process. Cleanup bodies stay minimal and infallible; log rather than
   bubble.
 - **No IO beyond cleanup** in `Drop`; surprising side effects in drop
   are a review finding even when correct.
-- **Explicit `drop(x)`** for eager release — most important for locks
+- **Explicit `drop(x)`** for eager release, most important for locks
   (release before a long section) and for scope timing.
 - **Do not encode logical outcomes in Drop.** Rollback-on-drop is
   cleanup; *commit* is a semantic action and stays explicit. If a
@@ -115,31 +115,31 @@ and `guard` for one-off cleanup closures (verify current API).
 
 ## 5. Async hazard
 
-A guard held across `.await` stays held for the entire suspension — a
+A guard held across `.await` stays held for the entire suspension, which is a
 locked `MutexGuard` across await is the classic deadlock (and with
 `std::sync::Mutex`, a `Send` bound problem too). Review rule: any
 non-`Send` guard alive across an await point is a finding. Scope guards
 to end before the await, or use runtime-appropriate primitives
-(`tokio::sync::Mutex` — verify against your runtime).
+(`tokio::sync::Mutex`: verify against your runtime).
 
 ## 6. When not to apply
 
 - Cross-resource shutdown with ordering requirements (stop A, drain B,
-  close C) — reverse-creation drop order is too implicit; write an
+  close C): reverse-creation drop order is too implicit; write an
   explicit `shutdown()` state machine.
-- Cleanup whose success/failure the caller must *observe* — a `Drop`
+- Cleanup whose success/failure the caller must *observe*: a `Drop`
   that swallows errors hides failures; return them from a named method
   and keep `Drop` as best-effort fallback.
 - Anything in a hot path where the "resource" is a plain integer you
-  read back later — a guard is ceremony, not safety (YAGNI).
+  read back later: a guard is ceremony, not safety (YAGNI).
 
 ## 7. Review quick-checks
 
-- Manual `lock().unlock()` / `close()` / `release()` pairs — replace
+- Manual `lock().unlock()` / `close()` / `release()` pairs: replace
   with a guard (Hidden dependency on caller discipline).
 - `commit()` callable twice, or cleanup forgotten on one early-return
-  path — consuming-self + `Drop` fixes both (Temporal coupling).
-- Panic-capable `Drop` bodies — abort risk.
-- Guards alive across `.await` — deadlock/`Send` hazard (§5).
-- `Drop` performing logical outcomes the caller did not name — move to
+  path; consuming-self + `Drop` fixes both (Temporal coupling).
+- Panic-capable `Drop` bodies: abort risk.
+- Guards alive across `.await`: deadlock/`Send` hazard (§5).
+- `Drop` performing logical outcomes the caller did not name: move to
   an explicit method.

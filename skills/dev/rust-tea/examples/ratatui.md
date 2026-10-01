@@ -1,9 +1,9 @@
-# example — ratatui + crossterm (hand-rolled host)
+# example: ratatui + crossterm (hand-rolled host)
 
 How the TEA invariants land on a **hand-rolled ratatui loop** (checked
-against ratatui 0.30 + crossterm 0.29 — verify your `Cargo.toml`).
+against ratatui 0.30 + crossterm 0.29; verify your `Cargo.toml`).
 Extracted from a real pomodoro TUI; the source map at the end points
-into `~/Projects/tomo`. Idioms, not contract — `SKILL.md` invariants are
+into `~/Projects/tomo`. Idioms, not contract: `SKILL.md` invariants are
 the contract.
 
 Contents:
@@ -29,7 +29,7 @@ pub struct TuiRunner {
 impl Runner for TuiRunner {
     fn run(&mut self) -> Result<(), UiError> {
         while !self.core.is_quit() {
-            self.render_if_due()?;      // view — only when something happened
+            self.render_if_due()?;      // view: only when something happened
             self.handle_events()?;      // translate input -> Msg -> dispatch
             self.handle_timer()?;       // Msg::Tick(Instant::now())
         }
@@ -41,7 +41,7 @@ impl Runner for TuiRunner {
 
 - The runner is the only code that knows crossterm exists (Facade over
   the loop; Adapter at every boundary). Terminal setup/teardown (raw
-  mode, alternate screen, panic hook) lives here — never in core.
+  mode, alternate screen, panic hook) lives here, never in core.
 - Poll-with-timeout doubles as the tick cadence: timeout fires →
   dispatch `Tick(Instant::now())` (see `patterns.md` §9).
 
@@ -58,7 +58,7 @@ fn translate(&self, key: KeyEvent) -> Option<Msg> {
 }
 ```
 
-- A pure mapping `KeyEvent -> Option<Msg>` — table-test it without a
+- A pure mapping `KeyEvent -> Option<Msg>`: table-test it without a
   terminal. The core never sees a `KeyEvent` (layer rule).
 - Modal/overlay state short-circuits routing *before* page routing, so a
   modal keypress cannot leak into the page underneath.
@@ -76,7 +76,7 @@ macro_rules! dsp {
 dsp!(self, Msg::Timer(PomodoroMsg::Start(now)), Msg::Router(RouterMsg::GoTo(Page::Focus)));
 ```
 
-Sugar only — the real mechanism is the dispatch loop on `AppCore`
+Sugar only. The real mechanism is the dispatch loop on `AppCore`
 (`references/patterns.md` §4). Keep the macro trivial or skip it.
 
 ## 4. The EffectHandler adapter
@@ -99,17 +99,17 @@ impl EffectHandler for TuiEffects {
 
 - Fast effects run inline on the UI thread. Slow work spawns and reports
   back through a channel the loop polls (a custom event variant or mpsc
-  drained next to input events) — the core stays synchronous.
+  drained next to input events): the core stays synchronous.
 - The adapter holds process-wide resources (audio handle, notifier,
   config path) that the core must not know about.
 
 ## 5. Render discipline
 
 - Render when: an event was handled, a tick fired, or the dirty flag is
-  set. Skip otherwise — idle TUIs should cost ~0% CPU.
+  set. Skip otherwise; idle TUIs should cost ~0% CPU.
 - One view module per page (`view/focus.rs`, `view/settings.rs`), each
   exposing `fn render(core: &AppCore<TuiEffects>, frame: &mut Frame, area: Rect)`
-  — pure reads through public getters, no widget-held state.
+  (pure reads through public getters, no widget-held state).
 - Framing math (layout splits) lives in the view; placement *rules* that
   the daemon also needs live in core as pure functions.
 
@@ -119,7 +119,7 @@ impl EffectHandler for TuiEffects {
   `Updateable` and gets its own message enum; the top level wraps them
   (`Msg::Timer(PomodoroMsg)`).
 - Sub-model commands are promoted by `translate_*` methods on `AppCore`
-  (`references/patterns.md` §3). Optional pattern — a flat model + free-function
+  (`references/patterns.md` §3). Optional pattern: a flat model + free-function
   update is equally valid (see the choice table in `SKILL.md`).
 - A `Router` sub-model owning "which page is active" keeps key routing,
   page rendering, and navigation transitions cohesive instead of

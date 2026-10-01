@@ -1,7 +1,7 @@
-# patterns — skeleton stubs
+# patterns: skeleton stubs
 
 Copy-paste skeletons to adapt. They compile together as one module set,
-but there is deliberately no `main.rs` — wire the host to your renderer
+but there is deliberately no `main.rs`: wire the host to your renderer
 via `examples/iced.md` or `examples/ratatui.md`.
 
 Contents:
@@ -19,7 +19,7 @@ Contents:
 ## 1. Messages
 
 ```rust
-// src/core/messages.rs — sub-model vocabularies
+// src/core/messages.rs: sub-model vocabularies
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PomodoroMsg {
     Start(Instant),
@@ -32,7 +32,7 @@ pub enum PomodoroMsg {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RouterMsg { GoTo(Page) }
 
-// src/core/messages.rs — top-level vocabulary wraps sub-models
+// src/core/messages.rs: top-level vocabulary wraps sub-models
 #[derive(Debug, Clone, PartialEq)]
 pub enum Msg {
     Timer(PomodoroMsg),
@@ -194,7 +194,7 @@ fn iced_update(model: &mut Model, msg: Msg) -> Task<Msg> {
 ## 6. Ports and the adapter
 
 ```rust
-// src/core/ports.rs — declared in the layer that consumes them
+// src/core/ports.rs: declared in the layer that consumes them
 pub trait EffectHandler {
     fn execute(&mut self, effect: Effect) -> Vec<Msg>;
 }
@@ -202,7 +202,7 @@ pub trait Runner {
     fn run(&mut self) -> Result<(), UiError>;
 }
 
-// src/adapters/effects.rs — the only place real IO happens
+// src/adapters/effects.rs: the only place real IO happens
 pub struct TuiEffects { sound: SoundFx, notify: NotifyHandle, path: PathBuf }
 
 impl EffectHandler for TuiEffects {
@@ -247,11 +247,11 @@ fn session_end_advances_and_alarms() {
 
 ## 8. Field registry (data-driven views)
 
-One const table drives rendering, search, and tooltips — adding a setting
+One const table drives rendering, search, and tooltips; adding a setting
 becomes one row plus its message variant (Open/Closed, DRY):
 
 ```rust
-// src/ui/fields.rs — shell layer; render fn signature is framework-flavored
+// src/ui/fields.rs: shell layer; render fn signature is framework-flavored
 pub struct Field {
     pub section: Section,
     pub label: &'static str,
@@ -281,12 +281,12 @@ effect, Esc clears the draft.
 ## 9. Tick timer
 
 ```rust
-// iced — subscription (host layer)
+// iced: subscription (host layer)
 Subscription::batch([
     iced::time::every(Duration::from_millis(250)).map(|_| Msg::Timer(PomodoroMsg::Tick(Instant::now()))),
 ])
 
-// hand-rolled — poll with timeout doubles as the tick cadence
+// hand-rolled: poll with timeout doubles as the tick cadence
 if event::poll(Duration::from_millis(250))? {
     /* handle input events */
 } else {

@@ -1,4 +1,4 @@
-# typestate — states in the type system, and capability tokens
+# typestate: states in the type system, and capability tokens
 
 Contents:
 
@@ -14,7 +14,7 @@ Contents:
 
 Encode an object's lifecycle states as zero-sized type parameters.
 Methods exist only on the states where they are legal, and transition
-methods consume `self` — ownership is the engine. Once moved, the old
+methods consume `self`: ownership is the engine. Once moved, the old
 state cannot be used again:
 
 ```rust
@@ -49,7 +49,7 @@ impl Connection<Authenticated> {
 ```
 
 With this API, `Connection::query` on a fresh connection is a *compile
-error*, not a runtime one. `connect(conn)` twice is impossible — the
+error*, not a runtime one. `connect(conn)` twice is impossible. The
 first transition moved the value. Temporal coupling ("authenticate
 before you query") is enforced by the type system instead of a runtime
 panic or a doc comment.
@@ -87,14 +87,14 @@ impl<State> Connection<State> {
 
 Rule of thumb: typestate models *linear* lifecycles known at compile
 time; enums model *branching* runtime state. A two-state toggle never
-needs either — an enum with two variants is already the whole story.
+needs either: an enum with two variants is already the whole story.
 
 ## 4. Builders as mild typestate
 
 A builder enforces "required fields set before `build()`" two ways:
 
 - Runtime: `build()` returns `Result` listing missing fields
-  (`derive_builder`, `bon` — verify current APIs).
+  (`derive_builder`, `bon`: verify current APIs).
 - Typestate: `Builder<NoTimeout>` exposes `.timeout()` →
   `Builder<HasTimeout>`; `build()` exists only on complete states.
 
@@ -122,7 +122,7 @@ Properties:
 - **Held, not accessible**: holding a `&Vault` proves nothing; holding a
   `SessionToken` proves you unlocked it. Who-calls-what becomes a type
   fact, not a review convention.
-- Zero-sized — no runtime cost.
+- Zero-sized: no runtime cost.
 - The `_priv: ()` field is the struct-level cousin of trait sealing
   (see `sealed-traits.md`): outsiders can hold `&SessionToken` returned
   by your API but can never forge one.
@@ -130,25 +130,25 @@ Properties:
   capability's validity to a borrow of the resource.
 
 In `rust-tea` terms: a port like `EffectHandler` is a capability granted
-to the core — the core can *use* effects only because the host handed
+to the core. The core can *use* effects only because the host handed
 it the handler.
 
 ## 6. When not to apply
 
-- Trivial transitions (open/closed, on/off) — an enum field is simpler
+- Trivial transitions (open/closed, on/off): an enum field is simpler
   and inspectable.
-- State stored in collections or decided by IO at runtime — enum state.
-- Prototypes and scripts — the ceremony exceeds the risk.
-- More than ~4–5 states with data-heavy transitions — the type-level
+- State stored in collections or decided by IO at runtime: enum state.
+- Prototypes and scripts: the ceremony exceeds the risk.
+- More than about 5 states with data-heavy transitions: the type-level
   bookkeeping outweighs the safety (Speculative generality).
 
 ## 7. Review quick-checks
 
-- Methods that panic or return "wrong state" errors — the state should
+- Methods that panic or return "wrong state" errors: the state should
   be unrepresentable, not checked (Temporal coupling).
-- `is_connected()` guards before every call on the same object — move
+- `is_connected()` guards before every call on the same object: move
   the check into the type (typestate) or make the state an enum variant.
-- State stored as `String`/`u32` tags with manual consistency —
+- State stored as `String`/`u32` tags with manual consistency:
   Primitive obsession; enum or typestate.
 - Authority granted by "caller convention" (public method anyone may
   call) where a token would encode who may call it.

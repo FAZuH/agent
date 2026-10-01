@@ -12,7 +12,7 @@
         "Tests follow Arrange-Act-Assert structure with clear separation between setup, execution, and assertion",
         "Test names read as executable specifications (e.g., 'rejects_empty_string', 'accepts_valid_simple_email') not 'test1', 'test2'",
         "The response includes tests for error/failure paths, not just happy paths",
-        "Each test asserts exactly one logical thing — no multiple unrelated assertions per test"
+        "Each test asserts exactly one logical thing, with no multiple unrelated assertions per test"
       ]
     },
     {
@@ -22,7 +22,7 @@
       "files": [],
       "expectations": [
         "The review identifies that test_calculate_total2 is non-falsifiable or broken (weak assertion, doesn't actually verify correctness)",
-        "The review identifies that test_calculate_total has two unrelated assertions (happy path + empty cart) — Assertion Roulette",
+        "The review identifies that test_calculate_total has two unrelated assertions (happy path + empty cart), Assertion Roulette",
         "The review calls out meaningless test names (test_calculate_total, test_calculate_total2) as not being specification-like",
         "The review flags f64 comparison as fragile (floating-point equality)",
         "The review points out missing edge case or boundary tests (e.g., quantity=0, overflow, NaN, negative price handling)",
@@ -31,7 +31,7 @@
     },
     {
       "id": 3,
-      "prompt": "We're about to build a new microservice that processes invoice PDFs — extracts line items, validates totals, and stores them in Postgres. I need a testing strategy. We already have an existing test suite in the monorepo using pytest. How should I approach testing this? What kinds of tests do I need? How do I avoid common pitfalls? I'm especially worried about the PDF parsing being flaky and the database interactions being slow in CI.",
+      "prompt": "We're about to build a new microservice that processes invoice PDFs: extracts line items, validates totals, and stores them in Postgres. I need a testing strategy. We already have an existing test suite in the monorepo using pytest. How should I approach testing this? What kinds of tests do I need? How do I avoid common pitfalls? I'm especially worried about the PDF parsing being flaky and the database interactions being slow in CI.",
       "expected_output": "A testing strategy that: distinguishes unit from integration tests, recommends fakes for PDF parsing at the boundary, recommends collaboration + contract tests instead of N² integrated tests, suggests characterization tests for legacy PDF formats, addresses isolation and determinism, references appropriate guidelines",
       "files": [],
       "expectations": [

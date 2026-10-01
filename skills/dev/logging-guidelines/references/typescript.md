@@ -1,6 +1,6 @@
 # TypeScript/Node: Wide Events with `pino` (Hono style)
 
-The idiomatic Node stack this skill assumes is **pino** for the single logger and **Hono** for HTTP middleware. Pino's `redact` option gives you logger-level redaction without scattering checks through handlers, and Hono's `c.set`/`c.get` context makes a request-scoped wide-event object easy to thread through handlers. The pattern ports to Express/Fastify/other frameworks — only the middleware plumbing differs.
+The idiomatic Node stack this skill assumes is **pino** for the single logger and **Hono** for HTTP middleware. Pino's `redact` option gives you logger-level redaction without scattering checks through handlers, and Hono's `c.set`/`c.get` context makes a request-scoped wide-event object easy to thread through handlers. The pattern ports to Express/Fastify/other frameworks; only the middleware plumbing differs.
 
 ## Setup
 
@@ -124,7 +124,7 @@ app.post('/checkout', async (c) => {
 // Handler handles: business context only
 ```
 
-### Inline Pattern (no middleware — scripts, CLIs, ad hoc handlers)
+### Inline Pattern (no middleware: scripts, CLIs, ad hoc handlers)
 
 When there's no middleware layer, build the event through the request lifecycle and emit it once in a `finally` block:
 
@@ -174,7 +174,7 @@ app.post('/articles', async (c) => {
 // Single event with all context - queryable by any field
 ```
 
-The anti-pattern this replaces is scattering `console.log` lines through the handler — 6 disconnected lines with scattered context that can't answer "show me all article creates by free trial users."
+The anti-pattern this replaces is scattering `console.log` lines through the handler: 6 disconnected lines with scattered context that can't answer "show me all article creates by free trial users."
 
 ## Environment Characteristics (see `rules/context.md`)
 
@@ -213,7 +213,7 @@ const wideEvent = {
 
 ## Non-HTTP Work Units (see `rules/non-http.md`)
 
-Same one-event-per-unit-of-work principle for queue consumers. Emit once per message on ack/reject — not per processing step inside the handler:
+Same one-event-per-unit-of-work principle for queue consumers. Emit once per message on ack/reject, not per processing step inside the handler:
 
 ```typescript
 async function processMessage(message: QueueMessage) {
@@ -272,7 +272,7 @@ function maskApiKey(key: string): string {
 }
 ```
 
-**Salted keyed hashing** — for values you need to correlate across events without storing the raw value:
+**Salted keyed hashing**: for values you need to correlate across events without storing the raw value:
 
 ```typescript
 import { createHmac } from 'node:crypto';
@@ -282,7 +282,7 @@ function hashIdentifier(value: string): string {
 }
 ```
 
-**Logger-level redaction** — pino redacts known-sensitive paths at serialization time, not at each call site:
+**Logger-level redaction**: pino redacts known-sensitive paths at serialization time, not at each call site:
 
 ```typescript
 export const logger = pino({
@@ -302,14 +302,14 @@ function sanitizeLogField(input: string, maxLength = 1024): string {
 }
 ```
 
-Always serialize via a real JSON encoder (`JSON.stringify`) — never build a log line with manual string concatenation.
+Always serialize via a real JSON encoder (`JSON.stringify`): never build a log line with manual string concatenation.
 
 ## Testing (see `rules/testing.md`)
 
-Configure the logger to write to an in-memory sink during tests and assert on the captured structure — don't assert against stdout:
+Configure the logger to write to an in-memory sink during tests and assert on the captured structure, not against stdout:
 
 ```typescript
-// Node/pino — write to an in-memory stream instead of stdout
+// Node/pino: write to an in-memory stream instead of stdout
 import { pino } from 'pino';
 
 function createTestLogger() {

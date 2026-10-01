@@ -8,7 +8,7 @@ tags: logging, schema, type-drift, validation, ci
 
 **Impact: MEDIUM**
 
-`rules/structure.md` says to keep field names consistent across services. That's necessary but not sufficient — naming consistency alone doesn't stop **type drift**: Service A emits `user_id: "10042"` (string), Service B emits `user_id: 10042` (integer). Downstream columnar stores (ClickHouse, BigQuery, Snowflake) enforce a fixed column type per field, so this kind of drift causes ingestion failures, forced schema migrations, or silently corrupted queries (`WHERE user_id = 10042` missing the string rows).
+`rules/structure.md` says to keep field names consistent across services. That's necessary but not sufficient. Naming consistency alone doesn't stop **type drift**: Service A emits `user_id: "10042"` (string), Service B emits `user_id: 10042` (integer). Downstream columnar stores (ClickHouse, BigQuery, Snowflake) enforce a fixed column type per field, so this kind of drift causes ingestion failures, forced schema migrations, or silently corrupted queries (`WHERE user_id = 10042` missing the string rows).
 
 ### Enforcement Mechanisms
 
@@ -20,20 +20,20 @@ tags: logging, schema, type-drift, validation, ci
 
 **Pick based on team size and how distributed the services are**, not on which is theoretically "best":
 
-- **Solo or small team, few services**: a shared types package/module imported by every service is the highest-leverage option — it's free at runtime and catches drift before merge, and there's no separate schema registry to maintain.
+- **Solo or small team, few services**: a shared types package/module imported by every service is the highest-leverage option: it's free at runtime and catches drift before merge, and there's no separate schema registry to maintain.
 - **Multiple teams, independently deployed services**: compile-time sharing alone doesn't scale (you can't force every team to import your types), so this is where in-process validation and CI contract tests against a centrally owned schema definition earn their cost.
 
 ### Strict Validation vs. Graceful Degradation
 
-There's a real tension between data-platform teams (who want strict runtime rejection of malformed events to protect warehouse schema integrity) and application teams (who don't want telemetry silently dropped during a production incident because of a validation failure). If you have to pick a default: **coerce and flag, don't drop.** Convert a type mismatch to a safe string representation and add a `schema_violation: true` field rather than discarding the event outright — you keep the operational signal and can still alert on the violation rate separately.
+There's a real tension between data-platform teams (who want strict runtime rejection of malformed events to protect warehouse schema integrity) and application teams (who don't want telemetry silently dropped during a production incident because of a validation failure). If you have to pick a default: **coerce and flag, don't drop.** Convert a type mismatch to a safe string representation and add a `schema_violation: true` field rather than discarding the event outright, so you keep the operational signal and can still alert on the violation rate separately.
 
 ### Value-Vocabulary Drift (enum-like strings)
 
 Field-name and type consistency still leave **value drift**: the same semantic
 outcome spelled differently across modules (`"failure"` vs `"error"` vs
 `"auth_failed"`), which silently breaks `WHERE outcome = 'error'` queries and
-alert thresholds. Standardize enum-like string fields — `outcome`, `reason`,
-`status`, `auth_method` — by defining the allowed literals once and reusing
+alert thresholds. Standardize enum-like string fields (`outcome`, `reason`,
+`status`, `auth_method`: by defining the allowed literals once and reusing
 them:
 
 - A shared `enum.Enum` (in Python/Java/C#/Rust) or `const` object / union type

@@ -66,7 +66,7 @@ shell being down.
 ## Quickshell plugin gotchas
 
 - `IdleMonitor` and the other idle types come from
-  `import Quickshell.Wayland` — a bare `import Quickshell` fails service load
+  `import Quickshell.Wayland`: a bare `import Quickshell` fails service load
   with `IdleMonitor is not a type`, and the only symptom in widget IPC is
   `service unavailable`.
 - A JS/QML parse error in one plugin takes the **whole shell** down, not just
@@ -78,7 +78,7 @@ shell being down.
 - `omarchy-shell shell summon <id>` reports `no live bar widget` for a
   third-party plugin widget that is visibly on the bar and whose own open/close
   IPC works. `Bar.findPanelWidget` does not match plugin widget slots, so
-  hotkey-style summon routing is broken for plugins — bind the widget's own
+  hotkey-style summon routing is broken for plugins, so bind the widget's own
   IPC instead.
 
 ## Phase 3: Bar placement

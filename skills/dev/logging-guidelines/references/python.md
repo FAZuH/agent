@@ -1,6 +1,6 @@
 # Python: Wide Events with `structlog`
 
-`structlog` plus the stdlib `contextvars` module is the closest Python equivalent to the "single logger + middleware" pattern used in the TypeScript reference (`references/typescript.md`). `contextvars` matters specifically because it's async-safe — a plain module-level dict would leak fields across concurrent requests under `asyncio`, which `contextvars` is designed to prevent.
+`structlog` plus the stdlib `contextvars` module is the closest Python equivalent to the "single logger + middleware" pattern used in the TypeScript reference (`references/typescript.md`). `contextvars` matters specifically because it's async-safe: a plain module-level dict would leak fields across concurrent requests under `asyncio`, which `contextvars` is designed to prevent.
 
 ## Setup
 
@@ -81,7 +81,7 @@ async def checkout(user: User = Depends(get_current_user)):
 
 ## Redacting Sensitive Fields (see `rules/security.md`)
 
-A processor runs on every event before rendering — this is the enforcement point, not scattered checks in handlers.
+A processor runs on every event before rendering. This is the enforcement point, not scattered checks in handlers.
 
 ```python
 SENSITIVE_KEYS = {"password", "token", "authorization", "api_key"}
@@ -110,27 +110,27 @@ def test_checkout_redacts_token(monkeypatch):
 Many Python codebases already standardize on **`loguru`** (which has no direct
 equivalent in this skill's list). Its `logger` is a process-wide singleton and
 its `contextualize` is contextvars-based, so the structlog mechanics port
-almost one-to-one — but two loguru specifics matter and are covered below.
+almost one-to-one, but two loguru specifics matter and are covered below.
 
 ### Concept mapping
 
 | structlog | loguru |
 |---|---|
 | `bind_contextvars(...)` | `logger.contextualize(...)` (contextvars, async-safe; restored on exit) |
-| `configure(processors=[...])` | a custom **sink** (or a `format=` callable — see the gotcha below) for the serialization boundary |
+| `configure(processors=[...])` | a custom **sink** (or a `format=` callable, see the gotcha below) for the serialization boundary |
 | `logger_factory=PrintLoggerFactory()` | `logger.add(path, ...)` for file/stream sinks |
 | `structlog.testing.LogCapture` | `logger.add(list.append, format=lambda r: ...)` (capture records in memory) |
 | processors (redaction, sanitize) | a `filter=`/sink/`format=`-stage function that mutates `record["extra"]` |
 
 Env base fields (commit hash, version, environment) attach to every record via
-`logger.configure(patcher=...)` — **not** `logger.patch(...)`, which is
+`logger.configure(patcher=...)`: **not** `logger.patch(...)`, which is
 per-instance and won't reach other modules' `from loguru import logger`.
 
 ### ⚠️ Gotcha: `format=` callables return TEMPLATES, not literal strings
 
 This is the single most common loguru trap and it silently drops records.
 `logger.add(..., format=my_callable)` treats the callable's **return value as a
-template** parsed by `str.format_map` plus loguru's color-markup regex — it is
+template** parsed by `str.format_map` plus loguru's color-markup regex. It is
 not written to output as-is:
 
 - A return value containing literal JSON braces (`{"a": 1}`) raises `KeyError`.
@@ -148,7 +148,7 @@ Two safe options:
    pure boundary, and wrap it for the sink with a function that doubles `{`/`}`
    and emits `<`/`>` as `\u003c`/`\u003e` so nothing survives that the template
    parser can misinterpret. Round-trips exactly through `json.loads`, but is
-   harder to reason about — prefer a custom sink.
+   harder to reason about, so prefer a custom sink.
 
 Always emit JSON via `json.dumps`; never assemble a log line by concatenating
 strings (see `rules/security.md`).
@@ -157,7 +157,7 @@ strings (see `rules/security.md`).
 
 Because loguru's serialization happens in the sink, put the redaction +
 sanitize step in that same sink (or a `filter=`) so it runs on every record
-before anything leaves the process — the enforcement point, not ad hoc `if`
+before anything leaves the process. The enforcement point, not ad hoc `if`
 checks in handlers. Reuse the key-based and URL-pattern redaction from
 `rules/security.md`, applied recursively over `record["extra"]` (and the
 message), stripping control chars and capping field length (CWE-117).

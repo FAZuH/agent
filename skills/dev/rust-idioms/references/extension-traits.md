@@ -1,4 +1,4 @@
-# extension traits — adding methods to foreign types
+# extension traits: adding methods to foreign types
 
 Contents:
 
@@ -54,10 +54,10 @@ Two consequences:
 Two failure shapes to know:
 
 - **Upstream adds a same-named inherent method**: inherent methods win
-  silently — your trait method stops being called, with no error. The
+  silently, and your trait method stops being called with no error. The
   behavior of existing code changes under a minor upstream bump.
 - **Upstream adds a same-named trait** that is also in scope: calls
-  become ambiguous — a compile error (annoying, but at least loud).
+  become ambiguous: a compile error (annoying, but at least loud).
 
 Defense: prefix-worthy names (`iter_chunks` rather than `chunks`),
 document the upstream-collision risk on the trait, and prefer
@@ -87,7 +87,7 @@ pattern powers `itertools` (`impl<I: Iterator> Itertools for I`) and
   impl is simpler, more discoverable, and collision-proof.
 - Small surface: every method must earn its place. An extension trait
   with forty methods is a dependency you impose on every reader.
-- Extension traits cannot see private state — if the "extension"
+- Extension traits cannot see private state: if the "extension"
   needs internals, it is not an extension; it belongs in the owning
   module.
 - Keep implementations side-effect free or obviously named; a method
@@ -98,21 +98,21 @@ pattern powers `itertools` (`impl<I: Iterator> Itertools for I`) and
 
 ## 6. When not to apply
 
-- One caller — a free `fn non_empty(s: &str)` is shorter than a trait
+- One caller: a free `fn non_empty(s: &str)` is shorter than a trait
   plus impl plus import (YAGNI).
-- You own the type — inherent impl.
-- The "extension" wants to override or shadow an upstream method —
+- You own the type: inherent impl.
+- The "extension" wants to override or shadow an upstream method:
   impossible by design; write a differently-named method instead.
 - You are about to add it "for symmetry" with no current user
   (Speculative generality).
 
 ## 7. Review quick-checks
 
-- Extension trait on a type in the same crate — should be inherent.
-- Same-named methods as an upstream trait/type in scope — collision
+- Extension trait on a type in the same crate: should be inherent.
+- Same-named methods as an upstream trait/type in scope: collision
   risk; rename.
-- Extension trait reaching 10+ unrelated methods — split by concern or
+- Extension trait reaching 10+ unrelated methods: split by concern or
   fold into the owning type (Single Responsibility Principle).
-- Blanket impl over a wide std trait without a documented reason —
+- Blanket impl over a wide std trait without a documented reason:
   check what it does to downstream coherence.
-- Missing-import footguns — re-export the trait from the crate root.
+- Missing-import footguns: re-export the trait from the crate root.

@@ -1,4 +1,4 @@
-# Notes — <subject>
+# Notes: <subject>
 
 ## Learner facts
 
@@ -15,7 +15,7 @@
 
 ## Misconceptions log
 
-1. **<state the wrong belief itself — never "missed Q3">** → replaced by <correct model> (YYYY-MM-DD)
+1. **<state the wrong belief itself, never "missed Q3">** → replaced by <correct model> (YYYY-MM-DD)
 
 ## Owned derivations worth citing back
 

@@ -14,9 +14,9 @@ Avoid these anti-patterns that undermine your logging effectiveness.
 
 Emitting multiple log lines per request creates noise without value. These scattered logs cannot be efficiently queried.
 
-**Incorrect** — 6 `console.log` lines per request (see the anti-pattern at the top of the Inline Pattern section in `references/typescript.md`).
+**Incorrect**: 6 `console.log` lines per request (see the anti-pattern at the top of the Inline Pattern section in `references/typescript.md`).
 
-**Correct** — a single wide event with everything:
+**Correct**: a single wide event with everything:
 
 ```json
 {
@@ -34,7 +34,7 @@ Emitting multiple log lines per request creates noise without value. These scatt
 
 Traditional logging captures "known unknowns" - issues you anticipated. But production bugs are often "unknown unknowns" - issues you never predicted. Wide events with rich context enable investigating issues you didn't anticipate.
 
-**Incorrect** — logging only for anticipated issues (see the Inline Pattern anti-pattern in `references/typescript.md`):
+**Incorrect**: logging only for anticipated issues (see the Inline Pattern anti-pattern in `references/typescript.md`):
 
 - Bug: "Users on free trial can't see their articles"
 - Your logs say: "Article created successfully" ✓
@@ -43,7 +43,7 @@ Traditional logging captures "known unknowns" - issues you anticipated. But prod
   - What subscription plans see this issue
   - When it started
 
-**Correct** — a wide event captures everything, including fields you didn't anticipate needing:
+**Correct**: a wide event captures everything, including fields you didn't anticipate needing:
 
 ```json
 {

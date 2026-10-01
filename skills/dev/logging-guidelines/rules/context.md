@@ -10,7 +10,7 @@ tags: logging, context, cardinality, dimensionality
 
 Wide events must be context-rich with high cardinality and high dimensionality. This enables you to answer questions you haven't anticipated yet - the "unknown unknowns" that traditional logging misses.
 
-> Before adding a field, check `rules/security.md`. Anything that identifies a person beyond an opaque ID, or any credential/token/session value, must be redacted, masked, or hashed before it goes into the event below — not added first and cleaned up later.
+> Before adding a field, check `rules/security.md`. Anything that identifies a person beyond an opaque ID, or any credential/token/session value, must be redacted, masked, or hashed before it goes into the event below, not added first and cleaned up later.
 
 ### High Cardinality
 
@@ -99,7 +99,7 @@ Include business-specific context, not just technical details. User subscription
 
 Now you KNOW this is critical: an enterprise customer ($48.5k LTV) trying to make a $2.5k purchase, with `new_payment_flow` enabled.
 
-Business context transforms debugging from "something broke" to "this $48,500 customer can't complete a $2,499 order." Note that none of the fields above are PII beyond an opaque `user.id` — that's the target shape: rich business context without raw personal identifiers.
+Business context transforms debugging from "something broke" to "this $48,500 customer can't complete a $2,499 order." Note that none of the fields above are PII beyond an opaque `user.id`: that's the target shape: rich business context without raw personal identifiers.
 
 ### Always Include Environment Characteristics
 

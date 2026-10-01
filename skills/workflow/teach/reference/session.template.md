@@ -2,7 +2,7 @@
 date: YYYY-MM-DD HH:mm
 ---
 
-# Session — <lesson-slug>
+# Session: <lesson-slug>
 
 <!-- Narrative is FREE from here down: probes, nodes taught, sidetracks,
      restarts/interruptions, tooling glitches worth remembering.

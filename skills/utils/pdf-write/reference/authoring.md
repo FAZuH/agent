@@ -122,7 +122,7 @@ fmtutil-sys --all --byfmt pdflatex   # or xelatex
 
 If the format is missing because `fmtutil.cnf` has no entry for that engine,
 `--all` cannot build it. Write a temporary `fmtutil.cnf` naming the format and
-build it into the user format tree (`TEXMFVAR`) instead — no install, no sudo.
+build it into the user format tree (`TEXMFVAR`) instead: no install, no sudo.
 A half-installed TeX tree also shows up as missing `.sty`/`.tfm` files
 (`lmodern`, `psnfss`, `lualatex-math`): those are genuinely packages, so
 diagnose before assuming the format was the problem.

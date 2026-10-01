@@ -4,7 +4,7 @@
 Scans skill roots + agent definitions, extracts references from each SKILL.md
 body: @-mentions (canonical skill/agent invocation form) and backticked
 agent-id spans (subagent delegation). @-mentions must resolve to a skill id or
-agent definition — anything else is a broken-ref finding (no suppression
+agent definition: anything else is a broken-ref finding (no suppression
 list). Also checks collisions across active roots and repo-vs-installed
 drift, regenerates graph.json, and prints JSONL findings to stdout (first line
 = run summary).
@@ -27,7 +27,7 @@ from pathlib import Path
 HOME = Path.home()
 
 # Scan roots. A skill id present in several roots is ONE logical node with a
-# `roots` list — the per-root copies are attributes, not separate nodes.
+# `roots` list: the per-root copies are attributes, not separate nodes.
 ROOTS = [
     ("agents", HOME / ".agents" / "skills"),
     ("config", HOME / ".config" / "opencode" / "skills"),
@@ -48,7 +48,7 @@ SCHEMA_VERSION = 1
 
 BACKTICK_RE = re.compile(r"`([^`\n]+)`")
 # Canonical reference form. Lookbehind rejects word chars and @ (emails,
-# @@); lookahead rejects a following '/' (npm scopes like @scope/pkg) — a
+# @@); lookahead rejects a following '/' (npm scopes like @scope/pkg), a
 # skill id never continues with those.
 AT_MENTION_RE = re.compile(r"(?<![\w@])@([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?![\w/-])")
 # Code spans are literal text, not references: @-mentions inside fenced blocks
@@ -266,7 +266,7 @@ def main() -> int:
     all_edges = edges | documents_edges
 
     def root_path(sid: str) -> tuple[str, str]:
-        """(active root, display path of the copy to open) — repo is source-only."""
+        """(active root, display path of the copy to open). Repo is source-only."""
         active = next((r for r in ACTIVE_PRECEDENCE if sid in roots[r]), "")
         return active, rel_home(roots[active or "repo"][sid])
 
