@@ -8,11 +8,10 @@ description: Close a finished task, procedure, or investigation with a fixed rep
 The last message of a finished piece of work has one fixed shape. The reader
 knows where to look without reading it twice.
 
-The report is written in plain English. The @simple-english skill owns the
-reply rules, and every rule there applies to this report.
-
-Answer the user's question first. Then close with the report. If the answer and
-the report repeat each other, the report is the answer.
+Write it in plain English: @simple-english owns the reply rules, and every rule
+there applies here. Answer the user's question first, then close with the
+report. If the answer and the report repeat each other, the report is the
+answer.
 
 ## Format
 
@@ -27,7 +26,6 @@ End the final message with this block. Keep the section order as shown:
 
 ### Completed
 1. item
-2. item
 
 ### Deviations
 1. item
@@ -45,29 +43,16 @@ End the final message with this block. Keep the section order as shown:
 
 ### Needs your decision
 
-🏁 **P1** - **<procedure title>**: <short procedure description>
-1. <first step of the procedure>
-2. <second step>
-
----
-
-❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
-
-➡️ <your recommended answer>
-
-❓ **Q2** - **<question title>**: <question body>
-
-➡️ <your recommended answer>
+<the prompts, in the @prompt-user shape>
 ```
 
 Each section is a list with one item per line. An empty section means `None`,
-in one word. Never pad a section to look thorough, and never merge two
-sections to save a line.
+in one word. Never pad a section to look thorough, and never merge two sections
+to save a line.
 
-The prompts close the message: they are the bottom-most element, after every
-section. The `### Needs your decision` heading is there for scanning and
-appears only when something sits under it — a run with nothing to prompt puts
-nothing after the sections: no heading, no `None`, no "let me know".
+The `### Needs your decision` heading appears only when something sits under
+it. Nothing to prompt means nothing after the sections: no heading, no `None`,
+no "let me know".
 
 The report is a final message to the user. It is not session state. Do not
 write it to the session record.
@@ -81,43 +66,15 @@ write it to the session record.
 | Hiccups | every friction entry, with where it went | a fix you did not make |
 | Failed / skipped | each failure, its reason, and each step skipped because of it | a step you silently dropped |
 | Next | the concrete follow-ups this run leaves open, or `None` | a generic "let me know" |
-| Needs your decision | the open choices only the user can make, as `❓`/`➡️` blocks, and procedures only the user can run, as `🏁` blocks | choices you already made for the user, or a generic ask |
-
-## The prompts
-
-The prompts under `### Needs your decision` follow the @prompt-user shape: one
-`🏁` procedure per block for things the user has to do, one `❓` question per
-block for decisions only they can make. Write a `❓` for a trade-off you
-deferred, a rejected option that turned out to matter, or a fact no source
-settled; write a `🏁` when the follow-up is steps the user runs, not a choice.
-
-The recommendation is not decoration. It is what lets the user answer with one
-word instead of writing your analysis back, so state it plainly and say why
-rather than listing options and leaving the choice open.
-
----
-
-## Post Task
-
-### Completed
-1. item
-
-### Needs your decision
-1. item
-
-❓ **Q1** - **<question title>**: <question body>
-
-➡️ <your recommended answer>
+| Needs your decision | the prompts: 🏁 procedures for steps the user runs, ❓ questions for decisions only they make | choices you already made for the user, or a generic ask |
 
 ## Rules
 
 - Log as you go, report at the end. A deviation reconstructed from memory at
-  the end is a fabrication. Entries are written when the thing happens, to the
-  session record if there is one, otherwise to the friction backlog.
-- Skip nothing silently. If a step failed or was skipped, it goes in
-  Failed / skipped with its reason. A report that reads as if everything
-  worked, when something did not, is worse than no report.
+  the end is a fabrication.
+- Skip nothing silently. A step that failed or was skipped goes in
+  Failed / skipped, with its reason.
 - Hiccups is the backlog, not the narration. If friction was filed, name the
   entry. If it was not filed, that is itself a gap worth saying so.
-- Facts, not feelings. What a check returned, not that it felt fine. A
-  verification that did not run is `not verified`, not `done`.
+- Facts, not feelings. A verification that did not run is `not verified`, not
+  `done`.
