@@ -89,6 +89,7 @@ These skills are loaded only when another skill or agent references them.
 - ⭐ **[global-instruction](../skills/shared/global-instruction/SKILL.md)**: The common, machine-agnostic rules, and the skills every session must load.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
 - **[post-task](../skills/shared/post-task/SKILL.md)**: Close finished work with the five-part report: Completed, Deviations, Hiccups, Failed/skipped, Next.
+- **[prompt-user](../skills/shared/prompt-user/SKILL.md)**: The shape of the bottom-of-message prompts: 🏁 procedures with steps, ❓ questions with a recommended answer.
 - **[gate](../skills/shared/gate/SKILL.md)**: Define approval gates, run modes, and the `GATE` tag format.
 - **[scratch](../skills/shared/scratch/SKILL.md)**: Define the `.scratch/` workspace lifecycle and layout.
 - **[worktree](../skills/shared/worktree/SKILL.md)**: Define safe git worktree creation and cleanup mechanics.
