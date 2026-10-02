@@ -7,7 +7,10 @@ description: Pick a free OpenCode v2 model when the session model's provider acc
 
 ## 1. AGENTS.md preference first
 
-Look for a `## ocv2-models` section. **Priority: the local project `AGENTS.md` wins over the global `~/.config/opencode/AGENTS.md`.** If it names a model, use it (verify it still exists in the list below; if stale, fall through and say so). If neither file has the section, pick from the list in step 3.
+Check for a `## ocv2-models` section. **Priority: local project `AGENTS.md`
+beats global `~/.config/opencode/AGENTS.md`.** Named model: use it after
+verifying it is still listed below; stale falls through with a note. Neither
+file has the section: pick from step 3.
 
 ## 2. List free models
 
@@ -16,7 +19,7 @@ export PATH="$HOME/.opencode/bin:$PATH"
 opencode2 models | rg -i free
 ```
 
-`opencode2 models` prints every model as `provider/model[:variant]` (~112 entries on beta-19187); the `free` filter is the current free tier. Always re-run, the list changes. Example output (2026-09-06):
+`opencode2 models` prints `provider/model[:variant]` (~112 entries on beta-19187); the `free` filter is the current free tier. Always re-run, the list changes. Example (2026-09-06):
 
 ```
 cline/z-ai/glm-5.2:free
@@ -34,20 +37,19 @@ tokenrouter/z-ai/glm-5.3-free
 
 The catalog is local, not the API's list: `opencode/space-bunny-free` is
 accepted by `POST /api/session` and runs, yet `opencode2 models` on the same
-install does not show it. When the user names a model, absence from this list is
-not evidence against it. Apply it and read back the error rather than silently
-substituting a different one.
+install does not show it. A user-named model absent here still applies: apply
+it and read back the error, never silently substitute.
 
 ## 3. Pick
 
 - Task needs image input → a `*vision*` entry (`litellm/free-pro-vision`, `litellm/flash-free-pro-vision`).
-- Otherwise prefer `litellm/*` for chat turns: a direct provider, live-verified 2026-09-06 (`free-pro-vision` answered a probe turn normally, cost 0).
-- **Subagent/delegated turns need tool use: `litellm/free-pro` does NOT have it.** It routes to `z-ai/glm-5.2:free`, whose OpenRouter endpoints are filtered out for tool compatibility; the subagent session dies with 404 "Filter by Tool Compatibility" (live-verified 2026-09-22). `tokenrouter/z-ai/glm-5.3-free` listed but had no channel that day. Working subagent pick: `opencode/nemotron-3-ultra-free` (live-verified 2026-09-22, full tool use across a multi-step provisioning delegation).
-- State the pick and the reason in one line. Don't interview; the AGENTS.md section is the override point.
+- Otherwise prefer `litellm/*` for chat turns: direct provider, live-verified 2026-09-06 (`free-pro-vision` probed normally, cost 0).
+- **Subagent/delegated turns need tool use: `litellm/free-pro` does NOT have it.** It routes to `z-ai/glm-5.2:free`, filtered out for tool compatibility; subagents die with 404 "Filter by Tool Compatibility" (live-verified 2026-09-22). `tokenrouter/z-ai/glm-5.3-free` listed but had no channel that day. Working subagent pick: `opencode/nemotron-3-ultra-free` (live-verified 2026-09-22, full tool use across multi-step delegation).
+- State pick plus reason in one line. Do not interview; the AGENTS.md section is the override.
 
 ## 4. Apply
 
-Model is per-session and sticky from creation; the prompt body's `providerID`/`modelID` keys are IGNORED (finding 2026-09-06), so use the model endpoint:
+Model is per-session and sticky; prompt-body `providerID`/`modelID` keys are IGNORED (finding 2026-09-06). Use the model endpoint:
 
 ```sh
 # 204 on success
@@ -61,9 +63,9 @@ Headless: `opencode2 run -m litellm/free-pro-vision "..."` (flag format `provide
 
 ## 5. 402 recovery
 
-`Upstream request failed: Insufficient account funds` (402) repeated on assistant messages = the session model's provider account is dry, not a plugin or harness bug. Switch (step 4) and re-prompt; failed messages stay in history with `finish: error`.
+`Upstream request failed: Insufficient account funds` (402) repeated on assistant messages means the session model's provider account is dry, not a plugin or harness bug. Switch (step 4) and re-prompt; failed messages stay in history with `finish: error`.
 
 ## 6. Other model failures
 
-- `opencode2 auth list` can hang with "Model catalog initialization timed out" regardless of version; do not use it for discovery, `opencode2 models` (step 2) works.
-- A child session on a free tier can hit the daily-limit 429 mid-run. Switch that child's model live (`POST /api/session/<sid>/model`, step 4, per-session and sticky) instead of restarting the work.
+- `opencode2 auth list` can hang with "Model catalog initialization timed out" regardless of version; never use it for discovery, `opencode2 models` (step 2) works.
+- A child session on a free tier can hit the daily-limit 429 mid-run. Switch that child live (`POST /api/session/<sid>/model`, step 4) instead of restarting the work.

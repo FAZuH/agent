@@ -12,15 +12,13 @@ description: >-
 
 # Writing OpenCode v2 plugins
 
-Everything here was measured on a live v2 host, not read from documentation.
-That distinction matters more than usual, because **the published plugin docs
+Measured on a live v2 host, not read from docs. **The published plugin docs
 and the shipped type definitions both describe a v1 shape that does not exist
 at runtime.** Where the two disagree, this document is right and the types are
-wrong; where neither is settled, it says so.
+wrong; where unsettled, it says so.
 
-Two branches. Most plugin work is the contract below. A plugin that calls an
-external service, holds settings, or can block the host needs one more thing:
-[decision plugins](decision-plugins.md).
+Most work is the contract below. External service, settings, or host-blocking
+needs one more thing: [decision plugins](decision-plugins.md).
 
 ## Layout
 
@@ -37,13 +35,12 @@ plugins/<name>/
 
 `sync.sh` discovers `plugins/*` and copies the directory to
 `~/.config/opencode/plugins/`. A repository edit is not live until
-`./sync.sh push -g`. OpenCode v2 hot-reloads plugins, so a restart is rarely
-the fix: `ocv2-pluginhealth` is the skill for loading questions.
+`./sync.sh push -g`. Hot-reload makes restart rarely the fix:
+`ocv2-pluginhealth` covers loading.
 
 **A local dir plugin gets no `node_modules`.** No `solid-js`, no
-`@opentui/solid`, no `createComponent`, and therefore no JSX. This is the single
-constraint that shapes the whole TUI story below, and it is invisible until you
-hit it.
+`@opentui/solid`, no `createComponent`, and therefore no JSX. This single
+constraint shapes the whole TUI story, and it stays invisible until hit.
 
 ## The server contract
 
@@ -67,10 +64,10 @@ export default {
 - `input` is a **JSON Schema object**, not a Zod schema.
 - `execute` returns **`{ content: string }`**. Returning a bare string throws
   `s is not an Object` at the harness *while the tool call still succeeds*, so
-  the model sees a result and you see an error. Read your own log, not the
-  error. This is the most common way a v1 habit silently half-works here.
-- The call context (`tctx`) is separate from the plugin context. Tools get
-  `ctx` at `setup`; `tctx` arrives per call.
+  the model sees a result and you see an error. Read your log, not the
+  error. The most common v1 habit half-working here.
+- Call context (`tctx`) is separate from plugin context. `ctx` arrives
+  at `setup`; `tctx` arrives per call.
 
 ### Hooks
 
@@ -81,13 +78,13 @@ ctx.tool.hook("execute.before", async (event: any) => {
 })
 ```
 
-Keyed on `event.tool`. On v2.0.20 these reach tool calls made by `task`
-subagents, so a policy hook covers subagent work, verified live, one session
-and one subagent, which is enough to refute a bypass report and not enough to
-call the boundary airtight.
+Keyed on `event.tool`. On v2.0.20 these reach `task`
+subagent calls, so a policy hook covers subagent work, verified live on one
+session and one subagent: enough to refute bypass, not to call the boundary
+airtight.
 
 Argument shapes differ per tool: `apply_patch` uses `patchText`, not
-`filePath`. Match on what is present rather than assuming one name.
+`filePath`. Match on presence, never assume one name.
 
 ### Commands
 
@@ -99,12 +96,11 @@ ctx.command.transform((draft: any) => draft.add({
 }))
 ```
 
-The return value is the command's reply text. Anything the user typed after the
-slash command arrives as `input.prompt.text`.
+Return value is the reply text. Text after the slash arrives as `input.prompt.text`.
 
 ## The TUI surface, measured
 
-The real shape of `ctx.ui` and `ctx.ui.dialog` on a live v2.0.20 host:
+Real `ctx.ui` and `ctx.ui.dialog` shape on live v2.0.20 host:
 
 ```
 ctx keys    options, location, app, renderer, client, data, attention, theme,
@@ -119,17 +115,17 @@ dialog      show, set, clear, alert, confirm, prompt, select   (all functions)
 exist:
 
 - `dialog.prompt({ title, description, value, placeholder })` → `Promise<string>`.
-  Use this for every text input. It is undocumented, and it is the only working
-  way to ask the user for a value.
+  Use it for every text input. Undocumented, and the only working
+  text-input primitive.
 - `dialog.select({ title, options })` → `Promise`, resolving with the selection
   (exact value unconfirmed). **It resolves on selection, which closes the
-  dialog.** Any panel that has to survive a change has no primitive to build on.
-  `dialog.set` is the one untested candidate; its signature is unconfirmed.
+  dialog.** No surviving panel has a primitive to build on.
+  `dialog.set` is untested; signature unconfirmed.
 - `dialog.clear()` closes. `dialog.show/alert/confirm` exist and are unexamined.
 
 ### Registration
 
-Commands and keybindings register from a slot render, because the layer needs a
+Commands and keybindings register from a slot render; the layer needs a
 rendered component:
 
 ```ts
@@ -149,11 +145,11 @@ ctx.ui.slot?.({
 
 A layer command is bound by `bind: "left"` for a literal key, or by `id` when
 the host's keybind config should decide. `enabled` is read as a function by the
-host, so a predicate is the safe form when it needs to change.
+host, so a predicate is the safe changing form.
 
 ### Measuring instead of guessing
 
-Any time the types and the behaviour disagree, log the shape from inside a slot
+Types disagree with behaviour: log the shape from inside a slot
 render and read it:
 
 ```ts
@@ -164,24 +160,24 @@ trace(JSON.stringify({
 }))
 ```
 
-This is one line and it ends hours of guessing. A plugin that renders a panel
+One line, ends hours of guessing. A plugin that renders a panel
 should write its own diagnostics: a TUI failure is otherwise **silent**: the
 command runs, throws, and the keymap swallows it, so the symptom is "nothing
 happens" with no error anywhere.
 
 ## One name, one owner
 
-A slash command registered from both the server plugin and the TUI appears
-**twice** in the palette, and only one of the two works. Pick the owner by
-whether the command needs a dialog:
+A slash command from both server plugin and TUI appears
+**twice** in the palette, and only one works. Pick owner by
+dialog need:
 
 - **TUI-only**: anything that opens a panel or a dialog, and anything that must
   not exist where dialogs cannot render (the desktop app loads no TUI module).
 - **Server-side**: anything that must work in every host, and anything that only
   reports state.
 
-One name, one owner, no exceptions. When a server command would duplicate a
-panel, use a different name for the text route rather than reusing the panel's.
+One name, one owner, no exceptions. A server command duplicating a
+panel takes a different text-route name.
 
 ## Verify it works
 
@@ -193,14 +189,13 @@ opencode2 api get /api/command    # which commands actually registered
 ```
 
 Then **drive a real call** through the HTTP API against a free model and read
-the output. A schema-valid answer is not a correct decision; the whole point of
-a decision tool is the answer, and only a real call shows it. Pick a free model
-per `ocv2-models`.
+the output. Schema-valid is not correct; only a real call shows the decision.
+Pick a free model per `ocv2-models`.
 
 A stub `ctx` is a genuine testing tool and it caught several real bugs here:
 it exercises `setup`, tool `execute`, hook dispatch, command registration, and
-dialog lifecycle without a TUI. What it cannot check is pixels, and any
-`DialogSelect`-shaped assumption it encodes is only as good as the stub.
+dialog lifecycle without a TUI. It cannot check pixels, and any
+`DialogSelect`-shaped assumption is only as good as the stub.
 
 ## Things that bite
 
