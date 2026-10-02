@@ -120,7 +120,7 @@ flowchart LR
 - **guarding-destructive-operations**: refuse instead of warn on delete, reset, and history-rewrite paths.
 - **verifying-external-behavior**: probe the library or API before you depend on it.
 - **shipping-build-artifacts**: make the build step a real gate on what ships.
-- **comments-discipline**: comments that earn their place.
+- **terse**: terse docs and comments that earn their place.
 - **wizard**: a script that walks a human through the steps only they can do.
 - **ffmpeg-skill**: cut, caption, convert, and normalise local media.
 - **pdf-write**: build a PDF from Markdown, or assemble scans and existing PDFs to a matching page width, then read the render back.
