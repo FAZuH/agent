@@ -6,9 +6,9 @@ description: The task-to-subagent routing table and the concrete workflow proced
 # workflows
 
 Assumes the `mattpocock/skills` set and this repo (`fazuh/agent`) are installed
-as skills on this machine. Skill names below refer to installed skills directly.
+as skills. Skill names below refer to installed skills directly.
 
-This skill separates the orchestrator's concrete workflows from the agent prompt so the prompt stays lean. The full procedures live as state machines in `reference/`, load the matching file and follow it. This file only summarises each workflow and when to use it, plus the routing table you use to pick a subagent.
+Concrete workflows live as state machines in `reference/`: load the matching file and follow it. This file only summarises each workflow and when to use it, plus the routing table for picking a subagent.
 
 ## Subagent routing
 
@@ -71,8 +71,8 @@ subagent.
 
 ## Ticket context and durable docs
 
-- Non-trivial ticket work: after research/design synthesis, run @task-context before the first delegation, then pass each worker its role projection and the packet path in the delegation prompt, never raw research transcripts. The packet is a derived view; the spec stays the task's source of truth.
-- Durable developer docs (`docs/dev/`) change only through @setup-dev-docs, on an explicit user request; ordinary feature work writes task context instead.
+- Non-trivial ticket work: after research/design synthesis, run @task-context before the first delegation, then pass each worker its role projection and the packet path, never raw research transcripts. The packet is derived; the spec stays the source of truth.
+- `docs/dev/` changes only through @setup-dev-docs, on explicit user request; ordinary feature work writes task context instead.
 
 ## Loading rules
 

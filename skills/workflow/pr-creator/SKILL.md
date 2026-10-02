@@ -21,15 +21,11 @@ metadata:
 
 ## Workflow
 
-Follow these steps in order to create a pull request:
-
 ### 1. Branch Management (CRITICAL safety)
 
-Never create a PR from the repository's **default branch**: PRs that come from
-`main`/`master` are indistinguishable from direct pushes and skip review. Work
-on a dedicated, descriptively named branch instead.
+Never open a PR from the default branch: it reads as a direct push and skips review. Work on a dedicated, descriptively named branch.
 
-Detect the default branch first (do not hardcode `main`: repos vary):
+Detect the default branch first, never hardcode `main`:
 
 ```bash
 # Primary: ask GitHub directly, authoritative for PR base and merge behavior
@@ -40,118 +36,78 @@ git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null
 git remote show origin 2>/dev/null | grep "HEAD branch"
 ```
 
-Strip `refs/remotes/origin/` from the `symbolic-ref` output to get the branch
-name. If `gh` and the local `symbolic-ref` disagree, trust `gh`: the local
-ref is a stale cache (refresh it with `git remote set-head origin -a`). If
-there is no remote configured, fall back to checking for the common defaults
-(`main`, then `master`).
+Strip `refs/remotes/origin/` for the branch name. `gh` beats a local `symbolic-ref` (stale cache; refresh with `git remote set-head origin -a`). No remote: try `main`, then `master`.
 
-Then check the current branch:
+Then check where you are:
 
 ```bash
 git branch --show-current
 ```
 
-If the current branch is the default branch, create and switch to a new
-descriptive branch before doing anything else:
+On the default branch, cut a new branch before anything else:
 
 ```bash
 git checkout -b <new-branch-name>
 ```
 
-Choose a name that describes the work, e.g. `feat/user-auth`, `fix/crash-on-parse`.
+Name it for the work, e.g. `feat/user-auth`, `fix/crash-on-parse`.
 
 ### 2. Commit Changes
-
-Verify all intended changes are committed before creating the PR:
 
 ```bash
 git status
 ```
 
-If there are uncommitted changes, stage and commit them with a descriptive
-message in [Conventional Commits](https://www.conventionalcommits.org/) format
-(e.g. `feat(ui): add new button`, `fix(core): resolve crash`). NEVER commit
-directly to the default branch.
+Uncommitted work: stage and commit it in [Conventional Commits](https://www.conventionalcommits.org/) format (e.g. `feat(ui): add new button`). NEVER commit to the default branch.
 
 ### 3. Locate Template
 
-Look for a pull request template in the repository:
-
 - `.github/pull_request_template.md`
 - `.github/PULL_REQUEST_TEMPLATE.md`
-- `.github/PULL_REQUEST_TEMPLATE/` (a directory of templates, e.g. `bug_fix.md`,
-  `feature.md`). If multiple exist, ask the user which to use or select the
-  most appropriate one from the context.
+- `.github/PULL_REQUEST_TEMPLATE/` (e.g. `bug_fix.md`, `feature.md`). Several templates: ask the user or pick from context.
 
-**GATE template-pick (normal → select the most appropriate template based on
-context and note the choice in the PR description):** when multiple templates
-exist, which one structures the PR is the user's call. Firing this gate beats
-silently guessing wrong; when it skips (auto mode), the selection rules and
-context decide, and the choice is reported. (Vocabulary: the @gate skill.)
+**GATE template-pick (normal → pick the most appropriate template from context and note the choice in the PR):** several templates means the user picks. Never guess silently.
 
-If **no template exists** in the repo, use the bundled generic template at
-`reference/pr-template.md` as the fallback so the PR still has structure.
+No template in the repo: fall back to the bundled `reference/pr-template.md`.
 
 ### 4. Read Template
 
-Read the content of the chosen template file. The description you draft must
-follow its structure.
+Read the chosen template. The description follows its structure.
 
 ### 5. Draft Description
 
-Create a PR description that strictly follows the template's structure:
+- **Headings**: keep them all.
+- **Checklists**: `[x]` only what is genuinely done, `[ ]` the rest. Never check a box for undone work.
+- **Content**: clear, concise summaries per section.
+- **Related issues**: link them (e.g. `Fixes #123`).
+- **Auto-close**: `Closes #N`, one per line, only for issues the PR genuinely resolves (`Closes`, not `Fixes`; never merely-related or tracking issues).
 
-- **Headings**: Keep all headings from the template.
-- **Checklists**: Review each item. Mark `[x]` if genuinely completed, leave
-  it unchecked (`[ ]`) if not applicable, and never check a box for work you
-  haven't done.
-- **Content**: Fill each section with clear, concise summaries of your changes.
-- **Related Issues**: Link any issues fixed or related to this PR (e.g.
-  `Fixes #123`).
-- **Auto-close issues**: If the PR resolves any issue (the branch, commits, or
-  the user references an issue this work addresses), add a `Closes #<number>`
-  line so that issue auto-closes when the PR merges. Include every issue the PR
-  resolves, one per line (`Closes #12`, `Closes #34`). Use `Closes` (not
-  `Fixes`) so the issue is closed automatically on merge. Only add issues the
-  PR genuinely resolves, never merely-related or tracking ones you don't want
-  auto-closed.
-
-Follow the template's own guidance for sections that don't apply: the bundled
-`reference/pr-template.md` instructs omitting non-applicable sections entirely
-(never writing "N/A" filler), so drop them rather than leaving empty headings.
+Non-applicable sections: follow the template's own guidance. The bundled template says omit, never "N/A".
 
 ### 6. Preflight Checks
 
-Before creating the PR, run the repository's *own* standard checks (build,
-lint, tests). Don't assume a specific command; discover what the repo
-defines:
+Run the repo's own checks (build, lint, tests). Discover, don't assume:
 
 - `package.json` scripts (`lint`, `test`, `typecheck`, `build`, `check`, …)
 - `justfile` / `Makefile` targets
 - `Cargo.toml` (`cargo test`, `cargo clippy`, `cargo fmt --check`)
 - `pyproject.toml` / `uv.lock` (e.g. `uv run pytest`, `ruff check`)
-- CI workflow files (`.github/workflows/`) for the canonical commands
+- CI workflows (`.github/workflows/`) for the canonical commands
 
-Run the checks the repo itself uses. If the repo defines no such checks, note
-that in the PR and proceed; don't invent a check the project doesn't have.
+No checks defined: note it in the PR and proceed.
 
-Then confirm the PR will contain only this branch's work. A local base branch
-can sit ahead of its remote, and those commits ride along silently:
+Then confirm the PR holds only this branch's work. A local base ahead of remote rides along silently:
 
 ```bash
 git fetch origin
-git log --oneline origin/<base>..HEAD   # every commit listed here lands in the PR
+git log --oneline origin/<base>..HEAD   # every commit here lands in the PR
 ```
 
-If that list holds commits you did not author for this branch, local base work
-is being carried into the PR. Stop and ask: whether to push, rebase, or
-re-target is the user's call, not a detail to decide for them.
+Foreign commits in that list: stop and ask. Push, rebase, or re-target is the user's call.
 
 ### 7. Push Branch
 
-Push the current branch to the remote. Double-check the branch name first:
-pushing the default branch is the one irreversible mistake here.
+Verify the name first. Pushing the default branch is the one irreversible mistake here.
 
 ```bash
 # Verify the current branch is NOT the default branch
@@ -162,8 +118,7 @@ git push -u origin HEAD
 
 ### 8. Create PR
 
-Use the `gh` CLI to create the PR. Write the description to a temporary file
-first to avoid shell-escaping issues with multi-line Markdown:
+`gh` CLI, description via temp file (never inline Markdown through the shell):
 
 ```bash
 # 1. Write the drafted description to a FRESH temp file, never a fixed path
@@ -176,17 +131,8 @@ gh pr create --title "type(scope): succinct description" --body-file "$body"
 rm "$body"
 ```
 
-- **Never pass an unverified path to `--body-file`.** The flag replaces the body
-  with the file's contents, so a missing or empty file silently wipes it:
-  the call succeeds and the damage is only visible afterwards. Create the file with
-  `mktemp` in the same command that uses it, assert `test -s` before the call,
-  and never append (`>>`) onto a path that may not exist, because that
-  *recreates* the file as empty. Keep cross-session drafts under
-  `/tmp/opencode/`, not bare `/tmp/`, so a concurrent session cannot collide.
-  The same guard applies to `gh issue edit --body-file`.
-- **Title**: Use the [Conventional Commits](https://www.conventionalcommits.org/)
-  format if the repository uses it (match the style of recent commits when in
-  doubt).
+- **Never pass an unverified path to `--body-file`.** The flag replaces the body with the file's contents, so a missing or empty file silently wipes it. `mktemp` in the same command, `test -s` before the call, never `>>` onto a path that may not exist (it recreates the file as empty). Cross-session drafts go under `/tmp/opencode/`, not bare `/tmp/`. Same guard for `gh issue edit --body-file`.
+- **Title**: [Conventional Commits](https://www.conventionalcommits.org/) if the repo uses it (match recent commits when in doubt).
 
 ## Dependency graph
 

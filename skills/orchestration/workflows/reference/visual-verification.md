@@ -7,7 +7,7 @@
 
 ## When to use
 
-A web page/UI must be visually verified, or an image file needs reading/transcribing.
+Web page/UI needs visual verification, or an image file needs reading/transcribing.
 
 ## State machine
 
@@ -36,5 +36,5 @@ START (visual check / image)
 
 ## Gates
 
-- Step1 and step2 are alternatives: exactly one dispatches per invocation (web page/UI → step1, still image → step2). Step3 consumes whichever ran; the unused alternative being skipped is not a failure.
-- Re-run WEB only after `implement` reports the environment is up again.
+- Step1 and step2 are alternatives: exactly one dispatches per invocation (web page/UI → step1, still image → step2). Step3 consumes whichever ran; a skipped alternative is not a failure.
+- Re-run WEB only after `implement` reports the environment is up.

@@ -5,8 +5,8 @@ description: Install, update, list, or remove upstream-owned (External class) ag
 
 # External Skills
 
-Upstream-owned skills live in `~/.agents/skills/`. Update them through the CLI,
-never by hand-editing.
+Upstream-owned skills live in `~/.agents/skills/`. Update through the CLI,
+never by hand.
 
 ## Rule 0: check the CLI first
 
@@ -16,7 +16,7 @@ reports. Known-good forms (long = short): `--global` = `-g`,
 
 ## Install
 
-Global, for OpenCode (the default, available in every session):
+Global, for OpenCode (the default, every session):
 
 ```bash
 npx skills add <owner/repo> --global --agent opencode --yes
@@ -30,8 +30,8 @@ npx skills add <owner/repo> --global --agent opencode --yes --skill '*'     # ev
 npx skills add <owner/repo> --global --agent opencode --list                # preview what a repo offers, install nothing
 ```
 
-Project-level (omit `--global`) only when the skill is repo-specific. Never
-install the same repo both global and project-level, OpenCode registers the
+Project-level (omit `--global`) only for repo-specific skills. Never
+install the same repo global and project-level: OpenCode registers the
 same ids twice.
 
 ## Update, list, remove
@@ -47,8 +47,8 @@ npx skills remove <name> --global --agent opencode --yes
 - **Never hand-edit `~/.agents/skills/`.** Install target only. Fix by
   reinstalling/updating, or propose the change upstream.
 - **Never `install -g --all` on a multi-agent box.** `--all` copies symlink
-  farms into EVERY detected agent dir (~55 on this machine). Scope the
-  install with `--agent opencode`.
+  farms into EVERY detected agent dir (~55 on this machine). Scope
+  with `--agent opencode`.
 - **Config roots shadow it.** If @skill-doctor flags a `collision` between
   `~/.config/opencode/skills/<name>` and `~/.agents/skills/<name>`, the
   config copy wins and the npx copy is dead weight. Remove the shadowed
@@ -60,8 +60,7 @@ npx skills remove <name> --global --agent opencode --yes
 The CLI strictly parses `SKILL.md` frontmatter. An upstream `description:`
 with unquoted colons (`requests: cut, trim, ...`) is invalid YAML, so the
 install reports `Skipped .../SKILL.md - YAML parse error` and installs
-nothing. The exit code stays 0, so check the output, not the code. When that
-happens:
+nothing. Exit code stays 0, so check the output, not the code. Then:
 
 ```bash
 git clone --depth 1 https://github.com/<owner>/<repo> /tmp/opencode/<repo>

@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user asks to write, plan, or run a test suite.
+Write, plan, or run a test suite.
 
 ## State machine
 
@@ -47,6 +47,6 @@ START (test work requested)
 
 ## Gates
 
-- REVIEW is optional and only on user request.
+- REVIEW is optional, only on user request.
 - FINISH (step7) depends on ITERATE (step5), never on REVIEW (step6): a skipped or failed review does not block finish; a red suite does.
 - Iteration loop ends when the suite is green and the new tests add real signal.

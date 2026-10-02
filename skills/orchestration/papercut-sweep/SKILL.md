@@ -6,10 +6,8 @@ description: Run the agent self-improvement loop over the global papercuts store
 # Papercut sweep
 
 A feedback loop where the agent learns from its own friction: capture
-problems while working, then periodically convert them into concrete
-improvements to skills, agent definitions, tooling, and process.
-Proposals typically arrive here from @session-retro (end-of-session)
-or direct capture during work; this skill curates and applies them.
+problems while working, then convert them into improvements to skills, agent definitions, tooling, and process.
+Proposals arrive here from @session-retro or direct capture during work; this skill curates and applies them.
 
 Two stores, one rule:
 
@@ -38,10 +36,9 @@ Run top to bottom when invoked. Do not skip the user gates.
 
 1. **Sweep**: `papercuts -g list --status open` and group the `self::`
    entries by target artifact (one skill / one agent def / one theme per
-   group). Dedup overlapping entries. Read the **untagged** entries too: a
-   `self::` prefix written in the text counts as the tag, `papercuts` has no
-   way to correct a missing tag, and most of the backlog is untagged, so
-   `--tag self::*` alone hides most of the work.
+   group). Dedup overlapping entries. Read the **untagged** entries too:
+   a `self::` prefix in the text counts as the tag, and most of the backlog
+   is untagged, so `--tag self::*` alone hides most of the work.
 2. **Propose**: per group, draft the concrete change (exact edit or diff).
    Check the target is user-owned before drafting: skills in
    `~/Projects/agent/` (source) or `~/.config/opencode/skills/`
@@ -66,7 +63,7 @@ Run top to bottom when invoked. Do not skip the user gates.
      ever, even "obvious" ones.
    - Project source code → never through this loop; route to normal work.
 4. Evidence: when a change rewrites a skill description, review its trigger
-   branches against the body and run `skill-doctor`. Treat trigger accuracy as a
+   branches against the body and run `skill-doctor`. Trigger accuracy is a
    manual judgment unless the user supplies a dedicated evaluation tool. Body
    and content edits need no formal evidence unless the user asks.
 5. **Graduate big trials**: an idea needing real-world trial (new

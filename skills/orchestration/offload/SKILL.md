@@ -32,10 +32,10 @@ BRANCH="$(git branch --show-current)"
 
 Memory file: `$LOCAL_ROOT/.opencode/offload.md`. Read it first when it
 exists; it carries `remote_host`, `remote_root`, `excludes`, and the check
-command (see §1). Later runs reuse it and skip discovery unless it is stale
+command (see §1). Later runs reuse it and skip discovery unless stale
 or the user forces re-detection.
 
-Remote paths are never assumed from the local layout. First run confirms
+Never assume remote paths from the local layout. First run confirms
 `remote_host` and `remote_root` with the user (suggestion:
 `<remote-base>/$PROJECT`); later runs read them from memory.
 
@@ -115,14 +115,14 @@ dubiously owned). Done when the remote tree matches local modulo excludes.
 
 ## Flaky links
 
-Some remote hosts (home LAN behind tailscale, laptop on wifi) stall long
-single-shot commands. On a flaky link:
+On a flaky link (home LAN behind tailscale, laptop on wifi: long
+single-shot commands stall):
 
 - Set ssh keepalives in `~/.ssh/config` for that host: `ServerAliveInterval
   15` + `ServerAliveCountMax 4` (kill dead connections early) and
   `ConnectTimeout 10` (fail fast on probes).
 - Probe before big work: `ssh -o BatchMode=yes <host> 'true'`. A 10s timeout
-  on the probe means the link is down right now, not that the host is.
+  on the probe means the link is down, not the host.
 - Seed large trees with `git bundle` (single resumable file) or
   `rsync --partial` (resumes an interrupted transfer). Never one long
   transfer that restarts from zero on drop.

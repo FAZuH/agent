@@ -5,8 +5,8 @@ description: Finish work in a git worktree by following the @finish and @pr-crea
 
 # Worktree finish
 
-Finish a worktree's pull request safely. This skill coordinates PR creation or
-readiness work with conflict resolution; it does not silently change behavior.
+Finish a worktree's pull request safely. Coordinates PR creation or
+readiness with conflict resolution; never silently changes behavior.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -17,7 +17,7 @@ readiness work with conflict resolution; it does not silently change behavior.
 
 ### 1. Run the session finish workflow
 
-Read and follow the @finish skill first. Keep its proposed commit groups available for the orchestrator.
+Read and follow the @finish skill first. Keep its proposed commit groups for the orchestrator.
 
 ### 2. Load the PR workflow
 
@@ -25,7 +25,7 @@ Read and follow the @pr-creator skill before creating, updating, or pushing the 
 
 ### 3. Identify the worktree and PR
 
-Run read-only checks to identify the current worktree, branch, remote, and PR:
+Read-only checks for the current worktree, branch, remote, and PR:
 
 ```bash
 git worktree list
@@ -40,9 +40,9 @@ feature worktree from `git worktree list` and run worktree commands there.
 ### 4. Check mergeability
 
 Inspect the PR's mergeability and compare the feature branch with its current
-base branch. Refresh the base branch before testing when the repository's normal
-workflow permits it. Use the repository's standard PR or CI checks as described
-by @pr-creator.
+base branch. Refresh the base branch first when the repo's normal
+workflow permits it. Use the repo's standard PR or CI checks per
+@pr-creator.
 
 Treat these as conflict signals:
 
@@ -54,8 +54,8 @@ Treat these as conflict signals:
 ### 5. Resolve only simple conflicts
 
 When conflicts are limited, mechanical, and behavior-preserving, resolve them
-in the worktree. Examples include importing both independent additions,
-retaining compatible formatting changes, or choosing the version that matches
+in the worktree. Examples: importing both independent additions,
+keeping compatible formatting changes, choosing the version that matches
 the already-agreed implementation without changing its behavior.
 
 After each resolution:
@@ -76,8 +76,8 @@ semantics, or where the correct side cannot be established from the existing
 code, tests, issue, or PR description, is the user's call, not yours.
 (Vocabulary: the @gate skill.)
 
-Explain the conflicting choices, the likely behavior or compatibility impact,
-and the files involved. Do not commit, push, or discard either choice until the
+Explain the conflicting choices, likely behavior or compatibility impact,
+and files involved. Never commit, push, or discard either choice until the
 user answers.
 
 ### 7. Finish the worktree

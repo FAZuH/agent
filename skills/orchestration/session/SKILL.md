@@ -13,8 +13,8 @@ description: >-
 
 # session
 
-Every non-trivial feature gets a session workspace in `.scratch/`, and the
-spec doc inside it is the single source of truth for the work.
+Every non-trivial feature gets a `.scratch/` workspace. The spec doc
+inside it is the single source of truth.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > skill's numbered procedures: point-and-call narration, live deviation
@@ -26,17 +26,15 @@ spec doc inside it is the single source of truth for the work.
 
 ## Read the workspace first
 
-- **Session start / resume:** read `.scratch/*_*/spec.md` before doing
-  anything; it restores where the work stands and what was already decided.
-- **After compaction or fork:** re-read the spec and `checkpoint.md` before
-  continuing, they are the canonical summary of the work.
-- **Mid-task:** check the deviation log to see what already changed.
+- **Session start / resume:** read `.scratch/*_*/spec.md` first; it restores where the work stands and what was decided.
+- **After compaction or fork:** re-read the spec and `checkpoint.md`; they are the canonical summary.
+- **Mid-task:** check the deviation log for what already changed.
 
 ## Writing a plan / spec
 
-Study the codebase first (existing pages, modules, routes, conventions) so the
-plan matches the repo's actual structure and style. Keep the doc
-self-contained: a fresh agent or a compacted session must be able to resume
+Study the codebase first (pages, modules, routes, conventions) so the
+plan matches the repo. Keep the doc
+self-contained: a fresh or compacted session must resume
 from the doc plus the code.
 
 Template (`.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`):
@@ -69,14 +67,14 @@ How to verify (tests, lint, build); which subagents to delegate to
 
 Append entries to this log with a shell append (`cat >> spec.md <<'EOF' …`),
 or an edit that anchors on the file's final line and ADDS after it. Never
-anchor an edit on a duplicated phrase mid-file: replace-edits anchored on
+anchor on a duplicated phrase mid-file: replace-edits on
 recurring log text silently overwrite an existing entry.
 
 ## Log sections
 
 Two more sections sit alongside the deviation log in the same `spec.md`. Each
 owning skill below states its entry format; this skill owns where the sections
-go and the empty placeholder in the template above.
+go and the empty placeholder above.
 
 - `## Gate log`, approval-gate decisions and run-mode switches. The @gate
   skill owns the entry format; never fold these into the deviation log.
@@ -95,7 +93,7 @@ go and the empty placeholder in the template above.
 `.scratch/` doubles as the local issue tracker. Follow the conventions from
 [`setup-matt-pocock-skills/issue-tracker-local.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md).
 The mattpocock skills use
-`<feature-slug>` as the directory name, on this machine the slug is always
+`<feature-slug>` as the directory name; on this machine the slug is always
 date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
 
 - **Spec**: [@to-spec](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
@@ -110,14 +108,14 @@ date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
 
 When marking a ticket resolved, replace `Status:` with `resolved (<date>)`
 and append an **Outcome** paragraph: what landed, key judgment calls,
-pointer to spec deviation-log entries, and any flagged follow-ups. Sessions
+pointer to spec deviation-log entries, flagged follow-ups. Sessions
 recovering from forks or killed subagents rely on these Outcome blocks more
 than on chat history.
 
 ## Logging deviations
 
 As work diverges from the plan, log it immediately in the deviation log and
-update the affected section in place. The doc must always reflect reality.
+update the affected section in place. The doc always reflects reality.
 
 ```markdown
 ## Deviation log

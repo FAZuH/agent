@@ -5,15 +5,14 @@ description: Manage scheduled tasks on this machine through systemd user timers 
 
 # scheduled-task
 
-Manage scheduled tasks on this Arch Linux machine with **per-user systemd
-timers** (`systemctl --user`). Do not use crontab, anacron, or system-wide
-timers. If the user says "cron job", translate the schedule to an `OnCalendar`
+Per-user systemd timers (`systemctl --user`) on this Arch machine. Never
+crontab, anacron, or system-wide timers. "cron job" means an `OnCalendar`
 user timer.
 
-This skill owns the timer mechanics: the `octask` CLI, the `octask-` unit
-prefix, OnCalendar expressions, discovery, editing, and removal. The
-@scheduled-agent skill owns the restricted agent definition an unattended
-`--agent` run requires.
+Timer mechanics live here: the `octask` CLI, the `octask-` unit prefix,
+OnCalendar expressions, discovery, editing, removal. The @scheduled-agent
+skill owns the restricted agent definition an unattended `--agent` run
+requires.
 
 ## The model
 
@@ -62,10 +61,9 @@ Everything this skill manages uses the shared prefix **`octask-`**:
 
 ## First, discover what exists
 
-Never assume. Run `octask list` before adding, editing, or removing anything,
-and `systemctl --user list-timers --all --no-pager` for timers NOT managed by
-octask (this machine has other user timers). Report what you found: managed
-octask units, other timers and their next run, anything inactive or failed
+Never assume. Before any add/edit/remove, run `octask list` plus
+`systemctl --user list-timers --all --no-pager` (catches non-octask timers).
+Report: managed units, other timers with next runs, inactive or failed
 (`systemctl --user --failed`).
 
 ## Adding a scheduled task
@@ -88,7 +86,7 @@ octask units, other timers and their next run, anything inactive or failed
    - `octask add` validates the expression again before writing anything, and
      runs `systemd-analyze verify` on the generated units after writing.
    - Prefer `--persistent` so missed runs catch up after the machine was off
-     (systemd timers do not catch up without it).
+     (timers do not catch up without it).
    - Prefer `--delay <span>` (→ `RandomizedDelaySec=`) when several timers
      share a schedule, so they do not fire in the same instant.
 4. Confirm: re-run `octask list` and state the NEXT run time to the user.
@@ -136,20 +134,19 @@ every N hours). For "once per 12 hours with a stagger" use
 
 `OnCalendar=` is close to cron but explicit: `DayOfWeek Year-Month-Day
 Hour:Minute:Second`, e.g. `*-*-* 02:00:00` or `Mon *-*-* 03:00:00`. Slashes
-mean "every N from the left value" (`00/6:00:00` = every 6 h from 00:00; note
-this is NOT the same as cron's `*/6`). Validate anything non-trivial with
-`systemd-analyze calendar`.
+mean "every N from the left value" (`00/6:00:00` is every 6 h from 00:00, not
+cron's `*/6`). Validate anything non-trivial with `systemd-analyze calendar`.
 
 ## Success criteria
 
-- You ran discovery first and said what already exists.
+- Discovery ran first and you said what already exists.
 - The expression was validated with `systemd-analyze calendar` (or by
   `octask add`, which re-validates) before any unit file was written.
-- Units use the `octask-` prefix and live in `~/.config/systemd/user/`.
-- After any change you re-listed timers and stated the next run time.
-- Destructive steps used `--dry-run` first when anything was ambiguous.
-- Agent-scheduled tasks (`--agent`) use a restricted deny-all-by-default
-  agent definition, or the run was refused/reported as unsafe.
+- Units use the `octask-` prefix under `~/.config/systemd/user/`.
+- After any change you re-listed timers and stated the next run.
+- Ambiguous destructive steps used `--dry-run` first.
+- `--agent` tasks use a restricted deny-all-by-default agent definition, or
+  the run was refused/reported unsafe.
 
 ## Report
 

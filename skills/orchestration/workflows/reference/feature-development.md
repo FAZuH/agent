@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user asks to build a feature, implement a ticket/spec/plan, or fix a bug.
+Feature, ticket/spec/plan, or bug fix.
 
 ## State machine
 
@@ -50,17 +50,17 @@ START (user request: feature / ticket / bug fix)
 - step7 -> step6
 - step8 -> step7
 
-When @forkflow is available, the implementation handoff is `research report →
+When @forkflow is available, the handoff is `research report →
 fork → switch implement → first prompt`. The implement session owns verification;
-review may fork from its report as a separate read-only child.
-Forks share the working directory, so parallel writers require separate
-worktrees. The broader forkflow + setup-dev-docs + task-context session
-orchestration is deferred until it is exercised on a real ticket.
+review forks from its report as a separate read-only child.
+Forks share the working directory: parallel writers need separate
+worktrees. Broader forkflow + setup-dev-docs + task-context
+orchestration waits until exercised on a real ticket.
 
 ## Gates
 
-- GRILL only runs when the plan has gaps.
-- A step skipped because its gate did not fire is not a failed step, and later steps still run.
+- GRILL only runs on plan gaps.
+- A step skipped because its gate did not fire is not failed, and later steps still run.
 - FINISH only runs on explicit user request.
 - VERIFY always runs before REVIEW; no implementation reaches review with failing tests.
 - Loop REVIEW → IMPLEMENT → VERIFY while review turns up fixes; always resume the same sessions.
@@ -68,7 +68,7 @@ orchestration is deferred until it is exercised on a real ticket.
 ## Parallel multi-repo batches
 
 When one piece of work spans multiple repositories (e.g. a dependee/dependency pair),
-run the batch in parallel instead of serializing:
+run the batch in parallel:
 
 - One independent `implement` agent per repo. Never share a session across repos.
 - Downstream compile gate: after any change that affects a dependee's view

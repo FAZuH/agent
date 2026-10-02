@@ -5,10 +5,9 @@ description: Bootstrap, audit, or update the repo's durable developer docs under
 
 # setup-dev-docs
 
-`docs/dev/` is the repo's durable developer documentation: the shared source
-of truth for how humans and agents build, test, and operate the codebase.
-This skill establishes it, keeps it true, and repairs it. Task facts stay in
-`.scratch/`, decisions in `docs/adr/`, vocabulary in `CONTEXT.md`.
+`docs/dev/` is the durable developer docs: how humans and agents build, test,
+and operate the repo. This skill establishes, maintains, and repairs it. Task
+facts stay in `.scratch/`, decisions in `docs/adr/`, vocabulary in `CONTEXT.md`.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -16,16 +15,13 @@ This skill establishes it, keeps it true, and repairs it. Task facts stay in
 
 ## Invocation
 
-The user drives this skill: they name it, or ask plainly for docs/dev work.
-OpenCode reads only `name` and `description` from skill frontmatter, so a
-true user-invoked skill is not expressible there; the description holds to
-one branch (an explicit user request), so ordinary feature work never
-fires it.
+User-driven only: named or plainly asked for. OpenCode reads only `name` and
+`description` for invocation, so the description pins one branch (explicit
+request) and ordinary feature work never fires it.
 
 ## Mode
 
-Skills cannot parse arguments; the user states the mode in the prompt. Read
-it from their words. Exactly one of steps 3–5 runs.
+Skills cannot parse arguments: read the mode from the user's words. Exactly one of steps 3–5 runs.
 
 | Mode | Prompt says | Default when |
 |---|---|---|
@@ -44,7 +40,6 @@ topic the repo cannot support is reported, not written.
 - Read the repo's command surface: `package.json` scripts, `Makefile`,
   `justfile`, `pyproject.toml`, `Cargo.toml`, CI workflow files, the dev
   script (`dev.sh` or equivalent), and the test layout.
-- Note what already exists, so you preserve it.
 
 Done when: you can name every command the repo actually defines, and every
 `docs/dev/` file already present.
@@ -66,8 +61,7 @@ Done when: every fact you plan to write sits in the row that owns it.
 
 ## 3. Bootstrap
 
-Create only the documents the repository supports, using evidence from step 1
-and not a fixed set:
+Create only what the evidence supports, never a fixed set:
 
 | Doc | Write it when the repo has |
 |---|---|
@@ -95,13 +89,12 @@ Check every existing `docs/dev/` file:
 
 - **Stale claims**: a documented command, path, or step that contradicts
   the repo config or tree: fix it in place.
-- **Command verification**: re-check each documented command against the
-  manifests and CI. A command you cannot verify is flagged `unverified`,
-  never presented as valid.
+- **Command verification**: re-check each command against the manifests and
+  CI. Unverifiable commands are flagged `unverified`, never valid.
 - **Broken links**: resolve every relative link and referenced path; fix
   or flag.
-- **Duplication**: content that belongs to `CONTEXT.md`, `docs/adr/`, or
-  `.scratch/`: point at its home instead of restating it.
+- **Duplication**: content owned elsewhere (`CONTEXT.md`, `docs/adr/`, or
+  `.scratch/`): point home, never restate.
 
 **GATE doc-fix-approval (normal → apply each proposed fix in place):** every
 fix is proposed with file, line, and evidence, and applied only after the
@@ -124,9 +117,9 @@ moved.
 
 - Preserve existing docs: append, correct, and restructure locally. A
   whole-file replacement goes through the approval in step 5.
-- Human-only steps: document what a human must do and where the credential
-  lives (env var, secret store, owner); the secret value never enters a doc.
-  @wizard can generate the interactive steps when the user asks.
+- Human-only steps: document the step and where the credential lives (env var,
+  secret store, owner); values never enter a doc. @wizard generates the
+  interactive steps on request.
 - No invented conventions: if the repo does not do it, the doc does not say
   it.
 

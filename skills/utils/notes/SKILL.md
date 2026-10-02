@@ -5,21 +5,20 @@ description: Read and maintain durable notes for tools, CLIs, APIs, scheduled ag
 
 # Notes
 
-One Markdown file per tool or system, in
+One Markdown file per tool or system in
 `{{USER_HOME}}/.config/fazuh-agent/notes/`. Read the matching note before
-changing that system. Create one when the task produces knowledge that will
-help later.
+changing that system. Create one when the task produces reusable knowledge.
 
 ## OpenCode v2 findings
 
-The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.md`. A skill that needs a finding calls this skill and reads that note rather than keeping a second copy.
+The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.md`. Skills needing a finding read that note through this skill, never a second copy.
 
 ## Write a note
 
 1. Search the notes directory for the tool or system name.
 2. Read the matching file and its update rules.
-3. Update the existing claim when the new information changes it. Do not create a duplicate entry.
-4. Append a new entry when the note has no matching claim. Use the note's format when it defines one. Otherwise use:
+3. Update the matching claim in place, never duplicate it.
+4. No matching claim: append one. Use the note's format when it defines one. Otherwise use:
 
    ```markdown
    # <tool or system>
@@ -37,5 +36,5 @@ The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.m
    ```
 
 5. Keep secrets out of notes. Refer to the secret by purpose, not by value.
-6. After editing, read the note again and confirm that the next agent can find
-   the claim with a search for the tool or feature name.
+6. After editing, re-read the note and confirm the claim is findable by
+   tool or feature name.

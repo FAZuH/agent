@@ -21,15 +21,15 @@ The user wants to wrap up and clean up a worktree session. Triggers: "close the 
 
 ### 1. Run the session finish workflow
 
-Load the @finish skill and follow it exactly. It owns the whole wrap-up:
-discovering and updating the relevant docs, the commit-proposal gate, archiving
-a completed `.scratch/` workspace, the summary, and the next steps. Do not
+Load the @finish skill and follow it exactly. It owns the wrap-up:
+relevant docs, the commit-proposal gate, archiving
+a completed `.scratch/` workspace, the summary, next steps. Never
 restate or duplicate its steps here.
 
-Skip the steps a merge already satisfied. You usually arrive here from
-@pr-to-close, which only hands over once the PR is merged, so the docs scour
-and the commit proposal are no-ops, and re-running them invites an agent to
-"update" docs for work that is already merged. What is left is the archive and
+Skip the steps a merge already satisfied. From
+@pr-to-close the PR is already merged, so the docs scour
+and the commit proposal are no-ops: re-running them invites
+"updating" docs for merged work. What is left is the archive and
 the summary.
 
 ### 2. Clean up the worktree

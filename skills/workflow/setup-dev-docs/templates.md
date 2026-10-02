@@ -1,10 +1,9 @@
 # docs/dev templates
 
-Skeletons for bootstrap and update modes. Keep each doc short: purpose,
-verified commands, rules, checklist. Replace the angle brackets; delete any
-section the repo cannot support. Every command line you keep must come from
-repo evidence (manifest, Makefile, CI workflow), and each doc names where
-that evidence lives.
+Skeletons for bootstrap and update. Keep each doc short: purpose, verified
+commands, rules, checklist. Replace angle brackets; delete unsupported
+sections. Every kept command comes from repo evidence (manifest, Makefile, CI
+workflow); each doc names its source.
 
 ## docs/dev/README.md (index: always first)
 

@@ -1,8 +1,8 @@
 # Interrupted delegation recovery
 
 Use when a subagent spawn returns aborted ("Tool execution interrupted",
-"Endpoint is unavailable", or the server restarts mid-flight. Never re-spawn
-blindly, but first check the transient signatures below: one retry there;
+"Endpoint is unavailable") or the server restarts mid-flight. Never re-spawn
+blindly: check the transient signatures below first. One retry there;
 the wreckage procedure only if the retry fails too.
 
 ## Transient signatures (retry the dispatch once, then classify)
@@ -39,15 +39,13 @@ the wreckage procedure only if the retry fails too.
    - Any anomalies spotted (new files not in spec, moved tests) with
      resolve-or-justify instructions.
    - Gates + concise-report requirements, same as the original brief.
-4. **Two consecutive kills without progress** → stop re-spawning and report
-   to the user. Switching to direct execution is the user's call, not a
-   default.
-5. **Log it:** one deviation-log line per kill + recovery path taken; infra
+4. **Two consecutive kills without progress** → stop re-spawning and report.
+   Direct execution is the user's call, never a default.
+5. **Log it:** one deviation-log line per kill + recovery path; infra
    errors also go to the papercuts backlog.
 
 ## Rules
 
-- Never assume a fresh spawn means a clean slate. Disk state outranks the
-  transcript.
+- Disk state outranks the transcript: never assume a fresh spawn means a clean slate.
 - Prefer resuming the same unit over restarting it; prefer smaller units
   when infra is flaky, so kills lose less.

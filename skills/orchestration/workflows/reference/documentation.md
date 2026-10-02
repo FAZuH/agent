@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user asks for ADRs, glossary, or runbook updates, or wants to record an architectural decision.
+ADRs, glossary, or runbook updates, or recording an architectural decision.
 
 ## State machine
 

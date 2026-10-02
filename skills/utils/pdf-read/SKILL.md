@@ -19,9 +19,9 @@ license: MIT
 
 1. **Before using an approach, check its tool**: `command -v <tool>`.
 2. **Missing, no gate entry**: offer to install. Detect the package manager
-   (`pacman`/`apt`/`dnf`/`brew`) and propose the matching command from the
-   table. For `ocrmypdf` prefer `uv tool install ocrmypdf` when `uv` is
-   present. One offer per tool, never install silently.
+   and propose the matching table command (`ocrmypdf`: prefer
+   `uv tool install ocrmypdf` when `uv` exists). One offer per tool, never
+   install silently.
 3. **User declines**: record it as an approval gate in the current project's
    `AGENTS.md` (create the file with exactly this content if it does not
    exist), then continue with a fallback approach:
@@ -42,8 +42,8 @@ license: MIT
    - `uv` gated: image rendering + vision only.
    - Every relevant tool gated: say plainly what is unavailable and stop.
 5. Fallbacks are preferences, not straitjackets. Pick the best approach the
-   available tools allow (see Known Issues for the
-   pdfplumber-over-pdftotext rule).
+   available tools allow (Known Issues holds the pdfplumber-over-pdftotext
+   rule).
 
 ## Decision Tree
 
@@ -70,7 +70,7 @@ pdftotext file.pdf out.txt  # file
 
 ## Approach 2: rga / ripgrep-all (search PDFs for keywords/patterns)
 
-Fast full-text search across PDFs (and other files). Uses `pdftotext` under the hood but integrates with ripgrep's pattern matching, context lines, and output formatting.
+Fast full-text search across PDFs. Uses `pdftotext` under the hood with ripgrep's matching, context lines, and formatting.
 
 ```bash
 rga "keyword" file.pdf            # search single PDF
@@ -81,7 +81,7 @@ rga -C 3 "keyword" file.pdf       # 3 lines of context
 
 Matches are prefixed with the page number by default (`Page 2: beta two needle`), no flag needed.
 
-Best for: locating specific terms, extracting context around keywords, or finding which pages contain target content before diving deeper with pdfplumber or vision.
+Best for: locating terms, extracting keyword context, finding pages before going deeper with pdfplumber or vision.
 
 ## Approach 3: pdfplumber (text-based table/multi-column PDFs)
 
@@ -123,7 +123,7 @@ EOF
 
 ## Approach 4: image rendering + vision (most reliable, any PDF)
 
-Best for: complex layouts, mixed formats, or when pdfplumber fails. The model reads the visual layout directly.
+Best for complex layouts, mixed formats, or pdfplumber failure. The model reads the visual layout directly.
 
 ```bash
 # render all pages as PNG at 150 DPI
@@ -139,9 +139,8 @@ Use 200+ DPI for PDFs with small fonts:
 pdftoppm -r 200 -png "file.pdf" "$dir/page"
 ```
 
-Narrow the page range before rendering, so you do not read a 300-page
-document one image at a time. `rga` (Approach 2) reports page numbers, or
-fall back to:
+Narrow the page range before rendering, never a 300-page document one image
+at a time. `rga` (Approach 2) reports page numbers, or fall back to:
 
 ```bash
 pdftotext file.pdf - | grep -n "keyword"
@@ -157,7 +156,7 @@ uv run --with ocrmypdf ocrmypdf input.pdf output_ocr.pdf
 # then proceed with pdfplumber or vision on output_ocr.pdf
 ```
 
-If `ocrmypdf` is unavailable or gated, skip OCR, image rendering + vision
+If `ocrmypdf` is unavailable or gated, skip OCR: image rendering + vision
 (Approach 4) reads scanned pages directly.
 
 ## Known Issues

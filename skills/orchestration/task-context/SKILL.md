@@ -14,10 +14,10 @@ description: >-
 
 # task-context
 
-The **context packet** is one compact file per ticket: `.scratch/<YYYY-MM-DD>_<task>/context-packet.md`, holding the current,
-distilled view of the work: what to build, where, what must stay true, how
-to verify, and what each worker needs from it. Workers receive a
-role-specific projection, so raw research transcripts never ride into
+The **context packet** is one compact file per ticket: `.scratch/<YYYY-MM-DD>_<task>/context-packet.md`, the current
+distilled view: what to build, where, what must stay true, how
+to verify, and what each worker needs. Workers receive a
+role-specific projection; raw research transcripts never enter
 delegation prompts.
 
 > **Load the @scratch skill first.** It owns the `.scratch/` layout and slug
@@ -26,11 +26,11 @@ delegation prompts.
 
 ## Boundaries
 
-- `.scratch/<slug>/spec.md` stays the task's source of truth, objective,
+- `.scratch/<slug>/spec.md` stays the task's source of truth: objective,
   decisions, deviations, gates. The packet is a derived, disposable view,
   rebuildable from the spec plus the code at any time. @session owns that
   lifecycle and the checkpoints; this skill owns only the packet.
-- Durable knowledge goes to its home, never into the packet: stable
+- Durable knowledge goes home, never into the packet: stable
   workflow → `docs/dev/` (@setup-dev-docs), vocabulary → `CONTEXT.md`,
   decisions → `docs/adr/`.
 - The packet is not a second architecture memory. When @scratch-finish
@@ -94,11 +94,11 @@ Spec: `.scratch/<slug>/spec.md`, task truth lives there.
    delegation. Distill the findings into the fields; the findings file keeps
    the detail. Done when: every field is filled or marked `(none)` /
    `(deferred: <owner>)`.
-2. **Refresh**: when a trigger fires: a public API, module boundary,
+2. **Refresh**: on trigger: a public API, module boundary,
    design decision, acceptance criterion, or verification command changed;
    the base commit moved (commit, rebase, merge); or `git status --short`
-   shows files outside the packet's Relevant list. Edit the changed fields
-   and bump the Freshness line. A full rewrite means the design changed, so log that in the spec first.
+   shows files outside Relevant. Edit the changed fields
+   and bump the Freshness line. A full rewrite means the design changed: log it in the spec first.
 3. **Changed-file rule**: after every implement/verify round, compare
    `git status --short` and `git diff --stat <base>..HEAD` against Relevant
    files & symbols. A new or removed file joins the list with its symbols,
@@ -130,7 +130,7 @@ packet carries the distilled facts, and prompts carry the projection.
 
 When dispatching N>1 children from one packet, pre-render one projection
 file per child into the workspace (`projections/<role>.md`) and pass the
-file path in each dispatch prompt instead of pasting the projection inline.
+file path in each dispatch prompt instead of pasting inline.
 Hand-maintained inline briefs drift apart across children; files stay
 comparable and diffable, and a re-dispatch reuses the file unchanged.
 

@@ -17,7 +17,7 @@ From each SKILL.md body it extracts two reference forms:
 
 - `@name`: the canonical skill/agent invocation form. Every at-mention
   must resolve to a skill id or an agent definition; anything else is a
-  `broken-ref` finding (high). There is no suppression list, a reference to
+  `broken-ref` finding (high). No suppression list: a reference to
   something that does not exist is always reported.
 - Backticked spans that exactly match an agent id: subagent delegation,
   recorded as `routes` edges. Other backticked prose tokens are ambiguous by
@@ -63,7 +63,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    ```
 
 2. Triage findings by class: `broken-ref` (stale rename or reference to
-   something that does not exist), `collision` (same id in multiple active
+   something missing), `collision` (same id in multiple active
    roots), `drift` (repo source differs from installed copy).
 3. Fix by class, in owned roots only.
 
@@ -81,7 +81,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
      the loser copy only in owned roots; never touch install targets.
    - **Drift repo-vs-installed**: give the user the reinstall command below.
      NEVER hand-sync files between repo and install targets.
-4. Regenerate `graph.json`/`graph.html`, then append disposition records to
+4. Regenerate `graph.json`/`graph.html`, then append dispositions to
    `findings.jsonl`: keep the original finding line untouched and add a new
    line merging `{"disposition":"proposed-fix|reported|documented|upstream|user-action","note":"..."}`
    into a copy of it.
@@ -90,7 +90,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    interactive page beside `graph.json` and opens it (`--no-open` to skip;
    `--json`/`--out` to redirect paths). If browser tools reject `file://` or no
    desktop bridge is connected, serve the XDG data directory on localhost and
-   open `graph.html` there. Do not hand-roll a Playwright viewer for this.
+   open `graph.html` there. Never hand-roll a Playwright viewer for this.
 
 ## Common commands
 

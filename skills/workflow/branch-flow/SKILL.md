@@ -15,8 +15,8 @@ Two long-lived branches, one direction, one gate.
 
 There is no `dev`, `develop`, or `development` branch. A staging branch looks
 like it separates "unfinished" from "main", but it does not: promoting it ships
-the whole batch anyway. Queueing on `main` with a commit marker does the same
-job without the extra branch to keep in sync.
+the whole batch anyway. Queueing on `main` with a commit marker does the same job with no extra
+branch to sync.
 
 ## The `[no ci]` gate
 
@@ -28,14 +28,13 @@ git merge --no-ff origin/feat/add-button \
   -m "Merge pull request #12 from FAZuH/feat/add-button [no ci]"
 ```
 
-This is not a way to dodge the tests. The PR's own run already tested the
-branch; the merge to `main` only needs to queue it. The same marker on a
-docs-only commit means the ordinary thing. Nothing worth testing.
+This dodges no tests: the PR run already tested the branch, and the merge
+only queues it. A docs-only commit carries the same marker for the same reason.
 
 ## Cutting a release
 
-When `main` holds what you want shipped, make one commit on `main` with **no
-marker**. That is the whole trigger.
+When `main` holds what you want shipped, make one unmarked commit on `main`.
+That is the whole trigger.
 
 ```bash
 git commit --allow-empty -m "chore: run release"
@@ -74,9 +73,8 @@ notes are built from.
 
 ## Rules
 
-- **A PR's base is `main`.** Always. It is the default branch, so tooling that
-  detects the default branch is already right. Do not add a staging branch to
-  "fix" that.
+- **A PR's base is `main`.** Always. Default-branch detection is already
+  right; never add a staging branch to "fix" it.
 - **Work reaches `main` by PR merge only.** The one direct commit is
   `chore: run release`.
 - **Do not create `dev`, `develop`, `development`, `staging`, or `production`.**
@@ -95,8 +93,8 @@ git switch main && git pull && git switch -c v0.6
 ```
 
 Delete it once that version ships. A version branch still open at the next
-release means the release ships whatever it happens to contain. That is the
-only real hazard, and it is a decision you make deliberately.
+release ships whatever it contains. That is the only hazard, and it is a
+deliberate decision.
 
 ## Hotfix branch
 
@@ -114,5 +112,5 @@ workflow, so it ships, and the version bump syncs back to `main` for you.
 
 **Blocking the queue**: `main` is broken and you need it working to keep
 going. Cut from `main`, merge back with `[no ci]`, and cut a release when you
-are ready. This ships the queue along with the fix; that is the trade, and it
-is the reason to prefer the `release` base when you have the choice.
+are ready. This ships the queue with the fix; that trade is why the `release`
+base is preferred when you have the choice.

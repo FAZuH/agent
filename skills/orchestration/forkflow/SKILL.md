@@ -11,9 +11,7 @@ description: >-
 
 # forkflow
 
-`forkflow` is the warm-delegation layer for the orchestration workflow. It
-uses the current ticket's session history as an accelerator. The ticket's
-durable contract remains its spec and, when used, its @task-context packet.
+Warm-delegation layer for orchestration. Uses the current ticket's session history as an accelerator. The durable contract stays the spec and, when one exists, the @task-context packet.
 
 ## One-shot
 
@@ -26,8 +24,8 @@ scripts/oc-delegate.sh ses_SOURCE --agent implement \
 
 `--through`/`--before` (explicit boundary), `--agent`, and
 `--prompt`/`--prompt-file` are required; `--model` and `--timeout` optional.
-Exit 0 only when the child turn succeeds. It reuses the @ocv2-sessions
-scripts. The manual steps below stay as the fallback and the reference.
+Exit 0 only on child success. Reuses the @ocv2-sessions
+scripts. The manual steps below are fallback and reference.
 
 For a plain Q&A fork that keeps the parent's agent and model (no switch),
 `scripts/oc-ask.sh` is the one-shot, fork at the latest message → prompt →
@@ -48,8 +46,8 @@ For every child:
 fork → switch agent → verify → first prompt
 ```
 
-Switching after the child has already run a turn changes session metadata and
-message tags, but does not reliably replace the model's system prompt.
+Switching after the child ran a turn changes session metadata and
+message tags but does not reliably replace the model's system prompt.
 
 ## Preconditions
 
@@ -69,8 +67,8 @@ Probe once per orchestrator session before relying on warm delegation:
 4. Verify the session metadata and reply. Mark forkflow available only when
    both report the requested child agent.
 
-If any probe step fails, use a normal fresh `subagent` spawn and pass the
-role-specific task brief. Do not make the ticket depend on fork support.
+If any probe step fails, spawn a normal fresh `subagent` with the
+role-specific task brief. Never make the ticket depend on fork support.
 
 ## Delegation procedure
 
@@ -80,12 +78,12 @@ role-specific task brief. Do not make the ticket depend on fork support.
 3. `POST /api/session/{child}/agent` with the target subagent name. Do this
    before any prompt is sent to the child.
 4. Verify `GET /api/session/{child}` reports the target agent.
-5. Send exactly one first prompt containing the run mode and the focused role
+5. Send exactly one first prompt with the run mode and the focused role
    brief. If a task packet exists, pass only its role projection and path;
-   do not paste raw research transcripts.
+   never paste raw research transcripts.
 6. Poll `GET /api/session/{child}` until `.data.outcome` is `succeeded` or
-   `failed`. The deployed server may not support the documented `/wait`
-   operation, so polling is the portable method.
+   `failed`. Polling is portable; the deployed server may not support the
+   documented `/wait` operation.
 7. Read the newest assistant message and report the child ID, outcome, and
    result to the orchestrator.
 
@@ -104,9 +102,9 @@ of a child that already ran a turn.
 
 ## Unattended fleets
 
-The default loop is foreground: fork → prompt → poll → report. For unattended
-fleets (overnight batches) the dispatch ledger, per-generation completion
-markers, and stall detection are not optional; @long-horizon owns those
+The default loop is foreground: fork → prompt → poll → report. Unattended
+fleets (overnight batches) also need the dispatch ledger, per-generation completion
+markers, and stall detection; @long-horizon owns those
 requirements and the wake loop, since they are liveness concerns rather than
 fork mechanics.
 
@@ -118,8 +116,8 @@ file before parsing.
 ## Ledger and fallback
 
 Record child IDs, source boundary IDs, target agents, outcomes, and fallback
-decisions in the active session's existing session record. `forkflow` does not
-create a second ticket-context or architecture-memory file. On fallback,
+decisions in the active session's existing session record. `forkflow` creates
+no second ticket-context or architecture-memory file. On fallback,
 record the failed probe and continue with ordinary delegation.
 
 Raw API mechanics live in @ocv2-sessions; this skill owns the orchestration

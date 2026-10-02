@@ -15,6 +15,6 @@ One line per item. No prose paragraphs, no per-item essays.
 Rules:
 
 - Answers to known questions go above the list, capped at four short lines.
-- Anything the agent can verify itself (file exists, command output) is verified before listing, never asked.
-- Verdicts persist back into the session record (spec, checkpoint, or ticket) the same turn they land.
+- Verify what you can (file exists, command output) before listing, never ask.
+- Persist verdicts to the session record (spec, checkpoint, ticket) the same turn they land.
 - A group marked accepted in a previous turn is executed, not re-presented.

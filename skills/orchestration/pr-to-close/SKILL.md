@@ -5,7 +5,7 @@ description: "Full end-to-end close of a worktree feature: create a PR (pr-creat
 
 # PR to close
 
-Take a finished worktree branch through the whole lifecycle: open a pull request, watch its CI, merge it as soon as it's green, then close the worktree. This composes three skills in order. Do not skip or reorder any step.
+Finished worktree branch end to end: open a pull request, watch CI, merge when green, close the worktree. Three skills in order. Never skip or reorder.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -14,15 +14,15 @@ Take a finished worktree branch through the whole lifecycle: open a pull request
 
 ## Workflow
 
-Run these three skills in order. After each, confirm the step succeeded before moving to the next.
+Run these three skills in order. Confirm each step before moving on.
 
 ### 1. Create the PR
 
-Follow the @pr-creator skill to open a pull request for the current worktree branch. It owns branch safety, committing, the repo's checks, pushing, and the `gh` CLI call, and it returns the PR URL/number. Do not proceed until a PR exists for the worktree branch.
+Follow the @pr-creator skill to open a pull request for the current worktree branch. It owns branch safety, committing, the repo's checks, pushing, and the `gh` CLI call, and it returns the PR URL/number. No PR, no next step.
 
 ### 2. Watch CI and merge when green
 
-Follow the @pr-watchmerge skill on the PR from step 1. If any check fails it stops and reports: do NOT merge, do NOT close the worktree. Surface the failure to the user and wait for their decision. Only proceed once the PR is merged.
+Follow the @pr-watchmerge skill on the PR from step 1. Failing checks: do NOT merge, do NOT close the worktree. Surface the failure and wait. Proceed only once merged.
 
 ### 3. Close the worktree
 
@@ -36,7 +36,7 @@ The branch is now merged, so it is already gone remotely. Follow the @worktree-c
 
 ## Safety rules
 
-- Run the three skills strictly in order. Never merge before a PR is open, never close the worktree before the PR is merged.
-- Never close the worktree if the PR merge failed or had failing checks. Stop and report instead.
+- Run the three skills strictly in order. Never merge before a PR is open, never close before the PR is merged.
+- PR unmerged or checks failing: never close the worktree. Stop and report.
 - Each sub-skill's own safety rules still bind; this skill adds none beyond the ordering above.
-- Report the final state back to the user: PR number, merge commit, and that the worktree was cleaned up.
+- Report the final state: PR number, merge commit, worktree cleaned up.

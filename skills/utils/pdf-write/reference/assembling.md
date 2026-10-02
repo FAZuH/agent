@@ -1,8 +1,8 @@
 # Assembling a PDF
 
 Convert and merge material that already exists as files: hand-written scans,
-typed parts already built, or PDFs that arrived from somewhere else. The result
-is one file whose pages agree on width, with every source still on disk.
+typed parts already built, or PDFs from elsewhere. One file out, pages at one
+width, every source still on disk.
 
 Steps run in order. Step 1 applies per input; steps 2 to 5 apply to the whole.
 
@@ -33,8 +33,7 @@ magick scan.jpg -auto-orient -resize 2480x \
 - `-resize 2480x` scales to a width of 2480 px, keeping the aspect ratio.
   Change the number, never the ratio, to hit a different target width.
 - A hardened ImageMagick policy denies the PDF write. `magick -list policy`
-  shows it, and the same page can be re-rendered through `gs` the way step 3
-  does.
+  shows it; re-render the page through `gs` the way step 3 does.
 
 ### A page built from Markdown
 
@@ -49,16 +48,16 @@ pdfinfo -f 1 -l 20 -box part.pdf | grep MediaBox
 ```
 
 Bare `pdfinfo` prints one `Page size:` line, and it is page 1. On a merge of
-sources built by different tools, that one line hides the entire problem, so
-use the `-f 1 -l N -box` form before deciding anything.
+sources from different tools that line hides the whole problem: use
+`-f 1 -l N -box` before deciding anything.
 
 Expect the widths to disagree. A Pandoc A4 page is 595.28 pt, a scan left at
 its native density can be 1662 pt, and an older merge can be 596 pt.
 
 ## 3. Re-render each page at the target width
 
-Ghostscript writes the page box it is told to and scales the content to fit it,
-so this is where the widths become equal. Two details carry the whole recipe:
+Ghostscript writes the page box it is told and scales content to fit, so
+widths become equal here. Two details carry the recipe:
 
 - **`-dFIXEDMEDIA` is required.** With it the device points become the page
   box. Without it, `-dDEVICEWIDTHPOINTS` sets the width and leaves the height
@@ -121,27 +120,26 @@ PY
 
 ## 4. Merge
 
-`pdfunite` takes the merge order as its arguments and copies pages through
-untouched. It normalizes nothing, which is why step 3 comes first.
+`pdfunite` takes merge order as its arguments and copies pages untouched. It
+normalizes nothing, which is why step 3 comes first.
 
 ```bash
 pdfunite 0.pdf 1.pdf 2.pdf 3.pdf 'Group B_Tugas 2.pdf'
 ```
 
-Quote a name with a space in it. An input already at the target width still
-goes through step 3, so that every page ends up with the same MediaBox rather
-than a near miss.
+Quote a name with a space. Inputs already at target width still go through
+step 3, so every page ends with the same MediaBox, never a near miss.
 
 ## 5. Verify
 
-The gate is in `SKILL.md`. For a merged file the check that matters is
-`pdfinfo -f 1 -l N -box`, and the reads that matter are the scan pages, since
-those are the ones `pdftotext` cannot vouch for.
+The gate is in `SKILL.md`. On a merged file the check that matters is
+`pdfinfo -f 1 -l N -box`, and the reads that matter are the scan pages:
+`pdftotext` cannot vouch for those.
 
 ## Rebuild after one part changes
 
-Regenerate the changed part, then merge again. Do not rebuild the inputs that
-did not change: the merge is cheap and the sources are still on disk.
+Regenerate the changed part, then merge again. Inputs that did not change
+stay: the merge is cheap and the sources are still on disk.
 
 ## Traps
 
@@ -154,5 +152,5 @@ did not change: the merge is cheap and the sources are still on disk.
   must contain `%d`. For a single page out, use `gs -sPageList=1`.
 - One `gs` run means one box for every page it writes, so per-page geometry
   means per-page runs.
-- A scan with no text layer returns nothing from `pdftotext`. Expected, and it
-  still means the render has to be read.
+- A scan with no text layer returns nothing from `pdftotext`. Expected: the
+  render still has to be read.
