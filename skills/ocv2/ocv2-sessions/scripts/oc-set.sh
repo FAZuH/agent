@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-set.sh — switch agent and/or model on an OpenCode v2 session.
+# oc-set.sh: switch agent and/or model on an OpenCode v2 session.
 # Wraps POST /api/session/{id}/agent and POST .../model (both 204, empty
 # body), then verifies via GET. See SKILL.md for the API details.
 set -euo pipefail
@@ -34,12 +34,12 @@ while [[ $# -gt 0 ]]; do
     *) die "unknown argument: $1" ;;
   esac
 done
-[[ -n "$AGENT$MODEL" ]] || die "nothing to switch — pass --agent and/or --model"
+[[ -n "$AGENT$MODEL" ]] || die "nothing to switch, pass --agent and/or --model"
 
 command -v opencode2 >/dev/null || die "opencode2 not on PATH"
 command -v jq >/dev/null || die "jq not on PATH"
 
-post() { # post <path> <json> — dies unless the call succeeds (204: empty body)
+post() { # post <path> <json>: dies unless the call succeeds (204: empty body)
   local out
   out=$(opencode2 api post "$1" --data "$2" 2>&1) || die "POST $1 failed: $out"
   if jq -e '._tag' >/dev/null 2>&1 <<<"$out"; then

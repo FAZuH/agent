@@ -13,9 +13,9 @@ pdf-build path/to    # main.md inside that directory
 pdf-build paper.md   # that specific file
 ```
 
-`pdf-build` renders every `.mmd` to `.png` with `mmdc`, builds the Markdown to
-`.pdf` with Pandoc, and records input hashes in `pdf-build.lock`. It skips the
-work when nothing changed. Delete the lock to force a rebuild.
+`pdf-build` renders `.mmd` to `.png` (`mmdc`), builds Markdown to `.pdf`
+(Pandoc), records hashes in `pdf-build.lock`, and skips unchanged work. Delete
+the lock to force a rebuild.
 
 The underlying calls, when you need them directly:
 
@@ -25,8 +25,8 @@ pandoc -i main.md -o main.pdf
 ```
 
 Keep the `.mmd` sources next to the `.md`, and reference the rendered `.png`
-files relatively (`![alt](diagram.png)`). A PDF that cannot be rebuilt from
-its folder is not finished.
+relatively (`![alt](diagram.png)`). A PDF that cannot be rebuilt from its
+folder is not finished.
 
 ## Math is LaTeX, not inline code and not HTML
 
@@ -65,8 +65,8 @@ pandoc cover.md --pdf-engine=xelatex --standalone \
 
 - Geometry wins over `papersize`, so the two together are not a conflict.
 - `paperwidth=210mm` is 595.28 pt, the A4 width a merge normalizes to.
-- `paperheight` is what fits a page to its content. A cover page of names on a
-  full A4 is mostly blank, and the blank part is what `paperheight` removes.
+- `paperheight` fits a page to its content. Names on a full A4 are mostly
+  blank, and the blank is what `paperheight` removes.
 - `pagestyle:empty` drops the page number. Without it Pandoc prints one at the
   bottom of every page, including a single-page cover.
 - `xelatex` handles the Unicode a non-English document needs. `pdflatex` fails
@@ -94,19 +94,18 @@ pandoc cover.md --pdf-engine=xelatex --standalone \
 - **`{ width=NN% }`** on an image is honoured. Full width is rarely right; see
   layout below.
 - **Keep related prose, its table, and its algorithm on the same flow.** A
-  forced `\newpage` before an algorithm strands the prose it explains on the
-  previous page and leaves the algorithm page half empty; more page breaks, not
-  fewer, is what fixes it. Check the rendered page count and page density, not
-  just that the build succeeded.
+  forced `\newpage` before an algorithm strands its prose on the previous page
+  and leaves the algorithm page half empty; more page breaks, not fewer, fix
+  it. Check rendered page count and density, not just exit 0.
 
 ## Images and Mermaid
 
 - Quote any Mermaid label containing brackets, commas, or comparison
   operators. `A["L[i,j] = 0"]` parses; `A[L[i,j] = 0]` is a parse error.
-- Render the diagram and **look at it** before embedding. Two failure shapes
-  seen in practice: a top-to-bottom flowchart 20 nodes tall, unusable on a
-  page; and edges bundled through a shared subgraph border, unreadable.
-  Fix by restructuring: group into phases side by side, or reduce node count.
+- Render the diagram and **look at it** before embedding. Two shapes seen in
+  practice: a top-to-bottom flowchart 20 nodes tall, unusable on a page; edges
+  bundled through a shared subgraph border, unreadable. Fix by restructuring:
+  phases side by side, or fewer nodes.
 - Scale images to the page. On A4 with 15 mm margins the text block is about
   186 mm wide, so a 1584x1104 diagram at `width=100%` is roughly 130 mm tall
   and will push itself onto a page of its own.
@@ -122,10 +121,10 @@ fmtutil-sys --all --byfmt pdflatex   # or xelatex
 
 If the format is missing because `fmtutil.cnf` has no entry for that engine,
 `--all` cannot build it. Write a temporary `fmtutil.cnf` naming the format and
-build it into the user format tree (`TEXMFVAR`) instead — no install, no sudo.
+build it into the user format tree (`TEXMFVAR`) instead: no install, no sudo.
 A half-installed TeX tree also shows up as missing `.sty`/`.tfm` files
 (`lmodern`, `psnfss`, `lualatex-math`): those are genuinely packages, so
 diagnose before assuming the format was the problem.
 
 Check before assuming: `command -v pandoc mmdc`, and read the actual error
-text. Never install TeX packages to fix a build you have not diagnosed.
+text. Never install TeX packages for an undiagnosed build.

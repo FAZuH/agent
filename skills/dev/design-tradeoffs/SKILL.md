@@ -10,19 +10,17 @@ description: >-
 
 # Design Tradeoffs
 
-Guide the user through a structured tradeoff analysis when they are deciding between approaches.
-
 ## 1. Clarify the decision
 
-Ask the user to narrow scope if it's too broad. Surface implicit constraints: budget, timeline, team expertise, existing stack, scalability needs, maintenance horizon.
+Narrow scope if too broad. Surface implicit constraints: budget, timeline, expertise, stack, scale, maintenance horizon.
 
-**Done when:** you and the user agree on a clear decision question and a short list of constraints.
+**Done when:** agreed decision question plus short constraint list.
 
 ## 2. List the options
 
-Generate 3–5 distinct approaches. Avoid false dichotomies (don't stop at two unless the user named exactly two). If the user already has candidates, start from those.
+Generate 3–5 distinct approaches. No false dichotomies (two only if the user named two). Start from user candidates when present.
 
-Do not include options that violate hard constraints unless you flag them explicitly as such.
+Flag constraint-violating options explicitly, never include them silently.
 
 ## 3. Analyse each option
 
@@ -30,17 +28,17 @@ For every option, produce this template:
 
 **What it is**: one or two sentences.
 
-**Strengths**: bullet list. Why you'd pick it.
+**Strengths**: why you would pick it.
 
-**Weaknesses**: bullet list. Why you'd avoid it.
+**Weaknesses**: why you would avoid it.
 
-**Best for**: specific scenarios where this option shines.
+**Best for**: scenarios where it shines.
 
-**Worst for**: specific scenarios where this option is painful.
+**Worst for**: scenarios where it hurts.
 
 ## 4. Cross-cutting comparison
 
-Compare all options side by side on relevant dimensions. Pick from this list the dimensions that matter for this decision:
+Compare all options side by side. Use only dimensions that matter here:
 
 - Complexity (implementation + operational)
 - Flexibility and adaptability to change
@@ -55,7 +53,7 @@ Compare all options side by side on relevant dimensions. Pick from this list the
 
 ### Table presentation
 
-Present the comparison as a markdown table:
+Comparison goes in a markdown table:
 
 - **Dimensions phrased positively**: name them so ✅ always means "good".
   (e.g., "No nginx" not "Nginx complexity"; "No CORS" not "CORS needed".)
@@ -65,4 +63,4 @@ Present the comparison as a markdown table:
 
 ## 5. Recommend
 
-Given the user's context, state which option you'd pick and why. Then name one concrete signal that would change your recommendation, so the user knows what to watch for.
+State your pick and why. Name one concrete signal that would flip it.

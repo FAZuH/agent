@@ -25,13 +25,11 @@ Highest wins:
 3. **Config file**: `data_dir = "/mnt/big"` in the config file
 4. **Platform default**: from the OS convention
 
-Two different namespaces meet here, and conflating them is the usual bug:
+Two namespaces meet here; conflating them is the usual bug:
 
 - `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` are
-  **global per-user** variables. The platform crate already honours them. Do
-  not read them yourself, and do not invent your own spelling of them.
-- `MYAPP_*` are **per-application** overrides, and they are yours to define.
-  This is the layer that lets a user redirect one app without touching the rest.
+  **global per-user**. The platform crate already honours them. Never read them yourself, never invent your own spelling.
+- `MYAPP_*` are **per-application** overrides. Yours to define: redirect one app without touching the rest.
 
 ## Which directory holds what
 
@@ -42,15 +40,11 @@ Two different namespaces meet here, and conflating them is the usual bug:
 | cache | `cache_dir` | anything reconstructable | yes, the user may delete it |
 | state | `state_dir` | logs, history, last-run markers | no, but not worth backing up |
 
-Cache is a promise: a user deleting the cache directory must never lose data.
-If putting a file in `cache_dir` would lose something, that file belongs in
-`data_dir`.
+Cache is a promise: deleting it must never lose data. Doubt means `data_dir`.
 
 ## Resolve once, inject everywhere
 
-Call the platform crate **once**, in startup, and hand a struct to everything
-else. A call site that calls `dirs::data_dir()` directly silently ignores every
-override above, and makes the value untestable.
+Call the platform crate **once**, at startup, and hand the struct down. A call site calling `dirs::data_dir()` directly ignores every override and is untestable.
 
 ```rust
 use std::path::PathBuf;
@@ -96,30 +90,24 @@ impl Paths {
 }
 ```
 
-Array order *is* the precedence, so the ladder is readable in one glance and
-cannot drift from the docs.
+Array order *is* the precedence: readable in one glance, cannot drift from the docs.
 
 ## Rules
 
 - **The chicken-and-egg rule.** `config_dir` is overridable by CLI and env
   only. Anything overridable by the config file must be a *different*
   directory, or be resolved after the file is read.
-- **Normalise before use.** Expand a leading `~` and make the path absolute.
-  A relative `--data-dir .` must not resolve against whatever directory the
-  process happened to start in.
-- **Create lazily.** Build a directory on first write, not at startup. Startup
-  should not litter a machine for a command that turns out to be `--help`.
-- **Secrets in `config_dir` are mode 0600.** Config is the one kind that
-  routinely holds credentials. `data_dir` is for things the user expects to
-  find and read.
+- **Normalise before use.** Expand leading `~`, make absolute.
+  Relative `--data-dir .` must not resolve against the startup directory.
+- **Create lazily.** Build on first write, not at startup. Startup must not litter the machine for `--help`.
+- **Secrets in `config_dir` are mode 0600.** Config routinely holds credentials. `data_dir` holds what the user expects to read.
 - **Do not put absolute paths in the config file that the platform must
-  supply.** Only override what the user asked to override.
+  supply.** Override only what the user asked to override.
 
 ## Tests never touch the real home
 
-A test that resolves the real `data_dir` writes into the developer's actual
-account, and passes on a machine that happens to have write access. Build a
-`Paths` from a temp directory instead:
+A test resolving the real `data_dir` writes into the developer's account. Build a
+`Paths` from temp instead:
 
 ```rust
 let paths = Paths {
@@ -130,13 +118,11 @@ let paths = Paths {
 };
 ```
 
-This only works because startup returns a plain struct. That is the real
-reason for the injection, more than convenience.
+Injection works because startup returns a plain struct. Testability is the point, not convenience.
 
 ## Naming the env vars
 
-Convert a Rust field name to its variable with `heck`, so the mapping is one
-call and never a hand-written string that drifts from the field:
+Map field names with `heck`: one call, never a hand-written string that drifts:
 
 ```rust
 use heck::ToShoutySnakeCase;
@@ -147,20 +133,14 @@ use heck::ToShoutySnakeCase;
 The two crates for reading them:
 
 - `figment`: layered config with real precedence and provenance, so an error
-  can name the source that supplied a bad value. `Env::prefixed("MYAPP_")`
-  plus `Toml::file(...)`; `merge` replaces, `join` only fills gaps. Its `Jail`
+  names the bad source. `Env::prefixed("MYAPP_")`
+  plus `Toml::file(...)`; `merge` replaces, `join` fills gaps. `Jail`
   sandboxes env and filesystem for tests.
 - `envy`: the small option. `envy::prefixed("MYAPP_").from_env::<Config>()`.
-  Deserialize-only, so it cannot report where a value came from.
+  Deserialize-only, no provenance.
 
 ## Reference
 
-- `dirs`: <https://crates.io/crates/dirs>. The low-level crate: free
-  functions like `config_dir`, `data_dir`, `cache_dir`, `state_dir`, each
-  returning the bare base with no per-app subdirectory. Reach for it when you
-  want a base directory and are content to append the application name
-  yourself, or when you want a directory kind the `directories` crate does not
-  expose.
+- `dirs`: <https://crates.io/crates/dirs>. Low level: bare bases (`config_dir`, `data_dir`, `cache_dir`, `state_dir`), no per-app subdirectory. Use when you append the app name yourself, or need a kind `directories` lacks.
 - `directories`: <https://crates.io/crates/directories>. Same author, adds
-  `ProjectDirs`, which appends the per-app subdirectory using each platform's
-  own convention. Prefer this for anything user-facing.
+  `ProjectDirs` with per-app subdirectories per platform convention. Prefer for user-facing paths.

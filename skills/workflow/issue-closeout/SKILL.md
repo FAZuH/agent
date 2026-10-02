@@ -23,9 +23,8 @@ Deduplicate. For each issue, decide the intent:
 - **Referenced only** (partial progress, context, follow-up host) → comment,
   do not close.
 
-When the PR body used `Closes #N`, treat it as resolved intent even if the
-merge base was not the default branch, which is exactly the case where
-GitHub's auto-close silently failed.
+A `Closes #N` line means resolved intent, even off the default branch where
+GitHub auto-close silently fails.
 
 ## 2. Post the closeout comment
 
@@ -35,9 +34,8 @@ One comment per issue, naming what a reader needs to audit the fix:
 gh issue comment <n> --body "Merged via #<pr> (<merge-sha>). Commits: <short-sha> (<scope>), ... . Notes: <anything non-obvious, e.g. deviations or gate evidence>."
 ```
 
-Map issues to their commits explicitly when the mapping is not one-to-one.
-Include gate/test evidence in the comment when the issue's acceptance
-criteria mention verification.
+Non-one-to-one mapping: list which commits hit which issue. Acceptance
+criteria mention verification: include gate/test evidence.
 
 ## 3. Close resolved issues
 

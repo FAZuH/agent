@@ -5,8 +5,8 @@ description: Start working on a task in a new git worktree branch, keeping untra
 
 # Worktree new
 
-Start working on a task inside a fresh git worktree so the main working tree
-stays clean. All tracked work, code and commits, happens in the worktree;
+Start a task inside a fresh git worktree so the main tree
+stays clean. Tracked work (code and commits) happens in the worktree;
 untracked project state stays on the main tree.
 
 > **Load the @following-procedures skill first.** It defines how you run this
@@ -26,9 +26,9 @@ The user wants to begin work on a feature or task in an isolated git worktree. T
 
 2. **Identify the task.** Use the user's stated task/feature description as the goal. If none was given, ask what they want to work on before creating the worktree.
 
-3. **Work inside the worktree path.** Use `workdir` for bash/pty commands. Everything tracked (code and commits) happens there.
+3. **Work inside the worktree path.** Use `workdir` for bash/pty commands. Tracked work (code and commits) happens there.
 
-4. **Report when done.** When the task is complete, report what changed and note that the user can invoke @worktree-close to finish the session and clean up the worktree.
+4. **Report when done.** Task complete: report what changed and note the user can invoke @worktree-close to finish and clean up.
 
 ## Dependency graph
 

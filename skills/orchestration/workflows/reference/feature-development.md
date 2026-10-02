@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user asks to build a feature, implement a ticket/spec/plan, or fix a bug.
+Feature, ticket/spec/plan, or bug fix.
 
 ## State machine
 
@@ -33,11 +33,11 @@ START (user request: feature / ticket / bug fix)
 | 1 | PLAN | you | Create a plan in Plan mode. |
 | 2 | GRILL | you | If the plan has gaps: @grilling or @grill-with-docs. If the plan is too large to hold in one session: @wayfinder. |
 | 3 | PERSIST | you | @grill-with-docs leaves a `CONTEXT.md` glossary + `docs/adr/` paper trail; read them before implementation so names match the domain language. Persist the plan with @session. Log plan deviations with @session as they surface. |
-| 4 | RESEARCH | `research-discovery` | Delegate a preliminary pass to map the relevant code and gather library/API facts, then read the files it points to. For a deeper external fact a decision waits on, invoke the @deep-research skill — it delegates back to `research-discovery` for a cited findings file. |
+| 4 | RESEARCH | `research-discovery` | Delegate a preliminary pass to map the relevant code and gather library/API facts, then read the files it points to. For a deeper external fact a decision waits on, invoke the @deep-research skill, which delegates back to `research-discovery` for a cited findings file. |
 | 5 | IMPLEMENT | `implement` / `@forkflow` | Prefer `forkflow`: fork the completed research boundary, switch to `implement`, verify, then send the first prompt. Fall back to a fresh `implement` spawn. |
 | 6 | VERIFY | `implement` / `@forkflow` | Ask `implement` to run checks in verification-only mode before review. If checks fail, resume IMPLEMENT (step 5). |
 | 7 | REVIEW | `review` / `@forkflow` | Fork a read-only review child from the implement report when safe. If it turns up fixes, create or resume an implement session; never switch an already-running child to another agent. |
-| 8 | FINISH | `finish` | Commit only when the user explicitly asks — delegate to `finish` to propose grouped commit messages, restate them to the user for approval, then run the `git add` + `git commit` yourself. |
+| 8 | FINISH | `finish` | Commit only when the user explicitly asks. Delegate to `finish` to propose grouped commit messages, restate them to the user for approval, then run the `git add` + `git commit` yourself. |
 
 ## Dependency graph
 
@@ -50,17 +50,17 @@ START (user request: feature / ticket / bug fix)
 - step7 -> step6
 - step8 -> step7
 
-When @forkflow is available, the implementation handoff is `research report →
+When @forkflow is available, the handoff is `research report →
 fork → switch implement → first prompt`. The implement session owns verification;
-review may fork from its report as a separate read-only child.
-Forks share the working directory, so parallel writers require separate
-worktrees. The broader forkflow + setup-dev-docs + task-context session
-orchestration is deferred until it is exercised on a real ticket.
+review forks from its report as a separate read-only child.
+Forks share the working directory: parallel writers need separate
+worktrees. Broader forkflow + setup-dev-docs + task-context
+orchestration waits until exercised on a real ticket.
 
 ## Gates
 
-- GRILL only runs when the plan has gaps.
-- A step skipped because its gate did not fire is not a failed step — later steps still run.
+- GRILL only runs on plan gaps.
+- A step skipped because its gate did not fire is not failed, and later steps still run.
 - FINISH only runs on explicit user request.
 - VERIFY always runs before REVIEW; no implementation reaches review with failing tests.
 - Loop REVIEW → IMPLEMENT → VERIFY while review turns up fixes; always resume the same sessions.
@@ -68,9 +68,9 @@ orchestration is deferred until it is exercised on a real ticket.
 ## Parallel multi-repo batches
 
 When one piece of work spans multiple repositories (e.g. a dependee/dependency pair),
-run the batch in parallel instead of serializing:
+run the batch in parallel:
 
-- One independent `implement` agent per repo — never share a session across repos.
+- One independent `implement` agent per repo. Never share a session across repos.
 - Downstream compile gate: after any change that affects a dependee's view
   (visibility, public signatures, message shapes), run `cargo check` (or the
   equivalent) in the dependee before declaring the batch green.

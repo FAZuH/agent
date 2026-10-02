@@ -5,31 +5,31 @@ description: End-of-session retrospective where the agent proposes improvements 
 
 # Session retro
 
-Look back at the finished (or finishing) session and convert what happened
-into concrete, filed proposals for improving your own skills, agent
-definitions, tooling, and process. This skill only proposes; application
+Look back at the finished session and convert it into filed proposals
+for your own skills, agent
+definitions, tooling, and process. Proposals only; application
 belongs to @papercut-sweep.
 
 Always follow the rules in the *Rules* section at the bottom.
 
 ## 1. Mine the session and its config
 
-Walk back through the conversation, then through the config it ran under, and
+Walk back through the conversation, then the config it ran under, and
 look for five things:
 
 1. **Friction hit**: tool fights, dead ends, permission denials,
-   workarounds used silently, retries that should not have been needed.
-2. **Repeated corrections**: instructions or prompts the user had to give
-   twice; conventions that had to be re-explained; wrong assumptions made.
+   silent workarounds, retries that should not have been needed.
+2. **Repeated corrections**: instructions the user gave
+   twice; conventions re-explained; wrong assumptions made.
 3. **Skill/workflow gaps**: missing guidance, wrong skill routed, stale
    docs, a procedure step that did not survive contact with reality.
-4. **Gold-standard wins**: something that went unusually well and is worth
-   encoding as standing practice, not just luck.
+4. **Gold-standard wins**: something unusually good, worth
+   encoding as standing practice.
 5. **New-skill candidate**: improvised multi-step workflow (3+ steps) worth
-   extracting as a new skill. High bar, do not force: it must be reusable
+   extracting as a new skill. High bar, do not force: reusable
    across sessions/repos, not covered by any existing skill in
    `available_skills`, with transcript evidence (what was done, trigger
-   phrases, inputs/outputs). If none meets the bar, state `No new-skill
+   phrases, inputs/outputs). None meets the bar: state `No new-skill
    candidate.` and move on. That is a valid outcome.
 
 Mine both config levels, so a finding lands on the surface that can actually
@@ -42,7 +42,7 @@ hold it:
 
 A lesson that only holds in this repo belongs in its `AGENTS.md` or repo
 skill; a general one belongs on a global surface. Re-read the repo-local files
-before proposing, a fix already documented there is a no-op finding, and a
+before proposing: a fix already documented there is a no-op finding, and a
 missing one is the cheapest proposal you can file.
 
 ## 2. Propose (do not file yet)
@@ -112,16 +112,16 @@ collect its `id`. Then report a compact **filed** table:
 | # | id | tag | proposal | actionable now? |
 
 - `#` is the same number from the proposal table, keep it stable.
-- Keep the `id` column: it is the store handle used for
+- Keep the `id` column: the store handle for
   `papercuts resolve` once the user approves application via @papercut-sweep.
 - Mark which entries look immediately actionable versus needing thought.
 - When the user later says "apply papercut <N>" or "fix <N>", map N back to
-  that row's `id` from this table before touching the store.
+  that row's `id` before touching the store.
 - If nothing was approved, state "No papercuts filed, proposals remain as discussion only."
 
 ## Rules
 
-- Filing requires the step-3 user approval (GATE papercut-file, a `normal` gate that skips only in auto mode; vocabulary: @gate). Never auto-create a new skill here: a `self::new-skill` candidate is followed by a separate skill-authoring session with `writing-for-agents`.
+- Filing requires the step-3 user approval (GATE papercut-file, a `normal` gate that skips only in auto mode; vocabulary: @gate). Never auto-create a new skill here: a `self::new-skill` candidate needs a separate skill-authoring session with `writing-for-agents`.
 - Never edit skills, agent definitions, or config from this skill. Applying an approved proposal belongs to @papercut-sweep.
 - Scope decides the store: global scope uses `papercuts -g`, repo/project scope uses plain `papercuts add`. Never use `-g` for a repo-local fix.
 - In a restricted/read-only agent (e.g. Plan mode): keep the deviation log

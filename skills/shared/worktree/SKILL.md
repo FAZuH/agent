@@ -5,73 +5,56 @@ description: Work on a feature/branch inside a separate git worktree so the main
 
 # Worktree branch work
 
-Work on a branch inside its own git worktree. The main working tree keeps the untracked project state, so creating or removing a worktree never touches `.scratch/`, `.papercuts.jsonl`, or other untracked files.
+One branch, one git worktree. The main tree keeps all untracked project state, so creating or removing a worktree never touches `.scratch/`, `.papercuts.jsonl`, or other untracked files.
 
-> **Untracked main-tree state:** `.scratch/` (the session workspace; its
-> layout and lifecycle live in the @scratch skill) and `.papercuts.jsonl` are
-> untracked, so they live only in the main tree. This skill only needs to know
-> they must not be created or edited inside a worktree. See the @scratch skill
-> for anything you actually need to do with `.scratch/`.
+> **Untracked means main-tree only.** `.scratch/` (see @scratch) and `.papercuts.jsonl` are untracked, so they live only in the main tree: never create or edit them inside a worktree.
 >
-> **A concurrent session's clean-tree step can delete them.** `git clean` with a
-> broad pathspec in the main tree removes untracked files belonging to *another*
-> session, not just your own. Scope a clean to your own paths
-> (`git clean -fd -- <path>`), or dry-run first with `git clean -nd`. Untracked
-> means "not on any branch"; it does not mean "not wanted".
+> **A concurrent session's broad `git clean` deletes them.** Scope cleans to your own paths (`git clean -fd -- <path>`) or dry-run first (`git clean -nd`). Untracked means "not on any branch", not "not wanted".
 
-Because those items live in the main tree only, they are *not* available inside
-the worktree. Do work in the worktree using tracked files only. If a task needs
-`.scratch/` state, that state belongs to the main-tree session, not the branch.
+A worktree sees tracked files only. A task needing `.scratch/` state belongs to the main-tree session, not the branch.
 
 ## Creating a worktree
 
-1. **Start from the main tree** so the new worktree branches off current state. (The opencode session may already be running in the main tree.)
-
-2. **Pick a branch name.** Use a short kebab-case slug describing the task, e.g. `feat/my-feature`.
-
-3. **Choose a location.** Worktrees live outside the main tree, in the **same parent directory as the project dir**. For a project at `<parent>/<project>`, the worktree goes in `<parent>/<project>-wt/<branch>`. This keeps the worktree out of the main tree so its files never collide with `.scratch/`/`.papercuts.jsonl`.
-
-4. **Create the worktree** (creates and checks out the branch):
+1. **Start from the main tree**, so the worktree branches off current state.
+2. **Pick a branch name**: short kebab-case slug, e.g. `feat/my-feature`.
+3. **Choose a location** outside the main tree, same parent dir: `<parent>/<project>-wt/<branch>`.
+4. **Create it** (creates and checks out the branch):
    ```
    git worktree add -b <branch> <path>
    ```
-   Where `<path>` is `<parent>/<project>-wt/<branch>`, e.g. for a project at `<parent>/<project>`:
+   e.g. for a project at `<parent>/<project>`:
    ```
    git worktree add -b feat/my-feature <parent>/<project>-wt/feat-my-feature
    ```
-
-5. **Work inside the worktree path** (use `workdir` for bash/pty commands). Everything tracked (code, commits) happens there.
+5. **Work inside the worktree path** (`workdir` for bash/pty). Tracked work (code, commits) happens there.
 
 ## While working
 
-- Do **not** run `git worktree remove` or `git branch -D` while work is in progress.
-- In a Rust worktree, set `CARGO_TARGET_DIR=<worktree-path>/target` before building. Cargo locks and fingerprints are path-sensitive, so a shared target directory serializes concurrent worktrees and can trigger a cold rebuild.
+- No `git worktree remove` or `git branch -D` mid-work.
+- Rust worktree: `CARGO_TARGET_DIR=<worktree-path>/target` before building. Path-sensitive locks and fingerprints serialize concurrent worktrees on a shared target dir and can force a cold rebuild.
 
 ## Finishing / cleanup
 
-Only run cleanup when the branch work is done (merged, or user explicitly wants the worktree gone).
+Only when the branch work is done (merged, or the user wants the worktree gone).
 
-1. **Ensure the branch is merged** (if the work is meant to be kept):
+1. **Ensure merged** (if keeping the work):
    ```
    git branch --merged <main-branch>
    ```
-   If it's not merged and you remove the worktree, you lose the branch's commits.
-
-2. **Remove the worktree** from the main tree (use the main-tree `workdir`):
+   Removing an unmerged worktree loses the branch's commits.
+2. **Remove the worktree** from the main tree:
    ```
    git worktree remove <path>
    ```
-   If the worktree has untracked/modified files and refuses to remove, use `--force` **only after** confirming nothing there is worth keeping.
-
-3. **Delete the branch** once the worktree is gone and work is merged/discarded:
+   Refuses over untracked/modified files: `--force` only after confirming nothing there is worth keeping.
+3. **Delete the branch** once the worktree is gone and work is merged or discarded:
    ```
    git branch -D <branch>
    ```
-
-4. **Verify**: `git worktree list` should show the worktree gone, and untracked main-tree items (`.scratch/`, `.papercuts.jsonl`) must still exist in the main tree.
+4. **Verify**: `git worktree list` shows it gone; `.scratch/` and `.papercuts.jsonl` still in the main tree.
 
 ## Safety rules
 
-- Never remove a worktree that has uncommitted work or an unmerged branch unless the user explicitly confirms it's safe to discard.
+- No removing a worktree with uncommitted work or an unmerged branch without explicit user confirmation.
 - Never delete the main tree or its untracked files.
-- Always run `git worktree remove`/`git branch -D` from the **main** tree, not from inside the worktree being removed.
+- `git worktree remove` / `git branch -D` always from the **main** tree, never inside the worktree being removed.

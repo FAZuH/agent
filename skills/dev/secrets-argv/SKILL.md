@@ -80,7 +80,4 @@ file) for header tokens. Never `curl -H "Authorization: Bearer $TOKEN"`.
 
 ## Why not env vars?
 
-`FOO=secret cmd` keeps the secret out of argv but it still lands in shell
-history and `xtrace`; env is fine when the secret is already in a guarded
-file (`ENV_FILE`) and you're careful with `set -x`, the file/stdin route is
-always safer.
+`FOO=secret cmd` avoids argv but still lands in history and xtrace. Env is acceptable from a guarded file (`ENV_FILE`) with `set -x` care; file/stdin stays safest.

@@ -7,42 +7,42 @@ description: Review a diff, a single file, or another agent definition along two
 
 The review **method**. The `review` subagent is the **permission scope** it runs
 inside: read, glob, grep, `git`, `gh`, subagents, and one write to the OS temp
-directory. Keep the two apart — the method changes often, the permissions
+directory. Method changes often, permissions
 almost never.
 
-If you are the `review` subagent, you already have the scope: run the procedure
-below on the target from your prompt. If you are the orchestrator or the main
-session, spawn the `review` subagent with the target. Never run the review
-yourself there; the scope is the point.
+`review` subagent: you already have the scope. Run the procedure
+below on the target from your prompt. Orchestrator or main
+session: spawn the `review` subagent with the target. Never review
+there yourself; the scope is the point.
 
 ## Targets
 
 | Target | Pinned by | Spec source |
 |---|---|---|
-| Diff | a fixed point — commit, branch, tag, merge-base. Ask if none was given. | issue refs in the commit log, a user-supplied path, a PRD or spec under `docs/` or `.scratch/` |
+| Diff | a fixed point (commit, branch, tag, merge-base). Ask if none was given. | issue refs in the commit log, a user-supplied path, a PRD or spec under `docs/` or `.scratch/` |
 | One file | the path | the file's own docs plus the siblings it has to agree with |
 | An agent definition | the path | its `description` against what the body is actually asked to do |
 
-Ask for the target when the request names none. "Review everything" is not a
+Ask for the target when the request names none. "Review everything" is no
 target.
 
 ## Before spawning anything
 
-- Resolve the fixed point and capture `git diff <fixed-point>...HEAD` and `git log <fixed-point>..HEAD --oneline`. A non-empty diff is a precondition.
-- If the fixed point lands inside an in-progress merge or rebase conflict, stop and say @resolving-merge-conflicts is the right skill: review is for resolved diffs.
-- Name the standards sources — `CODING_STANDARDS.md`, `CONTRIBUTING.md`, `AGENTS.md` — plus the @code-review smell baseline. Surgical-change discipline is a useful second lens: no overcomplication, surface the assumptions.
+- Resolve the fixed point and capture `git diff <fixed-point>...HEAD` and `git log <fixed-point>..HEAD --oneline`. Non-empty diff is a precondition.
+- Fixed point inside an in-progress merge or rebase conflict: stop. @resolving-merge-conflicts owns it; review is for resolved diffs.
+- Name the standards sources (`CODING_STANDARDS.md`, `CONTRIBUTING.md`, `AGENTS.md`) plus the @code-review smell baseline. Surgical-change discipline is a useful second lens: no overcomplication, surface the assumptions.
 - Name the spec source, or state that there is none. `docs/agents/issue-tracker.md` missing is not a blocker; the Spec axis reports "no spec available" instead.
 
 ## The two axes
 
 Spawn both as parallel sub-agents, using the built-in `general` type for each
 (@code-review says `general-purpose`, which does not exist in this config).
-Aggregate under `## Standards` and `## Spec`, side by side. Do not merge or
-rerank across axes, and never edit what you are reviewing.
+Aggregate under `## Standards` and `## Spec`, side by side. Never merge or
+rerank across axes, and never edit the target.
 
 Then over the same target:
 
-- @ponytail-review — what to delete, what the standard library or the platform
+- @ponytail-review: what to delete, what the standard library or the platform
   already does. One line per finding. Do not apply the cuts.
 - @antislop for UI or copy, @antislop-code for code comments. Report only the
   rules they break.
@@ -74,13 +74,13 @@ End every review by handing the fixes to the next agent:
 
 - Invoke the @handoff skill and write its document to the OS temp directory,
   never into the repo.
-- Name the fixed point or the target path, the branch, the spec source, and
-  every finding under its own heading with the file path, the line, and the
+- Name the fixed point or target path, the branch, the spec source, and
+  every finding under its own heading with file path, line, and
   reason.
 - Tell the receiving agent to call the Skill tool for `handoff` first, so it
   works from the same method instead of a paraphrase.
-- List the skills the fixes need: `ponytail-review` for the complexity
-  findings, `antislop` or `antislop-code` for the rest, plus whatever the fix
-  itself touches (`implement`, `tdd`, `test-guidelines`, a domain skill).
-- The next agent starts from the handoff, not from the transcript, so anything
-  it needs has to be in the document.
+- List the skills the fixes need: `ponytail-review` for complexity,
+  `antislop` or `antislop-code` for the rest, plus whatever the fix
+  touches (`implement`, `tdd`, `test-guidelines`, a domain skill).
+- The next agent starts from the handoff, not the transcript: anything
+  it needs goes in the document.

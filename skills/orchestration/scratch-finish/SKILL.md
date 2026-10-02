@@ -11,8 +11,8 @@ description: >-
 
 # Archive a completed `.scratch/` workspace
 
-This skill is the single home for the completion checklist and the archive
-steps. Other skills (`finish`, @session) and the @scratch skill itself
+Single home for the completion checklist and the archive
+steps. `finish`, @session, and the @scratch skill itself
 reference it instead of restating the steps.
 
 > **Load the @following-procedures skill first.** It defines how you run this
@@ -26,7 +26,7 @@ reference it instead of restating the steps.
 
 ## Completion checklist
 
-If the repo has no `.scratch/` workspace, report that there is nothing to
+No `.scratch/` workspace in the repo: report nothing to
 archive and stop. Otherwise archive only when every condition holds:
 
 - all checklist items on the spec are done;

@@ -5,7 +5,7 @@ description: Run gated self-improvement, collect proposals via session-retro, va
 
 # Self-improve
 
-Run the collect + validate self-improvement check, then offer the sweep. This
+Run the collect + validate check, then offer the sweep. This
 skill only collects and validates; application belongs to @papercut-sweep.
 
 > **Load the @following-procedures skill first.** It defines how you run this
@@ -27,7 +27,7 @@ Always follow the rules in the *Rules* section at the bottom.
    ```
 
    Report the run-summary line (`skills, agents, edges, broken, collisions,
-   drift`). Note any `broken` or `drift` finding as a follow-up; the Rules
+   drift`). A `broken` or `drift` finding is a follow-up; the Rules
    section says why this skill does not fix it.
 3. **Offer the sweep, do not run it.** **GATE offer-sweep (normal → do
    not run the sweep; note its availability in the report):** running
@@ -45,10 +45,7 @@ Always follow the rules in the *Rules* section at the bottom.
 
 ## Rules
 
-- This skill never edits skills, agent definitions, or config, and never
-  applies fixes. Application belongs to @papercut-sweep. Skill creation
-  requires a separate `writing-for-agents` workflow after explicit user
-  approval.
+- Never edit skills, agent defs, or config here; never apply fixes. Application belongs to @papercut-sweep. New skills need a separate `writing-for-agents` workflow after explicit approval.
 - Both gates (`papercut-file` in step 1, `offer-sweep` in step 3) are
   `normal` gates: explicit user approval required; they skip only in auto
   mode (vocabulary: @gate).

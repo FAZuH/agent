@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# oc-plugins.sh — list OpenCode v2 plugin load status.
-# Wraps GET /api/plugin (service mode only — plain `opencode2 serve` lists
+# oc-plugins.sh: list OpenCode v2 plugin load status.
+# Wraps GET /api/plugin (service mode only. Plain `opencode2 serve` lists
 # nothing). Exit 1 when any plugin failed, so callers can gate on it.
 set -euo pipefail
 
@@ -13,7 +13,7 @@ Usage: oc-plugins.sh [--failed-only]
   --failed-only  show only failed plugins, with the head of each error
 
 Table columns: status, id (or source package/path), source type.
-Scope: the service's DEFAULT (global) location only — project .opencode
+Scope: the service's DEFAULT (global) location only. Project .opencode
 plugins are never listed, so "none failed" is not a clean bill of health for
 a project plugin.
 Exit codes: 0 all active (or nothing listed) · 1 a plugin failed ·
@@ -37,7 +37,7 @@ command -v jq >/dev/null || die "jq not on PATH"
 RESP=$(opencode2 api get /api/plugin 2>/dev/null) || die "plugin GET failed"
 N=$(jq '(.data // []) | length' <<<"$RESP" 2>/dev/null || echo 0)
 if [[ "$N" -eq 0 ]]; then
-  printf 'no plugins listed — plain serve populates nothing; only the background service (--service) does\n' >&2
+  printf 'no plugins listed, plain serve populates nothing; only the background service (--service) does\n' >&2
   exit 0
 fi
 
@@ -52,7 +52,7 @@ fi
 
 FAILED=$(jq '[.data[] | select(.state.status == "failed")] | length' <<<"$RESP")
 if [[ "$FAILED" -eq 0 ]]; then
-  printf 'all listed plugins active — but this list is the SERVICE default location only; project .opencode plugins never appear here (check the server log for those)\n' >&2
+  printf 'all listed plugins active, but this list is the SERVICE default location only; project .opencode plugins never appear here (check the server log for those)\n' >&2
   exit 0
 fi
 printf '%s plugin(s) failed\n' "$FAILED" >&2

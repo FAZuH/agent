@@ -31,9 +31,6 @@ permissions:
     effect: allow
 ---
 
-You are the permission scope for the @review-agent skill, not the method
-itself. Call the Skill tool for `review-agent` first, then follow it on the
-target from your prompt. If it is not in your context, ask for it.
+Permission scope for the @review-agent skill, not the method. Load `review-agent` via the Skill tool first, then follow it on the prompted target. Missing from context: ask for it.
 
-Never edit or commit. The handoff in the OS temp directory is the one file you
-write.
+Never edit or commit. The temp-dir handoff is the one file you write.

@@ -23,7 +23,7 @@ This skill remains read-only with respect to commits: it never runs
 `git add`, `git commit`, or `git push`. It only proposes groups for the
 orchestrator.
 
-Your job is only to PLAN the commit grouping and PROPOSE one `type(scope): description` message per logical group. Return the proposed group messages to the orchestrator. The orchestrator restates them to the user, the user can adjust them, and only the orchestrator runs the actual `git add` and `git commit`.
+Your job is only to PLAN the grouping and PROPOSE one `type(scope): description` message per logical group. Return them to the orchestrator.
 
 The commit permission does not persist beyond the command invocation and does
 not pass to any other request or agent. When in doubt, do not commit; propose
@@ -31,16 +31,16 @@ and hand off.
 
 ## Procedure
 
-Check if this directory is a git repository (`git rev-parse --is-inside-work-tree`). If it is not a repository, skip all commit steps.
+Not a git repo (`git rev-parse --is-inside-work-tree` fails): skip everything.
 
-Read the commit docs of the project, if any. Find and grep for commit docs before proposing commits: search for `CONTRIBUTING.md`, `docs/commits*`, any `COMMITTING.md`/`COMMIT*.md`, `docs/dev/commit-scopes.md`, and the commit section of `AGENTS.md` or `CLAUDE.md`. Use glob and grep across the whole repo, including `docs/`, to locate them. Read the docs before you write a commit message. Check the last 10 commits with `git log --oneline -10`. Base the message on those docs. Do not invent conventions that the project does not have.
+Read the project's commit docs first: grep for `CONTRIBUTING.md`, `docs/commits*`, `COMMITTING.md`/`COMMIT*.md`, `docs/dev/commit-scopes.md`, and the commit section of `AGENTS.md`/`CLAUDE.md`. Check `git log --oneline -10`. Base the message on those docs, never invent conventions.
 
 When the repo has a commit-scopes vocabulary (`docs/dev/commit-scopes.md` or equivalent), load the @commit-scopes skill and follow its scope rules: closed vocabulary, singular, real-slice, never colliding with a type, ≤8 chars. Every group picks a scope from that table or takes no scope. If the docs are missing or poor, say so. When no existing scope fits, follow @commit-scopes to propose the new scope: GATE `new-scope` is `always`, so propose name + definition + example subject and wait for explicit approval before committing with it. One example is a new commit scope.
 
-Identify the files that you changed this session. Only those files belong in the commit groups you propose.
+Identify the files changed this session. Only those belong in the groups.
 
-Split the changes into separate commits. Use one commit per logical change. Do not combine unrelated changes in one commit. Do not write one message that lists several unrelated changes. Group the changed files by logical change first. Then commit each group separately. Do not stage everything and write one commit for it by default.
+One commit per logical change. Group changed files by logical change first. Never stage everything into one commit by default.
 
-If there is nothing to commit, say so. Then skip the rest of this section.
+Nothing to commit: say so and skip the rest.
 
 You have NO commit permission: you must NOT run `git add`, `git commit`, or `git push` on your own, no matter what. Propose one message for each group. Use the format `type(scope): description`. Hand the proposed group messages to the orchestrator. The orchestrator restates them to the user for approval (the user can adjust the messages) and then runs the actual `git add` and `git commit` for each group.

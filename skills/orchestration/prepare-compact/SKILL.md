@@ -10,8 +10,8 @@ description: >-
 
 # prepare-compact
 
-If you're told to call this skill, it means a session compaction is imminent. This is the last
-chance to persist everything a fresh session needs to resume seamlessly. Be
+Compaction is imminent. This is the last
+chance to persist everything a fresh session needs to resume. Be
 thorough: assume the conversation history is about to be deleted.
 
 > **Load the @following-procedures skill first.** It defines how you run this
@@ -23,12 +23,10 @@ thorough: assume the conversation history is about to be deleted.
 > `.scratch/complete/` archive location. Follow it when you update the session
 > doc or checkpoint.
 
-Extra notes the user gives (see the conversation) count as arguments: use them
-as notes to persist, and/or the feature slug when the repo uses the `.scratch/`
-layout.
+Extra notes the user gives count as arguments: persist them as notes,
+and/or use them as the feature slug when the repo uses `.scratch/`.
 
-Do the steps in order. Do not compress or skip facts; the goal is fidelity,
-not brevity.
+Do the steps in order. Never compress or skip facts; fidelity over brevity.
 
 IMPORTANT: If you lack write access (a read-only agent, Plan mode, or any
 restriction that blocks editing files, updating todos, memory, or clearing the
@@ -39,15 +37,15 @@ lost on compaction.
 ## 1. Snapshot current state
 
 Run `get_goal` and record the current goal's objective verbatim; the fresh
-session will need to re-create it. Then, from your own context, capture:
+session re-creates it. Then, from your own context, capture:
 
-- **Objective**: what is being worked on right now, in one or two sentences.
-- **Done**: what shipped so far: files created/changed, features working,
+- **Objective**: what is being worked on, in one or two sentences.
+- **Done**: what shipped: files created/changed, features working,
   verification passed.
 - **In progress**: anything half-finished: partial edits, uncommitted work, a
   design being worked out.
-- **Blocked**: external blockers, pending decisions, answers you are still
-  waiting on.
+- **Blocked**: external blockers, pending decisions, answers still
+  awaited.
 - **Deviations**: anything that diverged from a plan, spec, or original
   request.
 
@@ -65,9 +63,9 @@ Detect the repo's session-doc convention rather than assuming one:
   exists. Keep the same section refresh + dated deviation entries.
 - If no session doc exists, do not invent one. Skip creation and note it in
   the report.
-- If the work is essentially complete, say so and note that the doc should be
+- Work essentially complete: say so and note that the doc should be
   archived (`.scratch/complete/` when the repo uses `.scratch/`, or the
-  repo's equivalent archive location).
+  repo's equivalent).
 
 ## 3. Collect the todo list
 
@@ -80,8 +78,8 @@ checkpoint (step 6) so a fresh session can pick them up. Sources, in order:
 - Your own context: pending or in-progress items stated in the conversation.
 
 Write each item with what remains and how to verify it. Mark anything
-actually finished as completed. Merge duplicates. Keep the list short enough
-to be useful. If there are no todos, say so in the report and move on.
+actually finished as completed. Merge duplicates. Keep the list short.
+No todos: say so in the report and move on.
 
 ## 4. Persist session-critical facts
 
@@ -100,8 +98,8 @@ Capture anything that is cheap to lose and expensive to rediscover:
 ## 5. Update memory (optional)
 
 If this session changed durable, high-signal facts (new project conventions,
-architecture decisions, or workflow changes), update the project or global
-memory blocks so they survive without the conversation. Do not add trivia.
+architecture decisions, workflow changes), update the project or global
+memory blocks so they survive without the conversation. Never add trivia.
 
 ## 6. Write the resume checkpoint
 
@@ -148,13 +146,13 @@ Detect the OpenCode harness first:
   session ID: ses_…`. Compact with the @ocv2-compact skill: from that skill's
   directory run `scripts/oc-compact.sh ses_… --timeout 0`, then end the turn.
   The compaction is a steer: it queues behind the current turn and runs once
-  the session goes idle. Waiting synchronously inside the turn always times
-  out.
+  the session goes idle. Never wait synchronously inside the turn; it always
+  times out.
 - **OpenCode v1**: the `compact_context` tool is available. Call it.
 
-When the gate fires (interactive mode), ask with the @gate mechanics: state
-what was persisted and where (step 8), that compaction replaces the
-conversation with the summary, and offer Approve / Abort. Approve → run the
+When the gate fires (interactive mode), ask with the @gate mechanics: what
+was persisted and where (step 8), that compaction replaces the
+conversation with the summary, Approve / Abort. Approve → run the
 compaction for the detected harness. Abort → stop; the persisted state stands
 either way.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-msgs.sh — list an OpenCode v2 session's messages as a compact table, or
+# oc-msgs.sh: list an OpenCode v2 session's messages as a compact table, or
 # dump one message as JSON. Newest first. See SKILL.md for the API details.
 set -euo pipefail
 
@@ -42,7 +42,7 @@ if [[ -n "$FULL" ]]; then
 fi
 
 # tempfile: piped `opencode2 api` output truncates at 256 KiB, which cuts any
-# real session history — redirect to a file, then read it.
+# real session history: redirect to a file, then read it.
 LIST=$(mktemp) || die "mktemp failed"
 trap 'rm -f "$LIST"' EXIT
 opencode2 api get "/api/session/$SESSION/message" >"$LIST" 2>/dev/null \

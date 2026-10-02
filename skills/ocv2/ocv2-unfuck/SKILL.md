@@ -9,18 +9,18 @@ description: Verify top-level tool availability before claiming Code Mode lacks 
 
 ## The pitfall
 
-The sandbox hides most tools by design. `Object.keys(tools)` inside `default.execute` never lists `shell`, `read`, or `subagent`. This result is normal inside the sandbox.
+The sandbox hides most tools by design. `Object.keys(tools)` inside `default.execute` never lists `shell`, `read`, or `subagent`. Normal inside the sandbox.
 
 ```js
 await tools.shell({ command: "echo hi" }) // Unknown tool 'shell'
 await tools.subagent({}) // Unknown tool 'subagent'
 ```
 
-The two calls fail inside the sandbox even when both tools work top-level. The error names the sandbox limit, not the session limit.
+Both calls fail inside the sandbox even when top-level works. The error names the sandbox, not the session.
 
 ## The truth
 
-Top-level calls carry the full tool set. `default.shell`, `default.subagent`, and `default.read` succeed in full sessions even when the sandbox hides the same names.
+Top-level calls carry the full set. `default.shell`, `default.subagent`, and `default.read` work in full sessions even when the sandbox hides them.
 
 ## Steps
 

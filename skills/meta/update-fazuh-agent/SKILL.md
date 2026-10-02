@@ -11,23 +11,23 @@ description: Update this OpenCode setup to the latest state of the agent reposit
 ## Find the repository
 
 The checkout path is not fixed: every push to the global target writes it to
-`~/.config/opencode/.agent-repo` (one line, the absolute path). Read it; never
-hardcode a path and never guess one.
+`~/.config/opencode/.agent-repo` (one line, absolute path). Read it; never
+hardcode a path, never guess.
 
 ```bash
 cat ~/.config/opencode/.agent-repo
 ```
 
 If the file is missing, this setup predates it. Ask the user for the checkout
-path, or run `./sync.sh push -g` from the checkout once to create it. Do not
+path, or run `./sync.sh push -g` from the checkout once to create it. Never
 fall back to a guessed directory.
 
 ## Steps
 
-1. **Resolve the repository path** with the command above. If it is missing or
-   is not a git repository, stop and report, every later step depends on it.
+1. **Resolve the repository path** with the command above. Missing or
+   not a git repository: stop and report. Every later step depends on it.
 
-2. **Record the starting state**, so the report can show what moved:
+2. **Record the starting state**, so the report shows what moved:
 
    ```bash
    git -C "$repo" rev-parse --short HEAD
@@ -35,9 +35,9 @@ fall back to a guessed directory.
    git -C "$repo" rev-parse --abbrev-ref HEAD
    ```
 
-3. **Stop on a dirty worktree.** Any output from `status --porcelain` means the
-   user has work in progress. Report the files and stop. Do not stash, reset,
-   clean, or check anything out.
+3. **Stop on a dirty worktree.** Any `status --porcelain` output means
+   work in progress. Report the files and stop. No stash, reset,
+   clean, or checkout.
 
 4. **Pull, fast-forward only:**
 
@@ -66,7 +66,7 @@ fall back to a guessed directory.
    checks), `plugins/ponytail` (needs a cold restart after push).
 
 7. **Run the repository checks** when the pull touched `scripts/`, `plugins/`,
-   or the Rust workspace: `./dev.sh all` from the checkout. Fix nothing here,
+   or the Rust workspace: `./dev.sh all` from the checkout. Fix nothing here;
    report a red run and let the user decide.
 
 8. **Redeploy the configuration**, the step that makes the update real:
@@ -81,22 +81,22 @@ fall back to a guessed directory.
 
 9. **Verify the result:** `./sync.sh diff -g` must report every item in sync. A
    target file that still differs was edited in place after the push; sync keeps
-   it and says so, so report the path instead of overwriting it.
+   it and says so. Report the path instead of overwriting.
 
 10. **Reinstall only when the pull really needs it.** `./install.sh` refreshes
-    the external skills and cargo packages, and `./install.sh -b` adds the bonus
-    ones. Skip it for a routine pull: the config push in step 8 is the normal
+    the external skills and cargo packages, `./install.sh -b` adds the bonus
+    ones. Skip it for a routine pull: the step-8 config push is the normal
     case. Run it when the pull changed `install.sh` itself, when a new external
-    or bonus item was added, or when the user asks. Moving a pin forward on
-    purpose is the `update-pins` skill's job, not this one.
+    or bonus item was added, or when the user asks. Moving a pin forward
+    is the `update-pins` skill's job, not this one.
 
-11. **Report**: the commits pulled, what was pushed, which checks ran, what
-    still needs a restart, and what was skipped with the reason.
+11. **Report**: commits pulled, what was pushed, checks run, what
+    still needs a restart, what was skipped and why.
 
 ## Restart rule
 
-OpenCode v2 hot-reloads most components. A changed `plugins/ponytail` needs a
-cold restart, because the nested `require()` calls inside its submodule are not
+OpenCode v2 hot-reloads most components. Changed `plugins/ponytail` needs a
+cold restart: the nested `require()` calls inside its submodule are not
 cache-busted. A plugin that does not appear at all is the other restart case.
 
 ## Rules
@@ -109,7 +109,7 @@ cache-busted. A plugin that does not appear at all is the other restart case.
 - Never run the full installer without asking first. It reinstalls unpinned
   external skills at whatever upstream `HEAD` is that day.
 - Never commit or push from this skill. Stop at the working tree.
-- Stop and report on any failing check, a missing pointer file, or a target that
+- Stop and report on any failing check, missing pointer file, or target that
   refuses to sync. A partial update with a clear report beats a silent fix.
 - Follow the repository's own rules for anything you touch beyond deploying:
   `agent-map` for layout, `skill-doctor` when a skill link or name moved.

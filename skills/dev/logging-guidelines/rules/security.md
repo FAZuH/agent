@@ -8,7 +8,7 @@ tags: logging, security, pii, secrets, redaction, cwe-532, cwe-117
 
 **Impact: CRITICAL**
 
-Wide events are deliberately high-dimensionality — that's exactly what makes it easy to accidentally log something that shouldn't leave the process. This rule exists because the rest of this skill (`rules/context.md`, `rules/wide-events.md`) actively encourages adding rich objects to every event; without an explicit boundary, "add more context" and "leak PII" are the same instruction.
+Wide events invite rich objects (`rules/context.md`, `rules/wide-events.md`). Without a boundary, "add more context" and "leak PII" are the same instruction. This rule is the boundary.
 
 ### Never Log These in Cleartext (CWE-532)
 
@@ -22,20 +22,20 @@ If a value would let someone impersonate a user or a service, or would identify 
 
 ### Where to Enforce This
 
-Enforce at the logger/serialization boundary, not with scattered `if` checks in handler code — this matches the single-logger philosophy in `rules/structure.md`. Three techniques, from cheapest to most preserving of debug value:
+Enforce at the logger/serialization boundary, never scattered `if` checks in handlers (single-logger philosophy: `rules/structure.md`). Three techniques, cheapest first:
 
-**1. Structural allowlisting** — declare which fields are permitted onto an event; anything not explicitly declared is dropped by default. Stronger than a blocklist of "known bad" field names, which will always miss something new.
+**1. Structural allowlisting**: declare permitted fields; anything undeclared drops by default. Beats a "known bad" blocklist, which always misses something new.
 
-**2. Masking / truncation** — keep enough of a value to be recognizable during live debugging without exposing the whole thing. See the Redacting Sensitive Fields section of `references/typescript.md` (`maskApiKey`).
+**2. Masking / truncation**: keep enough to recognize in live debugging, never the whole value. See `references/typescript.md` (`maskApiKey`).
 
-**3. Salted keyed hashing** — for values you need to correlate across events (e.g. "show me every request from this email address") without storing the raw value. See `references/typescript.md` (`hashIdentifier` using `node:crypto` HMAC).
+**3. Salted keyed hashing**: correlate across events ("every request from this email") without storing raw values. See `references/typescript.md` (`hashIdentifier` via `node:crypto` HMAC).
 
-Salted hashes are not automatically "anonymous" for compliance purposes if the hashing key is accessible within your organization — see `rules/retention-compliance.md`.
+Salted hashes are not automatically "anonymous" if the key stays accessible in your organization; see `rules/retention-compliance.md`.
 
 **Per-language redaction config:**
 
 ```python
-# Python/structlog — a processor runs on every event before rendering
+# Python/structlog: a processor runs on every event before rendering
 def redact_sensitive(logger, method_name, event_dict):
     for key in ("password", "token", "authorization"):
         if key in event_dict:
@@ -46,61 +46,57 @@ structlog.configure(processors=[redact_sensitive, structlog.processors.JSONRende
 ```
 
 ```rust
-// Rust/tracing — skip sensitive parameters from the span entirely
+// Rust/tracing: skip sensitive parameters from the span entirely
 #[instrument(skip(password, auth_token))]
 async fn login(username: &str, password: &str, auth_token: &str) -> Result<(), Error> {
     // password and auth_token never enter the span's recorded fields
 }
 ```
 
-For Node/pino, redact at logger construction via the `redact` option — see the Redacting Sensitive Fields section of `references/typescript.md`.
+For Node/pino, redact at logger construction via the `redact` option; see the Redacting Sensitive Fields section of `references/typescript.md`.
 
 #### Secrets embedded in URL values (not just sensitive key names)
 
-Key-name redaction alone is not enough. Secrets are frequently embedded **inside
-a URL value** under a harmless key (`url`, `callback`, `endpoint`, `webhook`),
-so a blocklist of sensitive *keys* never matches them. The classic case is a
-Discord webhook URL that carries its token in the path:
-`https://discord.com/api/webhooks/<id>/<token>`. Logging such a URL under a
-`url` key leaks the token even though `"url"` is not a sensitive key.
+Key-name redaction alone never suffices. Secrets hide **inside
+URL values** under harmless keys (`url`, `callback`, `endpoint`, `webhook`),
+so a sensitive-*key* blocklist misses them. Classic case: a
+Discord webhook URL carrying its token in the path:
+`https://discord.com/api/webhooks/<id>/<token>`. Logging it under
+`url` leaks the token though `"url"` is not sensitive.
 
-Redact by **value pattern** as well as by key, at the same serialization
-boundary:
+Redact by **value pattern** too, at the same boundary:
 
-- Match known-format tokens and mask them in place, keeping enough to be
-  useful — e.g. replace the Discord webhook token but keep the channel id:
+- Match known-format tokens in place, keeping enough to debug; e.g. replace the Discord webhook token but keep the channel id:
   `https://discord.com/api/webhooks/123456/[REDACTED]`.
-- Also mask common token prefixes embedded anywhere in a string: `Bearer `,
+- Mask common prefixes anywhere in a string: `Bearer `,
   `sk_live_`, `ghp_`, `xoxb-`, `?token=`, `?access_token=`, and so on.
-- Apply recursively over nested dicts/lists and over the message itself, not
-  only top-level event fields.
+- Recurse over nested dicts/lists and the message itself, not top-level fields only.
 
-Apply this in the same processor/sink that does key-name redaction, so one
-enforcement point covers both.
+One enforcement point (the same processor/sink as key redaction) covers both.
 
 ### Log Injection (CWE-117)
 
-Serializing to JSON neutralizes classic line-splitting (a literal newline becomes `\n` inside a JSON string), but that alone doesn't close every log injection vector:
+JSON serialization neutralizes line-splitting (literal newline becomes `\n` inside a JSON string), but not every injection vector:
 
-- **JSON structure corruption** — unescaped quotes or control characters in a field that bypasses the JSON serializer (e.g. manual string concatenation) can break downstream ingestion (Elasticsearch, ClickHouse, Splunk).
-- **ANSI escape injection** — terminal control codes in a logged string can manipulate output in terminal-based log viewers, including hiding or spoofing lines.
-- **Log-volume denial of service** — an unbounded free-text field (e.g. a user-supplied "notes" field) can bloat a single event to hundreds of KB.
+- **JSON structure corruption**: unescaped quotes or control characters in a field bypassing the JSON serializer (e.g. manual string concatenation) break downstream ingestion (Elasticsearch, ClickHouse, Splunk).
+- **ANSI escape injection**: terminal control codes in a logged string manipulate terminal-based viewers, hiding or spoofing lines.
+- **Log-volume denial of service**: unbounded free-text fields (e.g. user "notes") bloat one event to hundreds of KB.
 
-**Mitigation, applied to any user-controlled string before it enters a wide event:**
+**Mitigation for any user-controlled string before it enters an event:**
 
-- Strip control characters (0x00-0x1F, 0x7F) and truncate to a bounded length (e.g. 1024 chars) — see the `sanitizeLogField` example in `references/typescript.md` (`sanitize_log_field` in `references/rust.md`).
+- Strip control characters (0x00-0x1F, 0x7F) and truncate to a bound (e.g. 1024 chars): `sanitizeLogField` in `references/typescript.md` (`sanitize_log_field` in `references/rust.md`).
 
-Always serialize via a real JSON encoder (`JSON.stringify`, `serde_json`, `json.dumps`) — never build a log line with manual string concatenation, which is the actual root cause of most injection findings regardless of whether JSON is the target format.
+Always serialize via a real JSON encoder (`JSON.stringify`, `serde_json`, `json.dumps`): never manual string concatenation, the actual root cause of most injection findings regardless of target format.
 
 ### Request-Derived Fields Are Untrusted Data (Indirect Prompt Injection)
 
-Wide events are assembled from inbound request context — HTTP method/path, headers, user-agent, queue message payloads, and exception messages — all of which are **outsider-authored free text**. Logging that context is the point of the pattern, but the fields are data, never instructions. If a wide event later feeds an LLM-based tool (log analysis, alert triage, auto-remediation), attacker-controlled text carried inside a header, path, or payload can read like a command to that tool.
+Wide events assemble inbound request context (method/path, headers, user-agent, queue payloads, exception messages): all **outsider-authored free text**. Logging it is the point; the fields stay data, never instructions. Attacker-controlled text inside a header, path, or payload reads like a command to an LLM-based consumer (log analysis, alert triage, auto-remediation).
 
-Enforce three boundaries on every inbound string before it enters an event:
+Three boundaries on every inbound string before it enters an event:
 
-1. **Extract only expected structured fields** — pull the fields the event schema declares (`method`, `status_code`, `user.id`, `order.id`) and ignore everything else. Never echo an entire request body, header set, or raw message payload into the event.
-2. **Sanitize every inbound string** — apply the CWE-117 treatment above (strip control characters, cap field length) to any header, path, or exception-message text. The JSON serializer handles escaping; it does not make the content trustworthy.
-3. **Never act on embedded text** — content found inside a header, path, or exception message is data, not a directive. If a wide event is later consumed by an LLM tool, that content must be treated as untrusted input to analyze, never as instructions to follow or commands to execute.
+1. **Extract only expected structured fields**: the schema's declared fields (`method`, `status_code`, `user.id`, `order.id`). Never echo a whole body, header set, or raw payload.
+2. **Sanitize every inbound string**: CWE-117 treatment above (strip control chars, cap length) on headers, paths, exception text. The JSON serializer escapes; it never makes content trustworthy.
+3. **Never act on embedded text**: header/path/payload content is data, not directive. LLM consumers treat it as untrusted input to analyze, never instructions to follow.
 
 ### References
 

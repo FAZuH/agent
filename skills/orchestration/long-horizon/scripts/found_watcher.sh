@@ -1,5 +1,5 @@
 #!/bin/bash
-# found_watcher.sh — Discord-ping the moment a *FOUND* sentinel appears.
+# found_watcher.sh: Discord-ping the moment a *FOUND* sentinel appears.
 # Reads the webhook URL at runtime from a secrets file; never prints it.
 # One notification per file; retries failed sends next cycle.
 set -u
@@ -24,7 +24,7 @@ while true; do
     url=$(sed -n 1p "$KEYFILE")
     uid=$(sed -n 2p "$KEYFILE")
     payload=$(jq -nc --arg t "HIT: $b" \
-      --arg d "Verify with ONE test, then wait for user approval — change nothing.
+      --arg d "Verify with ONE test, then wait for user approval. Change nothing.
 
 Contents:
 $body" \
@@ -34,7 +34,7 @@ $body" \
     if curl -sf -o /dev/null --max-time 10 -H 'Content-Type: application/json' -d "$payload" "$url"; then
       log "NOTIFIED $b"
     else
-      log "ERR notify failed for $b — retrying next cycle"
+      log "ERR notify failed for $b, retrying next cycle"
       continue
     fi
     notified="$notified $b"

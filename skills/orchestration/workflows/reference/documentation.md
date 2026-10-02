@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user asks for ADRs, glossary, or runbook updates, or wants to record an architectural decision.
+ADRs, glossary, or runbook updates, or recording an architectural decision.
 
 ## State machine
 
@@ -25,7 +25,7 @@ START (docs / decision request)
 | # | State | Owner | Action |
 |---|---|---|---|
 | 1 | DELEGATE | `document` | Delegate ADRs, glossary, and runbook updates to `document`. |
-| 2 | GLOSSARY | you / `document` | Keep the project's `CONTEXT.md` glossary sharp: when a new term solidifies during work, run @domain-modeling or have `document` capture it — a stale glossary is worse than none. |
+| 2 | GLOSSARY | you / `document` | Keep the project's `CONTEXT.md` glossary sharp: when a new term solidifies during work, run @domain-modeling or have `document` capture it. A stale glossary is worse than none. |
 | 3 | ADR | `document` | For architectural decisions, have `document` record an ADR with context, decision, and consequences (via @documentation-and-adrs). |
 | 4 | LOG | you | Log the decision with @session when it affects an active plan. |
 
@@ -38,5 +38,5 @@ START (docs / decision request)
 
 ## Gates
 
-- GLOSSARY maintenance is continuous — trigger whenever a new term solidifies.
+- GLOSSARY maintenance is continuous: trigger whenever a new term solidifies.
 - LOG runs only when the decision affects an active plan.

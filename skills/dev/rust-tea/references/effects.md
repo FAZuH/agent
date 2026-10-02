@@ -1,8 +1,8 @@
-# effects — declarative side effects and their host translation
+# effects: declarative side effects and their host translation
 
-The core returns effects as data; the host (or an `EffectHandler`
-adapter) executes them. This doc covers designing the vocabulary,
-executing safely, async and blocking work, and results coming back as
+Core returns effects as data; the host (or `EffectHandler`
+adapter) executes them. Covers vocabulary design,
+safe execution, async and blocking work, and results as
 messages.
 
 Contents:
@@ -23,24 +23,23 @@ Contents:
 | iced | `iced::Task<Message>` returned from `update` | the framework |
 | Domain core inside a framework app | own `Effect` enum, translated to `Task` in the shell wrapper | framework, via translation |
 
-The discipline is identical in all three: *describe* work as data, do not
-perform it inline. With iced, treat `Task` constructors
-(`Task::perform`, `Task::done`, `Task::batch`) as your effect vocabulary.
+Discipline is identical: *describe* work as data, never perform
+it inline. With iced, `Task` constructors
+(`Task::perform`, `Task::done`, `Task::batch`) are your vocabulary.
 
-The hybrid (third row) costs one translation step; pay it when you need
-the core testable without the runtime. Skip it for small apps where
-`Task` directly is fine.
+Pay the hybrid translation step only when the core must test
+without the runtime.
 
 ## 2. Designing the effect vocabulary
 
 - Data only: no closures, futures, or renderer handles. Payloads are
   owned values (`Box<Config>` when large).
 - Coarse-grained: `SaveConfig(Config)`, not `WriteBytes(Path, Vec<u8>)`
-  — the adapter decides *how*; the model decides *what* and *why*.
+  and the adapter decides *how*; the model decides *what* and *why*.
 - Nested vocabularies nest as variants: `Effect::Session(SessionEffect)`,
   mirroring how messages nest.
 - If two variants must always fire together *in a meaningful order*, that
-  ordering is domain meaning — model it as one variant (making Temporal
+  ordering is domain meaning. Model it as one variant (making Temporal
   coupling explicit) rather than hoping callers batch correctly.
 - Effects may be batched: `update` returns `Vec<Effect>`; the host
   executes them in order.
@@ -55,20 +54,19 @@ pub trait EffectHandler {
 ```
 
 - The adapter maps one effect to the minimum real-world action. It must
-  not make policy decisions — the model already decided.
+  not make policy decisions. The model already decided.
 - Fast effects (play a short sound, write a small file) may run
   synchronously on the UI thread.
-- Slow effects must not run inside `execute` on the UI thread — see §4.
+- Slow effects must not run inside `execute` on the UI thread. See §4.
 - `execute` returning messages keeps the loop total: effects → messages
   → update → effects, terminating when both come back empty.
 
 ## 4. Blocking and async work
 
 **Hand-rolled TUI.** Keep the core synchronous. For slow work, spawn
-(`std::thread::spawn` or your runtime) and deliver the outcome back
-through the host's event source — an mpsc channel the loop polls, or a
-custom variant on your event enum. The loop structure stays: poll input,
-poll result channel, dispatch messages.
+(`std::thread::spawn` or your runtime) and deliver the outcome
+through the host event source. Loop stays: poll input,
+poll results, dispatch messages.
 
 **iced.** The executor is async; use `Task::perform`:
 
@@ -76,7 +74,7 @@ poll result channel, dispatch messages.
 // async-capable work
 Task::perform(async move { daemon.call(req).await }, Message::DaemonReplied)
 
-// blocking sync API (files, FFI, sockets) — never block the UI thread
+// blocking sync API (files, FFI, sockets): never block the UI thread
 Task::perform(
     tokio::task::spawn_blocking(move || std::fs::write(path, data)),
     Message::ConfigWritten,
@@ -92,18 +90,18 @@ Blocking work inside the UI thread is the single most common TEA bug.
   success, failure, or empty. There is no side channel.
 - Failure payloads carry enough context to render an error state:
   `Msg::ConfigSaved(Result<(), ConfigError>)`. The model turns that into
-  a toast or error view state — the adapter never touches UI.
-- Naming pattern: `<Thing><Past-participle>` — `ConfigSaved`,
+  a toast or error view state. The adapter never touches UI.
+- Naming pattern: `<Thing><Past-participle>`: `ConfigSaved`,
   `DaemonReplied`, `SessionLogged`.
 
 ## 6. Idempotency, coalescing, ordering
 
-- Input and ticks flood: coalesce in the *host* — drain all pending
-  events before rendering, render at most once per loop iteration.
+- Input and ticks flood: coalesce in the *host*, which drains pending
+  events before rendering, at most once per iteration.
 - Effects hitting the same resource twice in one batch (`SaveConfig`
   twice): pick last-wins or queue, once, and document it on the adapter.
 - Ordering inside a batch is the order `update` returned them. If order
-  matters, build the `Vec` in that order in `update` — do not rely on
+  matters, build the `Vec` in that order in `update`: do not rely on
   adapter internals.
 - Never sleep or retry inside `execute`; schedule follow-up work as a
   returned message or a host timer.
@@ -119,7 +117,7 @@ Blocking work inside the UI thread is the single most common TEA bug.
   ```
 
 - `update` decides when to save (on commit, on quit) and returns
-  `Effect::SaveConfig(current)` only when dirty — the coalesce point is
+  `Effect::SaveConfig(current)` only when dirty; the coalesce point stays
   pure and testable.
 - When `Msg::ConfigSaved(Ok(..))` arrives, `update` refreshes the
   snapshot (pure field copy).

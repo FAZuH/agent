@@ -1,5 +1,5 @@
 #!/bin/bash
-# supervisor.sh — keep resume-safe workers running through network blips.
+# supervisor.sh: keep resume-safe workers running through network blips.
 # Template from a battle-tested overnight run (2026-09-05/06). Copy, edit
 # CONFIG, launch detached. Workers must be resume-safe (progress files) and
 # write *_EXHAUSTED.txt / *_FOUND.txt sentinels.
@@ -40,7 +40,7 @@ while true; do
     # hit: stop everything, exit (the watcher notifies separately)
     for f in "$WORKDIR"/*FOUND*.txt; do
       [ -e "$f" ] || continue
-      log "*** FOUND: $f — stopping supervisor ***"
+      log "*** FOUND: $f, stopping supervisor ***"
       for w in "${WORKERS[@]}"; do
         IFS='|' read -r name match cmd sentinel <<< "$w"
         pgrep -f "$match" | xargs -r kill      # explicit PIDs, never pkill -f
@@ -54,9 +54,9 @@ while true; do
       IFS='|' read -r name match cmd sentinel <<< "$w"
       [ -f "$sentinel" ] || all_done=0
     done
-    [ "$all_done" -eq 1 ] && { log "all workers exhausted — supervisor exiting"; exit 0; }
+    [ "$all_done" -eq 1 ] && { log "all workers exhausted, supervisor exiting"; exit 0; }
   else
-    log "network degraded (ok=$ok/3) — not starting workers"
+    log "network degraded (ok=$ok/3), not starting workers"
   fi
   sleep "$CYCLE"
 done

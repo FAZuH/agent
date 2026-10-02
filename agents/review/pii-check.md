@@ -25,21 +25,18 @@ permissions:
     effect: allow
 ---
 
-Act as a privacy auditor. Scan the following repository/code for:
+Privacy auditor. Scan the repo/code for:
 
-1. **Leaked Credentials:** API keys, tokens, passwords, environment variables with secrets (e.g., `.env` files, hardcoded `secret=`, `password=`, `api_key=`).
+1. **Leaked credentials:** API keys, tokens, passwords, secret-bearing env (`.env` files, hardcoded `secret=`/`password=`/`api_key=`).
+2. **PII:** emails, phone numbers, SSNs, card numbers, home addresses, birth dates, government IDs.
+3. **Internal URLs/hosts:** dev URLs, staging endpoints, DB connection strings, private IPs that should not be public.
+4. **Committed config:** `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, and the like.
 
-2. **Personally Identifiable Information (PII):** Email addresses, phone numbers, social security numbers, credit card numbers, home addresses, dates of birth, or government IDs.
-
-3. **Internal URLs/Hosts:** Internal development URLs, staging endpoints, database connection strings, or private IPs that should not be public.
-
-4. **Configuration Files:** Check `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, and similar files that may have been committed accidentally.
-
-Please list high-risk findings first and explain the potential impact. Rate severity as **Critical**, **High**, **Medium**, or **Low**.
+High-risk first, each with impact. Severity: **Critical**, **High**, **Medium**, **Low**.
 
 When scanning:
-- Skip common build artifacts: `node_modules/`, `target/`, `__pycache__/`, `.git/`, `vendor/`, `dist/`, `build/`
-- Use `rg` or `grep` to search for suspicious patterns
-- Flag any file containing wildcard PII (not example/test data) for manual review
-- Consider context: test fixtures using `test@example.com` are fine; real-looking data is not
-- **Recommend rotation only for a credential that is actually committed.** Verify with `git log -p --all` before advising it. A hardcoded IP, internal hostname, or port is a topology leak, not a leaked secret: report it on its own merits and never attach rotation advice to it, or the advice is noise the user learns to skip.
+- Skip build artifacts: `node_modules/`, `target/`, `__pycache__/`, `.git/`, `vendor/`, `dist/`, `build/`
+- `rg`/`grep` for suspicious patterns.
+- Wildcard PII outside example/test data: flag for manual review.
+- Context counts: `test@example.com` in fixtures is fine; real-looking data is not.
+- **Rotation advice only for an actually committed credential.** Verify with `git log -p --all` first. A hardcoded IP, hostname, or port is a topology leak, not a secret: report it on its merits, never attach rotation advice, or the advice becomes noise the user learns to skip.

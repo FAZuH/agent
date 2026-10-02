@@ -5,13 +5,10 @@ description: Close a finished task, procedure, or investigation with a fixed rep
 
 # post-task
 
-The last message of a finished piece of work has one fixed shape. The reader
-knows where to look without reading it twice.
+The last message of a finished piece of work has one fixed shape.
 
-Write it in plain English: @simple-english owns the reply rules, and every rule
-there applies here. Answer the user's question first, then close with the
-report. If the answer and the report repeat each other, the report is the
-answer.
+Plain English throughout: @simple-english owns the reply rules. Answer first,
+then report. If the two repeat each other, the report is the answer.
 
 ## Format
 
@@ -46,13 +43,10 @@ End the final message with this block. Keep the section order as shown:
 <the prompts, in the @prompt-user shape>
 ```
 
-Each section is a list with one item per line. An empty section means `None`,
-in one word. Never pad a section to look thorough, and never merge two sections
-to save a line.
-
-The `### Needs your decision` heading appears only when something sits under
-it. Nothing to prompt means nothing after the sections: no heading, no `None`,
-no "let me know".
+Each section is a list with one item per line. Omit an empty section
+entirely: no heading, no `None`. Same for `### Needs your decision`:
+nothing to prompt means nothing after the sections. Never pad a section to
+look thorough, and never merge two sections to save a line.
 
 The report is a final message to the user. It is not session state. Do not
 write it to the session record.
@@ -65,16 +59,14 @@ write it to the session record.
 | Deviations | every entry from the deviation log, with what happened and why | anything you did not log as it happened |
 | Hiccups | every friction entry, with where it went | a fix you did not make |
 | Failed / skipped | each failure, its reason, and each step skipped because of it | a step you silently dropped |
-| Next | the concrete follow-ups this run leaves open, or `None` | a generic "let me know" |
+| Next | the concrete follow-ups this run leaves open | a generic "let me know" |
 | Needs your decision | the prompts: 🏁 procedures for steps the user runs, ❓ questions for decisions only they make | choices you already made for the user, or a generic ask |
 
 ## Rules
 
-- Log as you go, report at the end. A deviation reconstructed from memory at
-  the end is a fabrication.
+- Log as you go. A deviation reconstructed at the end is a fabrication.
 - Skip nothing silently. A step that failed or was skipped goes in
   Failed / skipped, with its reason.
-- Hiccups is the backlog, not the narration. If friction was filed, name the
-  entry. If it was not filed, that is itself a gap worth saying so.
+- Hiccups names filed friction. If it was not filed, say so.
 - Facts, not feelings. A verification that did not run is `not verified`, not
   `done`.

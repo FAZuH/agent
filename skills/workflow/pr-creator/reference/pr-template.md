@@ -1,6 +1,6 @@
 <!--
 Generic PR template. Fill in every section that applies to this PR and
-omit any section that does not — never write "N/A" filler. Keep the
+omit any section that does not, and never write "N/A" filler. Keep the
 remaining sections in the order shown below.
 -->
 

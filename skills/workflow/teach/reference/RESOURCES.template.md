@@ -1,8 +1,8 @@
-# Resources — <subject>
+# Resources: <subject>
 
 ## Used
 
-- <source/link/note> — <what it contributed; caveats if any>
+- <source/link/note>: <what it contributed; caveats if any>
 
 ## Backlog
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-prompt.sh — send a prompt to an OpenCode v2 session.
+# oc-prompt.sh: send a prompt to an OpenCode v2 session.
 # Wraps POST /api/session/{id}/prompt. Prints the user message id to stdout
 # (safe for $(...)); delivery goes to stderr. See SKILL.md for details.
 set -euo pipefail
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
     *) TEXT="$1"; shift ;;
   esac
 done
-[[ -n "$TEXT" ]] || die "no prompt text — pass TEXT or --file FILE"
+[[ -n "$TEXT" ]] || die "no prompt text, pass TEXT or --file FILE"
 
 command -v opencode2 >/dev/null || die "opencode2 not on PATH"
 command -v jq >/dev/null || die "jq not on PATH"

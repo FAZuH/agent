@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// oc-plugin-load.mjs — load OpenCode v2 plugins out of process and report what
+// oc-plugin-load.mjs: load OpenCode v2 plugins out of process and report what
 // they register, without touching the running service.
 //
 //   oc-plugin-load.mjs <plugins-dir> [name...]
@@ -7,7 +7,7 @@
 //   oc-plugin-load.mjs .opencode/plugins my-tool.js
 //
 // Why: a plugin can be loaded, listed as healthy by /api/plugin, and still be
-// dead — a global plugin's setup ctx has no string project path, so the v1
+// dead: a global plugin's setup ctx has no string project path, so the v1
 // `ctx.worktree || ctx.directory` idiom hands downstream code an object and
 // every call dies. Nothing else catches that until a user hits the tool.
 //
@@ -75,7 +75,7 @@ const FAKE_CTX = () => {
 const BAD_IDIOM = /\b(?:t?ctx)(\?)?\.(worktree|directory)\b/;
 
 // Comments talk about the idiom ("ctx.worktree is {} in v2") far more often
-// than code does, so strip them before scanning — blanking each block comment
+// than code does, so strip them before scanning, blanking each block comment
 // in place, since deleting it would shift every line number after it.
 const stripComments = (src) =>
   src
@@ -98,7 +98,7 @@ function sources(dir) {
   return out;
 }
 
-/** Files under scanDir whose code — not comments — still reads the v1 idiom. */
+/** Files under scanDir whose code, not comments, still reads the v1 idiom. */
 function idiomHitsIn(scanDir, relBase) {
   return sources(scanDir)
     .filter((s) => !s.endsWith("oc-plugin-load.mjs"))
@@ -133,7 +133,7 @@ if (process.argv[2] === "--self-test") {
   const got = idiomHitsIn(plugin, dir);
   const want = ["fixture/index.js:10"];
   const pass = got.join() === want.join();
-  console.log(`${pass ? "PASS" : "FAIL"} ${got.join(", ") || "(no hits)"}${pass ? "" : ` — want ${want.join(", ")}`}`);
+  console.log(`${pass ? "PASS" : "FAIL"} ${got.join(", ") || "(no hits)"}${pass ? "" : `, want ${want.join(", ")}`}`);
   rmSync(dir, { recursive: true, force: true });
   process.exit(pass ? 0 : 1);
 }

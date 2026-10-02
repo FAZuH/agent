@@ -11,45 +11,29 @@ description: >-
 
 # Improve architecture in OOP terms
 
-This skill adds two things to @oop, which you must load first ("use oop terms"): how a
-finding points at code, and which diagrams to draw. Everything else, including the
-closed term lists and the rules for wording a finding, is @oop's; do not restate it here.
-Load @oop directly instead when you only need the vocabulary.
+Load @oop first. This skill adds two things: how a finding points at code, and which diagrams to draw. Everything else is @oop's; do not restate it. Need only vocabulary: load @oop instead.
 
-Precedence: this skill wins over the hosting workflow's style.
-@improve-codebase-architecture's `HTML-REPORT.md` requires metaphor vocabulary
-(module/interface/depth/seam/leverage). When that document's tone section conflicts
-with this skill, this skill overrides it: use standard OOP vocabulary and standard-fit
-diagrams regardless; do not adopt its style sections.
+Precedence: this skill beats the hosting workflow's style. Against @improve-codebase-architecture's `HTML-REPORT.md` metaphor vocabulary, use OOP terms and standard-fit diagrams regardless.
 
 ## Referencing code (mandatory)
 
-Findings must be locatable in the source within seconds. A reader who cannot grep to
-the exact item considers the finding unreadable.
+Findings must be greppable to the exact item within seconds.
 
-- **Establish the full path on first mention, like importing a symbol.** The first
-  time an item appears in a finding, write it fully qualified:
-  `pwr_viewgen::model::ParsedMessage`, `pwr_ext::components::SelectKindDe`. After that
-  first establishment, the short name (`ParsedMessage`, `SelectKindDe`) is correct
-  everywhere within that finding.
+- **Establish the full path on first mention, like importing a symbol.** First
+  appearance is fully qualified:
+  `pwr_viewgen::model::ParsedMessage`, `pwr_ext::components::SelectKindDe`. Short names after that within the finding.
 - **Name declared items, never roles.** Write `webhook::send`,
   `server::parse_message`. Never "the payload twin", "the front door", "one home for
   the rule", "the gate owner". If you cannot name the identifier, you have not
   finished the analysis.
 - **Cite every claim**: `path/file.rs:LINE` beside the statement it supports. Verify
-  line numbers against the current working tree before publishing.
-- **Quote the problem site.** Each finding carries a ≤10-line verbatim excerpt of the
-  actual offending code (signature plus the lines that hurt). The excerpt is the
-  finding's anchor; prose refers back to it.
-- **Show the proposed signature**, not a paraphrase: when the solution changes an
-  interface, print the exact before/after signature in the implementation language.
+  line numbers against the working tree before publishing.
+- **Quote the problem site.** Each finding carries a ≤10-line verbatim excerpt (signature plus the lines that hurt). Prose refers back to it.
+- **Show the proposed signature**, not a paraphrase: exact before/after signature in the implementation language.
 
 ## Diagrams (standard, fit-for-purpose)
 
-Every finding whose subject has shape gets a diagram drawn with standard notation:
-UML or equivalent industry-standard forms. Choose whichever kind actually fits the
-finding; the list below is illustrative, never exhaustive and never a menu to pick
-from three:
+Every finding whose subject has shape gets a standard-notation diagram (UML or equivalent). Pick what fits; the list is illustrative, never a menu:
 
 - Class diagrams for type relationships: fields, enum variants, trait impls,
   ownership between types.
@@ -62,9 +46,6 @@ from three:
 Constraints:
 
 - Node labels are declared identifiers (`webhook::prepare`), never invented roles.
-- An arrow must represent a real dependency in the code; do not draw edges to make
-  the layout symmetric.
-- Validate before presenting: run `mermaid-doctor` on the file carrying the
-  diagram (parse plus full render); when the finding publishes a rendered
-  image, produce it with `mermaid-compile`. An unvalidated diagram is not done.
-- If no standard diagram fits, plain descriptive text beats a forced one.
+- An arrow is a real code dependency; never draw edges for symmetry.
+- Validate before presenting: `mermaid-doctor` on the carrying file (parse plus full render); rendered images via `mermaid-compile`. Unvalidated is unfinished.
+- No fitting standard diagram: plain text beats a forced one.

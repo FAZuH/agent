@@ -1,10 +1,10 @@
 # TypeScript/Node: Wide Events with `pino` (Hono style)
 
-The idiomatic Node stack this skill assumes is **pino** for the single logger and **Hono** for HTTP middleware. Pino's `redact` option gives you logger-level redaction without scattering checks through handlers, and Hono's `c.set`/`c.get` context makes a request-scoped wide-event object easy to thread through handlers. The pattern ports to Express/Fastify/other frameworks — only the middleware plumbing differs.
+Idiomatic Node stack: **pino** for the single logger, **Hono** for HTTP middleware. Pino `redact` redacts at logger level without handler checks; Hono `c.set`/`c.get` threads a request-scoped wide-event object. Ports to Express/Fastify; only middleware plumbing changes.
 
 ## Setup
 
-Create one logger instance at startup (see `rules/structure.md`) and import it everywhere. Environment base fields and redaction rules live here, in one place.
+One logger at startup (see `rules/structure.md`), imported everywhere. Environment base fields and redaction live here, in one place.
 
 ```typescript
 // lib/logger.ts - Single logger configuration
@@ -45,7 +45,7 @@ console.log('some event');   // Bypasses the logger entirely
 
 ## The Wide-Event Pattern (Hono middleware)
 
-The middleware initializes the event, captures timing, emits it in a `finally` block, and exposes the event to handlers for enrichment (see `rules/wide-events.md`, `rules/structure.md`).
+The middleware initializes the event, captures timing, emits in `finally`, exposes the event for enrichment (see `rules/wide-events.md`, `rules/structure.md`).
 
 ```typescript
 // middleware/wideEvent.ts
@@ -124,9 +124,9 @@ app.post('/checkout', async (c) => {
 // Handler handles: business context only
 ```
 
-### Inline Pattern (no middleware — scripts, CLIs, ad hoc handlers)
+### Inline Pattern (no middleware: scripts, CLIs, ad hoc handlers)
 
-When there's no middleware layer, build the event through the request lifecycle and emit it once in a `finally` block:
+No middleware (scripts, CLIs, ad hoc handlers): build through the lifecycle, emit once in `finally`:
 
 ```typescript
 app.post('/articles', async (c) => {
@@ -174,11 +174,11 @@ app.post('/articles', async (c) => {
 // Single event with all context - queryable by any field
 ```
 
-The anti-pattern this replaces is scattering `console.log` lines through the handler — 6 disconnected lines with scattered context that can't answer "show me all article creates by free trial users."
+The replaced anti-pattern: scattered `console.log` lines through the handler. 6 disconnected lines, scattered context, unanswerable "all article creates by free trial users."
 
 ## Environment Characteristics (see `rules/context.md`)
 
-Attach deployment and infrastructure context. Prefer putting it in the logger's `base` config (see Setup) or the middleware's `envContext`; this is what the full field set looks like:
+Attach deployment and infrastructure context. Prefer logger `base` config (Setup) or middleware `envContext`; the full field set:
 
 ```typescript
 const wideEvent = {
@@ -213,7 +213,7 @@ const wideEvent = {
 
 ## Non-HTTP Work Units (see `rules/non-http.md`)
 
-Same one-event-per-unit-of-work principle for queue consumers. Emit once per message on ack/reject — not per processing step inside the handler:
+One-event-per-unit-of-work for queue consumers. Emit once per message on ack/reject, never per internal step:
 
 ```typescript
 async function processMessage(message: QueueMessage) {
@@ -242,7 +242,7 @@ async function processMessage(message: QueueMessage) {
 
 ## Correlation (see `rules/correlation.md`)
 
-Prefer W3C Trace Context / OTel `trace_id`/`span_id` where tracing infrastructure exists. Without it, propagate a request ID across service hops as a fallback:
+Prefer W3C Trace Context / OTel `trace_id`/`span_id` where tracing exists. Without it, propagate a request ID as fallback:
 
 ```typescript
 // Service A - generate and propagate
@@ -261,7 +261,7 @@ wideEvent.requestId = requestId;  // Same ID links events together
 
 ## Redacting Sensitive Fields (see `rules/security.md`)
 
-Three techniques, from cheapest to most preserving of debug value:
+Three techniques, cheapest first:
 
 **Masking / truncation:**
 
@@ -272,7 +272,7 @@ function maskApiKey(key: string): string {
 }
 ```
 
-**Salted keyed hashing** — for values you need to correlate across events without storing the raw value:
+**Salted keyed hashing**: correlate across events without storing raw values:
 
 ```typescript
 import { createHmac } from 'node:crypto';
@@ -282,7 +282,7 @@ function hashIdentifier(value: string): string {
 }
 ```
 
-**Logger-level redaction** — pino redacts known-sensitive paths at serialization time, not at each call site:
+**Logger-level redaction**: pino redacts known-sensitive paths at serialization, never at call sites:
 
 ```typescript
 export const logger = pino({
@@ -292,7 +292,7 @@ export const logger = pino({
 
 ## Log Injection Sanitization (see `rules/security.md`)
 
-Apply to any user-controlled string before it enters a wide event:
+Apply to any user-controlled string before it enters an event:
 
 ```typescript
 function sanitizeLogField(input: string, maxLength = 1024): string {
@@ -302,14 +302,14 @@ function sanitizeLogField(input: string, maxLength = 1024): string {
 }
 ```
 
-Always serialize via a real JSON encoder (`JSON.stringify`) — never build a log line with manual string concatenation.
+Always serialize via a real JSON encoder (`JSON.stringify`): never manual string concatenation.
 
 ## Testing (see `rules/testing.md`)
 
-Configure the logger to write to an in-memory sink during tests and assert on the captured structure — don't assert against stdout:
+Log to an in-memory sink in tests; assert on captured structure, never stdout:
 
 ```typescript
-// Node/pino — write to an in-memory stream instead of stdout
+// Node/pino: write to an in-memory stream instead of stdout
 import { pino } from 'pino';
 
 function createTestLogger() {
@@ -321,4 +321,4 @@ function createTestLogger() {
 
 ## Open Question
 
-Node has no built-in async-context equivalent to Python's `contextvars` or Rust's span-based `tracing`. Teams split on whether to thread the `wideEvent` object through every function signature (explicit, no magic, but verbose) or to rely on `AsyncLocalStorage` so handlers can attach fields without passing the object around (cleaner handler code, but hidden coupling and a real footgun if an `await` boundary or a pooled worker breaks context). The middleware example above uses explicit context passing because it's the least surprising; `AsyncLocalStorage` earns its keep once handler signatures are too deep to keep threading the object.
+Node has no built-in async-context equivalent to Python `contextvars` or Rust span-based `tracing`. Two options: thread the `wideEvent` object through every signature (explicit, no magic, verbose), or rely on `AsyncLocalStorage` so handlers attach fields without passing the object (cleaner handlers, hidden coupling, real footgun when an `await` boundary or pooled worker breaks context). The middleware above passes context explicitly: least surprising. `AsyncLocalStorage` earns its keep once signatures run too deep to thread.

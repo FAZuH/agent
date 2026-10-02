@@ -13,9 +13,9 @@ description: >-
 
 # Long-horizon runs
 
-Keep work moving for hours while the orchestrator session idles, the network
+Keep work moving for hours while the orchestrator idles, the network
 drops, or the service restarts. The session is the weak link: an idle LLM
-session does not keep running, and goal auto-continue is not trustworthy for
+session does not keep running, and goal auto-continue is untrustworthy for
 long runs. Move liveness **outside** the session.
 
 > **Load the @following-procedures skill first.** It defines how you run this
@@ -31,7 +31,7 @@ Always follow the rules in the *Rules* section at the bottom.
    `*_EXHAUSTED.txt` (space done) or `*_FOUND.txt` (hit). Restart = re-run;
    the worker skips what the progress file records. Launch detached:
    `setsid nohup <worker> >> run.log 2>&1 < /dev/null & disown`: in-session
-   background tool calls get reaped, and bgrun units die with the service.
+   background calls get reaped, and bgrun units die with the service.
 2. **Supervisor** (`scripts/supervisor.sh`). A dumb loop: health-gate
    (N-of-M pings), restart dead workers, skip exhausted tracks, stop on a
    FOUND sentinel, exit when all tracks are done. Logs every spawn with its
@@ -61,7 +61,7 @@ Always follow the rules in the *Rules* section at the bottom.
 5. **Compose wake prompts self-contained.** Wake reason + standing rules
    re-injected + "act on the reason, update the session record, end your
    turn". The session may read each wake with fresh context after
-   compaction. Done when: the wake prompt alone would produce correct
+   compaction. Done when: the wake prompt alone produces correct
    behavior.
 6. **Stand down in order.** Supervisor first (it would resurrect workers),
    then workers (kill by explicit PID), then heartbeat
@@ -76,9 +76,9 @@ Always follow the rules in the *Rules* section at the bottom.
 
 Forked children (see @forkflow) plug into the heartbeat through
 `children.txt`, one line per child (sessionID, agent, dispatch epoch, state):
-a heartbeat or a recovering orchestrator must be able to re-read the ledger
-without context. Completion markers must be keyed by dispatch generation, or
-delete them on re-dispatch, because a stale `.done` suppresses a
+a heartbeat or a recovering orchestrator must re-read the ledger
+without context. Key completion markers by dispatch generation, or
+delete them on re-dispatch: a stale `.done` suppresses a
 re-dispatched child's finish-wake. Stall means no new child message for
 ~45 min; re-notify hourly, because `outcome` alone cannot tell a slow child
 from a dead one.

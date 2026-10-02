@@ -1,10 +1,10 @@
-# example — iced
+# example: iced
 
-How the TEA invariants land on **iced** (checked against iced 0.14 —
-verify against your `Cargo.toml` before copying APIs). Extracted from a
-real iced + layershell settings app; the source map at the end points
-into `~/Projects/hyprlay` for deep dives. These are idioms, not contract
-— the invariants in `SKILL.md` are the contract.
+How TEA lands on **iced** (checked against iced 0.14;
+verify your `Cargo.toml`). From a real iced + layershell
+settings app; the source map at the end points
+into `~/Projects/hyprlay`. Idioms, not contract:
+`SKILL.md` invariants are the contract.
 
 Contents:
 
@@ -38,11 +38,11 @@ fn boot() -> (Model, Task<Message>) {
 }
 ```
 
-- The four free functions are iced's contract; your `Model` is still the
-  single owner of state — all six invariants hold unchanged.
-- `boot` batches async hydration; results arrive as messages. The model
-  starts in a default/`Loading` state and reacts to results, so there is
-  no "must call hydrate first" ordering rule (Temporal coupling removed).
+- Four free functions are iced's contract; `Model` still owns all
+  state; all six invariants hold.
+- `boot` batches async hydration; results arrive as messages. Model
+  starts default/`Loading` and reacts; no "hydrate first" ordering
+  rule (Temporal coupling removed).
 
 ## 2. Update: free function + Task
 
@@ -60,10 +60,10 @@ fn update(model: &mut Model, message: Message) -> Task<Message> {
 }
 ```
 
-- Keep the `match` a dispatcher; move bodies into `Model` methods. A
-  600-line update function is a God object.
-- Translate effects to `Task` in one `apply`/`translate` function so
-  `update` stays policy and `Task` stays plumbing.
+- Keep `match` a dispatcher; move bodies into `Model` methods. A
+  600-line update is a God object.
+- Translate effects to `Task` in one `apply`/`translate` function:
+  `update` stays policy, `Task` stays plumbing.
 - Multiple follow-ups: `Task::batch([...])`.
 
 ## 3. Blocking IO off the UI thread
@@ -75,10 +75,10 @@ Task::perform(
 )
 ```
 
-iced's executor is async: a blocking socket/file call in `update` stalls
-the entire UI. Route sync APIs through `spawn_blocking` inside
-`Task::perform`. The injected `Arc<dyn DaemonControl>` port (passed to
-`Model::new`) keeps the socket type out of GUI code (Dependency
+iced's executor is async: blocking calls in `update` stall
+the UI. Route sync APIs through `spawn_blocking` in
+`Task::perform`. Injected `Arc<dyn DaemonControl>` port (passed to
+`Model::new`) keeps the socket out of GUI code (Dependency
 Inversion Principle).
 
 ## 4. Subscriptions
@@ -93,8 +93,8 @@ fn subscribe(_model: &Model) -> Subscription<Message> {
 }
 ```
 
-Subscriptions are pub/sub message sources — time, keyboard, window
-events — batched into one. They belong in the shell; the core only sees
+Subscriptions are pub/sub message sources (time, keyboard, window
+events), batched into one. They live in the shell; core sees only
 the resulting messages.
 
 ## 5. View: data-driven field registry
@@ -110,8 +110,8 @@ pub struct Field {
 pub const FIELDS: &[Field] = &[ /* one row per setting */ ];
 ```
 
-- `view` iterates `FIELDS` to render the settings page; the search box
-  filters the same table. Adding a setting = one new row + one message
+- `view` iterates `FIELDS`; search filters the same table.
+  New setting = one row + one message
   variant + one update arm (Open/Closed, DRY).
 - Interactive widgets close over message constructors:
   `slider(0..=100, v, move |x| Message::NumDrag(key, x))`.
@@ -121,32 +121,32 @@ pub const FIELDS: &[Field] = &[ /* one row per setting */ ];
 ## 6. Ephemeral drafts vs persisted config
 
 - `num_drafts: HashMap<Key, String>` holds half-typed text; `config`
-  holds committed values. Two separate concerns, two fields
+  holds committed values. Two concerns, two fields
   (Separation of concerns).
 - Commit on Enter (validate → update config → return save effect),
   discard on Esc, dirty = `config != config_snapshot`.
 - One lookup rule per widget type (numbers read drafts, everything else
-  reads config) — never render ad hoc from both.
+  reads config): never render ad hoc from both.
 
 ## 7. Single source of truth in a domain crate
 
-Types like `Bounds`, `Key`, `Mode` live in the pure domain crate
-(`crates/<app>-core`); GUI, daemon, and tray all derive from it. When two
-frontends compute the same fact differently, that is Divergent change —
+`Bounds`, `Key`, `Mode` live in the domain crate
+(`crates/<app>-core`); GUI, daemon, and tray derive from it. Two
+frontends computing one fact differently is Divergent change:
 move the fact into core.
 
 ## 8. Multi-window / multi-surface apps
 
-- One top-level `Model`; route per-surface messages through variant
+- One top-level `Model`; per-surface messages ride variant
   wrappers (`Message::Overlay(OverlayMsg)`); per-surface state lives as
-  sub-models on the top model.
-- The daemon side is its own model with its own update loop — same
+  sub-models.
+- Daemon side is its own model with its own loop, same
   invariants, different host. Shared vocabulary (commands, outcomes)
   lives in the domain crate.
 
 ## 9. Method-shaped alternative
 
-If you prefer method cohesion, keep transitions as methods and satisfy
+For method cohesion, keep transitions as methods and satisfy
 iced with a one-line wrapper (Adapter, not a violation):
 
 ```rust

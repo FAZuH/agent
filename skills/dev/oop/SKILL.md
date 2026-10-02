@@ -10,13 +10,13 @@ description: >-
 
 # OOP vocabulary
 
-Standard object-oriented and software-architecture terminology for codebase analysis, reviews, and design discussions. When this skill is loaded, every finding title, benefit statement, recommendation, and diagram label uses the terms below, never metaphor vocabulary like "deep/shallow module", "seam", "leverage", "locality", or "deletion test". If a source document speaks in metaphors, restate its points silently in standard terms; do not quote the metaphors back.
+Loaded: every finding title, benefit, recommendation, and diagram label uses the terms below. Never metaphor vocabulary ("deep/shallow module", "seam", "leverage", "locality", "deletion test"). Restate metaphor-speaking sources silently in standard terms; never quote them back.
 
 ## Rules
 
-- Lead each finding with the most specific applicable term from the lists below.
-- Do not coin new metaphor names. The lists below are closed: if nothing fits exactly, use plain descriptive language ("this class mixes parsing and persistence"), never a new coinage.
-- Language only: this skill changes how findings are worded, not what work is done.
+- Lead each finding with the most specific term below.
+- Never coin metaphors. The lists are closed: no exact fit means plain descriptive language ("this class mixes parsing and persistence"), never a new coinage.
+- Language only: wording changes, work does not.
 
 ## Principles
 

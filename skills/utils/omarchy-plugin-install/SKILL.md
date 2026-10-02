@@ -5,8 +5,8 @@ description: Install an Omarchy shell plugin end-to-end from a repo URL, startin
 
 # omarchy-plugin-install
 
-Full procedure for installing an Omarchy plugin from a third-party repo URL.
-Run phases in order; phase 1 gates everything (anything but CLEAN stops the run).
+Install an Omarchy plugin end to end from a third-party repo URL. Phases run
+in order; phase 1 gates all (non-CLEAN stops the run).
 
 Requires [Omarchy](https://omarchy.org) (Hyprland + the `omarchy` CLI).
 
@@ -19,12 +19,9 @@ those values instead of any example path below.
 **Spawn the `malware-check` subagent. Do not perform this audit yourself.**
 The main session runs with full permissions; the audit belongs in the
 subagent's default-ask sandbox, and the only thing the main session consumes
-is the verdict file it writes.
-
-If you find yourself running your own `git clone`, `grep`, `read`, or
-`clamscan` to check a plugin's source, stop. That is the exact mistake this
-phase exists to prevent, and it does not count as the audit. Hand the repo
-URL to the subagent instead.
+is the verdict file it writes. Your own `git clone`, `grep`, `read`, or
+`clamscan` does not count as the audit: that is the exact mistake this phase
+prevents. Hand the repo URL to the subagent instead.
 
 One `subagent` call per plugin (agent: `malware-check`, parallel calls when
 installing several), passing:
@@ -35,9 +32,8 @@ installing several), passing:
 - expected clone/verdict paths: it clones into `/tmp/malware-check/<name>`,
   audits, and writes the verdict to `/tmp/malware-check/<name>.md`.
 
-Its sandbox is default-ask: read-only scans run silently, while the clone and
-anything outside the allowlist prompt for approval. Approve the audit's own
-prompts as they come.
+Default-ask sandbox: read-only scans run silent; the clone and anything
+outside the allowlist prompts. Approve the audit's prompts as they come.
 
 Expect coverage of: `https?://` hits (only the plugin's documented API hosts),
 `eval\(|atob|base64|fromCharCode` (nothing in shipped code),
@@ -60,13 +56,13 @@ Never touch `/usr/share/omarchy/` (package-owned; updates overwrite it).
 `--enable` is best-effort: `omarchy plugin add <url> --enable --yes` can print
 `omarchy-shell is not responding` and leave the plugin **disabled**. Check with
 `omarchy plugin list`; if it is off, `omarchy plugin enable <plugin-id>` works
-and hot-reloads. The add path's in-process reload races; do not read it as the
-shell being down.
+and hot-reloads. The add path's in-process reload races; a `not responding`
+print is not the shell being down.
 
 ## Quickshell plugin gotchas
 
 - `IdleMonitor` and the other idle types come from
-  `import Quickshell.Wayland` — a bare `import Quickshell` fails service load
+  `import Quickshell.Wayland`: a bare `import Quickshell` fails service load
   with `IdleMonitor is not a type`, and the only symptom in widget IPC is
   `service unavailable`.
 - A JS/QML parse error in one plugin takes the **whole shell** down, not just
@@ -78,7 +74,7 @@ shell being down.
 - `omarchy-shell shell summon <id>` reports `no live bar widget` for a
   third-party plugin widget that is visibly on the bar and whose own open/close
   IPC works. `Bar.findPanelWidget` does not match plugin widget slots, so
-  hotkey-style summon routing is broken for plugins — bind the widget's own
+  hotkey-style summon routing is broken for plugins: bind the widget's own
   IPC instead.
 
 ## Phase 3: Bar placement
@@ -107,7 +103,7 @@ dotfiles repo.
 
 ## Phase 6: Persist (dotfiles sync loop)
 
-Copy the live files over their twins in the dotfiles repo: the keybind file,
-`~/.config/omarchy/shell.json`, and any helper script under `~/.local/bin/`.
-Commit one concern per commit using that repo's commit scopes, and push.
-`shell.json` plugin entries: commit only once placement is settled.
+Copy live files over their dotfiles twins: the keybind file,
+`~/.config/omarchy/shell.json`, helper scripts under `~/.local/bin/`.
+One concern per commit with that repo's scopes, then push.
+`shell.json` entries: commit only once placement is settled.

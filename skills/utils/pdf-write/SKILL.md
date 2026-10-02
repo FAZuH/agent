@@ -28,16 +28,15 @@ A submission bundle needs both: author the typed parts, then assemble them.
 
 ## Rules that hold for both
 
-- **Keep the sources.** The built or merged PDF is a build artifact. The part
-  PDFs, the `.md`, and the `.jpg` scans stay on disk, so a later edit rebuilds
-  one part instead of all of them.
+- **Keep the sources.** The delivered PDF is a build artifact; part PDFs,
+  `.md`, and scans stay on disk, so a later edit rebuilds one part, not all.
 - **One width across one delivered file.** Unless the user asks otherwise,
   every page in a single PDF agrees on width. Mixed page boxes are the defect
   this branch exists to prevent.
 - **Name the output what the user asked for.** `Group B_Tugas 2.pdf` is the
   name, not a generated one.
-- **Say the merge order out loud** when combining more than two inputs, so a
-  wrong order is caught before the file is read.
+- **Say the merge order out loud** with more than two inputs, so a wrong
+  order is caught before the file is read.
 
 ## Verify before delivering: mandatory
 
@@ -55,10 +54,9 @@ pdftoppm -png -r 90 out.pdf /tmp/opencode/page        # then READ the images
 - `pdftotext` returns nothing on a scanned or image page. That is the expected
   result, not a defect, so text extraction proves nothing there and only
   reading the render does.
-- Reading the rendered pages is the step that catches the real defects: bullets
-  that printed as literal asterisks, math that stayed raw, a figure alone on a
-  near-empty page, a member list collapsed into one run-on line, content
-  squashed against a re-rendered page box.
+- Reading the renders catches the real defects: bullets as literal
+  asterisks, raw math, a lone figure on a near-empty page, a member list
+  collapsed into one run-on line, content squashed against a re-rendered box.
 
 If page count or layout is wrong, fix it and rebuild. Do not describe the
 problem to the user and stop.

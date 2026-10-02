@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user asks to write, plan, or run a test suite.
+Write, plan, or run a test suite.
 
 ## State machine
 
@@ -28,12 +28,12 @@ START (test work requested)
 | # | State | Owner | Action |
 |---|---|---|---|
 | 1 | PLAN | you | Create a plan in Plan mode with @test-guidelines (add @gui-test-guidelines if the suite touches the UI). |
-| 2 | TRIM | you | Adjust the plan: remove testing that "tests apples is apples" — drop tautological or redundant cases. |
+| 2 | TRIM | you | Adjust the plan: remove testing that "tests apples is apples" and drop tautological or redundant cases. |
 | 3 | BUILD | you | Proceed in Build mode with `/goal`. |
 | 4 | IMPLEMENT | `implement` | Delegate test-first implementation and suite execution to `implement`; it owns both writing and running tests. |
 | 5 | ITERATE | `implement` | Iterate until the suite passes and the new tests add real signal. |
 | 6 | REVIEW | `review` | Review the test work with `review` if the user wants it. |
-| 7 | FINISH | `finish` | Mark the plan complete; @finish to cleanup — finish proposes grouped commit messages, you restate them to the user for approval, then commit yourself. |
+| 7 | FINISH | `finish` | Mark the plan complete; @finish to cleanup. Finish proposes grouped commit messages, you restate them to the user for approval, then commit yourself. |
 
 ## Dependency graph
 
@@ -47,6 +47,6 @@ START (test work requested)
 
 ## Gates
 
-- REVIEW is optional and only on user request.
-- FINISH (step7) depends on ITERATE (step5), never on REVIEW (step6) — a skipped or failed review does not block finish; a red suite does.
+- REVIEW is optional, only on user request.
+- FINISH (step7) depends on ITERATE (step5), never on REVIEW (step6): a skipped or failed review does not block finish; a red suite does.
 - Iteration loop ends when the suite is green and the new tests add real signal.

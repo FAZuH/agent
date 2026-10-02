@@ -18,12 +18,10 @@ description: >-
 
 ## 1. Check changelog support
 
-Glob `docs/dev/*`. Load and follow `docs/dev/changelog.md` and any other docs
-under `docs/dev/` (commit conventions, changelog style, bump rules).
+Glob `docs/dev/*`. Follow `docs/dev/changelog.md` plus the commit, style, and bump docs under it.
 
 If `docs/dev/changelog.md` does not exist, the repo does NOT support manual
-changelog creation. Report that to the user and stop. Do not write or edit a
-changelog.
+changelog creation. Report and stop. Do not write or edit a changelog.
 
 ## 2. Gather changes since the last version
 
@@ -39,8 +37,8 @@ List commits since that version:
 git log --oneline --no-decorate "$(git describe --tags --abbrev=0)..HEAD"
 ```
 
-Decide the next version number and which commits belong in the changelog
-according to the docs: user-visible changes only, internal work stays out.
+Per the docs, decide the next version and which commits belong in the
+changelog: user-visible changes only, internal work stays out.
 
 ## 3. Draft the changelog
 
@@ -53,9 +51,8 @@ Follow the docs for structure and wording:
 
 ## 4. Verify
 
-Re-read `CHANGELOG.md` against the docs' rules and examples. Confirm the
-version number and date format match the docs. Report what you changed and
-the next version number.
+Re-read `CHANGELOG.md` against the docs' rules and examples. Confirm version
+and date format match. Report what changed and the next version number.
 
 ## Dependency graph
 

@@ -7,7 +7,7 @@ whether a claim holds. It answers with probabilities, never with an action.
 
 It is one plugin with four tools, a TUI settings panel, and six feature
 switches. Setup and the full command list are in
-[Plugins](plugins.md#jev-fazuhjev); this page is the operating reference — what
+[Plugins](plugins.md#jev-fazuhjev); this page is the operating reference: what
 it guarantees, what it costs, and how to point it somewhere else.
 
 ## The safety contract
@@ -26,14 +26,14 @@ These are the rules the code enforces, not aspirations:
 - **One switch can block anything, and only that one.** With the `risk_hook`
   feature on, a `bash`, `edit`, `write`, or `apply_patch` call is sent to Jev and
   logged. It is blocked only when the answer is *both* confident *and* at or
-  above `gateProbability` — so a Jev failure, a coin-flip answer, and a weak
+  above `gateProbability`, so a Jev failure, a coin-flip answer, and a weak
   answer all pass through. The hook is off by default, because a blocked call
   has no interactive prompt.
 - **The key is never echoed, logged, or read back.** `/jev-key` writes it at
   mode 0600 and prints only the path. There is no command that takes a key as an
   argument, because anything after a slash command lands in the transcript.
-- **Everything sent is redacted first.** Credential-shaped text — private keys,
-  bearer tokens, `api_key = …` assignments — is stripped before the request
+- **Everything sent is redacted first.** Credential-shaped text (private keys,
+  bearer tokens, `api_key = …` assignments) is stripped before the request
   leaves the machine, on every call, including the `jegrep` shim. It is a net,
   not a guarantee: do not hand it a secret on purpose.
 - **The call log is 0600.** It records the exact redacted payload, the answers,
@@ -41,14 +41,15 @@ These are the rules the code enforces, not aspirations:
 
 ## Setup
 
-Three things, all settings rather than constants, because the wire model id and
-the endpoint path differ per provider and neither has a portable default.
+Everything here is a setting rather than a constant. `protocol`, `endpoint`, and
+`model` are the three that differ per provider: the wire model id and the
+endpoint path have no portable default.
 
 | Setting | Default | Change it with |
 | --- | --- | --- |
 | `protocol` | `systemone` | toggle in `/jev-settings` |
-| `endpoint` | **empty — you set this first** | `/jev-endpoint <url>`, or `/jev-settings` |
-| `model` | **empty — you set this first** | `/jev-model <id>`, or `/jev-settings` |
+| `endpoint` | **empty; you set this first** | `/jev-endpoint <url>`, or `/jev-settings` |
+| `model` | **empty; you set this first** | `/jev-model <id>`, or `/jev-settings` |
 | `keyEnv` | `JEV_API_KEY` | `/jev-settings` |
 | `keyFile` | `~/.config/fazuh-agent/secrets/jev_api_key` | `/jev-settings` |
 | `think` | `false` | toggle in `/jev-settings` |
@@ -66,20 +67,20 @@ speaks the System One `/systemone` shape works.
 
 `protocol` picks how the questions travel.
 
-**`systemone`** — the default. Posts `{ model, state, questions }` and reads an
+**`systemone`**: the default. Posts `{ model, state, questions }` and reads an
 `answers` object back. Needs a key.
 
-**`chat`** — for a provider that speaks an Ollama-style `/api/chat`. The same
-questions become one prompt, and the reply is parsed back into the same answers,
-so the validation and the confidence maths are unchanged. Needs no key, and none
-is sent even if one is configured.
+**`chat`**: for a provider that speaks an Ollama-style `/api/chat`. The client
+turns the same questions into one prompt and parses the reply back into the same
+answers, so the validation and the confidence maths are unchanged. Needs no key,
+and none is sent even if one is configured.
 
-Three things a small chat model gets wrong, all handled in the parser, and all
+Four things a small chat model gets wrong, all handled in the parser, and all
 found by running it rather than assuming:
 
 | What it does | What the parser does |
 | --- | --- |
-| Invents its own answer keys — asked for `verdict` it answers `1` | matches by key when the keys line up, by position when they do not, and fails when the count does not match |
+| Invents its own answer keys (asked for `verdict` it answers `1`) | matches by key when the keys line up, by position when they do not, and fails when the count does not match |
 | Echoes the question id into the `type` field | states the exact answer object next to each question, not in a preamble |
 | Copies a placeholder like `"<winning label>"` verbatim | names the real labels in the shape, so it fills numbers in rather than copying |
 | Omits a score's `legend` | synthesizes it from the question's own criteria, which is what the legend is |
@@ -90,21 +91,21 @@ spent **3–13s**.
 
 A chat model's answers are graded but less certain than a hosted one's, so a
 `minProbability` tuned for a hosted provider reports low confidence more often.
-That is the threshold working honestly, not a fault — but a provider change may
-want the threshold looked at.
+That is the threshold working honestly, not a fault, though a provider change
+may want the threshold looked at.
 
 The key is resolved at call time, first match wins: each env var in `keyEnv` in
 order, then `keyFile`. `/jev-status` shows which one is in use, never the value.
 
-`/jev-settings` and `/jev-features` and `/jev-key` are **TUI-only**. The desktop
+`/jev-settings`, `/jev-features`, and `/jev-key` are **TUI-only**. The desktop
 app loads no TUI module, so those three names do not exist there. The text
-commands — `/jev-status`, `/jev-model`, `/jev-endpoint`, `/jev-log` — work
+commands (`/jev-status`, `/jev-model`, `/jev-endpoint`, `/jev-log`) work
 anywhere.
 
 The model id is the **provider's own wire string**, not the namespaced id the host
 shows in `/model`. A provider's catalogue list may omit the model entirely, so
 the wire id often has to come from that provider's model page rather than from
-any list you can query.
+any list the provider exposes.
 
 ## Commands
 
@@ -124,26 +125,26 @@ no tool call is sent. The six keep their values, so you can configure with the
 plugin disabled and get your setup back when you re-enable it.
 
 The panel closes when you change a row, because the only dialog primitive a
-plugin can reach resolves on selection. Left/right to change a row in place is
-tracked in [issue #3](https://github.com/FAZuH/agent/issues/3), together with the
-measured reason the documented non-closing API does not exist.
+plugin can reach resolves on selection. [Issue #3](https://github.com/FAZuH/agent/issues/3)
+tracks left/right to change a row in place, and records the measured reason the
+documented non-closing API does not exist.
 
 ## The tools
 
-**`jev_pick_skill`** — which installed skill to load. Give it the request and the
+**`jev_pick_skill`**: which installed skill to load. Give it the request and the
 candidates as `name` plus the one-line description each `SKILL.md` already
 carries; you do not need their bodies. It returns one id and a probability.
 
-**`jev_pick_control`** — which on-page control matches a goal. Text only. Extract
+**`jev_pick_control`**: which on-page control matches a goal. Text only. Extract
 the controls yourself and pass them; Jev cannot see a page or a screenshot.
 
-**`jev_review_rank`** — review priority per changed file. Pass a goal, and per
+**`jev_review_rank`**: review priority per changed file. Pass a goal, and per
 item a path, what the file is for, and the change. It returns an ordering plus
 warnings for rules the change may break. **Every item comes back.** A `score`
 answer is fractional, so the output names the band between two adjacent rubric
 levels rather than a level index.
 
-**`jev_check`** — one yes/no question about a piece of text, returning P(yes).
+**`jev_check`**: one yes/no question about a piece of text, returning P(yes).
 Ask one thing per call; a compound question gets a coin-flip answer. There is no
 separate confidence field for a `noul`: a value near 0.5 means Jev does not know.
 
@@ -151,11 +152,11 @@ separate confidence field for a `noul`: a value near 0.5 means Jev does not know
 
 Three different quantities, and conflating them is the easy mistake:
 
-- **`minProbability`** — a `choice` whose top probability is below this is
+- **`minProbability`**: a `choice` whose top probability is below this is
   reported as low confidence.
-- **`minMargin`** — a `choice` whose gap to the runner-up is below this is
+- **`minMargin`**: a `choice` whose gap to the runner-up is below this is
   reported as low confidence. A near-duplicate decoy is what this catches.
-- **`gateProbability`** — the risk hook's block threshold and the review
+- **`gateProbability`**: the risk hook's block threshold and the review
   tool's warning threshold. One number, two uses, because they are the same
   judgement at different scales.
 
@@ -183,7 +184,7 @@ order will find it. Nothing else is provider-specific: the code names no
 provider, and `DEFAULTS` only describes one working deployment.
 
 If you get `401` or `403`, the key, the model id, or the account's plan for that
-model is the problem — the error message names which setting to check. `404`
+model is the problem, and the error message names which setting to check. `404`
 usually means the endpoint is not the provider's decisions path.
 
 ## The jegrep shim
@@ -245,8 +246,8 @@ log, not the type definitions.
 
 ## See also
 
-- [Plugins](plugins.md#jev-fazuhjev) — the inventory entry
-- [Port notes](dev/jev-port-notes.md) — how this was built, what was verified
+- [Plugins](plugins.md#jev-fazuhjev): the inventory entry
+- [Port notes](dev/jev-port-notes.md): how this was built, what was verified
   live, and what is still unproven
-- [@jev-use](../skills/ocv2/jev-use/SKILL.md) — the skill that tells an agent
+- [@jev-use](../skills/ocv2/jev-use/SKILL.md): the skill that tells an agent
   when to reach for it

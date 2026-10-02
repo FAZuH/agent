@@ -1,12 +1,11 @@
 # docs/dev templates
 
-Skeletons for bootstrap and update modes. Keep each doc short: purpose,
-verified commands, rules, checklist. Replace the angle brackets; delete any
-section the repo cannot support. Every command line you keep must come from
-repo evidence (manifest, Makefile, CI workflow), and each doc names where
-that evidence lives.
+Skeletons for bootstrap and update. Keep each doc short: purpose, verified
+commands, rules, checklist. Replace angle brackets; delete unsupported
+sections. Every kept command comes from repo evidence (manifest, Makefile, CI
+workflow); each doc names its source.
 
-## docs/dev/README.md (index — always first)
+## docs/dev/README.md (index: always first)
 
 ```markdown
 # Developer docs
@@ -37,11 +36,11 @@ Update rule: a workflow change lands here in the same branch that changes it.
 <One paragraph: what a contributor does day to day.>
 
 ## Setup
-1. <prerequisite> — `<verified install command>`
-2. First run — `<verified command>`
+1. <prerequisite>: `<verified install command>`
+2. First run: `<verified command>`
 
 ## Daily loop
-- `<command>` — <what it does> (source: <manifest or CI file>)
+- `<command>`: <what it does> (source: <manifest or CI file>)
 
 ## Conventions
 - <a rule the repo actually follows, with an example path>
@@ -62,7 +61,7 @@ Update rule: a workflow change lands here in the same branch that changes it.
 - <fixture, selector, or naming conventions that exist in the repo>
 
 ## CI
-- <which suites CI runs> — <link to the workflow file>
+- <which suites CI runs>: <link to the workflow file>
 ```
 
 ## architecture.md (navigation only)
@@ -74,10 +73,10 @@ Navigation, not design history: decisions live in `docs/adr/`, terms in
 `CONTEXT.md`.
 
 ## Modules
-- `<path>` — <one line: responsibility>
+- `<path>`: <one line: responsibility>
 
 ## Read next
-- `docs/adr/` — decisions with their rationale
+- `docs/adr/`: decisions with their rationale
 - <entry point file(s)>
 ```
 
@@ -90,7 +89,7 @@ Navigation, not design history: decisions live in `docs/adr/`, terms in
 - `<verified command or CI job link>`
 
 ## Human-only steps
-- <step> — performed by <role>; the credential lives in <env var or store>,
+- <step>: performed by <role>; the credential lives in <env var or store>,
   never in this doc.
 
 ## Runbook

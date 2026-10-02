@@ -5,8 +5,8 @@ description: Map and maintain this personal-public agent repository. Use when cl
 
 # Agent Map
 
-This skill is repository guidance. It does not contain machine paths,
-credentials, local target state, or host commands. Keep those facts in the host
+Repository guidance only. No machine paths,
+credentials, local target state, or host commands. Those live in the host
 `AGENTS.md` or another host-specific file.
 
 ## Source map
@@ -40,16 +40,16 @@ credentials, local target state, or host commands. Keep those facts in the host
 Use these classes:
 
 - Public repository item: portable instructions, skills, agents, plugins,
-  commands, and scripts. Do not include credentials, private paths, host names,
+  commands, scripts. No credentials, private paths, host names,
   current installation state, or machine-only values.
 - Host-specific item: paths, credentials, local services, installed inventory,
-  and commands that only make sense on one machine. Keep this in the host
+  commands that only make sense on one machine. Lives in the host
   `AGENTS.md` or another host-specific file.
-- External item: an upstream-owned skill or plugin. Install and update it
-  through its owner. Do not hand-edit its installed copy.
+- External item: upstream-owned skill or plugin. Install and update
+  through its owner. Never hand-edit the installed copy.
 
-If an item fails the portability test, keep its reusable rules in the public
-repository and its machine-specific values in the host overlay.
+Fails the portability test: reusable rules stay in the public
+repository, machine-specific values go in the host overlay.
 
 ## Choose the source directory
 
@@ -86,7 +86,7 @@ Agent definitions live under `agents/<category>/<name>.md` and install flat as
 - `vision`: image, web, Mermaid, and SVG inspection
 - `document`: documentation and changelog work
 
-Keep subagents within the task assigned by the primary agent. They report
+Keep subagents within the primary agent's task. They report
 blockers instead of silently changing scope. The primary agent owns delegation
 and prevents duplicate work.
 
@@ -110,7 +110,7 @@ Load the narrowest existing skill that matches the task:
 - `commit-scopes` for commit vocabulary
 - `update-fazuh-agent` to pull the repository and redeploy the config
 
-Do not copy rules from these skills into this map. Keep this skill focused on
+Do not copy rules from these skills into this map. This skill covers
 repository orientation and boundaries.
 
 ## Author a repository item
@@ -128,7 +128,7 @@ The item is ready when its source, documentation, and validation agree.
 ## Deploy with `sync.sh`
 
 The repository is the source of truth. `sync.sh` copies items to targets and
-tracks the copied content. Do not hand-edit a target copy.
+tracks the copied content. Never hand-edit a target copy.
 
 Preview before writing:
 
@@ -153,13 +153,13 @@ Deploy a project target or every configured target:
 
 After a normal push, OpenCode v2 hot-reloads most components. Restart only when
 a changed component does not appear, a plugin is not loaded, or a cold restart
-is required. Use `diff` before every deployment when the target state is
-uncertain. Use `pull` only when the target contains the changes that belong in
+is required. `diff` before every deployment when the target state is
+uncertain. `pull` only when the target holds the changes that belong in
 the source. Pull skips files with machine templates.
 
-The manifest protects target state. A stale target is removed only when its
+The manifest protects target state. A stale target goes only when its
 content still matches the recorded hash. Modified target files are kept and
-reported. Existing files outside the manifest are left alone.
+reported. Existing files outside the manifest stay alone.
 
 ## Use templates for machine values
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-fork.sh — fork an OpenCode v2 session (copy projected history at a boundary).
+# oc-fork.sh: fork an OpenCode v2 session (copy projected history at a boundary).
 # Wraps POST /api/session/{id}/fork (v2.session.fork). Prints the child id to
 # stdout (safe for $(...)); progress goes to stderr. See SKILL.md for details.
 set -euo pipefail

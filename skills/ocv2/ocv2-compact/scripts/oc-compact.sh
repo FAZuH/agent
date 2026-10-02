@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# oc-compact.sh — compact an OpenCode v2 session and wait for the summary.
+# oc-compact.sh: compact an OpenCode v2 session and wait for the summary.
 #
 # Wraps POST /api/session/{id}/compact (v2.session.compact): triggers the
 # compaction, then polls the created compaction message until it leaves
-# "running". The summarization is a model call on the session's own model —
+# "running". The summarization is a model call on the session's own model,
 # typically 10-60 s. Only --summary writes a file; everything else goes to
 # stderr so stdout stays clean. See SKILL.md for the API details.
 #
@@ -17,7 +17,7 @@ usage() {
 Usage: oc-compact.sh SESSION_ID [--id MSG_ID] [--timeout SECS] [--summary FILE]
 
   SESSION_ID   session to compact (ses_…)
-  --id MSG_ID  explicit id for the compaction message — an idempotency key,
+  --id MSG_ID  explicit id for the compaction message, an idempotency key,
                not a history boundary (ConflictError if that msg_ exists)
   --timeout    seconds to wait for completion (default 180; 0 = fire and
                return right after the POST)
@@ -60,14 +60,14 @@ printf 'compaction started: %s (session %s)\n' "$MSG" "$SESSION" >&2
 get_msg() { opencode2 api get "/api/session/$SESSION/message/$MSG" 2>/dev/null; }
 
 if [[ "$TIMEOUT" -eq 0 ]]; then
-  printf 'queued (delivery steer) — not waiting. Poll: GET /api/session/%s/message/%s\n' \
+  printf 'queued (delivery steer), not waiting. Poll: GET /api/session/%s/message/%s\n' \
     "$SESSION" "$MSG" >&2
   exit 0
 fi
 
 # 2. Poll. A steer into a running session stays status=null until that turn
 # ends, then flips to running; both cases keep waiting here. A "Nothing to
-# compact yet" failure means no new history since the last compaction — the
+# compact yet" failure means no new history since the last compaction. The
 # session is already compact, so that counts as success.
 deadline=$(( $(date +%s) + TIMEOUT ))
 STATUS="null"
@@ -80,14 +80,14 @@ while :; do
     failed)
       REASON=$(jq -r '.data.error | "\(.type): \(.message)"' <<<"$MSG_JSON" 2>/dev/null || echo 'unknown error')
       if [[ "$REASON" == *"Nothing to compact yet"* ]]; then
-        printf 'nothing to compact — no new history since the last compaction\n' >&2
+        printf 'nothing to compact, no new history since the last compaction\n' >&2
         exit 0
       fi
       die "compaction failed: $REASON" ;;
     *) die "compaction ended with status: $STATUS" ;;
   esac
   [[ $(date +%s) -ge $deadline ]] && {
-    printf 'oc-compact: timeout after %ss — status: %s\n' "$TIMEOUT" "$STATUS" >&2
+    printf 'oc-compact: timeout after %ss, status: %s\n' "$TIMEOUT" "$STATUS" >&2
     exit 1
   }
   sleep 5

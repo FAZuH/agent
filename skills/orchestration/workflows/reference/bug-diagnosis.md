@@ -7,7 +7,7 @@
 
 ## When to use
 
-The user reports something broken/failing, or a bug that resists a quick fix.
+Broken, failing, or resisting a quick fix.
 
 ## State machine
 
@@ -42,6 +42,6 @@ START (bug report)
 
 ## Gates
 
-- MAP only runs when the codebase is unfamiliar.
-- FIX (step3) hangs off DIAGNOSE (step1), never off MAP (step2) — an unfamiliar-codebase mapping pass informs the fix but does not gate it.
+- MAP only runs on an unfamiliar codebase.
+- FIX (step3) hangs off DIAGNOSE (step1), never off MAP (step2): a mapping pass informs the fix but does not gate it.
 - Review and commit follow the feature-development workflow exactly.

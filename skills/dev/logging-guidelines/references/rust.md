@@ -1,8 +1,8 @@
 # Rust: Wide Events with `tracing`
 
-Rust's idiomatic structured-logging story isn't a request-scoped logger object — it's `tracing`, which accumulates context on **spans** rather than mutating a shared struct. A span roughly plays the role that the `wideEvent` object plays in the TypeScript reference (`references/typescript.md`): a place to accumulate fields over the lifetime of a unit of work, emitted as one structured record.
+Rust has no request-scoped logger object. `tracing` accumulates context on **spans**, not a shared struct. A span plays the `wideEvent` role (`references/typescript.md`): field accumulation over a unit of work, emitted as one record.
 
-The unit of work doesn't have to be an HTTP request. A queue message, a cron tick, a daemon loop iteration, a CLI invocation, a request — the pattern is identical (`rules/non-http.md`); only the place where the root span gets created changes.
+Unit of work is never only HTTP: queue message, cron tick, daemon iteration, CLI invocation, request. Pattern identical (`rules/non-http.md`); only root-span creation moves.
 
 ## Setup
 
@@ -13,7 +13,7 @@ The unit of work doesn't have to be an HTTP request. A queue message, a cron tic
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-/// Stdout JSON — the simplest setup; no worker guard required.
+/// Stdout JSON: the simplest setup; no worker guard required.
 pub fn init_telemetry_stdout() {
     tracing_subscriber::registry()
         .with(
@@ -21,22 +21,22 @@ pub fn init_telemetry_stdout() {
                 .json()
                 // The event's own fields land at the top level of each JSON line
                 // instead of nested under "fields". Span-recorded fields always
-                // render under "span"/"spans" either way — see the note below.
+                // render under "span"/"spans" either way; see the note below.
                 .flatten_event(true),
         )
         .init();
 }
 ```
 
-**Where the wide event actually lands in each line:** the formatter emits `{timestamp, level, target, fields, span, spans}` — the root span's accumulated fields ride along nested under `"span"`, with the full root-to-leaf list under `"spans"`. There is no built-in flag that merges span fields into one flat record the way pino's output reads; point your ingest pipeline at `span.<field>` (Vector, Loki, and ELK all flatten trivially), or implement a custom `FormatEvent` if you truly need one flat object per unit of work.
+**Where the wide event lands:** the formatter emits `{timestamp, level, target, fields, span, spans}`: root-span fields ride nested under `"span"`, the root-to-leaf list under `"spans"`. No flag merges span fields flat the way pino reads; point ingest at `span.<field>` (Vector, Loki, ELK flatten trivially), or implement a custom `FormatEvent` for one flat object per unit of work.
 
-Filter verbosity with `EnvFilter` (`tracing_subscriber::EnvFilter::from_default_env()`) as usual — but note that `EnvFilter` filters by level/target only. It is not a sampling mechanism; see [Sampling](#sampling-see-rules_samplingmd) below.
+Filter verbosity with `EnvFilter` (`tracing_subscriber::EnvFilter::from_default_env()`) as usual, but `EnvFilter` filters by level/target only. Not a sampler; see [Sampling](#sampling-see-rules_samplingmd) below.
 
 ### Writing to a file: hold the `WorkerGuard` for the process lifetime
 
-`tracing_appender::non_blocking` writes through a background thread with a bounded buffer. The `WorkerGuard` it returns is what flushes that buffer on drop — so it must stay alive until process exit. Dropping it early (binding it as `_`, storing it in a config struct that dies at startup) silently discards every line still buffered at shutdown — a production data-loss trap with no error at the drop site.
+`tracing_appender::non_blocking` writes through a background thread with a bounded buffer. The returned `WorkerGuard` flushes on drop, so it stays alive until process exit. Early drop (binding as `_`, storing in a startup-dying config struct) silently discards buffered lines at shutdown: data loss with no error at the drop site.
 
-You don't need `std::mem::forget`. The contract is a plain named binding in `main`:
+No `std::mem::forget`. The contract is a named binding in `main`:
 
 ```rust
 /// JSON to a daily-rotating file. Returns a guard that MUST live for the
@@ -67,7 +67,7 @@ Stdout-only setups have no buffer and need no guard.
 
 ## Environment Base Fields (see `rules/context.md`)
 
-A pino-style logger takes a `base` object attached once at construction. `tracing` has no equivalent: **a span's field set is fixed when the span is created**, and events inherit only what their ancestor spans carry. So environment base fields ride the *unit-of-work root span*, seeded wherever that span is created — middleware for HTTP, the consumer loop for queues, `main` for CLIs. Centralize the values once:
+No pino-style `base` object. **Span field sets fix at creation**; events inherit ancestor-span fields only. Environment fields ride the *unit-of-work root span*, seeded at creation (middleware for HTTP, consumer loop for queues, `main` for CLIs). Centralize once:
 
 ```rust
 use std::sync::OnceLock;
@@ -95,11 +95,11 @@ pub fn env_base() -> &'static EnvBase {
 }
 ```
 
-Every root-span example below seeds these four fields. If you can't own root-span creation (e.g. a library wrapping a third-party server), the fallback is a custom `Layer` that injects the fields into spans as they open — more machinery; prefer owning the root span.
+Every root-span example below seeds these four. No root-span ownership (e.g. library wrapping a third-party server): fallback is a custom `Layer` injecting fields at span open. More machinery; prefer owning the root span.
 
 ## Sanitizing Untrusted Strings (see `rules/security.md`)
 
-Header values, paths, query strings, queue payloads, and exception messages are outsider-authored free text. Strip control characters and cap length before any of them enters a span field — the JSON serializer escapes output, but it neither neutralizes ANSI escape sequences nor bounds event volume (CWE-117):
+Headers, paths, query strings, queue payloads, exception messages are outsider-authored free text. Strip control chars, cap length before any span field. JSON escapes output; it neither neutralizes ANSI escapes nor bounds volume (CWE-117):
 
 ```rust
 /// Apply to any user-controlled string before recording it on a span.
@@ -115,15 +115,15 @@ pub fn sanitize_log_field(input: &str, max_len: usize) -> String {
 }
 ```
 
-Two details that differ from the TypeScript `sanitizeLogField` in `references/typescript.md`, both on the safe side: `char::is_control()` also strips C1 range characters (0x80–0x9F), and truncation counts `char`s, not bytes — byte slicing panics when it lands inside a multibyte codepoint.
+Two safe-side differences from TypeScript `sanitizeLogField` (`references/typescript.md`): `char::is_control()` also strips C1 (0x80–0x9F), and truncation counts `char`s, not bytes: byte slicing panics inside a multibyte codepoint.
 
 ## The Wide-Event Pattern: One Root Span per Unit of Work
 
-Whatever the unit of work is, the shape is the same:
+Whatever the unit of work, one shape:
 
-1. **Create one root `info_span!`** for the unit of work, declaring *every* field you will ever fill in — field sets are fixed at creation, so a field you didn't declare cannot be recorded later. Declare unknown-later fields as `tracing::field::Empty`, and spread the environment base fields in.
-2. **Record fields as they become known** via `Span::current()`.
-3. **Emit exactly one `info!`/`error!` at completion**, success or failure. Rust has no `finally`; structure the body so a single emit sits on the shared exit path — run the work, then log once based on the result.
+1. **One root `info_span!`**, declaring *every* field ever filled. Field sets fix at creation: undeclared fields can never record later. Unknown-later fields start as `tracing::field::Empty`, plus environment base fields.
+2. **Record as known** via `Span::current()`.
+3. **Exactly one `info!`/`error!` at completion**, success or failure. Rust has no `finally`; put one emit on the shared exit path: run the work, then log once on the result.
 
 Queue consumer (mirrors the Node version in `references/typescript.md`):
 
@@ -175,11 +175,11 @@ async fn process_message(msg: QueueMessage) {
 }
 ```
 
-`.instrument(span)` moves the span onto the future so the terminal event — and everything the work records — attaches to the root; `Span::current()` inside retrieves it. For a CLI, `main` plays the role of `process_message`: create the root span around the argument-parsed command, emit once at the end.
+`.instrument(span)` attaches the future (terminal event plus recorded fields) to the root; `Span::current()` retrieves it inside. CLI: `main` is `process_message`: root span around the parsed command, one emit at the end.
 
 ### Enriching from handlers and helpers
 
-Business code runs *inside* the root span and enriches it — it does not create it:
+Business code runs *inside* the root span and enriches it; never creates it:
 
 ```rust
 async fn handle_checkout(payload: CheckoutPayload) -> Result<(), CheckoutError> {
@@ -201,7 +201,7 @@ async fn handle_checkout(payload: CheckoutPayload) -> Result<(), CheckoutError> 
 }
 ```
 
-Reserve `#[instrument]` for nested operations worth timing individually — those become **child spans**, which supply the step-by-step timeline a single wide event deliberately doesn't (`rules/wide-events.md`, Known Limitations). Its `skip(...)` remains the strongest redaction tool: skipped arguments never enter any span.
+Reserve `#[instrument]` for nested operations worth timing: **child spans** supply the step timeline one wide event deliberately lacks (`rules/wide-events.md` Known Limitations). `skip(...)` stays the strongest redaction: skipped args never enter any span.
 
 ```rust
 #[instrument(skip(password, auth_token))] // skipped args never enter ANY span
@@ -212,7 +212,7 @@ async fn login(username: &str, password: &str, auth_token: &str) -> Result<Sessi
 
 ## HTTP Instantiation: axum Middleware (see `rules/wide-events.md`)
 
-For an axum (0.8) service, the wrapper is middleware via `middleware::from_fn` — this is workflow step 2's middleware doing init, timing, status capture, and the single emit, so handlers only enrich (as in the previous section):
+axum (0.8): middleware via `middleware::from_fn`. Workflow step 2: init, timing, status capture, single emit; handlers only enrich:
 
 ```rust
 use axum::{
@@ -227,7 +227,7 @@ use tracing::{error, field::Empty, info, info_span, Instrument, Span};
 async fn track_request(req: Request, next: Next) -> Response {
     let started = std::time::Instant::now();
     let method = req.method().to_string();
-    // Path and headers are outsider-authored text — sanitize before recording.
+    // Path and headers are outsider-authored text: sanitize before recording.
     let path = sanitize_log_field(req.uri().path(), 512);
     let user_agent = req
         .headers()
@@ -277,7 +277,7 @@ let app = Router::new()
     .layer(middleware::from_fn(track_request));
 ```
 
-One request then produces exactly one JSON line, with the accumulated context under `"span"`:
+One request produces exactly one JSON line, accumulated context under `"span"`:
 
 ```json
 {
@@ -301,11 +301,11 @@ One request then produces exactly one JSON line, with the accumulated context un
 }
 ```
 
-Other frameworks (actix-web, poise for Discord bots, warp) follow the same shape: create the root span before dispatch, `.instrument(...)` the handler future, record and emit after it resolves.
+Other frameworks (actix-web, poise for Discord bots, warp): same shape. Root span before dispatch, `.instrument(...)` the future, record and emit after resolve.
 
 ## Redacting Sensitive Fields (see `rules/security.md`)
 
-`skip(...)` in `#[instrument]` is the primary tool — anything skipped never enters the span's recorded fields at all, which is stronger than redacting after the fact.
+`skip(...)` is primary: skipped values never enter span fields, stronger than after-the-fact redaction.
 
 ```rust
 #[instrument(skip(password, auth_token))]
@@ -314,7 +314,7 @@ async fn login(username: &str, password: &str, auth_token: &str) -> Result<Sessi
 }
 ```
 
-For values that need partial masking rather than full omission, wrap them in a newtype with a custom `Debug`:
+Partial masking instead of full omission: wrap in a newtype with custom `Debug`:
 
 ```rust
 struct MaskedKey<'a>(&'a str);
@@ -330,13 +330,13 @@ impl std::fmt::Debug for MaskedKey<'_> {
 }
 ```
 
-For identifiers you need to correlate across events without storing raw values, HMAC them (`hmac` + `sha2` crates) the way `references/typescript.md` does with `node:crypto`.
+Correlatable identifiers without raw values: HMAC them (`hmac` + `sha2` crates), the way `references/typescript.md` does with `node:crypto`.
 
 ## Sampling (see `rules/sampling.md`)
 
-First, the negative statement: **`EnvFilter` is not a sampler.** It filters by level and target — turning it up and down controls verbosity, not event retention. Cost-control sampling needs a different mechanism:
+Negative first: **`EnvFilter` is not a sampler.** Level/target only: verbosity, never retention. Cost control needs another mechanism:
 
-- **Wide-event-native head sampling (no extra infra):** decide in the wrapper right before the terminal emit — always retain errors and slow units of work, downsample healthy ones, and record the denominator on retained events so queries can multiply back up. In-process counters don't coordinate across instances (same caveat as `rules/sampling.md`).
+- **Wide-event-native head sampling (no extra infra):** decide in the wrapper before the terminal emit: always retain errors and slow units, downsample healthy ones, record the denominator on retained events for multiply-back queries. In-process counters never coordinate across instances (same caveat as `rules/sampling.md`).
 
 ```rust
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -367,12 +367,12 @@ if let Some(rate) = sample_rate_for(resp.status().as_u16(), ms) {
 }
 ```
 
-- **With `tracing-opentelemetry`:** configure the OTel layer's sampler for consistent head-based decisions — `ParentBased(Box::new(TraceIdRatioBased::new(0.1)))` keeps 10% of traces, decided per trace ID so all services agree. Head-based means it can drop the failing request you needed; that's the tradeoff table in `rules/sampling.md`.
-- **Tail-based sampling** (guaranteed error retention) stays external — an OpenTelemetry Collector with the `tail_sampling` processor or Honeycomb Refinery between services and backend. Nothing in-process can make that decision honestly.
+- **With `tracing-opentelemetry`:** OTel layer sampler for consistent head decisions: `ParentBased(Box::new(TraceIdRatioBased::new(0.1)))` keeps 10% of traces, decided per trace ID so all services agree. Head-based can drop the failing request you needed; tradeoff table: `rules/sampling.md`.
+- **Tail-based sampling** (guaranteed error retention) stays external: OpenTelemetry Collector `tail_sampling` processor or Honeycomb Refinery between services and backend. No in-process decision is honest.
 
 ## Testing (see `rules/testing.md`)
 
-Capture events with an in-memory `MakeWriter` and assert on parsed JSON — never against stdout:
+Capture with an in-memory `MakeWriter`, assert on parsed JSON, never stdout:
 
 ```rust
 use std::sync::{Arc, Mutex};
@@ -410,7 +410,7 @@ impl std::io::Write for CaptureSink {
 }
 ```
 
-**The collision footgun:** `set_global_default` (what `.init()` calls) **panics if a global subscriber is already set** — and `cargo test` runs every test in one process. Two tests each calling `.init()` means the second panics (or, with `try_init`, silently fails and leaks the first test's config everywhere), and parallel tests interleave writes into one shared writer. Scope the dispatcher per test instead:
+**Collision footgun:** `set_global_default` (what `.init()` calls) **panics when a global subscriber exists**: and `cargo test` runs every test in one process. Two tests calling `.init()`: the second panics (or with `try_init`, silently takes the first test's config everywhere), and parallel tests interleave writes into one shared writer. Scope the dispatcher per test:
 
 ```rust
 #[test]
@@ -419,7 +419,7 @@ fn checkout_wide_event_has_expected_fields() {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().json().with_writer(capture.clone()));
 
-    // Scoped to this closure/thread — no global state touched, so tests can
+    // Scoped to this closure/thread: no global state touched, so tests can
     // run in parallel in one process without colliding.
     tracing::subscriber::with_default(subscriber, || {
         let span = tracing::info_span!("checkout", outcome = tracing::field::Empty);
@@ -434,27 +434,27 @@ fn checkout_wide_event_has_expected_fields() {
         .map(|line| serde_json::from_str(&line).expect("each captured line is valid JSON"))
         .collect();
 
-    // Schema assertion — span-recorded fields arrive nested under "span":
+    // Schema assertion: span-recorded fields arrive nested under "span":
     let event = events
         .iter()
         .find(|e| e["fields"]["event"] == "checkout_completed")
         .expect("terminal event was emitted");
     assert_eq!(event["span"]["outcome"], "success");
 
-    // Redaction scan — no secret-shaped substring anywhere in the output:
+    // Redaction scan: no secret-shaped substring anywhere in the output:
     let raw = format!("{events:?}");
     assert!(!raw.contains("sk_live_"));
 }
 ```
 
-`with_default` is thread-local: it holds under `#[tokio::test]` (the default current-thread runtime runs on the test thread), but threads spawned inside the closure won't inherit it — multi-threaded-runtime tests need per-task instrumentation or a single global default set once in a shared fixture.
+`with_default` is thread-local: holds under `#[tokio::test]` (default current-thread runtime runs on the test thread), but spawned threads inside the closure never inherit it: multi-threaded-runtime tests need per-task instrumentation or one shared-fixture global default.
 
-This is the Rust counterpart to the pino in-memory stream in `references/typescript.md` (Testing); the snapshot-vs-redaction guidance on what's worth testing lives in `rules/testing.md`.
+Rust counterpart to the pino in-memory stream (`references/typescript.md` Testing); snapshot-vs-redaction guidance: `rules/testing.md`.
 
 ## Correlation (see `rules/correlation.md`)
 
-`tracing-opentelemetry` bridges `tracing` spans directly to OTel `trace_id`/`span_id`, which is generally preferable to hand-rolling a `request_id` field in Rust specifically, since span-based context propagation is already how `tracing` works internally — you get correlation "for free" once the OTel layer is wired in, rather than threading a request ID through every function signature. Without OTel infrastructure, extract `x-request-id` (or `traceparent`) at the edge, record it on the root span's `request_id` field, and propagate it on outbound calls.
+`tracing-opentelemetry` bridges spans to OTel `trace_id`/`span_id`: preferable to hand-rolled `request_id`, since span propagation is already `tracing`'s mechanism. Correlation comes free once the OTel layer wires in. Without OTel: extract `x-request-id` (or `traceparent`) at the edge, record on the root span, propagate outbound.
 
 ## Open Question
 
-Rust projects genuinely split on whether to emit JSON to stdout (as above) or skip stdout entirely and export spans straight through `tracing-opentelemetry` to a collector. Stdout JSON has zero infrastructure dependency; direct export gets you traces (not just flat log lines) but needs a working collector. Same tradeoff as the general stdout-vs-OTLP question in `rules/correlation.md` — pick based on whether you already have collector infrastructure, not by default.
+Split: JSON to stdout (above) vs spans straight through `tracing-opentelemetry` to a collector. Stdout: zero infra dependency. Direct export: traces, not flat lines, but needs a collector. Same stdout-vs-OTLP tradeoff as `rules/correlation.md`: pick by existing collector infra, never by default.

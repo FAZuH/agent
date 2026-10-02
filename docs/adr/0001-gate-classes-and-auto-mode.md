@@ -1,4 +1,4 @@
-# ADR 0001 — Gate classes and the `auto` run mode
+# ADR 0001: Gate classes and the `auto` run mode
 
 - Status: accepted (2026-09-02)
 - Scope: agent-facing skill/agent conventions (`skills/shared/gate/`, retrofit sites)
@@ -20,13 +20,13 @@ there unless the run is configured for it.
    modes (`interactive` / `auto`), gate classes, the one-line `GATE`
    tag convention, and the gate-log format. Skills declare gates as tags;
    they no longer restate skip mechanics. The skill is loaded only where
-   referenced — it makes no global claims.
+   referenced, so it makes no global claims.
 
 2. **Three gate classes**, each with exactly one skip trigger:
-   - `always` — irreversible/destructive/global/convention-changing. Never
+   - `always`: irreversible/destructive/global/convention-changing. Never
      skipped, not even in auto.
-   - `normal` — skip in auto (and only in auto).
-   - `subagent` — additionally skips when executing as a subagent, because
+   - `normal`: skip in auto (and only in auto).
+   - `subagent`: additionally skips when executing as a subagent, because
      the spawning context already holds the decision. Kept separate from
      `normal` on purpose: folding it in either makes `normal` gates
      silently auto-resolve inside subagents (unsafe), or loses the
@@ -39,7 +39,7 @@ there unless the run is configured for it.
    never self-grant. Unconfigured headless runs are a user configuration
    problem, not something the skill detects.
 
-4. **Every gate declares its auto-resolution** — the concrete action
+4. **Every gate declares its auto-resolution**: the concrete action
    "proceed" means when the gate skips. A gate tag without one is invalid.
 
 5. **Gates log to a dedicated `## Gate log`** section in the session
@@ -56,8 +56,8 @@ there unless the run is configured for it.
   approval gates and stay untouched.
 - `subagent` currently has one user (research-plan). If it stays
   single-site, demoting the class is the recorded escape hatch.
-- Amended 2026-09-30: `research-plan` is gone — both research subagents start
-  immediately — so the `subagent` class has no users left and the escape hatch
+- Amended 2026-09-30: `research-plan` is gone, and both research subagents start
+  immediately, so the `subagent` class has no users left and the escape hatch
   above applies to it as written.
 - Future extension candidates, deliberately deferred: scoped auto,
   skip budgets, a gate registry linted by skill-doctor.

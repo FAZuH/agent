@@ -5,22 +5,19 @@ description: Schedule an unattended OpenCode agent run on a systemd user timer, 
 
 # scheduled-agent
 
-Run an OpenCode agent unattended on a systemd user timer. Two pieces are
-needed: (1) a **restricted agent definition** that is safe to run without a
-human, and (2) a **timer** that invokes `opencode run --agent <id>`. Live
-example on this machine: `octask-autocommit-notes.timer` running the
-`autocommit` agent (see "Reference implementation").
+Run an OpenCode agent unattended on a systemd user timer. Two pieces: (1) a
+**restricted agent definition** safe to run human-free, (2) a **timer**
+invoking `opencode run --agent <id>`. Live example: `octask-autocommit-notes.timer`
+running the `autocommit` agent (see "Reference implementation").
 
-This skill owns the agent definition and the verification of an unattended
-run. The @scheduled-task skill owns the timer mechanics: the `octask` CLI,
-OnCalendar expressions, listing, editing, and removal. It also owns the
-`octask-` unit prefix both skills share.
+Timer mechanics (`octask` CLI, OnCalendar, listing, editing, removal, the
+shared `octask-` prefix) live in @scheduled-task.
 
 ## Step 1: write the restricted agent definition
 
-Unattended runs can never answer permission prompts, so the agent MUST be
-deny-all-by-default with a narrow allowlist (V2 ordered-array `permissions`:
-broad `*` deny first, narrow allows after, see
+Unattended runs answer no prompts, so the agent MUST be deny-all-by-default
+with a narrow allowlist (V2 ordered-array `permissions`: broad `*` deny first,
+narrow allows after, see
 [permissions](https://opencode.ai/v2/docs/agents/#permissions)).
 
 Create a Markdown agent file:
@@ -82,15 +79,14 @@ Rules and gotchas:
   command, e.g. `git *`.
 - Deny destructive commands explicitly after the broad allow: `git push*`,
   `git reset*`, `git checkout*`, `git clean*`.
-- Keep the `model` cheap and `steps` low, unattended runs must fail cheap.
-- **Gates run in auto only if you configure it.** A headless run cannot
-  answer `question` forms, so they get auto-dismissed and any gate that fires
-  makes the gated action not happen. The run mode comes only from the user:
-  bake "run in auto mode" into the agent's system prompt when you want
-  `normal`/`subagent` gates to skip (`always` gates still fire and will fail
-  the action, so configure the permissions to make that impossible instead).
-  If you leave it out, that is a configuration problem on your side, not
-  something the run detects. See the @gate skill.
+- Keep the `model` cheap and `steps` low: unattended runs fail cheap.
+- **Gates run in auto only if configured.** A headless run cannot answer
+  `question` forms, so they auto-dismiss and any fired gate blocks its action.
+  The run mode comes only from the user: bake "run in auto mode" into the
+  agent's system prompt to skip `normal`/`subagent` gates (`always` gates
+  still fire and fail the action, so write the permissions to make that
+  impossible instead). Left out means a configuration problem on your side,
+  not something the run detects. See the @gate skill.
 - **Binary selection matters**: the script prefers `~/.opencode/bin/opencode2`
   (the v2 beta that owns the service DB). Older builds (e.g. `/usr/bin/opencode`
   1.18.x) fail against the migrated DB with `no such column: project_id`. If
@@ -100,8 +96,7 @@ Rules and gotchas:
 
 ## Step 2: schedule the run
 
-Timer mechanics live in @scheduled-task (the `octask` CLI, OnCalendar
-expressions, discovery, removal). Load it for those. The agent-run form:
+Timer mechanics live in @scheduled-task. The agent-run form:
 
 ```bash
 octask add <name> \
@@ -122,10 +117,10 @@ default, which is not a cheap unattended model.
 
 1. One manual run: `systemctl --user start octask-<name>.service`, then watch
    it with `octask logs <name> -f`.
-2. Check the agent actually did the right thing (and nothing else). A timer
-   reaching `Finished`, exit 0, or a clean tree can mask an instant failure
-   (e.g. `Invalid API key` when a contributor-free model needs interactive
-   auth), so read the run's output, not just the exit status.
+2. Check it did the right thing and nothing else. `Finished`, exit 0, or a
+   clean tree can mask instant failure (e.g. `Invalid API key` on a
+   contributor-free model needing interactive auth): read the run's output,
+   not just the status.
 3. `octask list` to confirm the timer is enabled and note the NEXT run.
 4. Only then leave it enabled.
 
