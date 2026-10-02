@@ -5,9 +5,7 @@ description: The common, machine-agnostic operating rules for every session: the
 
 # Global Instruction
 
-Common rules for every session, on any machine. The host AGENTS.md keeps only
-what is true of one host (paths, credentials, installed commands) and points
-here for the rest.
+Rules for every session, on any machine. The host AGENTS.md keeps host-only facts (paths, credentials, installed commands) and points here for the rest.
 
 ## Mandatory skill load
 
@@ -43,20 +41,11 @@ Load these before the first tool call, every session:
 
 ## Papercuts
 
-The `papercuts` CLI ships with this repository's `install.sh`. When you hit
-friction (a dead-end tool call, a broken link, a confusing setup step, a flaky
-command, a misleading error), file it before moving on:
+The `papercuts` CLI ships with this repo's `install.sh`. File friction before moving on (dead-end tool call, broken link, confusing setup, flaky command, misleading error):
 
-- `papercuts add "<what you were doing > what got in the way>"`, one or two
-  sentences. Attach `--cmd` / `--exit` / `--stderr-file` for tool failures.
-  Never feed raw env dumps.
-- Severity: `minor` by default, `major` for time sinks, `blocker` for walls.
-- File in the moment; do not stop working. This is friction, not a bug tracker.
-- Repo store: `.papercuts.jsonl` at the repo root, append-only. Check
-  `git status` before assuming it is tracked. `papercuts resolve <id>` marks
-  one fixed.
-- Global store: `papercuts -g`, tagged `self::skill` / `self::agent-def` /
-  `self::tool` / `self::process`; @papercut-sweep sweeps them. Repo sanding
-  stays repo-local.
-- `papercuts schema` prints the machine contract; `papercuts doctor` validates
-  the log file. Clear the backlog with `papercuts list --format md`.
+- `papercuts add "<doing > blocked-by>"`, one or two sentences. Tool failures: attach `--cmd` / `--exit` / `--stderr-file`. Never raw env dumps.
+- Severity: `minor`, `major` for time sinks, `blocker` for walls.
+- File in the moment, keep working. Friction, not a bug tracker.
+- Repo store: `.papercuts.jsonl` at the repo root, append-only. Check `git status` before assuming it is tracked. `papercuts resolve <id>` marks one fixed.
+- Global store: `papercuts -g` (`self::skill` / `self::agent-def` / `self::tool` / `self::process`; @papercut-sweep sweeps). Repo sanding stays repo-local.
+- `papercuts schema` prints the contract; `papercuts doctor` validates the log. `papercuts list --format md` clears the backlog.

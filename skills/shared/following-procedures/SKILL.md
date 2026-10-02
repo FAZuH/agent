@@ -1,77 +1,48 @@
----
-name: following-procedures
-description: >-
-  How to run a numbered procedure step-by-step without skipping steps:
-  point-and-call narration, live deviation logging, and a fixed post-run
-  report. Load this skill ONLY when a procedural skill tells you to load it.
-  Never on its own: it is not a general instruction. Do not trigger on
-  ordinary multi-step tasks.
----
+# Skill: following-procedures
 
 # following-procedures
 
-This skill governs how you run numbered procedures. Only a procedure that says
-to load it gets this treatment; do not apply narration or reporting to
-non-procedural work.
+How to run a numbered procedure. Only a procedure that says to load it gets this treatment.
 
 ## Before starting
 
-1. Read the whole procedure, every numbered step, top to bottom, before
-   doing step 1.
-2. Read the dependency graph. Note which steps depend on which.
-3. Note the rules section at the bottom; the procedure header points at it.
-   The rules bind from the start.
+1. Read the whole procedure, every step, top to bottom, before step 1.
+2. Note the dependency graph: which steps need which.
+3. Note the rules at the bottom; the header points at them. They bind from the start.
 
 ## While running: point and call
 
-For each step, in one terse line, state:
+Per step, one terse line at step boundaries only:
 
 - `STEP n/N: <action>; next: <step n+1 name>`
 
-Emit at step boundaries only, not per tool call. If the harness has no visible
-narration, keep the line in your working notes.
-
 ## If a step fails
 
-- Log it immediately in the deviation log (failed).
-- From the dependency graph, skip every later step that depends on it; mark
-  each `skipped (depends on step N)`.
-- Continue any later step that does not depend on the failed step.
+- Log it in the deviation log immediately (failed).
+- Skip every later step that depends on it; mark each `skipped (depends on step N)`.
+- Continue later steps with no failed dependency.
 
 ## Deviation log
 
-Keep a running list as you work. Write entries immediately; never reconstruct
-them from memory at the end.
-
-Entry format:
+Running list, entries written immediately, never reconstructed:
 
 - `[date] step N: what happened, why`
 
-Where to log:
+Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction/issue backlog (e.g. `.papercuts.jsonl`): log there. Else: working notes.
 
-- If the harness provides a session record with a deviation log (e.g. a
-  `.scratch/` workspace), log there.
-- Else if the environment provides a friction/issue backlog (e.g.
-  `.papercuts.jsonl`), log there.
-- Else keep the list in your working notes.
-
-Hiccups (tool failures, dead ends, environment friction) go to the friction
-backlog whenever it exists.
+Hiccups (tool failures, dead ends, environment friction) go to the friction backlog wherever one exists.
 
 ## Interruption
 
-If the user interjects mid-procedure:
+User interjects mid-procedure:
 
 1. Pause at the current step.
 2. Log the interruption as a deviation.
-3. Persist resume state. If the harness has a session record, add an entry to
-   the `## Interrupted procedures` section in its spec doc (the session skill
-   defines the workspace; this section lives in `spec.md`). Else keep the
-   entry in your working notes.
-4. Handle the user's message.
+3. Persist resume state: `## Interrupted procedures` in the session `spec.md` (the session skill defines the workspace), else working notes.
+4. Handle the message.
 5. Resume at the same step.
 
-The `## Interrupted procedures` section holds one entry per interruption:
+One entry per interruption, updated in place, deleted only when resumed and finished:
 
 ```markdown
 ## Interrupted procedures
@@ -81,23 +52,18 @@ The `## Interrupted procedures` section holds one entry per interruption:
   - notes: <anything needed to resume>
 ```
 
-Keep the section in `spec.md` alongside the deviation log; update it in place,
-never delete an entry until the procedure is resumed and finished.
-
 ## After finishing: the run report
 
-Hand the report to @post-task. It owns the format and what belongs in each
-section, and it is the single place either shape is written down.
+Hand the report to @post-task. It owns the format.
 
 ## Authoring convention (for procedure authors)
 
 A procedural skill must:
 
-- Number its steps `1.`, `2.`, … top to bottom, one action per step.
-- Say at the top: "Always follow the rules in the *Rules* section at the
-  bottom."
-- Put references, rules, and exceptions at the bottom.
-- Include a `## Dependency graph` section right after the steps:
+- Number steps `1.`, `2.`, … top to bottom, one action per step.
+- Say at the top: "Always follow the rules in the *Rules* section at the bottom."
+- Put references, rules, exceptions at the bottom.
+- Include a `## Dependency graph` right after the steps:
 
   ```
   ## Dependency graph
@@ -109,18 +75,11 @@ A procedural skill must:
 
   Rules:
 
-  - A step with no arrow depends on nothing.
-  - `step4 -> step1, step2` means step4 needs BOTH step1 and step2 to
-    succeed.
-  - Dependencies may only point to earlier-numbered steps (the graph is a
-    DAG).
-  - The graph is required even for strictly linear procedures
-    (`stepN -> stepN-1`).
-  - Independent steps may run in parallel if the environment allows; narrate
-    and report each anyway.
-  - There is no "always run after failure" operator. If a step must run after
-    a failed dependency, list it without that dependency and leave the
-    decision to the agent, reported in the run report.
+  - No arrow: depends on nothing.
+  - `step4 -> step1, step2` needs BOTH.
+  - Arrows point only backwards (DAG).
+  - Required even when linear (`stepN -> stepN-1`).
+  - Independent steps may run in parallel; narrate and report each anyway.
+  - No "run after failure" operator. A step that must run after a failed dependency lists no dependency; the agent decides and reports it.
 
-- If the skill has its own deviation-log destination, say so in one line;
-  otherwise the default in the "Deviation log" section above applies.
+- State its deviation-log destination in one line, else the default above applies.

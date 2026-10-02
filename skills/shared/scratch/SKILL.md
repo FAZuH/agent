@@ -12,16 +12,11 @@ description: >-
 
 # scratch
 
-The repo tracks non-trivial work in a `.scratch/` session workspace: one
-date-prefixed directory per feature. The workspace survives session forks and
-context compactions, so any session can recover the full picture (decisions,
-file layout, deviations, status) from the workspace plus the code.
+Non-trivial work lives in `.scratch/`: one date-prefixed directory per feature. It survives forks and compactions, so any session recovers decisions, layout, deviations, and status from workspace plus code.
 
 ## Does the repo use `.scratch/`?
 
-Verify before assuming: `ls .scratch/` or glob `.scratch/*/spec.md`. If the
-repo has no `.scratch/` workspace, this skill does not apply: use whatever
-plan/spec docs the repo actually tracks instead.
+Verify first: `ls .scratch/` or glob `.scratch/*/spec.md`. No `.scratch/`: this skill does not apply, use the repo's actual plan/spec docs.
 
 ## Slug format
 
@@ -47,17 +42,11 @@ creation date (not the completion date); it never changes afterwards.
 `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md` → execute →
 `.scratch/complete/<YYYY-MM-DD>_<feature-slug>.md`
 
-1. **Plan**: before implementation, write
-   `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md` (the @session skill owns the
-   doc's sections and templates).
-2. **Split**: if the spec is too big for one session, break it into
-   tracer-bullet tickets under `.scratch/<YYYY-MM-DD>_<feature-slug>/issues/`.
+1. **Plan**: write the spec before implementing (@session owns its sections and templates).
+2. **Split**: too big for one session: tracer-bullet tickets under `.../issues/`.
 3. **Execute**: work the plan; log deviations as they happen.
-4. **Complete**: when the work ships, archive the workspace (below).
+4. **Complete**: shipped: archive (next section).
 
 ## Completing / archiving a feature
 
-When the work ships, archive the workspace. The completion checklist and the
-archive steps live in the @scratch-finish skill: load and follow it. The
-workspace moves from `.scratch/<slug>/` to `.scratch/complete/<slug>.md`; do
-not duplicate those steps here.
+Checklist and steps live in @scratch-finish: load and follow it. The workspace moves from `.scratch/<slug>/` to `.scratch/complete/<slug>.md`; do not duplicate those steps here.

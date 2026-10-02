@@ -13,41 +13,20 @@ description: >-
 
 # gate
 
-An **approval gate** is a step where an action may proceed only after the
-user approves it. This skill gives gates a shared vocabulary and one rule for
-when a gate may be skipped, so skills stop re-explaining their own skip
-conditions. A gate applies only where it is explicitly declared (a `GATE`
-tag) and only to the action that tag guards.
+An **approval gate** is a step where an action proceeds only with user approval. Shared vocabulary and one skip rule, so skills stop re-explaining their own. A gate applies only where declared (a `GATE` tag), only to the action that tag guards.
 
 ## Run mode
 
-Gates depend on the run mode:
+- `interactive`: the default. Gates fire via the `question` tool. Question forms propagate to the user even from a subagent, so any agent can gate.
+- `auto`: the user pre-approved the scoped action set. `normal` and `subagent` gates skip; `always` still fires.
 
-- `interactive`: the default. Gates fire; ask via the `question` tool
-  (internally `default.question`). Question forms propagate up to the user
-  even from a subagent, so any agent can gate.
-- `auto`: the user pre-approved the scoped action set for this run.
-  `normal` and `subagent` gates skip; `always` gates still fire.
+**Auto never comes from the agent itself.** Only from the user, by scope:
 
-**Auto never comes from the agent itself.** It comes only from the user, in
-one of these ways, by order of scope:
+1. **Command argument** (`/finish auto …`): scoped to the invocation, ends with it, never persists.
+2. **Mid-session switch** (`/gate auto`, or "run in auto mode"): session-scoped. Passes into every skill and subagent via the delegation prompt, until `/gate interactive`, session end, or revocation. Recorded in the workspace gate log when one exists.
+3. **Headless setup** (`opencode run`, scheduled agents): "run in auto mode" baked into the agent's instructions. Absent: gates fire, forms auto-dismiss, gated actions do not happen. A user configuration problem, not something the skill detects.
 
-1. **Command argument**: e.g. `/finish auto …`. Scoped to that command
-   invocation; ends when the command does; never persists.
-2. **Mid-session switch**: the user invokes `/gate auto` or says "run in
-   auto mode". Scoped to the session: the current agent proceeds in auto,
-   passes the mode into every skill it runs and every subagent it spawns
-   (stated in the delegation prompt), and it persists until `/gate
-   interactive`, session end, or revocation. Recorded in the session
-   workspace's gate log (below) when one exists.
-3. **Headless setup**: unattended runs (`opencode run`, scheduled agents)
-   get auto by instruction: the user bakes "run in auto mode" into the
-   agent's instructions when configuring it. If they do not, gates fire and
-   the question forms get auto-dismissed, so gated actions do not happen.
-   That is a configuration problem on the user's side, not something the
-   skill detects or works around.
-
-When in doubt, treat the run as interactive. An agent never self-grants auto.
+In doubt: interactive. Agents never self-grant auto.
 
 ## Gate classes
 
@@ -57,19 +36,13 @@ When in doubt, treat the run as interactive. An agent never self-grants auto.
 | `normal` | ask | **skip** (auto-resolution, log) | ask (question propagates) |
 | `subagent` | ask | skip (auto-resolution, log) | **skip (delegation covered it)** |
 
-- `always`: irreversible, destructive, global, or convention-changing
-  (push, config edits, publishing, deletions, closed-vocabulary changes).
-  Never skipped by any mode.
-- `normal`: the default class. Skip in auto, and only in auto.
-- `subagent`: additionally skips when executing as an agent with
-  `mode: subagent`, because the spawning context already holds the decision.
-  Use only when delegation itself implies the approval (the @deep-research
-  precedent: research's Mode 1 plan-approval is skipped by Mode 2 because
-  the user already asked for the outcome).
+- `always`: irreversible, destructive, global, or convention-changing (push, config edits, publishing, deletions, closed-vocabulary changes). Never skipped.
+- `normal`: the default. Skips in auto, only in auto.
+- `subagent`: skips under delegation too, because the spawning context holds the decision. Only when delegation implies approval (precedent: @deep-research plan-approval skipped by Mode 2).
 
 ### Why `subagent` is its own class
 
-Each class answers exactly one author question, with exactly one skip trigger:
+Each class answers one author question with one skip trigger:
 
 - `always`: *can this action be undone cheaply?* No → always.
 - `normal`: *did the user pre-approve this kind of action by choosing
@@ -77,55 +50,38 @@ Each class answers exactly one author question, with exactly one skip trigger:
 - `subagent`: *did the user already make this decision by requesting the
   delegation itself?* Skip in auto and under delegation.
 
-Folding `subagent` into `normal` fails three ways: a `normal` gate that
-skips in any subagent context lets commit-approval auto-resolve inside a
-subagent even in interactive mode (unsafe); one skip trigger loses the
-research case, where the subagent re-asks what the user just answered by
-delegating; and ad-hoc "gate covered" notes in the delegation prompt are
-unauditable, which is the hand-rolled prose this skill replaces.
+Folding `subagent` into `normal` fails three ways: a `normal` gate auto-resolving inside an interactive subagent (unsafe); the research case lost, where the subagent re-asks what delegating just answered; ad-hoc "gate covered" notes in delegation prompts, which are unauditable.
 
 ## Declaring a gate
 
-A gate in a procedure or skill is a one-line tag; the mechanics live here.
+One-line tag; mechanics live here.
 
 ```
 **GATE <id> (<class> → <auto-resolution>):** <what the gate guards>
 ```
 
-- `<id>`: a stable, lowercase-hyphenated name (`commit-approval`,
-  `papercut-file`, `new-scope`). Used in the gate log and re-gates.
+- `<id>`: stable, lowercase-hyphenated (`commit-approval`, `papercut-file`, `new-scope`). Used in the gate log and re-gates.
 - `<class>`: `always` | `normal` | `subagent`.
-- `<auto-resolution>`: the concrete thing "proceed" means when the gate
-  skips. It is load-bearing: without it, "skip the gate" is ambiguous.
-- The trailing text is what the gate protects (keep it; it is site-specific
-  detail, not duplicated mechanics).
+- `<auto-resolution>`: the concrete thing "proceed" means when the gate skips. Load-bearing: without it, "skip the gate" is ambiguous.
+- Trailing text is what the gate protects (keep it; site-specific detail, not duplicated mechanics).
 
 ### Authoring checklist
 
-Classify with these questions in order; the first that hits wins:
+Classify in order; first hit wins:
 
-1. Destructive or irreversible, or harms a closed vocabulary / convention /
-   an external system or store → `always`.
+1. Destructive or irreversible, or harms a closed vocabulary / convention / external system or store → `always`.
 2. Redundant under delegation (the caller already decided) → `subagent`.
 3. Otherwise → `normal`.
 
-Also state the auto-resolution as a concrete action, never "proceed": what
-file/command/store changes, and what the fallback is.
+State the auto-resolution as a concrete action, never "proceed": what file/command/store changes, and the fallback.
 
 ### Asking
 
-State **what / why / blast radius**, then offer options Approve / Edit /
-Abort. Batch same-class gates into one question (the session-retro
-precedent: File all / Pick individually / File none). Re-gate on drift: an
-approval is void if the action's scope grew after it was granted.
+State **what / why / blast radius**, then Approve / Edit / Abort. Batch same-class gates into one question. Re-gate on drift: approval voids if scope grew after granting.
 
 ## Gate log
 
-Gate decisions go to a **dedicated `## Gate log` section** in the session
-workspace's `spec.md`, never the deviation log. A skipped gate in auto mode
-is expected behavior, not a deviation; mixing them buries real deviations in
-noise. The @session skill owns the template for this section; this skill
-owns its format.
+Dedicated `## Gate log` in the workspace `spec.md`, never the deviation log. A skipped gate in auto is expected behavior, not a deviation. The @session skill owns the section template; this skill owns its format.
 
 Entry format (append `- (none yet)` → entries):
 
@@ -137,26 +93,12 @@ Entry format (append `- (none yet)` → entries):
 - [2026-09-02] papercut-file (normal); skipped (auto): filed 4 entries unprompted
 ```
 
-Fields: date, gate id, class, then the decision: `fired: <outcome>` /
-`skipped (auto | delegated): <auto-resolution taken>` / `failed: <reason>`.
-Log mode switches too (`/gate auto` → interactive) so a compacted session
-recovers the mode.
+Fields: date, gate id, class, then `fired: <outcome>` / `skipped (auto | delegated): <auto-resolution taken>` / `failed: <reason>`. Log mode switches too (`/gate auto` → interactive) so a compacted session recovers the mode.
 
-Fallback when there is no `.scratch/` workspace: keep the log in working
-notes. Runs in auto always end with a "Gates skipped" list in the report. A
-skip is never silent.
+No `.scratch/` workspace: keep the log in working notes. Auto runs always end with a "Gates skipped" list in the report. A skip is never silent.
 
 ## Scope and boundaries
 
-Approval gates only, and only in the skills and agents that explicitly
-reference this skill. It states no rules about anything else. Verification
-steps (tests pass, CI green, review clean, completion checklists) and
-interaction gates (teach's quiz pacing) are not approval gates: they are
-not this skill's subject and do not reference it.
+Approval gates only, in skills and agents that reference this skill. Verification steps (tests, CI, checklists) and interaction gates (quizzes) are not approval gates and do not reference it.
 
-Harness permission rules (agent frontmatter `ask` / `allow` / `deny`) are a
-separate layer from gates: a gate is a procedure step that calls the
-`question` tool, not a permission prompt. See @notes and the
-`ocv2-findings.md` note for the OpenCode v2 behavior: depth-2 `ask`
-*permission* prompts hang, while question-form gates propagate to the top.
-Do not try to implement a gate as a frontmatter `ask` rule.
+Harness permission rules (`ask` / `allow` / `deny`) are a separate layer: a gate calls the `question` tool, not a permission prompt. Never implement a gate as a frontmatter `ask` rule (depth-2 `ask` prompts hang on v2; question forms propagate). See @notes and the `ocv2-findings.md` note for the v2 behavior.

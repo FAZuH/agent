@@ -5,21 +5,14 @@ description: The shape of everything the user must read or act on at the bottom 
 
 # prompt-user
 
-The bottom of a message that needs something from the user has one fixed shape.
-The reader knows where to look without reading it twice. Two kinds:
+The bottom of a message that needs something from the user. Two kinds:
 
-- **Procedure** (`🏁 P1`): the user has to *do* something: run a command,
-  click through a dashboard, restart a service. Steps, numbered.
-- **Question** (`❓ Q1`): the user has to *decide* something. The options go
-  in the question body; the `➡️` line is your recommended answer and the
-  reason. The recommendation is what lets them reply with one word instead of
-  writing your analysis back.
+- **Procedure** (`🏁 P1`): the user has to *do* something. Steps, numbered.
+- **Question** (`❓ Q1`): the user has to *decide* something. Options in the body; the `➡️` line is your recommendation and the reason, so they can reply with one word.
 
 ## Placement
 
-Always the bottom-most element: the answer first, the report if there is one,
-then the prompts, so the last thing on screen is what needs answering or doing.
-Nothing to prompt means nothing there: no heading, no `None`, no "let me know".
+Bottom-most element: answer, report if any, then prompts. Nothing to prompt means no block at all.
 
 ## Shape
 
@@ -45,11 +38,7 @@ Nothing to prompt means nothing there: no heading, no `None`, no "let me know".
 
 ## Rules
 
-- Procedures first, questions last. The `---` divider separates the two kinds
-  only: never between two procedures, never between two questions.
-- Numbering runs `P1`, `P2`, … and `Q1`, `Q2`, … across the message and
-  restarts in the next one.
-- One pointed item per block: one procedure with its steps, one question with
-  its options. A question that fits in one word gets no block. Just ask.
-- When the message ends in a post-task report, the report's own format carries
-  the prompts. See @post-task.
+- Procedures first, questions last. `---` separates the two kinds only.
+- Numbering runs across the message (`P1`, `P2`, `Q1`, `Q2`) and restarts in the next one.
+- One pointed item per block. A one-word question gets no block, just ask.
+- Inside a post-task report, the report's format carries the prompts. See @post-task.
