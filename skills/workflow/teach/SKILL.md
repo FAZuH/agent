@@ -266,7 +266,11 @@ Sessions render through Obsidian, which renders LaTeX natively. All math
 notation (explanations, questions, options) goes in LaTeX, never plain-text
 approximations:
 
-- Inline math: `$f(x)$`
-- Centered display math: `$$` fenced on its own lines, e.g. `$$\n f(x) \n$$`
+- Inline math: `\(f(x)\)`
+- Centered display math, always multiline:
 
-If LaTeX can be used, it should be. Write $f(x) = x^2$, not `f(x) = x^2`.
+\[
+f(x)
+\]
+
+If LaTeX can be used, it should be. Write \(f(x) = x^2\), not `f(x) = x^2`.
