@@ -1,3 +1,5 @@
+## [0.13.1](https://github.com/FAZuH/agent/compare/v0.13.0...v0.13.1) (2026-10-02)
+
 ## [0.13.0](https://github.com/FAZuH/agent/compare/v0.12.8...v0.13.0) (2026-10-01)
 
 
@@ -56,11 +58,4 @@
 * **skill:** exclude target without a trailing slash ([c21bb71](https://github.com/FAZuH/agent/commit/c21bb713e1d871a5ca28a5bf9171255e4e9de1ad))
 * **skill:** keep prose, table and algorithm on one page flow ([4d96e3c](https://github.com/FAZuH/agent/commit/4d96e3c42a426e4b9fb75ea94979c39673a787e5))
 * **skill:** skip the finish steps a merge already satisfied ([a3b011c](https://github.com/FAZuH/agent/commit/a3b011cc1626352ef62fbd07c18e56f02c8faf39)), closes [#7](https://github.com/FAZuH/agent/issues/7)
-
-## [0.12.5](https://github.com/FAZuH/agent/compare/v0.12.4...v0.12.5) (2026-09-30)
-
-
-### Bug Fixes
-
-* **skill:** stop claiming research-discovery waits for approval ([ba1c4e2](https://github.com/FAZuH/agent/commit/ba1c4e211f6e05e1e495b9cbcb60b60709fc3611))
 
