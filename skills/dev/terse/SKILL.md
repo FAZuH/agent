@@ -1,20 +1,20 @@
 ---
-name: comments-discipline
+name: terse
 description: >-
-  Decide whether a comment earns its line, and delete the ones that do not:
-  narration ("what" restatements), decision-log comments ("pinned", "fixed",
-  "was slower"), graveyard references to removed code, change-history
-  banners, and section-divider decoration. Use whenever you are about to
-  write a comment, whenever you edit a file that already has comments (even
-  for an unrelated change), and whenever the user asks to add, clean up, or
-  audit comments ("de-slop", "why are there so many comments").
+  Keep docs and comments terse: delete any sentence the reader can lose
+  without losing a fact, constraint, decision, number, path, or safety rule.
+  Use when writing or editing docs, skill docs, ADRs, runbooks, or code
+  comments, and when cleaning verbose prose. Never for chat replies (owned
+  by @simple-english).
 ---
 
-# Comment Discipline
+# Terse docs and comments
 
-Default to zero comments. A comment costs a line to read and a thing that can go stale. Pay it only when the code cannot carry the information.
+Default to zero words. Every sentence must earn its place. Chat replies are excluded: @simple-english owns replies.
 
-## The one test
+## The tests
+
+### Comments
 
 Before writing any comment, ask: **if I delete this comment, does the reader lose something the code itself cannot tell them?**
 
@@ -28,6 +28,17 @@ Before writing any comment, ask: **if I delete this comment, does the reader los
 - **A workaround for something external and undocumented** ("upstream API returns 200 on failure, check body.error instead")
 
 Everything else is banned. No exceptions for "it helps context," "it explains my reasoning," or "it's just one line."
+
+### Docs prose
+
+Before keeping a sentence, ask: **if I delete it, does the reader lose a fact, constraint, decision, number, path, or safety rule?**
+
+- If no → delete it.
+- If yes → shortest form carrying exactly that, present tense.
+
+Never cut: frontmatter, headings, commands, code blocks, gates, graphs, tables carrying spec, numbers, paths, MUST/NEVER rules, working links.
+
+Always cut: throat-clearing intros, restated rules, hedged doubles, non-disambiguating examples, "in other words" second passes, obvious procedure narration.
 
 ## Banned categories (with the failure caught, verbatim style)
 
@@ -96,8 +107,12 @@ def get_user(user_id: int) -> User:
 ```
 Docstrings only for public API where callers cannot see the implementation, and only for what the signature lacks: units, ownership, errors, side effects, thread-safety. Never a name restatement.
 
+### 8. Prose restating its own heading
+A paragraph repeating the heading in longer words. The heading already says it; delete the paragraph.
+
 ## What survives
 
+- A fact, constraint, decision, number, path, or safety rule the surrounding text does not already state
 - A constraint invisible in the code (external behavior, silent-overwrite risk, ordering)
 - A deliberately non-obvious choice, stated as *why the code is correct*, not *what changed*
 - BDD-style `# given / # when / # then` in tests
@@ -113,11 +128,11 @@ Docstrings only for public API where callers cannot see the implementation, and 
 
 **When editing a file that already has comments (even for an unrelated change):** add no new violations, but leave unrelated comments alone. That is a separate pass, not incidental work.
 
-**When asked to clean up / de-slop / audit comments:** go comment-by-comment in file order:
-1. Apply the one test.
+**When asked to clean up / de-slop / audit comments or docs prose:** go sentence by sentence in file order:
+1. Apply the matching test above.
 2. Fail: delete outright. Never soften a banned category into a shorter version of itself.
-3. Pass but wordy: cut to the one sentence carrying the why.
-4. Deleting would leave genuinely unclear code (comment compensating for bad naming or structure): flag back as a code issue. Fix the code, not the comment.
+3. Pass but wordy: cut to the shortest form carrying the fact.
+4. Deleting would leave genuinely unclear code or text (the words were compensating for bad naming or structure): flag back as a structure issue. Fix the structure, not the words.
 5. Report kept / cut / flagged counts in one line. No per-decision narration unless asked.
 
-Never touch code in a comment cleanup pass unless step 4 applies and the user agrees.
+Never touch code in a cleanup pass unless step 4 applies and the user agrees.

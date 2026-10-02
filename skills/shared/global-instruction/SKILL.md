@@ -16,7 +16,7 @@ Load these before the first tool call, every session:
 | `@ponytail` | The ladder: skip what need not exist, reuse what exists, stdlib and native before dependencies. |
 | `@antislop` | The anti-slop filter for UI, copy, and code comments. |
 | `@agent-map` | Repo layout, file classification, skill routing, delegation. |
-| `@comments-discipline` | Whether a comment earns its line. |
+| `@terse` | Terse docs and comments: keep only what earns its place. |
 | `@jev-use` | A judgement over enumerable options goes to Jev, not to deliberation. |
 | `@prompt-user` | The bottom of a message that needs the user: 🏁 procedures, ❓ questions. |
 
