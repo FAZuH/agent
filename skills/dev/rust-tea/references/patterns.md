@@ -1,8 +1,8 @@
 # patterns: skeleton stubs
 
-Copy-paste skeletons to adapt. They compile together as one module set,
-but there is deliberately no `main.rs`: wire the host to your renderer
-via `examples/iced.md` or `examples/ratatui.md`.
+Copy-paste skeletons. They compile as one module set; no
+`main.rs` by design: wire the host via
+`examples/iced.md` or `examples/ratatui.md`.
 
 Contents:
 
@@ -170,8 +170,8 @@ impl<E: EffectHandler> AppCore<E> {
 
 ## 5. Free-function update (function form)
 
-Same contract, no trait. Use when the model is flat or the host requires
-a function pointer:
+Same contract, no trait. Use for flat models or host-required
+function pointers:
 
 ```rust
 // src/core/update.rs
@@ -247,8 +247,8 @@ fn session_end_advances_and_alarms() {
 
 ## 8. Field registry (data-driven views)
 
-One const table drives rendering, search, and tooltips; adding a setting
-becomes one row plus its message variant (Open/Closed, DRY):
+One const table drives rendering, search, tooltips; new setting
+= one row plus its message variant (Open/Closed, DRY):
 
 ```rust
 // src/ui/fields.rs: shell layer; render fn signature is framework-flavored
@@ -274,9 +274,9 @@ pub fn search_fields(query: &str) -> Vec<&'static str> {
 }
 ```
 
-Pair with draft state for editable numbers: `drafts: HashMap<Key, String>`
-mirrors config while half-typed; commit validates and returns the save
-effect, Esc clears the draft.
+Pair with drafts for editable numbers: `drafts: HashMap<Key, String>`
+mirrors half-typed config; commit validates and returns the save
+effect, Esc clears.
 
 ## 9. Tick timer
 
@@ -294,6 +294,6 @@ if event::poll(Duration::from_millis(250))? {
 }
 ```
 
-Tick interval = the smoothest display update you need (progress bars:
+Tick interval = the smoothest display you need (progress bars:
 100–250 ms; countdown seconds: 250–500 ms). Ticks carry the instant so
 the model stays deterministic (see `testing.md` §5).

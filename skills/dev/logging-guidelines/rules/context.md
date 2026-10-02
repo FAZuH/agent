@@ -8,17 +8,17 @@ tags: logging, context, cardinality, dimensionality
 
 **Impact: CRITICAL**
 
-Wide events must be context-rich with high cardinality and high dimensionality. This enables you to answer questions you haven't anticipated yet - the "unknown unknowns" that traditional logging misses.
+Events must be context-rich: high cardinality plus high dimensionality. Answers questions unanticipated at write time (unknown unknowns).
 
-> Before adding a field, check `rules/security.md`. Anything that identifies a person beyond an opaque ID, or any credential/token/session value, must be redacted, masked, or hashed before it goes into the event below, not added first and cleaned up later.
+> Before adding a field, check `rules/security.md`. Anything identifying a person beyond an opaque ID, or any credential/token/session value, gets redacted, masked, or hashed before entering the event, never added first and cleaned later.
 
 ### High Cardinality
 
-High cardinality means a field can have millions or billions of unique values. User IDs, request IDs, and transaction IDs are high cardinality fields. Your logging must support querying against any specific value of these fields. Without high cardinality support, you cannot debug issues for specific users.
+High cardinality: millions or billions of unique values (user IDs, request IDs, transaction IDs). Must query any specific value; without it, no per-user debugging.
 
 ### High Dimensionality
 
-High dimensionality means your events have many fields (20-100+). More dimensions mean more questions you can answer without redeploying code.
+High dimensionality: many fields (20-100+). More dimensions, more questions answered without redeploying.
 
 ```json
 {
@@ -65,7 +65,7 @@ High dimensionality means your events have many fields (20-100+). More dimension
 
 ### Always Include Business Context
 
-Include business-specific context, not just technical details. User subscription tier, cart value, feature flags, account age - this context helps prioritize issues and understand business impact.
+Include business context, not just technical details: tier, cart value, flags, account age. Prioritizes issues, shows business impact.
 
 ```json
 {
@@ -99,11 +99,11 @@ Include business-specific context, not just technical details. User subscription
 
 Now you KNOW this is critical: an enterprise customer ($48.5k LTV) trying to make a $2.5k purchase, with `new_payment_flow` enabled.
 
-Business context transforms debugging from "something broke" to "this $48,500 customer can't complete a $2,499 order." Note that none of the fields above are PII beyond an opaque `user.id`: that's the target shape: rich business context without raw personal identifiers.
+Transforms "something broke" into "this $48,500 customer can't complete a $2,499 order." No field is PII beyond opaque `user.id`: the target shape.
 
 ### Always Include Environment Characteristics
 
-Include environment and deployment information in every wide event. This context is essential for correlating issues with deployments, identifying region-specific problems, and understanding the runtime environment.
+Include environment and deployment info in every event: correlates issues with deploys and regions.
 
 **Environment fields to include:**
 
@@ -124,15 +124,8 @@ Include environment and deployment information in every wide event. This context
 }
 ```
 
-See the Environment Characteristics section of `references/typescript.md` for how to read these from `process.env` at startup.
+See the Environment Characteristics section of `references/typescript.md` for reading these from `process.env` at startup.
 
-**Why environment context matters:**
+**Why it matters:** `commit_hash` pins the code version; `deployment_id` correlates errors with deploys; `region`/`availability_zone` isolate regional failures; `instance_id` debugs single instances; `version` tracks across releases; `environment` separates prod from staging.
 
-- **commit_hash**: Instantly identify which code version caused an issue
-- **deployment_id**: Correlate errors with specific deployments
-- **region/availability_zone**: Identify region-specific failures
-- **instance_id**: Debug issues affecting specific instances
-- **version**: Track issues across service versions
-- **environment**: Distinguish production from staging issues
-
-This environment context should be added once at service startup and automatically included in every wide event via middleware.
+Add once at startup; middleware includes it in every event.

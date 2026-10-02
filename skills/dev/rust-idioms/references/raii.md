@@ -12,13 +12,12 @@ Contents:
 
 ## 1. RAII in Rust
 
-Resource Acquisition Is Initialization: a resource's lifetime is bound
-to a value; releasing happens in `Drop`. The compiler inserts the drop
-at scope end, on early return, and on unwinding. Cleanup is not a
-discipline, it is a semantics.
+Resource Acquisition Is Initialization: lifetime bound
+to a value; release happens in `Drop`. The compiler inserts the drop
+at scope end, on early return, and on unwinding.
 
 std is built on it: `MutexGuard` releases the lock, `File` closes the
-descriptor, `JoinHandle` (scoped threads) joins. The pattern to copy:
+descriptor, scoped `JoinHandle` joins. Copy this shape:
 
 ```rust
 pub struct Transaction<'a> {
@@ -49,21 +48,18 @@ impl Drop for Transaction<'_> {
 }
 ```
 
-Three invariants fall out of the types: you cannot forget cleanup
-(`Drop` runs on every path), you cannot double-commit (`commit` takes
-`self` by value), and you cannot use the transaction after commit
-(it was moved).
+Types enforce: cleanup runs on every path (`Drop`), no double-commit
+(`commit` takes `self`), no use after commit (moved).
 
 ## 2. Guard types
 
-A guard is a small RAII value whose whole job is one scoped invariant.
-Beyond transactions: temporary permission changes, "currently rendering"
-flags, session scopes, metric timers, test fixtures. The shape is
-always: acquire in the constructor, release in `Drop`, expose whatever
-the guarded region may legitimately do.
+A guard is a small RAII value for one scoped invariant:
+permission changes, "currently rendering" flags, session scopes,
+metric timers, test fixtures. Shape: acquire in the constructor,
+release in `Drop`, expose only what the guarded region may do.
 
-Pair guards with capability tokens (`typestate.md` §5) when the guarded
-region must *prove* it holds the resource:
+Pair with capability tokens (`typestate.md` §5) when the region
+must *prove* it holds the resource:
 
 ```rust
 pub struct RenderGuard<'a> { frame: &'a mut Frame, _priv: () }
@@ -74,8 +70,8 @@ impl<'a> RenderGuard<'a> {
 
 ## 3. Drop bombs
 
-The inverse emphasis: a guard that *panics, aborts, or logs loudly* when
-dropped without being defused. It turns "you forgot a required step"
+Inverse: a guard that *panics, aborts, or logs loudly* when
+dropped without defuse. It turns a forgotten step
 into an immediate, located failure:
 
 ```rust
@@ -115,11 +111,11 @@ and `guard` for one-off cleanup closures (verify current API).
 
 ## 5. Async hazard
 
-A guard held across `.await` stays held for the entire suspension, which is a
-locked `MutexGuard` across await is the classic deadlock (and with
-`std::sync::Mutex`, a `Send` bound problem too). Review rule: any
-non-`Send` guard alive across an await point is a finding. Scope guards
-to end before the await, or use runtime-appropriate primitives
+A guard held across `.await` stays held for the suspension: a
+locked `MutexGuard` across await is the classic deadlock (plus a
+`Send` problem with `std::sync::Mutex`). Review rule: any
+non-`Send` guard alive across await is a finding. End guards
+before the await, or use runtime primitives
 (`tokio::sync::Mutex`: verify against your runtime).
 
 ## 6. When not to apply
@@ -127,9 +123,8 @@ to end before the await, or use runtime-appropriate primitives
 - Cross-resource shutdown with ordering requirements (stop A, drain B,
   close C): reverse-creation drop order is too implicit; write an
   explicit `shutdown()` state machine.
-- Cleanup whose success/failure the caller must *observe*: a `Drop`
-  that swallows errors hides failures; return them from a named method
-  and keep `Drop` as best-effort fallback.
+- Cleanup the caller must *observe*: return errors from a named
+  method; keep `Drop` as best-effort fallback.
 - Anything in a hot path where the "resource" is a plain integer you
   read back later: a guard is ceremony, not safety (YAGNI).
 

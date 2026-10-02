@@ -12,13 +12,13 @@ Contents:
 
 ## 1. Why seal
 
-A public, unsealed trait is a promise: *anyone may implement this,
-forever*. That promise constrains you: adding a method without a
-default is a breaking change for every downstream impl, and internal
-dispatch cannot assume anything about unknown implementors.
+A public, unsealed trait promises: *anyone may implement this,
+forever*. Cost: adding a method without a default breaks every
+downstream impl, and internal dispatch cannot trust unknown
+implementors.
 
-Seal the trait when the set of implementations is *yours*: you want
-downstream to use the trait, but not to add to it.
+Seal when the implementations are *yours*: downstream may use
+the trait, not extend it.
 
 ## 2. The pattern
 
@@ -40,9 +40,9 @@ impl Value for Temperature { fn render(&self) -> String { /* ... */ } }
 impl Value for Pressure   { fn render(&self) -> String { /* ... */ } }
 ```
 
-Downstream code can write `fn show(v: &dyn Value)`, call `v.render()`,
-and store `Box<dyn Value>`: but `impl Value for MyThing` fails to
-compile because `MyThing` cannot implement the private `Sealed`.
+Downstream can write `fn show(v: &dyn Value)`, call `v.render()`,
+and store `Box<dyn Value>`: but `impl Value for MyThing` fails
+because `MyThing` cannot implement the private `Sealed`.
 
 The `#[sealed]` crate (attribute-based, verify current) generates the
 same shape with less boilerplate.
@@ -56,24 +56,23 @@ same shape with less boilerplate.
 | Closed set of implementations and values, need matching | enum |
 | Heterogeneous values across crates that must share an API | sealed trait over crate types, or enum |
 
-If the implementations are all in your crate and you never gain
-anything from downstream impls, an enum is often simpler than a sealed
-trait: a sealed trait earns its keep when implementations need
-different fields or carry data the enum would have to unify.
+All implementations in your crate and nothing gained from downstream
+impls: an enum is often simpler. A sealed trait earns its keep when
+impls need different fields or data the enum would unify.
 
 ## 4. Exhaustive matching as a refactor tool
 
 Enums and sealed-and-matched traits share one superpower: **the
-compiler is your refactor checklist**. Add a variant (or a new internal
-impl) and every non-wildcard `match` site becomes a compile error
-listing exactly where to update logic.
+compiler is your refactor checklist**. Add a variant or internal
+impl and every non-wildcard `match` becomes a compile error
+listing where to update logic.
 
 Wildcard arms (`_ => ...`) discard this. Use them deliberately, for
 truly ignorable cases, never to silence the compiler during a change.
 A wildcard arm in a domain enum is usually a missing invariant.
 
-This is the same engine `rust-tea` leans on: adding a `Msg` variant
-breaks every `update` match until it is handled.
+Same engine `rust-tea` leans on: adding a `Msg` variant
+breaks every `update` match until handled.
 
 ## 5. `#[non_exhaustive]` vs sealing
 
@@ -84,8 +83,8 @@ Orthogonal tools that are easy to confuse:
 | `#[non_exhaustive]` (on your enum/struct/variant) | **matching / construction** | downstream must write wildcard arms and cannot exhaustively construct; you may add variants in minor releases |
 | sealed supertrait | **implementation** | downstream cannot `impl` the trait at all |
 
-Both exist to keep "closed vocabulary" promises about *future* versions
-(semver hygiene). An enum that is both matched internally and
+Both keep "closed vocabulary" promises about *future* versions
+(semver hygiene). An enum matched internally and
 constructed downstream needs both.
 
 ## 6. When not to apply

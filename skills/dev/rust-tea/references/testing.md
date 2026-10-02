@@ -1,8 +1,8 @@
 # testing: what TEA makes easy and how to keep it easy
 
-TEA's shape is a testing gift: `update` is a pure function of
-(model, message), effects are data, and every outside capability is an
-injected port. Test the core headlessly; CI never needs a renderer.
+TEA tests well: `update` is pure over (model, message),
+effects are data, and outside capabilities are injected ports.
+Test the core headlessly; CI never needs a renderer.
 
 Contents:
 
@@ -16,22 +16,21 @@ Contents:
 
 ## 1. What to test
 
-Priority order (highest value per effort first):
+Highest value per effort first:
 
 1. **Update transitions**: message in → state changed + effects out.
-   This is the app's actual behavior.
 2. **Domain model methods**: state machines, computed getters
    (`remaining_time`, `is_config_dirty`).
 3. **Effect translation**: sub-model command → top-level `Effect`.
-4. **Input translation tables**: `KeyEvent` → `Msg` mappings (pure, in
-   the shell; still table-testable without a terminal).
+4. **Input translation tables**: `KeyEvent` → `Msg` mappings (pure
+   shell; table-testable without a terminal).
 5. **Views**: mostly covered by type-checking plus tests for any derived
    logic (§6). Full render tests are optional and framework-bound.
 
 ## 2. Injection points
 
-- The core is generic over `E: EffectHandler`; tests construct it with a
-  double. Construction lives in one place (`AppCore::new`), so a test
+- Core is generic over `E: EffectHandler`; tests pass a
+  double. Construction lives in `AppCore::new`, so a test
   core is three lines.
 - Other capabilities (sound, notify, repos) are port traits; doubles
   implement them the same way.
@@ -41,9 +40,9 @@ let mut core = AppCore::new(MockEffects::default());
 core.dispatch(Msg::Timer(PomodoroMsg::Start(t0)));
 ```
 
-If a test needs the real filesystem or a live socket to reach the model,
-the injection point is missing. That is the finding, not a reason to add
-test fixtures.
+A test needing the real filesystem or live socket means
+the injection point is missing. That is the finding, not a reason for
+fixtures.
 
 ## 3. Test doubles
 
@@ -97,7 +96,7 @@ fn session_end_advances_and_alarms() {
   says "the time is now T".
 - `Instant` is std and pure, so it is fine in core. No wall-clock reads inside
   `update`; the host stamps real time into messages, tests pass chosen
-  instants. This removes both nondeterminism and Temporal coupling.
+  instants.
 - Long spans do not need many ticks: jump straight to the interesting
   instant (`t0 + FOCUS_LEN`).
 
@@ -105,9 +104,9 @@ fn session_end_advances_and_alarms() {
 
 - Prefer testing the model-derived facts a view would display
   (`core.router().active_page()`, `format!("{}", pomodoro.remaining_time())`).
-- If a view contains real logic (filtering, sorting, grouping), extract
-  it as a pure function or method into core and test it there; the view
-  becomes a thin renderer over tested data.
+- View with real logic (filtering, sorting, grouping): extract
+  it into core and test there; the view
+  stays a thin renderer over tested data.
 - Widget trees themselves: rely on type-checking plus manual/visual
   checks. Full render-snapshot tests are framework-bound and optional.
   do not reach for them first.

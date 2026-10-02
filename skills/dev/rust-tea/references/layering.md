@@ -1,9 +1,9 @@
 # layering: module layout and dependency direction
 
 Where the five kinds of TEA code live, and which dependencies are legal.
-Goal: the core stays pure, the renderer stays replaceable, and one
-conceptual change touches one layer (Stable-dependencies principle,
-Acyclic Dependencies Principle).
+Core stays pure, renderer stays replaceable, one
+conceptual change touches one layer (Stable-dependencies,
+Acyclic Dependencies).
 
 Contents:
 
@@ -69,15 +69,15 @@ view may live beside the renderer types, but it must not mutate or do IO.
 | Workspace with `crates/<app>-core` | multiple fronts (gui + daemon + cli), or core needs its own dependency set | compiler-enforced wall |
 | `src/core/` module | single binary, small app | convention + code review (+ `pub(crate)` discipline) |
 
-Start with the module split; promote to a crate when a second front or a
-heavy dependency set appears. Promotion is mechanical if the direction
-rules above held from the start.
+Start with the module split; promote to a crate at the second front
+or heavy dependency set. Promotion is mechanical if the direction
+rules held.
 
 ## 5. Single source of truth placement
 
-- One fact, one definition. Domain constants and types live in core;
-  the config schema lives in core; registries that drive views live in
-  the shell but are built from core types.
+- One fact, one definition. Domain constants, types, and config
+  schema live in core; view registries live in
+  the shell but build from core types.
 - If two layers need the same enum, it lives in core and both import it:
   never copy (Divergent change guard).
 - Persisted values and their in-UI drafts mirror each other through one

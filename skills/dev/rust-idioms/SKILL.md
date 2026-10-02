@@ -15,19 +15,11 @@ One invariant drives every pattern here:
 
 > **Invalid values cannot be constructed; valid values cannot be misused.**
 
-Push constraints out of documentation and discipline and into the type
-system. A function signature that accepts `&str` promises nothing; a
-signature that accepts `&Email` promises the value was validated once, at
-the boundary, by the compiler's help.
+Push constraints into the type system. `&str` promises nothing; `&Email` promises boundary validation.
 
-The cost is authoring time and API surface. Every pattern below has a
-"When not to apply" section. The failure mode is not missing the pattern, it
-is applying it where the domain has no real constraint
-(Speculative generality, YAGNI).
+Cost: authoring time and API surface. Every pattern has "When not to apply". The failure is applying where the domain has no real constraint (Speculative generality, YAGNI), not missing the pattern.
 
-When reviewing, lead each finding with the most specific term from the
-`oop` skill (Primitive obsession, Leaky abstraction, Temporal coupling,
-Anemic domain model, Shotgun surgery), then name the idiom that fixes it.
+When reviewing, lead with the most specific `oop` term (Primitive obsession, Leaky abstraction, Temporal coupling, Anemic domain model, Shotgun surgery), then the fixing idiom.
 
 `rust-tea` (UI architecture, Model/Msg/Update/View/Effect/Host) uses these
 idioms internally: message enums are closed vocabularies, ports are
@@ -63,10 +55,9 @@ capabilities, effect payloads are error-as-data.
 | Generics/`dyn` | One implementation exists and a second is hypothetical: write the concrete type |
 
 Read only what the task needs. `SKILL.md` plus the decision table cover most
-reviews; load the reference named in that table's last column for the pattern
-being written.
+reviews; load the named reference for the pattern at hand.
 
-Crates are mentioned as accelerators (`thiserror`, `anyhow`, `nutype`,
-`secrecy`, `scopeguard`, `enum_dispatch`). Verify their current state
-against docs before recommending; the *patterns* are std-level and do not
+Crates (`thiserror`, `anyhow`, `nutype`,
+`secrecy`, `scopeguard`, `enum_dispatch`) are accelerators. Verify against
+docs before recommending; the *patterns* are std-level and do not
 age.

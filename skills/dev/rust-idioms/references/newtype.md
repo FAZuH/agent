@@ -11,9 +11,7 @@ Contents:
 
 ## 1. The pattern
 
-A tuple struct with a private field, plus a fallible constructor. The
-field is private, so no invalid instance can exist outside the defining
-module (Encapsulation):
+Tuple struct, private field, fallible constructor. Privacy means no invalid instance outside the defining module (Encapsulation):
 
 ```rust
 pub struct Email(String);
@@ -47,16 +45,14 @@ Rules:
 - Constructor is named for what it does (`parse`, `new`, `try_from`-style)
   and returns `Result`: never a silently-lossy `From<String>`.
 - Offer explicit accessors (`as_str`), not `Deref`. `Deref` re-exposes the
-  inner type's full API and quietly un-does the invariant (the API
-  guidelines reserve `Deref` for smart pointers).
+  inner type's full API and silently voids the invariant (reserved for smart pointers).
 - Implement `From<Email> for String` for the *safe* outward direction
   (a valid email is always a string; the reverse is not true).
 - `#[repr(transparent)]` when FFI or size guarantees matter. The
   newtype is zero-cost at runtime.
 
-A two-value domain is an enum, not two `bool` parameters. `bool` params
-at call sites (`send(&msg, true, false)`) are unreadable and
-un-extensible. Name the states:
+Two-value domain: an enum, never two `bool` parameters. `send(&msg, true, false)`
+is unreadable and un-extensible. Name the states:
 
 ```rust
 pub enum Delivery { Sync, Async }
@@ -68,8 +64,7 @@ pub fn send(msg: &Msg, via: Delivery) -> Result<Receipt, SendError>
 Credit: Alexis King's essay of the same name. The rule: **parse at the
 boundary, never validate on the way through.**
 
-The anti-pattern: validation without a type change throws information
-away, so every downstream caller must re-check or trust:
+Anti-pattern: validation without a type change discards the proof, so downstream re-checks or trusts:
 
 ```rust
 fn send(input: &str) -> Result<Receipt, SendError> {
@@ -80,8 +75,8 @@ fn send(input: &str) -> Result<Receipt, SendError> {
 }
 ```
 
-The fix: the check *changes the type*, so the proof travels with the
-value and downstream code needs no checks:
+Fix: the check *changes the type*. Proof travels with the
+value; downstream needs no checks:
 
 ```rust
 fn main() -> Result<(), AppError> {
@@ -93,11 +88,10 @@ fn main() -> Result<(), AppError> {
 fn send(email: Email) -> Result<Receipt, SendError> { /* no checks */ }
 ```
 
-Where the boundary lives: `main`/CLI parsing, HTTP route handlers,
-config loading, socket message decode. Everything interior receives
-already-parsed types. If you find `validate_*` functions returning
-`bool` or `Result<()>` whose proof is discarded, that is the finding, and
-make them constructors.
+Boundary: `main`/CLI parsing, HTTP route handlers,
+config loading, socket message decode. Interior receives
+already-parsed types. `validate_*` returning
+`bool` or `Result<()>` with discarded proof is the finding: make them constructors.
 
 ## 3. Acceptance traits (fold-in)
 
@@ -134,25 +128,24 @@ This is the inbound mirror of the newtype's outbound `From`.
   newtype pattern applied to *sensitivity*: secrets are typed so they
   cannot be logged accidentally.
 
-Both replace boilerplate, not thinking. The invariant design is still
-yours.
+Both replace boilerplate, not thinking. Invariant design stays yours.
 
 ## 5. When not to apply
 
-- Internal one-off helpers and prototypes: a checked `&str` parameter
+- Internal one-off helpers and prototypes: a checked `&str`
   is fine until a second caller appears (YAGNI).
-- Types with exactly one use site and one construction path already
+- One use site and one construction path already
   (the module *is* the invariant).
-- Data that crosses no trust boundary and feeds straight into
-  serialization (an internal cache key is a `String` until it isn't).
+- Data crossing no trust boundary, straight into
+  serialization (an internal cache key stays `String`).
 
 ## 6. Review quick-checks
 
-- Public API parameters of raw `String`/`u64`/`bool` that carry domain
+- Public API parameters of raw `String`/`u64`/`bool` carrying domain
   meaning. Primitive obsession.
-- `validate_*` functions whose proof is discarded (returns `bool` or
+- `validate_*` with discarded proof (returns `bool` or
   `Result<(), _>`): replace with constructors (Parse, don't validate).
-- The same check implemented in more than one place: parse at the
+- One check in several places: parse at the
   boundary instead.
-- `Deref` on a newtype: invariant leak. Prefer explicit accessors.
+- `Deref` on a newtype: invariant leak. Explicit accessors.
 - `bool` parameters at call sites: a two-state enum.

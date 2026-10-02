@@ -1,8 +1,8 @@
 # example: ratatui + crossterm (hand-rolled host)
 
-How the TEA invariants land on a **hand-rolled ratatui loop** (checked
+How TEA lands on a **hand-rolled ratatui loop** (checked
 against ratatui 0.30 + crossterm 0.29; verify your `Cargo.toml`).
-Extracted from a real pomodoro TUI; the source map at the end points
+From a real pomodoro TUI; the source map at the end points
 into `~/Projects/tomo`. Idioms, not contract: `SKILL.md` invariants are
 the contract.
 
@@ -60,8 +60,8 @@ fn translate(&self, key: KeyEvent) -> Option<Msg> {
 
 - A pure mapping `KeyEvent -> Option<Msg>`: table-test it without a
   terminal. The core never sees a `KeyEvent` (layer rule).
-- Modal/overlay state short-circuits routing *before* page routing, so a
-  modal keypress cannot leak into the page underneath.
+- Modal/overlay short-circuits *before* page routing, so modal keys
+  cannot leak underneath.
 - Mode-aware keys (per-page tables) beat one giant match with magic
   booleans (Primitive obsession).
 
@@ -76,7 +76,7 @@ macro_rules! dsp {
 dsp!(self, Msg::Timer(PomodoroMsg::Start(now)), Msg::Router(RouterMsg::GoTo(Page::Focus)));
 ```
 
-Sugar only. The real mechanism is the dispatch loop on `AppCore`
+Sugar only. Real mechanism is the dispatch loop on `AppCore`
 (`references/patterns.md` §4). Keep the macro trivial or skip it.
 
 ## 4. The EffectHandler adapter
@@ -98,32 +98,31 @@ impl EffectHandler for TuiEffects {
 ```
 
 - Fast effects run inline on the UI thread. Slow work spawns and reports
-  back through a channel the loop polls (a custom event variant or mpsc
-  drained next to input events): the core stays synchronous.
+  back through a channel the loop polls: the core stays synchronous.
 - The adapter holds process-wide resources (audio handle, notifier,
   config path) that the core must not know about.
 
 ## 5. Render discipline
 
-- Render when: an event was handled, a tick fired, or the dirty flag is
-  set. Skip otherwise; idle TUIs should cost ~0% CPU.
+- Render when an event was handled, a tick fired, or the dirty flag is
+  set. Skip otherwise; idle TUIs cost ~0% CPU.
 - One view module per page (`view/focus.rs`, `view/settings.rs`), each
   exposing `fn render(core: &AppCore<TuiEffects>, frame: &mut Frame, area: Rect)`
   (pure reads through public getters, no widget-held state).
-- Framing math (layout splits) lives in the view; placement *rules* that
-  the daemon also needs live in core as pure functions.
+- Framing math (layout splits) lives in the view; placement *rules*
+  the daemon needs live in core as pure functions.
 
 ## 6. Composed sub-models (guideline)
 
 - `AppCore` composes `Pomodoro` / `Config` / `Router`; each implements
   `Updateable` and gets its own message enum; the top level wraps them
   (`Msg::Timer(PomodoroMsg)`).
-- Sub-model commands are promoted by `translate_*` methods on `AppCore`
-  (`references/patterns.md` §3). Optional pattern: a flat model + free-function
-  update is equally valid (see the choice table in `SKILL.md`).
-- A `Router` sub-model owning "which page is active" keeps key routing,
-  page rendering, and navigation transitions cohesive instead of
-  scattered across the runner (Single Responsibility Principle).
+- Sub-model commands promote via `translate_*` on `AppCore`
+  (`references/patterns.md` §3). Flat model + free-function
+  update is equally valid (choice table in `SKILL.md`).
+- A `Router` sub-model owning "which page is active" keeps routing,
+  rendering, and transitions cohesive
+  (Single Responsibility Principle).
 
 ## 7. Source map (`~/Projects/tomo`)
 

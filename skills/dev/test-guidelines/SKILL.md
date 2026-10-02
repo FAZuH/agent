@@ -13,11 +13,11 @@ description: >-
 
 # Test Writing Guidelines
 
-This skill contains authoritative test writing guidelines. When invoked, you MUST:
+When invoked, you MUST:
 
-1. **Reference these guidelines explicitly** in your response (e.g., "Per the test writing guidelines, a test must be falsifiable...")
-2. **Apply them to whatever testing task the user has**: whether writing new tests, reviewing existing ones, or discussing strategy
-3. **Quote relevant rules** rather than just summarizing
+1. **Reference these guidelines explicitly** (e.g., "Per the test writing guidelines, a test must be falsifiable...")
+2. **Apply them to the task**: new tests, reviews, strategy
+3. **Quote relevant rules**, not summaries
 
 ## Foundational Validity
 - **A test must be falsifiable.** If no plausible code change could make it fail, it is not a test, it is dead code. Delete it.
@@ -26,12 +26,12 @@ This skill contains authoritative test writing guidelines. When invoked, you MUS
 - **Test error paths, not just happy paths.** Every branch that can fail (invalid input, missing state, error responses, edge cases) requires a test. Untested branches are untested code.
 
 ## The Trilemma (Know the Tradeoffs)
-Every test lives on a spectrum defined by three properties that cannot all be maximized simultaneously:
+Three properties, never all maximized at once:
 - **Protection against regressions**: how much real code does it execute?
 - **Resistance to refactoring**: does it break when behavior is unchanged but internals change?
 - **Fast feedback**: how quickly does it run?
 
-An E2E test maximizes the first two and sacrifices the third. A heavily mocked unit test maximizes the third but destroys the second. A good suite balances these consciously rather than defaulting to one extreme. Know which pillar you are trading against when you make a structural decision.
+An E2E test maximizes the first two and sacrifices the third. A heavily mocked unit test inverts that. Balance consciously; name the pillar you trade away.
 
 ## What Disqualifies a Unit Test
 Per Feathers, a test is categorically *not* a unit test if it:
@@ -41,12 +41,12 @@ Per Feathers, a test is categorically *not* a unit test if it:
 - Cannot run correctly at the same time as any other test (shared mutable state)
 - Requires environment changes (config file edits, env vars set externally) to run
 
-Tests that violate these are integration tests. Label and treat them as such: separate suite, separate performance budget, separate CI stage.
+Tests that violate these are integration tests: separate suite, separate performance budget, separate CI stage.
 
 ## Isolation & Determinism
 - **Tests must not share state.** No global variables, no singleton mutation, no shared DB rows. Each test sets up and tears down its own world.
 - **Tests must not depend on execution order.** Any test must pass in isolation and in any order. If B requires A first, they are one test.
-- **Eliminate non-determinism.** Wall clock time, random numbers, and network calls make tests flaky. Inject clocks, seed RNGs, stub at the boundary. A flaky test is worse than no test, because it erodes trust in the entire suite until failures are ignored.
+- **Eliminate non-determinism.** Clocks, RNGs, network: inject, seed, stub at the boundary. A flaky test is worse than none; it trains the team to ignore failures.
 
 ## Measurement validity
 - **A measurement must be falsifiable.** If no plausible change could flip the result, it is not a measurement. A number with no baseline, no error bar, and no named knob is an anecdote.
@@ -56,10 +56,10 @@ Tests that violate these are integration tests. Label and treat them as such: se
 
 ## Structure
 - **One concept per test.** Assert one logical thing. Multiple unrelated assertions in a single test obscure which behavior failed.
-- **Use Arrange-Act-Assert (AAA) / Given-When-Then.** Set up preconditions, execute the single behavior, assert the outcome. Keep each phase minimal and clearly separated.
-- **No logic in tests.** `if`, `for`, `while`, `switch`, `try/catch`, random generators inside a test body are a smell. Logic in tests means the tests themselves can have bugs. Use parameterized or table-driven tests instead of loops.
-- **Prefer DAMP over DRY in tests.** Tests tolerate a degree of duplication if it makes the test readable and self-contained. Complex inheritance hierarchies and shared setup abstractions in test code reduce readability more than they reduce repetition. Inline what the reader needs to understand the test.
-- **Name tests as executable specifications.** The name should read as a sentence: `returns_empty_list_when_no_matching_items`, not `test1` or `testFilter`. A failing test name should identify what broke without reading the body.
+- **Use Arrange-Act-Assert (AAA) / Given-When-Then.** Setup, execute, assert. Keep phases minimal and separated.
+- **No logic in tests.** `if`, `for`, `while`, `switch`, `try/catch`, random generators in a test body are a smell. The test becomes its own bug surface. Use parameterized or table-driven tests instead of loops.
+- **Prefer DAMP over DRY in tests.** Duplication is tolerable when it keeps a test readable and self-contained. Shared setup abstractions cost more readability than they save repetition. Inline what the reader needs.
+- **Name tests as executable specifications.** `returns_empty_list_when_no_matching_items`, not `test1`. A failing name identifies the break without reading the body.
 
 ## Test Doubles: Use the Right Tool
 Use the Meszaros taxonomy precisely:
@@ -73,7 +73,7 @@ Prefer state verification (asserting what the SUT returned or what state changed
 
 ## Mocking Rules
 - **Only mock at true external boundaries:** network, filesystem, third-party services, time, external databases. Do not mock internal collaborators or domain objects.
-- **Do not mock what you don't own.** Never mock third-party libraries, external vendor APIs, or framework internals. When a framework upgrades and its behavior changes, mocked tests will stay green while production breaks. Instead, wrap third-party code behind an interface you own, and mock the wrapper. Verify the wrapper with narrow integration tests.
+- **Do not mock what you don't own.** Never mock third-party libraries, vendor APIs, or framework internals. Upgrades break production while mocked tests stay green. Wrap third-party code behind an interface you own, mock the wrapper, verify the wrapper with narrow integration tests.
 - **Prefer real objects over mocks** wherever Feathers' constraints permit. Real objects test actual behavior; mocks test that you set up the mock correctly.
 
 ## Data
@@ -85,24 +85,24 @@ Prefer state verification (asserting what the SUT returned or what state changed
 ## Anti-Patterns: Named and Defined
 - **Tautological Test / Ugly Mirror**: the test replicates the production logic line for line, so it passes whether or not the logic is correct. Verify output against independently computed expected values, not re-derived ones.
 - **Assertion Roulette**: multiple unrelated assertions in one test with no distinct messages. When it goes red, you cannot tell which assertion failed without debugging. One concept per test.
-- **Erratic Test (Flaky)**: passes and fails intermittently. Caused by timing dependencies, shared mutable state, or uncontrolled external resources. Fix or delete; do not retry.
-- **Fragile Fixture**: test breaks due to unrelated data or environmental changes. The test is coupled to too much context.
+- **Erratic Test (Flaky)**: passes and fails intermittently. Timing, shared mutable state, uncontrolled external resources. Fix or delete; do not retry.
+- **Fragile Fixture**: breaks on unrelated data or environmental changes. Coupled to too much context.
 - **Overspecified Test**: mocks a dependency, dictates what it returns, then asserts the SUT returned that same value. This verifies only that the mocking framework works.
 - **Logic in Tests**: conditional or dynamic code (`if`, `for`, `try/catch`) in the test body. The test itself becomes a bug surface. Use parameterized tests.
-- **Line Hitter**: a test written to hit coverage numbers, not to verify behavior. Initializes objects in invalid states to execute lines and catch exceptions. Produces zero behavioral guarantees.
-- **Literal Value Confusion**: tests filled with unexplained constants where readers cannot distinguish inputs relevant to the assertion from dummy values that only satisfy compiler requirements.
+- **Line Hitter**: written to hit coverage numbers, not verify behavior. Zero behavioral guarantees.
+- **Literal Value Confusion**: unexplained constants where readers cannot tell inputs relevant to the assertion from dummy values that only satisfy the compiler.
 
 ## Integration Tests
 - **Integration tests must test real integrations.** If you mock the database in an integration test, it is not an integration test.
-- **Integrated tests (cross-service) have combinatorial explosion problems.** Two services with N behaviors each require N² integrated tests for full permutation coverage. Instead, use collaboration tests (verifying how a client calls a dependency) plus contract tests (verifying the dependency actually behaves as assumed) separately.
+- **Integrated tests (cross-service) have combinatorial explosion problems.** Two services with N behaviors each need N² tests for full permutation coverage. Use collaboration tests (how a client calls a dependency) plus contract tests (the dependency behaves as assumed) separately.
 - **Integration tests own their data.** Each test seeds what it needs and cleans up after. Never assume the environment is in a known state.
 
 ## Coverage
 - **Coverage is not correctness.** A test that executes every line but asserts nothing will reach 100% coverage. High coverage is a necessary condition for a good suite, not a sufficient one.
 - **Low coverage is a reliable signal** of an under-tested codebase. High coverage is not a reliable signal of an effective one. (Inozemtseva & Holmes, ICSE 2014: coverage is not strongly correlated with test suite effectiveness when suite size is controlled for.)
 - **Do not write tests to hit a coverage number.** Write tests to specify behavior.
-- **Mutation testing is the superior metric** when precision matters. Generate mutants (e.g., change `>` to `>=`, flip a boolean), run the suite against them. A surviving mutant means the suite has a gap in behavioral coverage. Mutation score is computationally expensive, so run it periodically, not on every commit.
+- **Mutation testing is the superior metric** when precision matters. Mutants (e.g., `>` to `>=`, flipped booleans) run against the suite; a survivor means a behavioral gap. Expensive, so run periodically, not per commit.
 
 ## Advanced
-- **Property-based testing complements example-based testing.** Instead of fixed inputs, define invariants that must hold for all inputs (e.g., sorting is idempotent, reversing twice returns the original). Let a generator find counter-examples. Use it for algorithms, data transformations, state machines, and serialization round-trips: places where human-chosen examples systematically miss edge cases.
-- **Characterization tests for legacy code.** When working with untested code, write tests that capture the current behavior (even if wrong) before changing anything. This gives you a safety net to refactor toward the correct behavior. The goal is to get the code under test first; perfection comes after.
+- **Property-based testing complements example-based testing.** Define invariants for all inputs (sorting is idempotent, double-reverse returns the original). Let a generator find counter-examples. Use for algorithms, transformations, state machines, serialization round-trips: where human examples systematically miss edges.
+- **Characterization tests for legacy code.** Capture current behavior (even if wrong) before changing anything. Safety net first; correctness after.

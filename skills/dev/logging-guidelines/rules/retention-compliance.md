@@ -8,7 +8,7 @@ tags: logging, retention, compliance, gdpr, audit
 
 **Impact: MEDIUM**
 
-Operational wide events (this skill's primary subject) and security/audit logs are not the same thing and shouldn't share a retention policy by default, even though they're both "logs."
+Operational wide events (this skill's subject) and security/audit logs are different things. Never share a retention policy by default, though both are "logs."
 
 | | Operational wide events | Security/audit logs |
 |---|---|---|
@@ -18,10 +18,10 @@ Operational wide events (this skill's primary subject) and security/audit logs a
 | Storage | Standard object storage | Immutable/WORM storage |
 | Sensitive fields | Hash/mask (`rules/security.md`) | Access-controlled, not stripped |
 
-Auth attempts, privilege escalation, and access-control changes belong in the audit-log category regardless of whether they also show up as a field in an operational wide event: frameworks like SOC 2 Type II and PCI DSS expect these retained separately and for much longer than routine operational telemetry, with a portion (often 90 days) in immediately queryable "hot" storage.
+Auth attempts, privilege escalation, access-control changes are audit-log category, even as fields in an operational event: SOC 2 Type II and PCI DSS expect separate, far longer retention, part (often 90 days) in immediately queryable "hot" storage.
 
 ### The GDPR Tension
 
-GDPR's data-minimization principle (Article 5(1)(c)) and the "right to be forgotten" create a genuine unresolved tension with `rules/security.md`'s recommendation to use salted HMAC hashing for correlation: engineers generally treat a salted hash as sufficiently anonymized to keep indefinitely, but regulators can classify a hash as still-personal data if the organization retains the ability to compute it (i.e. still holds the salt/key): which most operational setups do, by necessity, since that's what makes the hash useful for correlation in the first place.
+GDPR minimization (Article 5(1)(c)) and the right to be forgotten tension against `rules/security.md` salted HMAC correlation: engineers treat salted hashes as anonymized enough to keep; regulators can classify a hash as still-personal when the organization holds the salt/key, which operational setups must, since that is what makes the hash correlatable.
 
-This is a compliance-policy question, not something to resolve unilaterally in code. If your logs contain any EU user data, get an explicit answer from whoever owns privacy/compliance decisions on whether hashed identifiers in operational logs need to be included in deletion requests, before treating hashing as a complete solution.
+Compliance-policy question, never unilateral code call. EU user data in logs: get an explicit privacy-owner answer on whether hashed identifiers fall under deletion requests, before treating hashing as a complete solution.

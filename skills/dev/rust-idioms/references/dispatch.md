@@ -18,9 +18,8 @@ Contents:
 | `dyn Trait` (`&dyn Store`) | dynamic (vtable) | open, decided at runtime | one copy, indirect calls |
 | `enum` (`enum AnyStore { S3(S3Store), Fs(FsStore) }`) | static (`match`) | closed, only the crate's variants | one copy, exhaustive |
 
-All three express "some behavior, multiple implementations". The
-decision is about *who may add implementations* and *when the set is
-known*, not about speed first.
+All three mean "some behavior, multiple implementations". Decide on *who may add implementations* and *when the set is
+known*, not speed first.
 
 ## 2. Decision table
 
@@ -34,10 +33,9 @@ known*, not about speed first.
 | One implementation exists, second is hypothetical | concrete type: refactor when the second arrives (YAGNI) |
 | Values must be serialized, compared, or exhaustively matched | enum |
 
-A useful pairing: **generics on the way in, `dyn` on the way out**
+Useful pairing: **generics in, `dyn` out**
 (`fn build(cfg: &Config) -> Box<dyn Store>`): flexible internals,
-one monomorphized entry point. The reverse (dyn in, concrete out) is
-rarely what you want.
+one monomorphized entry point. The reverse is rarely what you want.
 
 ## 3. Object safety (dyn compatibility)
 
@@ -51,14 +49,13 @@ A trait is object-safe only if it can be used as `dyn Trait`:
   `where Self: Sized`: that *preserves* object safety by removing
   them from the vtable).
 
-Fixes, in order: add `where Self: Sized` to the offending method; move
-the method to a separate extension trait; or rework to return
+Fix in order: add `where Self: Sized` to the offending method; move
+the method to a separate extension trait; return
 `Box<dyn ...>` instead of `Self`.
 
 ## 4. Enum dispatch
 
-When the implementation set is closed, an enum beats both alternatives
-on simplicity:
+Closed implementation set: prefer an enum:
 
 ```rust
 pub enum AnyStore {
@@ -78,12 +75,12 @@ impl AnyStore {
 
 Properties: no vtable, no monomorphization explosion, serializable,
 exhaustive matches keep the compiler in the refactor loop
-(`sealed-traits.md` §4). The cost: every new backend edits this
-`match`: is exactly the point when the set is closed. The
+(`sealed-traits.md` §4). Cost: every new backend edits this
+`match`. That is the point when the set is closed. The
 `enum_dispatch` crate generates this shape from a trait definition
 (verify current).
 
-A trait *behind* the enum still pays off internally: the enum arms stay
+Keep a trait *behind* the enum: arms stay
 one-liners and per-impl logic lives with its type.
 
 ## 5. Costs, honestly
@@ -96,7 +93,7 @@ one-liners and per-impl logic lives with its type.
   measure before paying generics' ergonomics for speed.
 - enum: cheapest runtime and most rigid API, correct when closed.
 
-In hot loops doing real work (I/O, parsing), dispatch choice rarely
+In hot loops doing real work (I/O, parsing), dispatch rarely
 registers on a profile. Measure; do not pre-optimize the vtable.
 
 ## 6. When not to apply

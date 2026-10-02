@@ -8,33 +8,33 @@ tags: logging, wide-events, canonical-log-lines
 
 **Impact: CRITICAL**
 
-Wide events (also called canonical log lines) are the foundation of effective logging. For each request, emit **a single context-rich event per service**. Instead of scattering 10-20 log lines throughout your request handler, consolidate everything into one comprehensive event emitted at the end of the request.
+Per request, emit **one context-rich event per service**. Never scatter 10-20 lines through the handler; consolidate into one event at the end.
 
 ### The Pattern
 
-Build the event throughout the request lifecycle, then emit once at completion in a `finally` block. This ensures the event is always emitted with complete context, even during failures.
+Build through the lifecycle, emit once at completion in a `finally` block. Fires with full context even on failure.
 
-**Incorrect**: scattering 6 `console.log` lines through the handler (see the anti-pattern at the top of the Inline Pattern section in `references/typescript.md`). You cannot query "show me all article creates by free trial users" from scattered logs.
+**Incorrect**: 6 scattered `console.log` lines (Inline Pattern anti-pattern, `references/typescript.md`). Unqueryable: "all article creates by free trial users" has no answer.
 
-**Correct**: a single context-rich event assembled through the request lifecycle and emitted in a `finally` block (see the Inline Pattern in `references/typescript.md`). Queryable by any field.
+**Correct**: one assembled event in `finally` (Inline Pattern, `references/typescript.md`). Queryable by any field.
 
 ### Connect Events with Request ID
 
-Every wide event must include a unique identifier that is propagated across all service hops. This is the only way to reconstruct the full journey of a request through a distributed system. Prefer W3C Trace Context / OpenTelemetry `trace_id`/`span_id` over an ad hoc header where you have tracing infrastructure available; see `rules/correlation.md`. A custom `x-request-id` is an acceptable fallback when you don't; see the Correlation section of `references/typescript.md` for the generate-and-propagate pattern.
+Every event carries a propagated identifier: the only way to reconstruct a cross-service journey. Prefer W3C Trace Context / OpenTelemetry `trace_id`/`span_id` where tracing exists; see `rules/correlation.md`. Otherwise `x-request-id`; generate-and-propagate pattern: `references/typescript.md` Correlation.
 
 ### Emit in Finally Block
 
-Always emit wide events in a `finally` block or equivalent. This ensures the event is emitted with complete context regardless of success or failure.
+Always emit in a `finally` block or equivalent: full context on success or failure.
 
 ### Known Limitations
 
-The "one event per unit of work" pattern doesn't fit every situation cleanly:
+One event per unit of work does not fit everywhere:
 
-- **Long-lived streaming connections** (WebSockets, SSE, gRPC streams): waiting for connection close to emit means zero visibility while the stream is open, and total loss if the process crashes mid-stream. Emit periodic checkpoint events instead of one terminal event.
-- **High-fan-out parallel sub-operations**: packing every parallel sub-task's fields into one request-level event produces oversized, hard-to-read payloads and loses per-task timing. Pair wide events with distributed tracing (child spans) for this case; the wide event gives the summary, the trace gives the timeline.
-- **Payload bloat**: uncontrolled context enrichment can produce 100KB+ JSON records, which increases GC pressure in the application and inflates ingestion cost downstream. Keep field values bounded (see `rules/security.md` on truncating free-text fields).
-- **Loss of intermediate timeline**: a single event at completion gives you the summary, not a step-by-step timeline of where time was spent inside the request. If you need that, you need spans/traces, not just a wider event.
+- **Long-lived streaming connections** (WebSockets, SSE, gRPC streams): waiting for close means zero mid-stream visibility, total loss on mid-stream crash. Emit periodic checkpoints instead.
+- **High-fan-out parallel sub-operations**: packing every sub-task into one event means oversized payloads and lost per-task timing. Pair with distributed tracing (child spans): wide event summarizes, trace gives the timeline.
+- **Payload bloat**: unbounded enrichment produces 100KB+ JSON records: GC pressure plus ingestion cost. Bound field values (see `rules/security.md` truncation).
+- **Loss of intermediate timeline**: one completion event summarizes; it never shows where time went inside the request. That needs spans/traces, not a wider event.
 
-None of these are arguments against wide events. They're arguments for pairing wide events with distributed tracing rather than treating wide events as a complete observability strategy on their own.
+None argue against wide events. Pair them with distributed tracing; never treat them as the whole observability strategy.
 
 Reference: [Stripe Blog - Canonical Log Lines](https://stripe.com/blog/canonical-log-lines), [A Practitioner's Guide to Wide Events](https://jeremymorrell.dev/blog/a-practitioners-guide-to-wide-events/)

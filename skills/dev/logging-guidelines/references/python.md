@@ -1,6 +1,6 @@
 # Python: Wide Events with `structlog`
 
-`structlog` plus the stdlib `contextvars` module is the closest Python equivalent to the "single logger + middleware" pattern used in the TypeScript reference (`references/typescript.md`). `contextvars` matters specifically because it's async-safe: a plain module-level dict would leak fields across concurrent requests under `asyncio`, which `contextvars` is designed to prevent.
+`structlog` plus stdlib `contextvars` is the Python "single logger + middleware" (`references/typescript.md`). `contextvars` is async-safe: a module-level dict leaks fields across concurrent `asyncio` requests.
 
 ## Setup
 
@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 ## The Wide-Event Pattern (FastAPI middleware)
 
-`bind_contextvars` attaches fields that automatically flow into every subsequent `logger.info(...)` call within the same async context, without passing a `wideEvent` object through every function signature by hand.
+`bind_contextvars` flows fields into every later `logger.info(...)` in the same async context: no `wideEvent` threading through signatures.
 
 ```python
 import time
@@ -81,7 +81,7 @@ async def checkout(user: User = Depends(get_current_user)):
 
 ## Redacting Sensitive Fields (see `rules/security.md`)
 
-A processor runs on every event before rendering. This is the enforcement point, not scattered checks in handlers.
+A processor runs on every event before rendering. The enforcement point, never scattered handler checks.
 
 ```python
 SENSITIVE_KEYS = {"password", "token", "authorization", "api_key"}
@@ -107,10 +107,7 @@ def test_checkout_redacts_token(monkeypatch):
 
 ## Porting to `loguru`
 
-Many Python codebases already standardize on **`loguru`** (which has no direct
-equivalent in this skill's list). Its `logger` is a process-wide singleton and
-its `contextualize` is contextvars-based, so the structlog mechanics port
-almost one-to-one, but two loguru specifics matter and are covered below.
+Many codebases standardize on **`loguru`** (no direct entry in this skill's list). Process-wide singleton `logger`, contextvars-based `contextualize`: structlog mechanics port nearly one-to-one. Two loguru specifics below.
 
 ### Concept mapping
 
@@ -124,14 +121,13 @@ almost one-to-one, but two loguru specifics matter and are covered below.
 
 Env base fields (commit hash, version, environment) attach to every record via
 `logger.configure(patcher=...)`: **not** `logger.patch(...)`, which is
-per-instance and won't reach other modules' `from loguru import logger`.
+per-instance and misses other modules' `from loguru import logger`.
 
 ### ⚠️ Gotcha: `format=` callables return TEMPLATES, not literal strings
 
-This is the single most common loguru trap and it silently drops records.
+The most common loguru trap, and it silently drops records.
 `logger.add(..., format=my_callable)` treats the callable's **return value as a
-template** parsed by `str.format_map` plus loguru's color-markup regex. It is
-not written to output as-is:
+template** parsed by `str.format_map` plus loguru's color-markup regex. Never written as-is:
 
 - A return value containing literal JSON braces (`{"a": 1}`) raises `KeyError`.
 - A return value containing `<...>`-shaped substrings (e.g. `<b>` in user
@@ -142,25 +138,19 @@ Two safe options:
 1. **A custom sink** (recommended): `logger.add(sink)` where `sink` is a
    callable `def sink(message): ...` receiving a `LogRecord`-like `message`
    with `message.record`. Serialize `record["extra"]` + base fields to JSON
-   there with `json.dumps` (never manual string concatenation). This is the
-   cleanest boundary and the one `rules/security.md` assumes.
+   there with `json.dumps` (never manual concatenation). The cleanest boundary, and the one `rules/security.md` assumes.
 2. **An escaping `format=` adapter**: keep `json_format(record) -> str` as the
-   pure boundary, and wrap it for the sink with a function that doubles `{`/`}`
-   and emits `<`/`>` as `\u003c`/`\u003e` so nothing survives that the template
-   parser can misinterpret. Round-trips exactly through `json.loads`, but is
-   harder to reason about, so prefer a custom sink.
+   pure boundary, wrap it to double `{`/`}`
+   and emit `<`/`>` as `\u003c`/`\u003e` so the template
+   parser misinterprets nothing. Round-trips exactly through `json.loads`, but
+   harder to reason about: prefer a custom sink.
 
-Always emit JSON via `json.dumps`; never assemble a log line by concatenating
+Always emit JSON via `json.dumps`; never concatenate
 strings (see `rules/security.md`).
 
 ### Redaction at the boundary
 
-Because loguru's serialization happens in the sink, put the redaction +
-sanitize step in that same sink (or a `filter=`) so it runs on every record
-before anything leaves the process. The enforcement point, not ad hoc `if`
-checks in handlers. Reuse the key-based and URL-pattern redaction from
-`rules/security.md`, applied recursively over `record["extra"]` (and the
-message), stripping control chars and capping field length (CWE-117).
+Serialization happens in the sink: redact + sanitize there (or a `filter=`), every record before it leaves the process. The enforcement point, never ad hoc `if` checks. Reuse `rules/security.md` key + URL-pattern redaction, recursed over `record["extra"]` and the message, control chars stripped, length capped (CWE-117).
 
 ### Testing
 
@@ -178,4 +168,4 @@ never appear unredacted in captured output (see `rules/testing.md`).
 
 ### Open Question
 
-Teams split on whether to use `structlog` directly everywhere, or wrap stdlib `logging` with `structlog.stdlib.ProcessorFormatter`. Pure `structlog` is simpler and faster; wrapping stdlib logging is usually necessary in practice anyway, because third-party dependencies (Uvicorn, Gunicorn, SQLAlchemy) log through stdlib `logging`, and you want their output in the same JSON schema rather than a second, differently-shaped log stream.
+Split: pure `structlog` everywhere, or wrap stdlib `logging` via `structlog.stdlib.ProcessorFormatter`. Pure is simpler and faster; wrapping is usually necessary anyway, since third-party dependencies (Uvicorn, Gunicorn, SQLAlchemy) log through stdlib and you want one JSON schema, not two streams.

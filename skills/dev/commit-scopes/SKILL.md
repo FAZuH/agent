@@ -15,7 +15,7 @@ scope. Do not invent one on the fly.
 
 ## 1. Inspect the codebase
 
-Map the repo to physical locations before proposing anything:
+Map the repo before proposing:
 
 ```bash
 git ls-files | cut -d/ -f1 | sort -u   # top-level dirs and files, ignores generated dirs
@@ -39,12 +39,11 @@ topic.
    `component` → `comp`. Check every scope ends without `s` unless the
    singular itself ends in `s` (e.g. `status`).
 
-2. **Cover a real slice.** A scope must own a top-level directory, crate, or
+2. **Cover a real slice.** A scope owns a top-level directory, crate, or
    domain module: roughly ≥10% of the codebase or a distinct deployable unit.
    Reject single-file / single-concern scopes. Common offender: `changelog`
    (one file → use `docs:` or no scope), `license`, `deps`, `readme`,
-   `contributing`. If only one file lives there, it is not a scope, so use no
-   scope.
+   `contributing`.
 
 3. **Never collide with a type.** These are types, not scopes:
    `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`,
@@ -130,9 +129,8 @@ docs: add commit scopes reference
 \`\`\`
 ```
 
-Tailor the table to the repo you inspected. Each `Covers` cell must point to
-real paths. Keep the vocabulary small, 3–8 rows. If you are tempted to add
-more, the extra ones are probably too narrow.
+Tailor the table to the inspected repo. Every `Covers` cell points to
+real paths. 3–8 rows; extras are probably too narrow.
 
 ## 4. Verify
 

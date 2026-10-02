@@ -12,14 +12,14 @@ description: >-
 
 # Comment Discipline
 
-Default to zero comments. A comment is a cost (another line to read, another thing that can go stale), and it is only worth that cost when the code cannot carry the information itself.
+Default to zero comments. A comment costs a line to read and a thing that can go stale. Pay it only when the code cannot carry the information.
 
 ## The one test
 
 Before writing any comment, ask: **if I delete this comment, does the reader lose something the code itself cannot tell them?**
 
 - If no → don't write it.
-- If yes → write the shortest possible comment that states only the missing piece, in present tense, as if the code had always been this way.
+- If yes → shortest comment stating only the missing piece, present tense, as if the code had always been this way.
 
 "Missing piece" means one of:
 - **A non-obvious constraint** ("must run before X initializes network")
@@ -38,10 +38,10 @@ Restates what the next line already says.
 -- ❌
 scroll_factor = 0.4, -- sets the scroll factor to 0.4
 ```
-If you can't imagine someone needing the comment to understand the line, don't write it. This includes restating a function/variable name in prose ("loop through the users" above `for user in users`).
+If no one needs the comment to understand the line, don't write it. Includes prose restatements of names ("loop through the users" above `for user in users`).
 
 ### 2. Decision-log / narration-of-the-edit comments
-Comments that describe the act of editing, not the resulting code: "fixed," "pinned," "inverted-feel fix," "was slower," "restored," "removed."
+Comments describing the edit, not the result: "fixed," "pinned," "inverted-feel fix," "was slower," "restored," "removed."
 
 ```lua
 -- ❌
@@ -49,9 +49,9 @@ natural_scroll = true, -- inverted-feel fix (direction only)
 scroll_factor = 0.4, -- pinned: Omarchy out-of-box speed (HyDE's 0.2 was slower)
 ```
 
-These are commit-message content, not code content. If the *value itself* needs justification going forward (e.g. "0.4, not the default 0.2: 0.2 causes visible input lag on this trackpad"), that's a real why-comment and is allowed. But "pinned" / "HyDE's was slower" / "fix" tell the reader nothing they can act on six months from now. They only make sense with the diff open.
+Commit-message content, not code content. A value needing forward justification (e.g. "0.4, not the default 0.2: 0.2 causes visible input lag on this trackpad") is a real why-comment. "Pinned" / "HyDE's was slower" / "fix" act on nothing six months out; they need the diff open.
 
-Test: strip out any word that only means something in the context of "compared to before" (pinned, fixed, restored, was X, now Y, no longer). What's left, if anything, might be a real comment.
+Test: strip words meaning only "compared to before" (pinned, fixed, restored, was X, now Y, no longer). The remainder, if any, might be real.
 
 ### 3. Graveyard comments
 References to code, tools, or configs that no longer exist.
@@ -60,10 +60,10 @@ References to code, tools, or configs that no longer exist.
 -- ❌ Dropped (tool gone): hyper-clear blur/opacity, hyprlay, record.sh...
 -- ❌ hl.unbind("SUPER + SHIFT + B") -- was: browser (still on SUPER+F)
 ```
-If it's gone, it's gone. Git history is where "what used to be here" lives, not the file. Never write a comment whose subject is absent from the file it's in.
+Gone is gone. "What used to be here" lives in git history, not the file. Never comment on something absent from the file.
 
 ### 4. History / provenance headers
-Multi-line banners recording when/why a file was ported, migrated, or touched, addressed to a future maintainer as if they're reading a PR description.
+Multi-line banners recording when/why a file was ported or touched, written as PR description to a future maintainer.
 
 ```
 -- ❌ =====================================================
@@ -72,13 +72,13 @@ Multi-line banners recording when/why a file was ported, migrated, or touched, a
 -- restored. `omarchy refresh tmux` clobbers this.
 -- =====================================================
 ```
-Exception: a one-line warning that a tool will silently overwrite the file IS a real constraint (someone needs to know before they debug why their edit vanished). Keep only that sentence, delete the rest:
+Exception: a one-line silent-overwrite warning IS a real constraint. Keep that sentence, delete the rest:
 ```
 -- ✅ `omarchy refresh tmux` overwrites this file: edits here won't survive a refresh.
 ```
 
 ### 5. Restating scope/inventory
-Comments listing what a section does or doesn't cover, when the code itself is the only accurate source of that list (and will drift the moment it's edited without the comment being updated).
+Comments inventorying a section when the code is the only accurate source (drifts on the next edit without the comment).
 
 ```
 -- ❌ Scope: fazuh.conf delta only; stock HyDE defaults already covered
@@ -86,7 +86,7 @@ Comments listing what a section does or doesn't cover, when the code itself is t
 ```
 
 ### 6. Section-divider banners with no content
-`===...===` blocks whose only job is decoration or to announce "here is the next part," where a blank line or the code structure already does that.
+Decoration-only `===...===` blocks where a blank line or the structure already separates.
 
 ### 7. Docstrings that restate the signature
 ```python
@@ -94,12 +94,12 @@ Comments listing what a section does or doesn't cover, when the code itself is t
 def get_user(user_id: int) -> User:
     """Gets the user with the given user_id and returns a User."""
 ```
-A docstring is allowed only for public API surface where callers can't see the implementation, and even then it should say something the signature doesn't: units, ownership of returned objects, error conditions, side effects, thread-safety, not a restatement of the name.
+Docstrings only for public API where callers cannot see the implementation, and only for what the signature lacks: units, ownership, errors, side effects, thread-safety. Never a name restatement.
 
 ## What survives
 
-- A constraint that isn't visible in the code (external tool behavior, silent-overwrite risk, ordering requirement)
-- A deliberately non-obvious choice, stated in terms of *why the code is correct*, not *what changed*
+- A constraint invisible in the code (external behavior, silent-overwrite risk, ordering)
+- A deliberately non-obvious choice, stated as *why the code is correct*, not *what changed*
 - BDD-style `# given / # when / # then` in tests
 - Linter/type-checker directives (`# noqa`, `// @ts-ignore`)
 - Shebangs and license headers
@@ -107,17 +107,17 @@ A docstring is allowed only for public API surface where callers can't see the i
 
 ## Workflow
 
-**When writing new code/config:** apply the one test to every comment before it's written. If in doubt, don't write it. Deleting a comment silently costs nothing; the user will ask if they actually wanted an explanation.
+**When writing new code/config:** test every comment before writing it. In doubt, leave it out. A deleted comment costs nothing; the user asks if they wanted the explanation.
 
-**When asked to add comments:** still apply the test per-line. "Add comments to this" is not permission to narrate. Write only what survives.
+**When asked to add comments:** still test per line. "Add comments" never means narrate. Write only what survives.
 
-**When editing a file that already has comments (even for an unrelated change):** don't add new violations near your edit, but don't go rewrite unrelated existing comments unless asked. That is a separate cleanup pass, not incidental to the task.
+**When editing a file that already has comments (even for an unrelated change):** add no new violations, but leave unrelated comments alone. That is a separate pass, not incidental work.
 
-**When asked to clean up / de-slop / audit an existing file's comments:** go comment-by-comment in file order:
+**When asked to clean up / de-slop / audit comments:** go comment-by-comment in file order:
 1. Apply the one test.
-2. If it fails, delete it outright. Don't soften it into a shorter version of the same banned category.
-3. If it passes but is longer than it needs to be, cut it to the single sentence that carries the why.
-4. If deleting a comment would leave genuinely unclear code (the comment was compensating for bad naming or a non-obvious structure), don't just delete it. Flag it back to the user as a naming/structure issue, since the fix is in the code, not the comment.
-5. Report a one-line count at the end: kept / cut / flagged. Don't narrate each decision unless asked.
+2. Fail: delete outright. Never soften a banned category into a shorter version of itself.
+3. Pass but wordy: cut to the one sentence carrying the why.
+4. Deleting would leave genuinely unclear code (comment compensating for bad naming or structure): flag back as a code issue. Fix the code, not the comment.
+5. Report kept / cut / flagged counts in one line. No per-decision narration unless asked.
 
-Never touch the code itself during a comment cleanup pass unless step 4 applies and the user agrees to the refactor.
+Never touch code in a comment cleanup pass unless step 4 applies and the user agrees.

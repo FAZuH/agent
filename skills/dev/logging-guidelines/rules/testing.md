@@ -8,11 +8,11 @@ tags: logging, testing, ci, snapshot-testing
 
 **Impact: MEDIUM**
 
-Nothing else in this skill is enforced unless it's actually checked. A wide-event schema functions as a contract. Dashboards, alerts, and other services' correlation logic all depend on specific fields existing with specific names and types, and contracts that aren't tested drift silently, usually discovered only when an alert stops firing.
+Unchecked contracts drift silently, surfacing only when an alert stops firing. A wide-event schema is a contract: dashboards, alerts, and correlation logic depend on exact names and types.
 
 ### Capture Logs in Memory During Tests
 
-Don't assert against stdout. Configure the logger to write to an in-memory sink during test runs and assert on the captured structure. See `references/typescript.md` (Testing) for the Node/pino in-memory stream helper.
+Never assert against stdout. Log to an in-memory sink in tests; assert on captured structure. Node/pino helper: `references/typescript.md` Testing.
 
 ```python
 # Python/structlog: structlog.testing.LogCapture
@@ -34,9 +34,9 @@ def test_checkout_logs_expected_fields():
 
 ### Two Things Worth Testing
 
-1. **Schema/snapshot tests**: compare the captured event shape against an approved snapshot. A code change that silently drops or renames a field (e.g. `user.id` → `userId`) fails the test instead of quietly breaking a downstream dashboard. Treat this the same as you'd treat a breaking API response-shape change.
-2. **Redaction tests**: a CI scan of captured log output against a set of patterns (`Bearer `, `sk_live_`, common secret prefixes, an email regex) that should never appear unredacted. This is the actual backstop for `rules/security.md`: the rule is only as good as the test that would catch a violation.
+1. **Schema/snapshot tests**: compare captured shape against an approved snapshot. Silently dropped or renamed fields (e.g. `user.id` → `userId`) fail instead of quietly breaking dashboards. Treat like a breaking API shape change.
+2. **Redaction tests**: CI-scan captured output for patterns that must never appear unredacted (`Bearer `, `sk_live_`, secret prefixes, email regex). The actual backstop for `rules/security.md`: the rule holds only as far as this test catches violations.
 
 ### When This Is Overkill
 
-If field names change often and no downstream consumer (dashboard, alert, other service) actually depends on the exact shape yet, snapshot tests will mostly generate noisy diffs to update rather than catching real regressions. Start with the redaction test. That one has a clear, stable pass/fail condition regardless of how much the schema itself is still evolving, so add schema snapshot tests once the shape has stabilized enough that a break is actually meaningful.
+Field names churning with no downstream consumer (no dashboard, alert, or service depending on exact shape): snapshots generate noisy diffs, not real regression catches. Start with the redaction test: stable pass/fail regardless of schema churn. Add snapshots once the shape stabilizes enough that a break matters.

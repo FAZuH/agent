@@ -12,7 +12,7 @@ Contents:
 
 ## 1. The pattern
 
-A trait implemented for a type you do not own. The trait supplies the
+A trait for a type you do not own. The trait supplies the
 methods; the impl attaches them:
 
 ```rust
@@ -29,9 +29,9 @@ impl StrExt for str {
 // "hello".non_empty() == Some("hello"), once StrExt is imported
 ```
 
-This is the only way to extend `str`, `Vec`, `Iterator`, `Result`, and
-every other upstream type. Canonical ecosystem example: `itertools`'
-`Itertools` trait, which adds combinator methods to every `Iterator`.
+Only way to extend `str`, `Vec`, `Iterator`, `Result`, and
+every other upstream type. Canonical example: `itertools`'
+`Itertools` trait.
 
 ## 2. Import hygiene
 
@@ -43,15 +43,15 @@ use mycrate::StrExt;   // methods exist from here on
 
 Two consequences:
 
-- **Feature**: the upstream type is untouched; users opt in per-file,
-  and no inherent-method namespace is polluted.
+- **Feature**: upstream untouched; users opt in per-file;
+  inherent namespace unpolluted.
 - **Footgun**: "method not found" errors when the import is missing.
   Mitigate by naming the trait descriptively (`Itertools`, not `Ext`)
   and re-exporting it next to the types it extends.
 
 ## 3. Collision risk
 
-Two failure shapes to know:
+Two failure shapes:
 
 - **Upstream adds a same-named inherent method**: inherent methods win
   silently, and your trait method stops being called with no error. The
@@ -60,9 +60,9 @@ Two failure shapes to know:
   become ambiguous: a compile error (annoying, but at least loud).
 
 Defense: prefix-worthy names (`iter_chunks` rather than `chunks`),
-document the upstream-collision risk on the trait, and prefer
-explicit paths (`<str as StrExt>::non_empty(s)`) in the rare hot spots
-where silence would be dangerous.
+document the collision risk, and prefer
+explicit paths (`<str as StrExt>::non_empty(s)`) where silence
+is dangerous.
 
 ## 4. Generic extensions
 
@@ -77,7 +77,7 @@ pub trait ResultExt<T, E> {
 impl<T, E> ResultExt<T, E> for Result<T, E> { /* ... */ }
 ```
 
-Now every `Result` in reach gains `.context(...)`. The same blanket
+Every in-scope `Result` gains `.context(...)`. The same blanket
 pattern powers `itertools` (`impl<I: Iterator> Itertools for I`) and
 `futures`' `TryFutureExt`.
 
@@ -85,8 +85,8 @@ pattern powers `itertools` (`impl<I: Iterator> Itertools for I`) and
 
 - Only for types you do **not** own. If you own the type, an inherent
   impl is simpler, more discoverable, and collision-proof.
-- Small surface: every method must earn its place. An extension trait
-  with forty methods is a dependency you impose on every reader.
+- Small surface: every method must earn its place. Forty methods is a
+  dependency imposed on every reader.
 - Extension traits cannot see private state: if the "extension"
   needs internals, it is not an extension; it belongs in the owning
   module.

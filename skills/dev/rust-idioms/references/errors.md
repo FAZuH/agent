@@ -21,11 +21,10 @@ Contents:
 | Design goal | stable, matchable variants | human-readable context chain |
 | Contains | domain data per variant | source chain + context strings |
 
-Libraries cannot know which failures their callers care about, so every
-distinct *actionable* failure gets its own typed variant. Applications
-usually just report, so one dynamic error type with a context chain is
-cheaper and more readable. The boundary: convert typed library errors
-into the app error type where the app's module boundary ends.
+Libraries give every distinct *actionable* failure its own typed variant;
+callers decide what matters. Applications usually just report, so one
+dynamic error type with a context chain is cheaper. Convert typed
+library errors at the app module boundary.
 
 ## 2. Library errors: typed and matchable
 
@@ -50,14 +49,14 @@ pub enum ConfigError {
 Conventions:
 
 - One enum per subsystem (`ConfigError`, `StoreError`), not one god
-  enum per crate, and callers match on the subsystem they touch.
+  enum per crate; callers match on the subsystem they touch.
 - Variants carry **structured data** (`field`, `retry_after`, `path`);
   `Display` renders prose only at the edge.
 - `#[from]` for automatic `?` conversion; `#[source]`/`#[error(...,
   source)]` to preserve the chain; `#[error(transparent)]` to pass an
   inner error through untouched.
-- Adding a variant is semver-breaking for exhaustive matchers, the same
-  vocabulary considerations as `sealed-traits.md` §4.
+- Adding a variant breaks exhaustive matchers; same vocabulary as
+  `sealed-traits.md` §4.
 
 ## 3. Application errors: context chains
 
@@ -71,19 +70,18 @@ fn load_user_config() -> Result<Config> {
 }
 ```
 
-- `.context()` adds a layer to the chain; the top of the chain is the
-  *what*, the source is the *why*. Print with `{:?}` (anyhow renders
-  the full chain) or iterate `error.chain()`.
+- `.context()` adds a layer; the top is the
+  *what*, the source is the *why*. Print with `{:?}` or iterate
+  `error.chain()`.
 - Context strings are lowercase fragments, no trailing punctuation,
-  describing the *failed action*, not the emotion; full wording rules
+  naming the *failed action*; wording rules
   in §6.
 - `anyhow::bail!` / `.with_context(|| ...)` for lazy formatting.
 
 ## 4. Error-as-data (fold-in)
 
-When control flow must *act* on a failure (retry, skip, degrade,
-surface a specific message), the error must remain structured all the
-way to the decider:
+When control flow must *act* on a failure (retry, skip, degrade),
+keep the error structured to the decider:
 
 ```rust
 pub enum StoreError {
@@ -112,10 +110,9 @@ the only policy owner, decides what a failure means.
 
 ## 5. Panics: only on unrecoverable state
 
-A panic is a bug report, not an error channel. Panic only when an
-internal invariant is broken and continuing would corrupt state or
-silently produce wrong output. Everything else (I/O, network, user
-input, parsing) is a `Result`.
+A panic is a bug report, not an error channel. Panic only on a broken
+internal invariant that would corrupt state or silently produce wrong
+output. Everything else (I/O, network, user input, parsing) is a `Result`.
 
 | Situation | Response |
 |---|---|
@@ -134,9 +131,8 @@ Rules:
 - Libraries never panic on caller mistakes; offer `checked_*`/`try_*`
   or return an error. A panic that *is* the contract (e.g. indexing)
   is documented with a `# Panics` doc section.
-- Binaries may panic at startup edges (malformed config), but
-  `fn main() -> Result` is still preferred: it prints a context
-  chain, not a stack trace.
+- Binaries may panic at startup (malformed config), but
+  `fn main() -> Result` is still preferred: context chain, not a stack trace.
 - `unreachable!()` only behind exhaustiveness you own (a private
   enum); on public or third-party types, return a variant instead.
 - A panic mid-operation is not transactional: use RAII guards
@@ -147,8 +143,7 @@ Rules:
   error strategy.
 
 Related: a wrong-state method that panics means the typestate failed
-(`typestate.md`); drop bombs panic deliberately as a guard
-(`raii.md`).
+(`typestate.md`); drop bombs panic deliberately (`raii.md`).
 
 ## 6. Wording
 

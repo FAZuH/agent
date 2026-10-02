@@ -1,8 +1,8 @@
 # effects: declarative side effects and their host translation
 
-The core returns effects as data; the host (or an `EffectHandler`
-adapter) executes them. This doc covers designing the vocabulary,
-executing safely, async and blocking work, and results coming back as
+Core returns effects as data; the host (or `EffectHandler`
+adapter) executes them. Covers vocabulary design,
+safe execution, async and blocking work, and results as
 messages.
 
 Contents:
@@ -23,13 +23,12 @@ Contents:
 | iced | `iced::Task<Message>` returned from `update` | the framework |
 | Domain core inside a framework app | own `Effect` enum, translated to `Task` in the shell wrapper | framework, via translation |
 
-The discipline is identical in all three: *describe* work as data, do not
-perform it inline. With iced, treat `Task` constructors
-(`Task::perform`, `Task::done`, `Task::batch`) as your effect vocabulary.
+Discipline is identical: *describe* work as data, never perform
+it inline. With iced, `Task` constructors
+(`Task::perform`, `Task::done`, `Task::batch`) are your vocabulary.
 
-The hybrid (third row) costs one translation step; pay it when you need
-the core testable without the runtime. Skip it for small apps where
-`Task` directly is fine.
+Pay the hybrid translation step only when the core must test
+without the runtime.
 
 ## 2. Designing the effect vocabulary
 
@@ -65,10 +64,9 @@ pub trait EffectHandler {
 ## 4. Blocking and async work
 
 **Hand-rolled TUI.** Keep the core synchronous. For slow work, spawn
-(`std::thread::spawn` or your runtime) and deliver the outcome back
-through the host's event source: an mpsc channel the loop polls, or a
-custom variant on your event enum. The loop structure stays: poll input,
-poll result channel, dispatch messages.
+(`std::thread::spawn` or your runtime) and deliver the outcome
+through the host event source. Loop stays: poll input,
+poll results, dispatch messages.
 
 **iced.** The executor is async; use `Task::perform`:
 
@@ -98,8 +96,8 @@ Blocking work inside the UI thread is the single most common TEA bug.
 
 ## 6. Idempotency, coalescing, ordering
 
-- Input and ticks flood: coalesce in the *host*, which drains all pending
-  events before rendering, render at most once per loop iteration.
+- Input and ticks flood: coalesce in the *host*, which drains pending
+  events before rendering, at most once per iteration.
 - Effects hitting the same resource twice in one batch (`SaveConfig`
   twice): pick last-wins or queue, once, and document it on the adapter.
 - Ordering inside a batch is the order `update` returned them. If order
@@ -119,7 +117,7 @@ Blocking work inside the UI thread is the single most common TEA bug.
   ```
 
 - `update` decides when to save (on commit, on quit) and returns
-  `Effect::SaveConfig(current)` only when dirty. The coalesce point is
+  `Effect::SaveConfig(current)` only when dirty; the coalesce point stays
   pure and testable.
 - When `Msg::ConfigSaved(Ok(..))` arrives, `update` refreshes the
   snapshot (pure field copy).

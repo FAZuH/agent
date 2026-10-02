@@ -8,7 +8,7 @@ tags: logging, background-jobs, queues, cron, cli, daemons
 
 **Impact: MEDIUM**
 
-Every example elsewhere in this skill is shaped around an HTTP request/response cycle. The underlying principle (one context-rich event per unit of work, emitted once at completion) generalizes past HTTP; only the definition of "unit of work" and the fields you attach change.
+Every example elsewhere is HTTP-shaped. The principle (one rich event per unit of work, emitted once at completion) generalizes past HTTP; only the unit definition and attached fields change.
 
 | Work unit | Execution boundary | Suggested fields |
 |---|---|---|
@@ -19,24 +19,22 @@ Every example elsewhere in this skill is shaped around an HTTP request/response 
 
 ### Queue Consumers
 
-Extract the trace context (`traceparent`, or a propagated `request_id`: see `rules/correlation.md`) from message metadata if the producer set it, so the event chains back to whatever created the message. Bind queue-specific metadata (consumer group, attempt count, time spent waiting in the queue) alongside business fields, and emit one event per message on ack or reject, not per processing step inside the handler. See the Non-HTTP Work Units section of `references/typescript.md` for the queue-consumer implementation.
+Extract trace context (`traceparent`, or propagated `request_id`: see `rules/correlation.md`) from message metadata when the producer set it, so the event chains back to its creator. Bind queue metadata (consumer group, attempt count, queue wait time) plus business fields; emit one event per message on ack/reject, never per internal step. Implementation: `references/typescript.md` Non-HTTP Work Units.
 
 ### Cron Jobs and CLI Tools
 
-Treat the whole invocation as the unit of work. For CLI tools, this typically means one event emitted right before the process exits (still via a `finally`-equivalent, e.g. wrapped in a top-level try/finally around `main()`), capturing flags, exit code, and duration.
+Treat the whole invocation as the unit. For CLIs, one event right before exit (top-level try/finally around `main()`), capturing flags, exit code, duration.
 
-**The logged exit code must match the real process exit status.** The common
-mistake is a wrapper that catches an exception (or `KeyboardInterrupt`) to emit
-its completion event and then **swallows** it. The event records
-`exit_code=130`/`outcome="interrupted"` while the process actually exits `0`,
-which makes the logs a lie and breaks any alerting keyed on exit status. After
-emitting the completion event, **re-raise** the caught exception (or set the
-real exit code) so the process exits with the status the event claims. If a
-deeper handler also catches to set the exit code, make sure it does not
-double-log the same exception as a second error record, and let the wide-event
-wrapper own the structured error, and let the outer handler only translate it
-to an exit code.
+**Logged exit code must match the real exit status.** The classic
+mistake: a wrapper catching an exception (or `KeyboardInterrupt`) to emit
+completion, then **swallowing** it. The event claims
+`exit_code=130`/`outcome="interrupted"` while the process exits `0`:
+logs lie, exit-status alerting breaks. After
+emitting, **re-raise** (or set the real exit code). Deeper handlers setting the exit code must not
+double-log the same exception as a second error; the wide-event
+wrapper owns the structured error, the outer handler only translates to
+an exit code.
 
 ### The Long-Running Batch Exception
 
-A single wide event covering a batch job that processes millions of records over several hours creates an operational blind spot: nothing is observable until the job finishes, and a crash mid-run produces no signal at all. Use a hybrid approach instead: emit periodic checkpoint events (e.g. every 10,000 records or every 5 minutes, whichever comes first) with running totals, then a final summary event on completion. The checkpoint events are what actually give you mid-run visibility; the summary event is what you query after the fact.
+One wide event over a multi-hour, million-record batch means blindness until the finish, and silence on mid-run crash. Hybrid instead: checkpoint events (e.g. every 10,000 records or 5 minutes, whichever first) with running totals, plus a final summary. Checkpoints give mid-run visibility; the summary serves post-hoc queries.
