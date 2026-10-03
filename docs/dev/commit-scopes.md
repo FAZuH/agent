@@ -45,7 +45,7 @@ that genuinely spans several components.
 feat(skill): add issue-closeout skill
 fix(plugin): mermaid-doctor timeout guard ignores render:false
 docs(script): document project-level sync targets
-feat(plugin): /md-link-keep trims existing mirrors immediately
+fix(plugin): the mermaid compiler passed a flag v12 removed
 feat(plugin): configurable publish dir via viz-state.json
 feat(agent): teach review subagent the spec axis
 feat: restructure repo into skill/agent/plugin/command

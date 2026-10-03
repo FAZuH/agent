@@ -19,7 +19,7 @@ the way it is, what was checked with real requests, and what is still unproven.
 ## The v2 plugin contract (the published docs are wrong)
 
 `https://opencode.ai/docs/plugins` documents a v1 shape. v2.0.20 uses this
-instead, read off `plugins/viz/src/index.ts` and `plugins/md-link/src/index.ts`:
+instead, read off `plugins/viz/src/index.ts`:
 
 | Concern | v1 (docs) | v2.0.20 (actual) |
 | --- | --- | --- |
