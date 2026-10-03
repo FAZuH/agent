@@ -269,8 +269,8 @@ approximations:
 - Inline math: `\(f(x)\)`
 - Centered display math, always multiline:
 
-\[
+$$
 f(x)
-\]
+$$
 
 If LaTeX can be used, it should be. Write \(f(x) = x^2\), not `f(x) = x^2`.
