@@ -17,15 +17,6 @@ Validates and exports Mermaid diagrams.
 - **`mermaid-compile`**: compiles a `.mmd` source to PNG, SVG, or PDF with `mmdc` (mermaid-cli) and exports it to `docs/diagrams/` unless you pass another directory.
 - **`mermaid-doctor`**: parses *and* renders every Mermaid block in the given `.html`, `.md`, `.txt`, or `.mmd` files and reports the parser's real errors with file:line locations.
 
-## md-link (`fazuh.md-link`)
-
-Mirrors the focused session into a Markdown file as it runs, for notes apps
-that read the same directory.
-
-Every command is client-side; nothing is sent to the model.
-
-- TUI: `ctrl+alt:n` or `/md-link [dir]` toggles the mirror, `/md-link-open` opens it, `/md-link-open-with` sets the opener, `/md-link-auto-open [on|off]`, `/md-link-sessions`, `/md-link-dir`, `/md-link-keep [n]`, and `/md-link-persist [on|off]` control the rest.
-
 ## viz (`fazuh.viz`)
 
 Authoring loops for one visual artifact: `write_mermaid`, `write_svg`,
