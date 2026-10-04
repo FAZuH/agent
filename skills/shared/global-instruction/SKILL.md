@@ -23,7 +23,7 @@ Load these before the first tool call, every session:
 ## Working habits
 
 - Check the current working directory first.
-- Use $latex$ for inline latex, and $$latex$$ for a latex block.
+- For latex, follow @presenting-latex.
 
 ## Shell discipline
 

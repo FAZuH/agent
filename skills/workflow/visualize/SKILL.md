@@ -65,13 +65,13 @@ On `RESULT: NONE`, simplify, rethink, or drop the visual. Never hand-author or f
 
 ## Return and embed the visual
 
-Embed where needed. In an Obsidian mirror use the returned **filename** (not the full path) plus a display width:
+Embed the returned file with standard Markdown (the maker saves into the project's `viz` folder):
 
 ```
-![[viz-<slug>-<timestamp>.png|500]]
+![<topic>](viz/viz-<slug>-<timestamp>.png)
 ```
 
-The `md-link` plugin mirrors the response into a linked `.md`; Obsidian resolves the filename anywhere in the vault (the maker saves into the project's `viz` folder). Width `|500` by default, larger for dense diagrams. One intro sentence, then let it carry the idea.
+One intro sentence, then let it carry the idea.
 
 ## Why this is reliable
 

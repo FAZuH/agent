@@ -38,7 +38,7 @@ export default {
     // points at the server's default location ($HOME), and the execute ctx
     // carries only the sessionID — so resolve the session's project dir from
     // the session API when the ctx lacks directory/worktree. A configured
-    // defaultDir (viz-state.json, md-link-style) overrides all of that;
+    // defaultDir (viz-state.json) overrides all of that;
     // empty means publish into the session's project.
     const VIZ_STATE_FILE = join(homedir(), ".config", "fazuh-agent", "data", "viz-state.json")
     // Last-resort publish base: setup ctx has no string project path for a
