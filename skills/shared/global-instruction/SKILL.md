@@ -13,17 +13,20 @@ Load these before the first tool call, every session:
 
 | Skill | Owns |
 |---|---|
-| `@ponytail` | The ladder: skip what need not exist, reuse what exists, stdlib and native before dependencies. |
-| `@antislop` | The anti-slop filter for UI, copy, and code comments. |
-| `@agent-map` | Repo layout, file classification, skill routing, delegation. |
+| `@antislop-copywriting` | The anti-slop filter for writing in general. |
+| `@agent-map` | Skill routing. |
 | `@terse` | Terse docs and comments: keep only what earns its place. |
 | `@jev-use` | A judgement over enumerable options goes to Jev, not to deliberation. |
-| `@prompt-user` | The bottom of a message that needs the user: 🏁 procedures, ❓ questions. |
 
 ## Working habits
 
+These are items you must do in specific situations.
+
 - Check the current working directory first.
 - For latex, follow @presenting-latex.
+- @presenting-latex : Writing latex
+- @prompt-user : Asking follow-up questions or telling the user to do something. This does not apply to @teach quizzes. The user will most likely ignore your prompts to the user if you do not follow this exact format.
+- @ponytail : When writing code, ANY code.
 
 ## Shell discipline
 
