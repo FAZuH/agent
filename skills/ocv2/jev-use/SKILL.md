@@ -64,16 +64,6 @@ The confidence verdict is the useful half:
 A `noul` has no separate confidence field: the value *is* P(yes), so 0.97 and
 0.03 are both certain, and 0.5 means Jev does not know.
 
-## What it costs
-
-Roughly $0.00002 for a small pick, $0.00005 for a review. A four-item review is
-under a tenth of a cent. `jegrep` (installed by `install.sh -b`, used through
-this plugin's loopback shim) is about $0.003 per search, the expensive
-one because it reads file contents.
-
-Never hesitate over cost. Hesitate over text: **the answer is only as good as
-the text you sent** to a service that cannot see what you see.
-
 ## Boundaries worth keeping
 
 - Jev is not an authority. It cannot permit, override policy, or make anything
