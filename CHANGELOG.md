@@ -1,3 +1,10 @@
+## [0.13.2](https://github.com/FAZuH/agent/compare/v0.13.1...v0.13.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **skill:** use $$ for display math, \\( \\) stays for inline ([374f0c6](https://github.com/FAZuH/agent/commit/374f0c63c1e4b1c9e78f33285ce3b39656ab7ef5))
+
 ## [0.13.1](https://github.com/FAZuH/agent/compare/v0.13.0...v0.13.1) (2026-10-02)
 
 ## [0.13.0](https://github.com/FAZuH/agent/compare/v0.12.8...v0.13.0) (2026-10-01)
@@ -47,15 +54,4 @@
 * **skill:** cargo jobs flags belong before -- ([3598af7](https://github.com/FAZuH/agent/commit/3598af7471ec9d4111dd2a8b3674f49e95b1f495))
 * **skill:** sweep the untagged papercuts too ([bfe371a](https://github.com/FAZuH/agent/commit/bfe371a5c70446db61f317981f57d41c940f0809))
 * **skill:** the omarchy install and quickshell traps ([3bc6f70](https://github.com/FAZuH/agent/commit/3bc6f70a47413b276a075b4bfa2756370de65dd4))
-
-## [0.12.6](https://github.com/FAZuH/agent/compare/v0.12.5...v0.12.6) (2026-09-30)
-
-
-### Bug Fixes
-
-* **agent:** advise rotation only for a committed credential ([d65cbae](https://github.com/FAZuH/agent/commit/d65cbae0c8275b57eaaac107f576bb759294e405))
-* **ocv2:** the model list is a local catalog, not the API's ([8b4faa6](https://github.com/FAZuH/agent/commit/8b4faa66dc995f9b3ac62af918814f3e8a069ba8))
-* **skill:** exclude target without a trailing slash ([c21bb71](https://github.com/FAZuH/agent/commit/c21bb713e1d871a5ca28a5bf9171255e4e9de1ad))
-* **skill:** keep prose, table and algorithm on one page flow ([4d96e3c](https://github.com/FAZuH/agent/commit/4d96e3c42a426e4b9fb75ea94979c39673a787e5))
-* **skill:** skip the finish steps a merge already satisfied ([a3b011c](https://github.com/FAZuH/agent/commit/a3b011cc1626352ef62fbd07c18e56f02c8faf39)), closes [#7](https://github.com/FAZuH/agent/issues/7)
 
