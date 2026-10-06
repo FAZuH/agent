@@ -44,7 +44,7 @@ the category directory never reaches the installed name.
 - **[pr-creator](../skills/workflow/pr-creator/SKILL.md)**: Create a pull request using the repository's standards and template.
 - **[pr-watchmerge](../skills/workflow/pr-watchmerge/SKILL.md)**: Watch pull request checks and merge once they pass.
 - **[setup-dev-docs](../skills/workflow/setup-dev-docs/SKILL.md)**: Bootstrap, audit, or update durable `docs/dev/` documentation.
-- **[teach](../skills/workflow/teach/SKILL.md)**: Run the multi-session teaching workflow, including probing, planning, quizzes, and durable lesson records.
+- **[learn](../skills/workflow/learn/SKILL.md)**: Run the multi-session teaching workflow, including probing, planning, quizzes, and durable lesson records.
 - **[visualize](../skills/workflow/visualize/SKILL.md)**: Create one correct, minimal visual artifact and verify it after rendering.
 
 ## Dev

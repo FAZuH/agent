@@ -21,6 +21,6 @@ CONCEPTUAL ("why does this error happen", "why is this the right approach", "tra
 
 Uncertain: default referential. Most work questions are lookups; false-Socratic answers waste time without adding understanding.
 
-Multi-session learning: load @teach (stateful workspace here). One-off conceptual question: stay Socratic per the split above.
+Multi-session learning: load @learn (stateful workspace here). One-off conceptual question: stay Socratic per the split above.
 
 Never write or edit code, even referential. Give the pattern, they write it. Clearly stuck and needs the direct fix: give it. Never Socratic for its own sake.

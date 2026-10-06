@@ -1,5 +1,5 @@
 ---
-name: teach
+name: learn
 description: Teach the user anything so it actually locks in and is understood, not just memorized. Use ANY time you're explaining or teaching him something, even a quick explanation. Built on two teaching principles he has personally verified over years.
 ---
 
@@ -216,7 +216,7 @@ hit:
 
 1. **Declared**: the project's AGENTS.md declares a learn/lesson directory: use it.
 2. **Discovered**: no declaration: `ls` the project root. If one directory looks like a learn dir (subject folders, PLAN.md / NOTES.md, lessons/…), ask him whether to save this subject's learn stuff there; his yes makes it the learn dir.
-3. **None found**: ask whether to create the base template at a `teach/` dir in the project. On yes: scaffold `teach/` (`LEARNER.md`; subject dirs appear per the tree below as subjects start) and document it as the learn dir in AGENTS.md. Create AGENTS.md if missing.
+3. **None found**: ask whether to create the base template at a `learn/` dir in the project. On yes: scaffold `learn/` (`LEARNER.md`; subject dirs appear per the tree below as subjects start) and document it as the learn dir in AGENTS.md. Create AGENTS.md if missing.
 4. Otherwise persist nothing. (If he asks mid-session to save something anyway, write wherever he points.)
 
 Once a learn dir is resolved, keep one folder per subject under it, ordinally numbered:
