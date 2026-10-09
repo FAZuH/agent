@@ -10,7 +10,7 @@ orchestrator routes work to.
 - ⭐ **[orchestrator](../agents/primary/orchestrator.md)**: routes work to the subagents below and owns delegation and run mode.
 - **[autocommit](../agents/primary/autocommit.md)**: commits pending changes, auto-discovering the repository's commit convention.
 - **[chat](../agents/primary/chat.md)**: exploration and general discussion.
-- **[tutor](../agents/primary/tutor.md)**: the learner-facing agent of the teach workflow: direct answers for lookups, Socratic prompts for concepts.
+- **[tutor](../agents/primary/tutor.md)**: the learner-facing agent of the learn workflow: direct answers for lookups, Socratic prompts for concepts.
 - **[phone-digest](../agents/primary/phone-digest.md)**: posts a digest of phone notifications to Discord.
 - **[mail-digest](../agents/primary/mail-digest.md)**: posts a daily digest of inbox mail to Discord.
 
@@ -40,7 +40,7 @@ orchestrator routes work to.
 
 - ⭐ **[document](../agents/document/document.md)**: writes ADRs, glossaries, runbooks, README sections, and changelogs. Never touches source code.
 
-The visual workflow routes to `mermaid-maker` and `svg-maker`. The teach
+The visual workflow routes to `mermaid-maker` and `svg-maker`. The learn
 workflow routes to `tutor` and the lesson-record system. See
 [workflows](../skills/orchestration/workflows/SKILL.md) for the full routing
 table and [skills](skills.md) for the skills these agents load.

@@ -412,7 +412,7 @@ check_mmdc
 step "Installing required skills"
 install_skill Agents365-ai/365-skills --skill mermaid-skill
 install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*'
-install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill grill-me grilling handoff to-questionnaire wait-what writing-for-agents
+install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*'
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
 install_skill DietrichGebert/ponytail --skill ponytail ponytail-review ponytail-audit \
@@ -437,6 +437,8 @@ if ((BONUS == 1)); then
   install_ffmpeg_skill
   install_reverse_skill
   install_jegrep
+  install_skill adithya-s-k/manim_skill
+  install_skill https://fframes.studio
 fi
 
 printf '\nInstallation complete. Restart OpenCode to load the configuration.\n'

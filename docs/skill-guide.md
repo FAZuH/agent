@@ -238,7 +238,7 @@ flowchart LR
 - **antislop** and **antislop-code**, **-copywriting**, **-human**, **-layoutmobile**, **-ui**: the anti-slop filter for generic AI output.
 - **ponytail** and **ponytail-review**, **-audit**, **-debt**, **-gain**, **-help**: the laziest solution that works; review, audit, and debt views of it.
 - **visualize**, **show-me**, **mermaid-skill**: one correct visual when a picture carries the idea.
-- **teach**: the multi-session teaching workflow, with quizzes and durable lesson records.
+- **learn**: the multi-session teaching workflow, with quizzes and durable lesson records.
 - **handoff**, **wait-what**: compact the session for another agent, or re-pitch the last answer.
 - **ocv2-api**, **ocv2-compact**, **ocv2-models**, **ocv2-sessions**, **ocv2-move**, **ocv2-pluginhealth**, **ocv2-unfuck**: the OpenCode v2 operations.
 
