@@ -149,6 +149,7 @@ This step decides whether the rest works. With level and goal in hand, reason
 out the best path for *this thing* to *this person*:
 
 - **Scope the field with a `research-synthesis` subagent.** Before planning the graph, map the topic: core concepts, real first principles, standard framings, common gotchas. Cheap, and it keeps the plan off half-remembered versions while surfacing genuine unconditional truths.
+- **Match the source's notation first.** Before planning the graph, read the source material's notation, conventions, and term definitions (course deck first, then textbooks). Teach and quiz in those forms, never in equivalents from memory. On conflict across sources, pick one per item and record it: course/exam deck wins for course work, standard textbook wins for general topics, more precise form wins ties. When a subject has a CONVENTIONS.md, read it here and teach per it; when it lacks one and a pick was made, create it (see *Lesson records*).
 - What are the unconditional truths this rests on? Is there a clean atomic unit ("ALL X is done through {____}")?
 - Which of those does he already hold (from Phase 1a)? Build from there. Not below it, not above it.
 - What's the motivated discovery path from those truths to his goal? Where does each step come from. Why would anyone reach for it?
@@ -211,13 +212,15 @@ established nodes. Unmotivated, unconfirmed facts never lock in.
 ## Lesson records: resolve the learn dir before persisting
 
 Teaching leaves artifacts worth carrying forward, but persistence is opt-in.
+**Read the device overlay first**: `{{USER_HOME}}/.config/fazuh-agent/skill/learn.md` holds device-specific learn settings (learn root, local paths). Read it before resolving anything; it never carries teaching rules, only machine placement.
 **Resolve the learn dir before writing anywhere**: in order, stop at the first
 hit:
 
 1. **Declared**: the project's AGENTS.md declares a learn/lesson directory: use it.
-2. **Discovered**: no declaration: `ls` the project root. If one directory looks like a learn dir (subject folders, PLAN.md / NOTES.md, lessons/…), ask him whether to save this subject's learn stuff there; his yes makes it the learn dir.
-3. **None found**: ask whether to create the base template at a `learn/` dir in the project. On yes: scaffold `learn/` (`LEARNER.md`; subject dirs appear per the tree below as subjects start) and document it as the learn dir in AGENTS.md. Create AGENTS.md if missing.
-4. Otherwise persist nothing. (If he asks mid-session to save something anyway, write wherever he points.)
+2. **Device overlay**: the overlay names a learn root: use it.
+3. **Discovered**: no declaration: `ls` the project root. If one directory looks like a learn dir (subject folders, PLAN.md / NOTES.md, lessons/…), ask him whether to save this subject's learn stuff there; his yes makes it the learn dir.
+4. **None found**: ask whether to create the base template at a `learn/` dir in the project. On yes: scaffold `learn/` (`LEARNER.md`; subject dirs appear per the tree below as subjects start) and document it as the learn dir in AGENTS.md. Create AGENTS.md if missing.
+5. Otherwise persist nothing. (If he asks mid-session to save something anyway, write wherever he points.)
 
 Once a learn dir is resolved, keep one folder per subject under it, ordinally numbered:
 
@@ -228,6 +231,7 @@ Once a learn dir is resolved, keep one folder per subject under it, ordinally nu
     PLAN.md                     the subject graph. See boundaries below
     NOTES.md                    the learner record for this subject
     RESOURCES.md                sources used + candidate backlog
+    CONVENTIONS.md              agreed notation, terms, and conventions. See boundaries below
     assets/                     shared media for this subject. Subject-global only,
                                 no per-lesson asset dirs
     lessons/
@@ -238,13 +242,14 @@ Once a learn dir is resolved, keep one folder per subject under it, ordinally nu
 
 Dates live in frontmatter and dated section headers, never in filenames. Date-titled notes collide with his Obsidian daily notes.
 
-**Create each file from the skeleton in this skill's `reference/<file>.template.md`; keep every heading verbatim after.** PLAN.md, NOTES.md, RESOURCES.md, quiz.md stay rigid; `session.md` narrative between title and `## Wrap-up` is free-form, and Wrap-up always closes the sitting.
+**Create each file from the skeleton in this skill's `reference/<file>.template.md`; keep every heading verbatim after.** PLAN.md, NOTES.md, RESOURCES.md, CONVENTIONS.md, quiz.md stay rigid; `session.md` narrative between title and `## Wrap-up` is free-form, and Wrap-up always closes the sitting.
 
 **File boundaries, or content scatters back:**
 
 - **`PLAN.md`**: the durable artifact, updated in place across sessions. Unconditional truths, strands table with status, the current **colored DAG**, open gaps not yet taught. Contains *no* prose about the learner: evidence lives elsewhere, cited by reference (`0002-badges q3 ✓`: lesson number + slug prefix + question id).
 - **`NOTES.md`**: everything about him as a learner of this subject: misconception list (each entry states the wrong belief itself, never "missed Q3"), probe edge findings from Phase 1, protocol quirks and preferences.
 - **`RESOURCES.md`**: sources actually used (with what each contributed) plus a backlog of candidates.
+- **`CONVENTIONS.md`**: agreed notation, terms, and conventions for this subject. One entry per item: adopted form, source, why chosen, rejected alternative. Read during Phase 2 planning and taught per; never a second copy of PLAN.md content.
 - **`lessons/<NNNN-slug>@session.md`**: today's live log: motivated and established nodes, sidetracks, status flips.
 - **`lessons/<NNNN-slug>/quiz.md`**: per-question items: options, selection, his note, verdict, explanation.
 - Media lives in `<subject>/assets/`, the subject's shared pool.
@@ -254,7 +259,7 @@ Dates live in frontmatter and dated section headers, never in filenames. Date-ti
 latest `quiz.md` under `## YYYY-MM-DD HH:mm: <label>`. A requiz turned
 teaching promotes to a fresh dir; note the split in both.
 
-**Distill at session end:** quiz verdicts → evidence refs in PLAN.md, misconception changes → NOTES.md, sources used → RESOURCES.md. The session.md stays as history.
+**Distill at session end:** quiz verdicts → evidence refs in PLAN.md, misconception changes → NOTES.md, sources used → RESOURCES.md, notation picks → CONVENTIONS.md. The session.md stays as history.
 
 Read-back: a later Phase 1 starts from PLAN.md + NOTES.md and the newest
 session/quiz files, never re-probing mastered ground. His time is scarcest in
