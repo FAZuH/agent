@@ -475,7 +475,8 @@ if ((BONUS == 1)); then
   install_jegrep
   install_skill adithya-s-k/manim_skill
   install_skill https://fframes.studio
-  install_skill https://github.com/cloudflare/security-audit-skill --skill security-audit
+  install_skill cloudflare/security-audit-skill --skill security-audit
+  install_skill docker/skill --skill '*'
 fi
 
 printf '\nInstallation complete. Restart OpenCode to load the configuration.\n'
