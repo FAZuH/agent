@@ -11,8 +11,15 @@ orchestrator routes work to.
 - **[autocommit](../agents/primary/autocommit.md)**: commits pending changes, auto-discovering the repository's commit convention.
 - **[chat](../agents/primary/chat.md)**: exploration and general discussion.
 - **[tutor](../agents/primary/tutor.md)**: the learner-facing agent of the learn workflow: direct answers for lookups, Socratic prompts for concepts.
-- **[phone-digest](../agents/primary/phone-digest.md)**: posts a digest of phone notifications to Discord.
-- **[mail-digest](../agents/primary/mail-digest.md)**: posts a daily digest of inbox mail to Discord.
+
+Digest agents live in `digest/<name>/` and deploy to
+`~/.config/fazuh-agent/digest/<name>/` (not the opencode agents dir), with the
+definition at `.opencode/agents/<name>.md` so the octask workdir lookup finds
+it. Each binary owns its schedule: `<name> setup --model <m>` creates the
+octask timer or edits the model on the existing one.
+
+- **[phone-digest](../digest/phone-digest/.opencode/agents/phone-digest.md)**: posts a digest of phone notifications to Discord.
+- **[mail-digest](../digest/mail-digest/.opencode/agents/mail-digest.md)**: posts a daily digest of inbox mail to Discord.
 
 ## Build
 

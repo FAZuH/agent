@@ -6,6 +6,7 @@ version = 4
 name = "agent"
 version = "0.13.4"
 dependencies = [
+ "clap",
  "mail-digest",
  "octask",
  "phone-digest",
@@ -397,6 +398,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "clap",
  "serde_json",
  "tempfile",
  "tiny_http",

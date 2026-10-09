@@ -4,6 +4,7 @@
 pub mod drain;
 pub mod ingest;
 pub mod post;
+pub mod setup;
 
 use std::env;
 use std::fs;
@@ -19,6 +20,7 @@ use clap::Parser;
 use clap::Subcommand;
 
 use crate::ingest::ServeConfig;
+use crate::setup::SetupArgs;
 
 #[derive(Parser)]
 #[command(
@@ -39,6 +41,8 @@ pub enum Cmd {
     Drain(DrainArgs),
     /// post a notification digest to Discord
     Post(PostArgs),
+    /// create the octask agent timer, or replace the model on the existing one
+    Setup(SetupArgs),
 }
 
 #[derive(Args)]
@@ -80,6 +84,7 @@ pub fn run() -> Result<()> {
             print_drained(&contents)
         }
         Cmd::Post(args) => post::post(&args.json, args.ping),
+        Cmd::Setup(args) => setup::run_setup(&args),
     }
 }
 
