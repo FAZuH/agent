@@ -136,3 +136,21 @@ fn load_task_rejects_foreign_execstart() {
     let err = load_task(dir.path(), "x").unwrap_err().to_string();
     assert_eq!(err, "edit: unexpected ExecStart format (re-add the task)");
 }
+
+#[test]
+fn load_task_accepts_the_nixos_shell_path() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("octask-x.service"),
+        "[Unit]\nDescription=x\n\n[Service]\nType=oneshot\nExecStart=/run/current-system/sw/bin/bash -c 'echo hi'\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("octask-x.timer"),
+        "[Timer]\nOnCalendar=daily\n",
+    )
+    .unwrap();
+    let t = load_task(dir.path(), "x").unwrap();
+    assert!(!t.is_agent);
+    assert_eq!(t.exec, "echo hi");
+}

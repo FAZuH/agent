@@ -10,6 +10,23 @@ use anyhow::bail;
 
 pub const PREFIX: &str = "octask-";
 
+/// Absolute bash for systemd `ExecStart` (verify requires one): the FHS
+/// path first, then the NixOS system profile path (stable across rebuilds).
+pub const SHELL_CANDIDATES: [&str; 3] = [
+    "/usr/bin/bash",
+    "/bin/bash",
+    "/run/current-system/sw/bin/bash",
+];
+
+pub fn shell_path() -> &'static str {
+    for cand in SHELL_CANDIDATES {
+        if Path::new(cand).is_file() {
+            return cand;
+        }
+    }
+    SHELL_CANDIDATES[0]
+}
+
 pub fn home() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
