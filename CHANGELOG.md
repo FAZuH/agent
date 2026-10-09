@@ -1,3 +1,10 @@
+## [0.13.6](https://github.com/FAZuH/agent/compare/v0.13.5...v0.13.6) (2026-10-09)
+
+
+### Features
+
+* **skill:** add security-audit skill to install bonus ([9a0650b](https://github.com/FAZuH/agent/commit/9a0650b36add36259268dda060ba3e746e42bf3c))
+
 ## [0.13.5](https://github.com/FAZuH/agent/compare/v0.13.4...v0.13.5) (2026-10-09)
 
 
@@ -22,6 +29,4 @@
 ### Bug Fixes
 
 * **skill:** use $$ for display math, \\( \\) stays for inline ([374f0c6](https://github.com/FAZuH/agent/commit/374f0c63c1e4b1c9e78f33285ce3b39656ab7ef5))
-
-## [0.13.1](https://github.com/FAZuH/agent/compare/v0.13.0...v0.13.1) (2026-10-02)
 
