@@ -1,3 +1,15 @@
+## [0.13.7](https://github.com/FAZuH/agent/compare/v0.13.6...v0.13.7) (2026-10-09)
+
+
+### Features
+
+* **skill:** add docker skill to install bonus ([67eb9d7](https://github.com/FAZuH/agent/commit/67eb9d7c041b3fb09988bd6e2d9c10a643021d34))
+
+
+### Bug Fixes
+
+* **script:** resolve octask unit shell for NixOS ([fe60d91](https://github.com/FAZuH/agent/commit/fe60d91430818c136886eb60c4554072d6f1443a))
+
 ## [0.13.6](https://github.com/FAZuH/agent/compare/v0.13.5...v0.13.6) (2026-10-09)
 
 
@@ -22,11 +34,4 @@
 * **skill:** add CONVENTIONS.md and device overlay to learn skill ([729b3ca](https://github.com/FAZuH/agent/commit/729b3ca7e8f02de3660076389e552eb1b1f1c54f))
 
 ## [0.13.3](https://github.com/FAZuH/agent/compare/v0.13.2...v0.13.3) (2026-10-04)
-
-## [0.13.2](https://github.com/FAZuH/agent/compare/v0.13.1...v0.13.2) (2026-10-04)
-
-
-### Bug Fixes
-
-* **skill:** use $$ for display math, \\( \\) stays for inline ([374f0c6](https://github.com/FAZuH/agent/commit/374f0c63c1e4b1c9e78f33285ce3b39656ab7ef5))
 
