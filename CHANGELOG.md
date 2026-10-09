@@ -1,3 +1,12 @@
+## [0.13.4](https://github.com/FAZuH/agent/compare/v0.13.3...v0.13.4) (2026-10-09)
+
+
+### Features
+
+* **script:** add ffreams skill to bonus installs ([115fce9](https://github.com/FAZuH/agent/commit/115fce93956d99d571b70ba9c098e38036d26dcb))
+* **script:** add manim skill to bonus installs ([c0bdcd9](https://github.com/FAZuH/agent/commit/c0bdcd93c69835ecc5ce721b4b130eab3b6b6ef3))
+* **skill:** add CONVENTIONS.md and device overlay to learn skill ([729b3ca](https://github.com/FAZuH/agent/commit/729b3ca7e8f02de3660076389e552eb1b1f1c54f))
+
 ## [0.13.3](https://github.com/FAZuH/agent/compare/v0.13.2...v0.13.3) (2026-10-04)
 
 ## [0.13.2](https://github.com/FAZuH/agent/compare/v0.13.1...v0.13.2) (2026-10-04)
@@ -31,13 +40,4 @@
 * **script:** embed the common rules at the bottom of the host AGENTS.md only ([5e1d3bc](https://github.com/FAZuH/agent/commit/5e1d3bc1699988b2edea2ad3ed328f069002750e))
 * **script:** strip the embedded AGENTS.md rules only with --embedded-rules ([658079e](https://github.com/FAZuH/agent/commit/658079e04879f917e799b375b39bef00cfeab90c))
 * **script:** strip the embedded rules from the host AGENTS.md on uninstall ([d89dea1](https://github.com/FAZuH/agent/commit/d89dea1a6e62705403ecb0efbfbceeb329fbf3aa))
-
-## [0.12.8](https://github.com/FAZuH/agent/compare/v0.12.7...v0.12.8) (2026-09-30)
-
-
-### Features
-
-* **script:** embed the common rules in the host AGENTS.md ([cff09cd](https://github.com/FAZuH/agent/commit/cff09cd91d3d93655cb09dd5ccab7338915c452e))
-* **skill:** add the global-instruction rules skill ([c3b0858](https://github.com/FAZuH/agent/commit/c3b08583666720b88e51bba85d9b6ba616b3fe1f))
-* **skill:** pdf-write assembles PDFs to a matching page width ([0c9340a](https://github.com/FAZuH/agent/commit/0c9340a24b9e8f11be1f215e23bc3bb7557777cf))
 
