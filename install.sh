@@ -438,6 +438,7 @@ if ((BONUS == 1)); then
   install_reverse_skill
   install_jegrep
   install_skill adithya-s-k/manim_skill
+  install_skill https://fframes.studio
 fi
 
 printf '\nInstallation complete. Restart OpenCode to load the configuration.\n'
