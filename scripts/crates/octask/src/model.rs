@@ -52,7 +52,8 @@ pub fn service_text(t: &Task) -> String {
         s.push_str(&format!("TimeoutStartSec={}\n", t.timeout));
     }
     s.push_str(&format!(
-        "ExecStart=/usr/bin/bash -c {}\n",
+        "ExecStart={} -c {}\n",
+        crate::sys::shell_path(),
         crate::sys::sq(&t.exec)
     ));
     s
@@ -121,10 +122,9 @@ pub fn load_task(dir: &Path, name: &str) -> Result<Task> {
             service.display()
         );
     }
-    if !execstart.starts_with("/usr/bin/bash -c '") {
+    let Some(rest) = strip_shell(&execstart) else {
         bail!("edit: unexpected ExecStart format (re-add the task)");
-    }
-    let rest = &execstart["/usr/bin/bash -c ".len()..];
+    };
     let inner = unsq(rest);
 
     if inner.contains(" run --agent ") || inner.contains(" run --model ") {
@@ -155,6 +155,19 @@ pub fn load_task(dir: &Path, name: &str) -> Result<Task> {
         t.exec = inner;
     }
     Ok(t)
+}
+
+/// Split `ExecStart=<shell> -c '<quoted>'` for any shell [`crate::sys::shell_path`]
+/// may write, so units created on NixOS stay editable anywhere.
+fn strip_shell(execstart: &str) -> Option<&str> {
+    for cand in crate::sys::SHELL_CANDIDATES {
+        if let Some(rest) = execstart.strip_prefix(cand)
+            && let Some(cmd) = rest.strip_prefix(" -c ")
+        {
+            return Some(cmd);
+        }
+    }
+    None
 }
 
 /// Greedy extraction like bash `sed -n 's/.* --model \([^ ][^ ]*\).*/\1/p'`:
