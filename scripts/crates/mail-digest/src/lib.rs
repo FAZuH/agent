@@ -10,6 +10,8 @@
 //! digest posts a compact summary line alongside a markdown file attachment
 //! carrying the original per-account full text.
 
+pub mod setup;
+
 use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;

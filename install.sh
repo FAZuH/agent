@@ -202,6 +202,31 @@ ensure_agent_values() {
   info "created .agent-values"
 }
 
+# digest/<name>/... mirrors to ~/.config/fazuh-agent/digest/<name>/... with
+# {{USER_HOME}} substituted. Any dir under digest/ rides the same rule; dest
+# dirs with no repo source are removed.
+deploy_digest() {
+  local src="$ROOT/digest" dest="$HOME/.config/fazuh-agent/digest" d name target f
+  [[ -d "$src" ]] || return 0
+  mkdir -p "$dest"
+  for d in "$src"/*/; do
+    [[ -d "$d" ]] || continue
+    name="$(basename "$d")"
+    target="$dest/$name"
+    mkdir -p "$target"
+    rsync -a --delete "$d" "$target/"
+    while IFS= read -r -d '' f; do
+      grep -q '{{USER_HOME}}' "$f" 2>/dev/null || continue
+      sed -i "s|{{USER_HOME}}|$HOME|g" "$f"
+    done < <(find "$target" -type f -print0)
+  done
+  for target in "$dest"/*/; do
+    [[ -d "$target" ]] || continue
+    [[ -d "$src/$(basename "$target")" ]] || rm -rf "$target"
+  done
+  info "deployed digest agents to $dest"
+}
+
 install_ffmpeg_skill() {
   local source target path
   TMP_DIR="$(mktemp -d)"
@@ -301,6 +326,8 @@ skills:$HOME/.config/opencode/skills
 agents:$HOME/.config/opencode/agents
 plugins:$HOME/.config/opencode/plugins
 commands:$HOME/.config/opencode/commands
+digest-mail:$HOME/.config/fazuh-agent/digest/mail-digest/.opencode/agents/mail-digest.md
+digest-phone:$HOME/.config/fazuh-agent/digest/phone-digest/.opencode/agents/phone-digest.md
 values:$ROOT/.agent-values
 reverse-skill:$HOME/.local/share/reverse-skill
 ITEMS
@@ -427,6 +454,15 @@ step "Installing repository packages"
 ensure_agent_values
 git -C "$ROOT" submodule update --init
 cargo install --path "$ROOT/scripts"
+
+step "Deploying digest agents and schedules"
+deploy_digest
+# Override the unattended model with DIGEST_MODEL=... ./install.sh
+DIGEST_MODEL="${DIGEST_MODEL:-opencode/mimo-v2.6-flash-free}"
+"$HOME/.cargo/bin/mail-digest" setup --model "$DIGEST_MODEL" \
+  --workdir "$HOME/.config/fazuh-agent/digest/mail-digest"
+"$HOME/.cargo/bin/phone-digest" setup --model "$DIGEST_MODEL" \
+  --workdir "$HOME/.config/fazuh-agent/digest/phone-digest"
 
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g

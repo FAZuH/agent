@@ -71,6 +71,21 @@ remove_sync_files() {
   fi
 }
 
+# Digest agent defs are deployed by install.sh, not sync.sh, so they need
+# their own removal. Only digest/ goes; notes, secrets, and data stay.
+remove_digest() {
+  local dir="$HOME/.config/fazuh-agent/digest"
+  if [[ ! -e "$dir" ]]; then
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    info "would remove $dir"
+  else
+    rm -rf "$dir"
+    info "removed $dir"
+  fi
+}
+
 # The installer embeds the global-instruction rules in the host AGENTS.md
 # between these markers. install.sh is not sourceable (it installs as it reads),
 # so the markers and the strip are repeated here; keep the two in step.
@@ -204,6 +219,7 @@ else
 fi
 
 remove_sync_files
+remove_digest
 if ((REMOVE_EMBEDDED_RULES)); then
   remove_global_instruction_ref
 fi
