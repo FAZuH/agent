@@ -1,3 +1,10 @@
+## [0.13.8](https://github.com/FAZuH/agent/compare/v0.13.7...v0.13.8) (2026-10-10)
+
+
+### Bug Fixes
+
+* **script:** incorrect external skill package name ([3e038fa](https://github.com/FAZuH/agent/commit/3e038fafa71244dadf5ea7cfa557ed6c4ba3488a))
+
 ## [0.13.7](https://github.com/FAZuH/agent/compare/v0.13.6...v0.13.7) (2026-10-09)
 
 
@@ -32,6 +39,4 @@
 * **script:** add ffreams skill to bonus installs ([115fce9](https://github.com/FAZuH/agent/commit/115fce93956d99d571b70ba9c098e38036d26dcb))
 * **script:** add manim skill to bonus installs ([c0bdcd9](https://github.com/FAZuH/agent/commit/c0bdcd93c69835ecc5ce721b4b130eab3b6b6ef3))
 * **skill:** add CONVENTIONS.md and device overlay to learn skill ([729b3ca](https://github.com/FAZuH/agent/commit/729b3ca7e8f02de3660076389e552eb1b1f1c54f))
-
-## [0.13.3](https://github.com/FAZuH/agent/compare/v0.13.2...v0.13.3) (2026-10-04)
 
