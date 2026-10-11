@@ -16,14 +16,15 @@ BONUS=0
 CHECK=0
 TMP_DIR=""
 
-# Pinned versions of everything this script fetches: the skills CLI from npm,
-# papercuts and the git checkouts by commit. Move a pin with the update-pins
-# skill; it checks the remote and reports the diff before editing.
+# Pinned versions of everything this script fetches: the skills and rea-agents
+# npm packages by version, papercuts and the git checkouts by commit. Move a
+# pin with the update-pins skill; it checks the remote and reports the diff
+# before editing.
 SKILLS_CLI_VERSION="1.7.0"
 PAPERCUTS_REV="369b2aeb6f4d6414ddaf2df71d90c8a0419e06bf"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
-REVERSE_SKILL_REV="cab634bd855fc287f6e420c1f36fd1a6b9245960"
+REA_AGENTS_VERSION="6.4.0"
 # jegrep v0.1.3. A tag object dereferences to the commit cargo actually builds.
 JEGREP_REV="c84f4561c081c9bcef494384d69c6e55012ca0da"
 
@@ -249,19 +250,12 @@ install_ffmpeg_skill() {
   info "installed ffmpeg-skill"
 }
 
-# reverse-skill is a repository, not a skill package: its routing scripts read
-# paths relative to the checkout, and upstream says to keep the whole root.
-install_reverse_skill() {
-  local target="$HOME/.local/share/reverse-skill"
-  if [[ -d "$target/.git" ]]; then
-    git -C "$target" fetch -q --depth 1 origin "$REVERSE_SKILL_REV"
-    git -C "$target" checkout -q --detach FETCH_HEAD
-  else
-    [[ ! -e "$target" ]] || die "$target exists and is not a reverse-skill checkout"
-    clone_pinned https://github.com/zhaoxuya520/reverse-skill "$REVERSE_SKILL_REV" "$target"
-  fi
-  bash "$target/skills/scripts/refresh-tool-index.sh"
-  info "installed reverse-skill to $target"
+# REA registers itself through its own CLI: setup writes a local MCP server
+# entry into OpenCode's config and installs the matching skill. The registration
+# pins to the package-runner version, so uninstall reverses the same one.
+install_rea() {
+  npx --yes "rea-agents@$REA_AGENTS_VERSION" setup --client opencode --yes
+  info "registered REA with OpenCode (rea-agents $REA_AGENTS_VERSION)"
 }
 
 # jegrep is the semantic-grep binary the jev plugin shells out to. It reads
@@ -329,7 +323,7 @@ commands:$HOME/.config/opencode/commands
 digest-mail:$HOME/.config/fazuh-agent/digest/mail-digest/.opencode/agents/mail-digest.md
 digest-phone:$HOME/.config/fazuh-agent/digest/phone-digest/.opencode/agents/phone-digest.md
 values:$ROOT/.agent-values
-reverse-skill:$HOME/.local/share/reverse-skill
+rea:$HOME/.agents/skills/reverse-engineer-anything
 ITEMS
 }
 
@@ -469,7 +463,7 @@ ensure_global_instruction_ref
 if ((BONUS == 1)); then
   step "Installing bonus skills"
   install_ffmpeg_skill
-  install_reverse_skill
+  install_rea
   install_jegrep
   install_skill adithya-s-k/manim_skill
   install_skill https://fframes.studio
