@@ -5,22 +5,23 @@ description: Move the pinned versions in install.sh and uninstall.sh forward. Us
 
 # Update pins
 
-`install.sh` pins what it fetches: the `skills` CLI by npm version, papercuts,
-bgrun, ffmpeg-skill, and reverse-skill by commit. This skill moves a pin to a
-new upstream version. It never moves one silently.
+`install.sh` pins what it fetches: the `skills` and `rea-agents` npm packages
+by version, papercuts, bgrun, and ffmpeg-skill by commit. This skill moves a
+pin to a new upstream version. It never moves one silently.
 
 ## The pins
 
 | Pin | File | Upstream | How to check the remote |
 |-----|------|----------|-------------------------|
 | `SKILLS_CLI_VERSION` | `install.sh`, `uninstall.sh` | npm `skills` | `npm view skills version` |
+| `REA_AGENTS_VERSION` | `install.sh`, `uninstall.sh` | npm `rea-agents` | `npm view rea-agents version` |
 | `PAPERCUTS_REV` | `install.sh` | `github.com/FAZuH/papercuts` | `git ls-remote https://github.com/FAZuH/papercuts HEAD` |
 | `BGRUN_REV` | `install.sh` | `github.com/FAZuH/bgrun` | `git ls-remote https://github.com/FAZuH/bgrun HEAD` |
 | `FFMPEG_SKILL_REV` | `install.sh` | `github.com/kajisho5/ffmpeg-skill` | `git ls-remote https://github.com/kajisho5/ffmpeg-skill HEAD` |
-| `REVERSE_SKILL_REV` | `install.sh` | `github.com/zhaoxuya520/reverse-skill` | `git ls-remote https://github.com/zhaoxuya520/reverse-skill HEAD` |
 
-`SKILLS_CLI_VERSION` is set in **two** files. Move both in one edit, or
-`uninstall.sh` keeps removing with a version that never wrote the files.
+`SKILLS_CLI_VERSION` and `REA_AGENTS_VERSION` are each set in **two** files.
+Move both copies of a pin in one edit, or `uninstall.sh` keeps removing with a
+version that never wrote the files.
 
 ## Not pinned
 

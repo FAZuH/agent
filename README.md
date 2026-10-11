@@ -84,8 +84,8 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
   installed with `cargo install`.
 
 Add `-b` to also install the bonus items: `anti-slop` for filtering generic AI
-output, `ffmpeg-skill` for editing media locally, and `reverse-skill` for
-reverse engineering and authorized security work:
+output, `ffmpeg-skill` for editing media locally, and REA for reverse
+engineering and authorized security work:
 
 ```bash
 ./install.sh -b
@@ -99,24 +99,26 @@ Both skills come from an upstream:
 - [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill):
   `ffmpeg-skill`, copied by hand and checked with its own doctor script.
 
-`reverse-skill` is a repository, not a skill package, so it is cloned whole into
-`~/.local/share/reverse-skill` and its tool index is refreshed there. Upstream
-says to use it from the full checkout, not from a copy of `skills/`:
+REA is an npm package with its own installer, so the bonus install runs
+`rea setup --client opencode --yes` at the pinned version. Setup registers
+REA's local MCP server in OpenCode's config and installs the
+`reverse-engineer-anything` skill into `~/.agents/skills`. The MCP entry lives
+in OpenCode's config, which `sync.sh` does not manage; `uninstall.sh
+--external-skills` reverses setup with `rea uninstall`. Native binary analysis
+additionally needs an existing Hopper, Ghidra, or IDA install; static
+JavaScript, Electron, and .NET inspection need none of them.
 
-- [zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill): a
-  49-module routing pack for APK, binary, JS, malware, CTF, and pentest work.
-  Open the checkout as a workspace, or point a session at its `RULES.md` and
-  `skills/<name>/SKILL.md`. The tools it drives (Java, Node, Python, jadx,
-  radare2, and the rest) stay optional; the tool index only reports which ones
-  this machine has.
+- [morluto/rea](https://github.com/morluto/rea): reverse engineer binaries,
+  apps, and runtime behavior through a local MCP server. Guides and case
+  studies: [rea.tools](https://rea.tools/).
 
 ### Pinned versions
 
-`install.sh` pins everything it fetches outside the `skills` CLI: the CLI's npm
-version, and the papercuts, bgrun, ffmpeg-skill, and reverse-skill commits. The
+`install.sh` pins everything it fetches outside the `skills` CLI: the CLI's and
+REA's npm versions, and the papercuts, bgrun, and ffmpeg-skill commits. The
 pin block sits at the top of `install.sh`. To move one, load the `update-pins`
 skill: it checks each remote, shows the diff between the pinned and current
-commit, and only edits after you approve. `uninstall.sh` mirrors the CLI pin
+commit, and only edits after you approve. `uninstall.sh` mirrors the npm pins
 because a newer CLI cannot remove what it did not write.
 
 ### Uninstall
