@@ -74,6 +74,15 @@ injects the bearer token jegrep's `--endpoint local` deliberately omits.
 (`parentID`) and returns immediately. The child runs in the background, same
 as ctrl+b, with the parent's model. Its id is in the reply for follow-up.
 
+## aside (`fazuh.aside`)
+
+`/aside <question>` forks the current session at its latest state, asks the
+question in the fork, and switches the view to the fork (like `/fork`).
+The fork keeps full history and stays open for follow-ups, unlike `/btw`
+which answers once in place. In the TUI the switch is automatic; on hosts
+with no TUI module (desktop, API, mini) use `/aside-fork`, which forks and
+asks but leaves the view alone — the fork id is in the reply.
+
 ## Commands
 
 Command definitions are a separate item class and live in `commands/`, not in
