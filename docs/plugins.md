@@ -68,6 +68,12 @@ Semantic grep is upstream [jegrep](https://github.com/can1357/jegrep), installed
 by `install.sh -b` and pointed at the loopback shim in `src/shim.ts`, which
 injects the bearer token jegrep's `--endpoint local` deliberately omits.
 
+## dispatch (`fazuh.dispatch`)
+
+`/dispatch <task>` spawns a `general` subagent bound to the current session
+(`parentID`) and returns immediately. The child runs in the background, same
+as ctrl+b, with the parent's model. Its id is in the reply for follow-up.
+
 ## Commands
 
 Command definitions are a separate item class and live in `commands/`, not in
