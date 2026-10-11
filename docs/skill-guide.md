@@ -231,6 +231,7 @@ flowchart LR
 - **notes**: durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behaviour.
 - **skill-doctor**: audit skill links, name collisions, and drift from the source.
 - **external-skills**: install, update, or remove upstream-owned skills.
+- **hindsight-docs**: the memory system's documentation; the recall/retain habit lives in global-instruction.
 - **scheduled-task**, **scheduled-agent**: systemd user timers and the restricted agents they run.
 - **omarchy-plugin-install**: install an Omarchy shell plugin end to end.
 - **simple-english**: plain, layman-readable prose for readers outside the field.

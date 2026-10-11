@@ -439,6 +439,9 @@ install_skill FAZuH/bgrun --skill bgrun
 # Not bonus: global-instruction makes @antislop a mandatory load
 # every session, and a default install that omits it leaves that dangling.
 install_skill miqdadbadjuber/anti-slop
+# The hindsight repo carries a full docs site; its clone blows past the skills
+# CLI's 300s default on a slow link and aborts the whole run, so raise the cap.
+SKILLS_CLONE_TIMEOUT_MS=900000 install_skill https://github.com/vectorize-io/hindsight --skill hindsight-docs
 cargo install --git https://github.com/FAZuH/papercuts --rev "$PAPERCUTS_REV"
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"
 
