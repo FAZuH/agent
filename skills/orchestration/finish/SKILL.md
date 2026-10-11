@@ -27,7 +27,7 @@ Repo uses `.scratch/` (see the @scratch skill): load the @scratch-finish skill a
 
 ## 4. Summarize the session
 
-Review the conversation. Concise summary: files changed or created, problems solved or features added, decisions made.
+Review the conversation. Concise summary: files changed or created, problems solved or features added, decisions made. If the hindsight MCP tools are present, `retain` the summary; absent → skip.
 
 ## 5. Suggest next steps
 
