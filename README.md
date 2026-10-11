@@ -82,10 +82,6 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
   `bgrun` CLI, which runs a command as a systemd user unit.
 - [FAZuH/papercuts](https://github.com/FAZuH/papercuts): the `papercuts` CLI,
   installed with `cargo install`.
-- [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail): the
-  `plugins/ponytail/upstream` submodule, the `fazuh.ponytail` plugin that wraps
-  it, and 6 skills: `ponytail`, `ponytail-review`, `ponytail-audit`,
-  `ponytail-debt`, `ponytail-gain`, `ponytail-help`.
 
 Add `-b` to also install the bonus items: `anti-slop` for filtering generic AI
 output, `ffmpeg-skill` for editing media locally, and `reverse-skill` for
@@ -153,7 +149,7 @@ does not appear or a plugin is not loaded.
 - [Skills](docs/skills.md): all 68 skills, one line each
 - [Skill Guide](docs/skill-guide.md): which skills to load at each phase of a change
 - [Agents](docs/agents.md): all 17 agent definitions, by role
-- [Plugins](docs/plugins.md): the five OpenCode plugins, plus the command definitions in `commands/`
+- [Plugins](docs/plugins.md): the OpenCode plugins, plus the command definitions in `commands/`
 - [Jev](docs/jev.md): the decision-model plugin: what it guarantees, what it costs, how to point it at another provider
 - [Commit and Changelog](docs/dev/commit-changelog.md): how this repository writes commits and changelog entries
 - [Commit Scopes](docs/dev/commit-scopes.md): the closed vocabulary of Conventional Commit scopes

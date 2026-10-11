@@ -42,8 +42,6 @@ rerank across axes, and never edit the target.
 
 Then over the same target:
 
-- @ponytail-review: what to delete, what the standard library or the platform
-  already does. One line per finding. Do not apply the cuts.
 - @antislop for UI or copy, @antislop-code for code comments. Report only the
   rules they break.
 
@@ -79,8 +77,7 @@ End every review by handing the fixes to the next agent:
   reason.
 - Tell the receiving agent to call the Skill tool for `handoff` first, so it
   works from the same method instead of a paraphrase.
-- List the skills the fixes need: `ponytail-review` for complexity,
-  `antislop` or `antislop-code` for the rest, plus whatever the fix
-  touches (`implement`, `tdd`, `test-guidelines`, a domain skill).
+- List the skills the fixes need: `antislop` or `antislop-code`, plus whatever
+  the fix touches (`implement`, `tdd`, `test-guidelines`, a domain skill).
 - The next agent starts from the handoff, not the transcript: anything
   it needs goes in the document.

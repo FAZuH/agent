@@ -442,10 +442,8 @@ install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering 
 install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*'
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
-install_skill DietrichGebert/ponytail --skill ponytail ponytail-review ponytail-audit \
-  ponytail-debt ponytail-gain ponytail-help
-# Not bonus: global-instruction makes @ponytail and @antislop a mandatory load
-# every session, and a default install that omits either leaves that dangling.
+# Not bonus: global-instruction makes @antislop a mandatory load
+# every session, and a default install that omits it leaves that dangling.
 install_skill miqdadbadjuber/anti-slop
 cargo install --git https://github.com/FAZuH/papercuts --rev "$PAPERCUTS_REV"
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"

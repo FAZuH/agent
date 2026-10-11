@@ -26,7 +26,6 @@ These are items you must do in specific situations.
 - For latex, follow @presenting-latex.
 - @presenting-latex : Writing latex
 - @prompt-user : Asking follow-up questions or telling the user to do something. This does not apply to @learn quizzes. The user will most likely ignore your prompts to the user if you do not follow this exact format.
-- @ponytail : When writing code, ANY code.
 
 ## Shell discipline
 

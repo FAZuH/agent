@@ -19,20 +19,14 @@ new upstream version. It never moves one silently.
 | `FFMPEG_SKILL_REV` | `install.sh` | `github.com/kajisho5/ffmpeg-skill` | `git ls-remote https://github.com/kajisho5/ffmpeg-skill HEAD` |
 | `REVERSE_SKILL_REV` | `install.sh` | `github.com/zhaoxuya520/reverse-skill` | `git ls-remote https://github.com/zhaoxuya520/reverse-skill HEAD` |
 
-The `plugins/ponytail/upstream` submodule needs no pin here: git records its
-commit in the parent repository, so `git submodule update --init` is already
-deterministic. Move it with
-`git submodule update --remote plugins/ponytail/upstream` and commit the
-gitlink.
-
 `SKILLS_CLI_VERSION` is set in **two** files. Move both in one edit, or
 `uninstall.sh` keeps removing with a version that never wrote the files.
 
 ## Not pinned
 
-The six `install_skill` repos (mattpocock/skills, Agents365-ai/365-skills,
-AminBlg/SimpleEnglish, FAZuH/bgrun, miqdadbadjuber/anti-slop,
-DietrichGebert/ponytail) install through
+The five `install_skill` repos (mattpocock/skills, Agents365-ai/365-skills,
+AminBlg/SimpleEnglish, FAZuH/bgrun, miqdadbadjuber/anti-slop)
+install through
 the `skills` CLI, which has no ref flag and always takes upstream HEAD. They
 move on their own; do not add a pin without switching them off the CLI.
 

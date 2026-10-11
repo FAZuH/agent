@@ -48,8 +48,7 @@ fall back to a guessed directory.
    A non-fast-forward, conflict, or authentication failure stops the run.
    Report it; never force, never retry with reset.
 
-5. **Update submodules.** A pull can move the `plugins/ponytail/upstream`
-   gitlink, and the plugin will not load against the old commit:
+5. **Update submodules** (if any):
 
    ```bash
    git -C "$repo" submodule update --init
@@ -63,7 +62,7 @@ fall back to a guessed directory.
 
    Note the paths that need different handling: `install.sh` and `uninstall.sh`
    (version pins moved upstream with the pull), `scripts/` (Rust workspace, needs
-   checks), `plugins/ponytail` (needs a cold restart after push).
+   checks).
 
 7. **Run the repository checks** when the pull touched `scripts/`, `plugins/`,
    or the Rust workspace: `./dev.sh all` from the checkout. Fix nothing here;
@@ -95,9 +94,8 @@ fall back to a guessed directory.
 
 ## Restart rule
 
-OpenCode v2 hot-reloads most components. Changed `plugins/ponytail` needs a
-cold restart: the nested `require()` calls inside its submodule are not
-cache-busted. A plugin that does not appear at all is the other restart case.
+OpenCode v2 hot-reloads most components. A plugin that does not appear at all
+is the restart case.
 
 ## Rules
 
