@@ -1,3 +1,11 @@
+## [0.13.10](https://github.com/FAZuH/agent/compare/v0.13.9...v0.13.10) (2026-10-11)
+
+
+### Features
+
+* **script:** install hindsight-docs skill, raise its clone timeout ([71f2008](https://github.com/FAZuH/agent/commit/71f2008777865a2d9bfbaad53f5090215f9fe8b4))
+* **skill:** wire hindsight memory into the orchestration loop ([1263dec](https://github.com/FAZuH/agent/commit/1263decf1ce4a998128a0db516013215ea23ac15))
+
 ## [0.13.9](https://github.com/FAZuH/agent/compare/v0.13.8...v0.13.9) (2026-10-11)
 
 
@@ -33,11 +41,4 @@
 ### Features
 
 * **skill:** add security-audit skill to install bonus ([9a0650b](https://github.com/FAZuH/agent/commit/9a0650b36add36259268dda060ba3e746e42bf3c))
-
-## [0.13.5](https://github.com/FAZuH/agent/compare/v0.13.4...v0.13.5) (2026-10-09)
-
-
-### Features
-
-* move digest agents to digest/, add setup subcommand wiring octask ([d21206b](https://github.com/FAZuH/agent/commit/d21206b07550473cd1deb2a5e051fd38a1ae791d))
 
