@@ -6,9 +6,7 @@ commands ships a `tui.ts` at its own directory root: the CLI resolves the TUI
 entry as `<plugin-dir>/tui` and loads nothing otherwise.
 
 Plugin IDs are `fazuh.<name>`. `sync.sh` copies the plugin directory into the
-OpenCode config; a `ponytail` change also needs a cold restart, because the
-nested `require()` calls inside the submodule are not cache-busted by hot
-reload.
+OpenCode config.
 
 ## mermaid (`fazuh.mermaid`)
 
@@ -70,15 +68,20 @@ Semantic grep is upstream [jegrep](https://github.com/can1357/jegrep), installed
 by `install.sh -b` and pointed at the loopback shim in `src/shim.ts`, which
 injects the bearer token jegrep's `--endpoint local` deliberately omits.
 
-## ponytail (`fazuh.ponytail`)
+## dispatch (`fazuh.dispatch`)
 
-A v2 adapter over the [ponytail](https://github.com/DietrichGebert/ponytail)
-submodule at `plugins/ponytail/upstream`. Upstream ships a v1 adapter that v2
-refuses to load, so this shim reuses the upstream builders and registers them
-through v2 transforms. A context hook injects the mode instructions into every
-session, subagents included, and the upstream command templates are registered
-so `/ponytail` and its siblings work. Update the submodule with
-`git submodule update --remote plugins/ponytail/upstream`.
+`/dispatch <task>` spawns a `general` subagent bound to the current session
+(`parentID`) and returns immediately. The child runs in the background, same
+as ctrl+b, with the parent's model. Its id is in the reply for follow-up.
+
+## aside (`fazuh.aside`)
+
+`/aside <question>` forks the current session at its latest state, asks the
+question in the fork, and switches the view to the fork (like `/fork`).
+The fork keeps full history and stays open for follow-ups, unlike `/btw`
+which answers once in place. In the TUI the switch is automatic; on hosts
+with no TUI module (desktop, API, mini) use `/aside-fork`, which forks and
+asks but leaves the view alone — the fork id is in the reply.
 
 ## Commands
 

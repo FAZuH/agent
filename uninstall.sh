@@ -21,15 +21,13 @@ EXTERNAL_SKILLS=(
   simple-english
   bgrun
   antislop antislop-code antislop-copywriting antislop-human antislop-layoutmobile antislop-ui
-  ponytail ponytail-audit ponytail-debt ponytail-gain ponytail-help ponytail-review
   ffmpeg-skill
 )
 
-REVERSE_SKILL_DIR="$HOME/.local/share/reverse-skill"
-
-# Must match the pin in install.sh; a newer CLI cannot remove what it did not
+# Must match the pins in install.sh; a newer CLI cannot remove what it did not
 # write. The update-pins skill moves both together.
 SKILLS_CLI_VERSION="1.7.0"
+REA_AGENTS_VERSION="6.4.0"
 
 usage() {
   cat <<EOF
@@ -47,7 +45,7 @@ Options:
   --dry-run              Show what would be removed without changing files.
   --external-packages    Also uninstall papercuts and bgrun from this installer.
   --external-skills      Also remove the external skills installed by install.sh,
-                         including the reverse-skill checkout.
+                         including the REA registration and skill.
   --embedded-rules       Also remove the rules this installer embedded in
                          ~/.config/opencode/AGENTS.md; the default keeps them.
 EOF
@@ -171,24 +169,22 @@ remove_external_skills() {
       npx --yes "skills@$SKILLS_CLI_VERSION" remove -g --agent opencode --yes "$skill"
     fi
   done
-  remove_reverse_skill
+  remove_rea
 }
 
-# reverse-skill is a git checkout, not a CLI-installed skill, so it needs a
-# different removal path. Confirm the origin before deleting anything.
-remove_reverse_skill() {
-  command -v git >/dev/null 2>&1 || return 0
-  local origin
-  origin="$(git -C "$REVERSE_SKILL_DIR" config --get remote.origin.url 2>/dev/null || true)"
-  if [[ "$origin" != *zhaoxuya520/reverse-skill* ]]; then
-    [[ -e "$REVERSE_SKILL_DIR" ]] && info "reverse-skill at $REVERSE_SKILL_DIR is not from zhaoxuya520/reverse-skill; kept"
-    return
-  fi
+# REA wrote its MCP entry and skill through its own CLI, so reverse it with
+# the same version. The registration lives in OpenCode's config, outside
+# sync.sh's manifest.
+remove_rea() {
   if ((DRY_RUN)); then
-    info "would remove the reverse-skill checkout at $REVERSE_SKILL_DIR"
-  else
-    rm -rf "$REVERSE_SKILL_DIR"
+    info "would run rea uninstall (rea-agents $REA_AGENTS_VERSION)"
+    return 0
   fi
+  if ! npx --yes "rea-agents@$REA_AGENTS_VERSION" uninstall </dev/null; then
+    info "rea uninstall failed; the REA registration and skill may remain"
+    return 0
+  fi
+  info "removed the REA registration and skill"
 }
 
 while (($#)); do

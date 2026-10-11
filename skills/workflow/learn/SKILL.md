@@ -113,10 +113,13 @@ If, reading the finished set cold, you can still tell which is right without kno
 
 ### Phase 1: Probe (never skip this)
 
-**Start from the record, not zero.** Read related lesson records first (*Lesson
-records*): green nodes are floor (skip or one spot-check each), red
-misconceptions under today's material get re-checked first, probing starts at
-the recorded frontier. Spend questions only where no record answers.
+**Start from the record, not zero.** Read **every** top-level subject file in
+full — PLAN.md, NOTES.md, RESOURCES.md, CONVENTIONS.md (*Lesson records*) —
+never a subset: an unread file can hold notation picks or state that
+contradict what you teach. Then the newest lesson records. Green nodes are
+floor (skip or one spot-check each), red misconceptions under today's material
+get re-checked first, probing starts at the recorded frontier. Spend questions
+only where no record answers.
 
 Two unknowns, two tools, boundary kept clean:
 
@@ -259,10 +262,13 @@ Dates live in frontmatter and dated section headers, never in filenames. Date-ti
 latest `quiz.md` under `## YYYY-MM-DD HH:mm: <label>`. A requiz turned
 teaching promotes to a fresh dir; note the split in both.
 
-**Distill at session end:** quiz verdicts → evidence refs in PLAN.md, misconception changes → NOTES.md, sources used → RESOURCES.md, notation picks → CONVENTIONS.md. The session.md stays as history.
+**Distill at session end — all four files, always.** Quiz verdicts → evidence refs in PLAN.md, misconception changes → NOTES.md, sources used → RESOURCES.md, notation picks → CONVENTIONS.md. Reading all four is part of this step, not optional: distilling one file while the others go unread is how contradictions ship (a notation pick recorded in CONVENTIONS.md while NOTES.md keeps teaching the old form). The session.md stays as history.
 
-Read-back: a later Phase 1 starts from PLAN.md + NOTES.md and the newest
-session/quiz files, never re-probing mastered ground. His time is scarcest in
+**Any top-level write triggers a consistency sweep.** After editing one top-level file, re-check the other three for statements the edit just made false — notation, status, paths, frontier. Fix them in the same pass.
+
+Read-back: a later Phase 1 starts from **all four** top-level files (PLAN.md,
+NOTES.md, RESOURCES.md, CONVENTIONS.md) plus the newest session/quiz files,
+never re-probing mastered ground. His time is scarcest in
 probing; records stop spending it.
 
 ## Formatting: math renders as LaTeX

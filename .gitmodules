@@ -1,3 +1,0 @@
-[submodule "plugins/ponytail/upstream"]
-	path = plugins/ponytail/upstream
-	url = https://github.com/DietrichGebert/ponytail
