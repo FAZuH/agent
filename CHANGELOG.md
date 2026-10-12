@@ -1,3 +1,11 @@
+## [0.13.11](https://github.com/FAZuH/agent/compare/v0.13.10...v0.13.11) (2026-10-12)
+
+
+### Features
+
+* **script:** extract digest-post crate and rework digest posts ([634ed95](https://github.com/FAZuH/agent/commit/634ed9589bab4a1186b1da23437b419a13ec2d69))
+* **script:** make digest deployment opt-in in install.sh ([a82fce6](https://github.com/FAZuH/agent/commit/a82fce6bc5ccc44d062739984b320bb4b3c4b9af))
+
 ## [0.13.10](https://github.com/FAZuH/agent/compare/v0.13.9...v0.13.10) (2026-10-11)
 
 
@@ -34,11 +42,4 @@
 ### Bug Fixes
 
 * **script:** resolve octask unit shell for NixOS ([fe60d91](https://github.com/FAZuH/agent/commit/fe60d91430818c136886eb60c4554072d6f1443a))
-
-## [0.13.6](https://github.com/FAZuH/agent/compare/v0.13.5...v0.13.6) (2026-10-09)
-
-
-### Features
-
-* **skill:** add security-audit skill to install bonus ([9a0650b](https://github.com/FAZuH/agent/commit/9a0650b36add36259268dda060ba3e746e42bf3c))
 
