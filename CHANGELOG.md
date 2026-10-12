@@ -1,3 +1,10 @@
+## [0.13.12](https://github.com/FAZuH/agent/compare/v0.13.11...v0.13.12) (2026-10-12)
+
+
+### Bug Fixes
+
+* digest agents appended --ping to routine-only posts ([cd7a895](https://github.com/FAZuH/agent/commit/cd7a8957ee2ca16621c9f17f73640197a1065950))
+
 ## [0.13.11](https://github.com/FAZuH/agent/compare/v0.13.10...v0.13.11) (2026-10-12)
 
 
@@ -30,16 +37,4 @@
 ### Bug Fixes
 
 * **script:** incorrect external skill package name ([3e038fa](https://github.com/FAZuH/agent/commit/3e038fafa71244dadf5ea7cfa557ed6c4ba3488a))
-
-## [0.13.7](https://github.com/FAZuH/agent/compare/v0.13.6...v0.13.7) (2026-10-09)
-
-
-### Features
-
-* **skill:** add docker skill to install bonus ([67eb9d7](https://github.com/FAZuH/agent/commit/67eb9d7c041b3fb09988bd6e2d9c10a643021d34))
-
-
-### Bug Fixes
-
-* **script:** resolve octask unit shell for NixOS ([fe60d91](https://github.com/FAZuH/agent/commit/fe60d91430818c136886eb60c4554072d6f1443a))
 
