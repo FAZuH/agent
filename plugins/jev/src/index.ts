@@ -2,58 +2,19 @@
  * fazuh.jev — bounded decisions from TypeSafe's Jev, over any provider that
  * exposes a System One /systemone endpoint.
  *
- * Four tools, one per use case that earned its place. Each hands Jev text plus a
- * typed question and returns an answer with a confidence verdict; none of them
- * acts. Use case 2 (digest priority) is deferred on cost and is not here.
- *
- * Fail-open is the contract: every tool returns a message telling the agent to
- * carry on unaided rather than throwing, so a Jev outage never blocks work. The
- * one exception is the opt-in tool.execute.before gate, which is off by default.
+ * Two hooks, no tools. The power is automatic: the skill-routing hook asks Jev
+ * which skill fits each user prompt and advises it in context; the risk hook
+ * judges bash/edit/write calls and can block one. Both are off by default and
+ * fail open — a Jev outage never blocks work, except the opt-in risk gate,
+ * which is the one switch allowed to block.
  */
 
-import { ask, estimateCost, JevError, type JevQuestion, type JevStateBody } from "./jev.ts"
-import { FEATURES, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, setFeature, spend, type JevState } from "./state.ts"
-
-const USAGE_NOTE = `Jev decides, you act. Its answer is a signal, not a verdict: weigh it, verify it, and ignore it when your own reading disagrees.`
-
-/** v2 tool results are { content }; a bare string makes the harness throw. */
-function ok(result: { decisions: any[]; inputTokens: number; elapsedMs: number; model: string }, lead: string) {
-  return { content: render(result, lead) }
-}
-
-function render(result: { decisions: any[]; inputTokens: number; elapsedMs: number; model: string }, lead: string) {
-  const lines = result.decisions.map((d) => {
-    const bits = [`- **${d.id}** → \`${JSON.stringify(d.value)}\``]
-    if (d.probability !== undefined) bits.push(`P=${d.probability.toFixed(2)}`)
-    if (d.margin !== undefined) bits.push(`margin=${d.margin.toFixed(2)}`)
-    if (d.confidence !== undefined) bits.push(`confidence=${d.confidence.toFixed(2)}`)
-    bits.push(d.confident ? "confident" : `**low confidence** — ${d.note ?? "weak answer"}`)
-    return bits.join(" · ")
-  })
-  return [
-    lead,
-    "",
-    ...lines,
-    "",
-    `${result.inputTokens} input tokens · ${estimateCost(result.inputTokens)} · ${result.elapsedMs}ms · ${result.model}`,
-    USAGE_NOTE,
-  ].join("\n")
-}
-
-/** ok() returns the text; every caller hands it back as a v2 tool result. */
-
-function failOpen(error: unknown, what: string) {
-  const detail = error instanceof JevError ? error.message : String(error)
-  return { content: `Jev was not consulted for ${what} (${detail}). Proceed without it — decide using your own judgement.` }
-}
-
-/** The plugin or this feature is off. Nothing was sent, so nothing was spent. */
-function disabled(tool: string, feature: string) {
-  const because = pluginEnabled() ? `feature "${feature}"` : "the Jev plugin is off"
-  return {
-    content: `${tool} is turned off (${because}). Turn it on with /jev-features, or decide this yourself — nothing was sent and nothing was spent.`,
-  }
-}
+import { ask, JevError } from "./jev.ts"
+import { cfgBool, cfgNum, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, setSkillCriterion, skillCriteriaMap, SKILL_CRITERIA_VERSION, spend, FEATURES } from "./state.ts"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { readFileSync, readdirSync } from "node:fs"
+import { createHash } from "node:crypto"
 
 /**
  * The one error the hook is allowed to let out. Anything else — a Jev
@@ -62,271 +23,279 @@ function disabled(tool: string, feature: string) {
  */
 class GateBlock extends Error {}
 
-const CHOICE_CANDIDATES = {
-  type: "array",
-  description: "The options to choose between, 2-20. Each needs a stable `id` and a `meaning` that says when it is the right pick.",
-  items: {
-    type: "object",
-    properties: {
-      id: { type: "string", description: "Short stable identifier, e.g. a skill name or a control ref." },
-      meaning: { type: "string", description: "When this option is the correct one." },
-    },
-    required: ["id", "meaning"],
-    additionalProperties: false,
-  },
-}
-
-function choiceTool(opts: {
-  name: string
-  lead: string
-  question: string
-  stateField: string
-  stateHint: string
-  feature: string
-}) {
-  return {
-    name: opts.name,
-    description: `${opts.question}\n\nGive Jev the ${opts.stateField} and the candidates; it picks one and says how sure it is. ${opts.lead} Jev is advisory — if it is unsure, decide yourself.`,
-    input: {
-      type: "object",
-      properties: {
-        [opts.stateField]: { type: "string", description: opts.stateHint },
-        question: { type: "string", description: "The one question to ask, in a sentence." },
-        candidates: CHOICE_CANDIDATES,
-      },
-      required: [opts.stateField, "question", "candidates"],
-      additionalProperties: false,
-    },
-    execute: async (input: any) => {
-      if (!featureOn(opts.feature)) return disabled(opts.name, opts.feature)
-      const candidates = (input.candidates ?? []) as { id: string; meaning: string }[]
-      if (candidates.length < 2) return failOpen(new JevError("needs at least 2 candidates", "shape"), opts.name)
-      if (candidates.length > 20) {
-        return failOpen(new JevError(`${candidates.length} candidates is too many; narrow to the plausible ones first`, "shape"), opts.name)
-      }
-      const seen = new Set(candidates.map((c) => c.id))
-      if (seen.size !== candidates.length) return failOpen(new JevError("candidate ids must be distinct", "shape"), opts.name)
-      try {
-        const questions: Record<string, JevQuestion> = {
-          pick: {
-            type: "choice",
-            instructions: String(input.question),
-            criteria: Object.fromEntries(candidates.map((c) => [c.id, String(c.meaning)])),
-          },
-        }
-        const result = await ask(String(input[opts.stateField]) as JevStateBody, questions)
-        const chosen = result.decisions[0]
-        return ok(result, `${opts.lead}\n\nPicked: \`${chosen.value}\`${chosen.confident ? "" : " (low confidence — verify before relying on it)"}`)
-      } catch (error) {
-        return failOpen(error, opts.name)
-      }
-    },
-  }
-}
-
-const REVIEW_LEVELS = [
-  "No concrete concern in the evidence given.",
-  "A localized concern worth a closer look.",
-  "Touches shared behaviour, a boundary, or a contract.",
-  "Directly conflicts with a stated requirement or weakens a check.",
-]
+// ——— skill routing hook ———
 
 /**
- * Yes/no gates asked about the change as a whole. Each one is a question the
- * diff can answer on its own, so "no" is a real signal rather than a shrug.
- * A gate that fires means read harder, never read less: the verdict only
- * raises the floor on attention, and every item is still returned.
+ * Where installed skills live: the global config, the external-skills dir,
+ * and the current project. First occurrence of a directory name wins, so a
+ * project skill shadows a global one the same way the skill tool resolves.
  */
-const REVIEW_GATES: [string, string][] = [
-  ["breaks_a_stated_rule", "Does this change violate a rule, convention, or constraint stated in the goal or project docs?"],
-  ["should_not_be_here", "Does this change do something the task did not ask for, or belong in a different place?"],
-  ["weakens_a_check", "Does this remove, skip, or loosen a test, assertion, validation, or guard?"],
-  ["touches_a_boundary", "Does this change auth, permissions, input handling, secrets, money, or another trust boundary?"],
-  ["changes_a_contract", "Does this change a public interface, a schema, a serialized format, or a shared signature?"],
-  ["has_unverified_claims", "Does the change or its evidence assert something that no test or receipt supports?"],
-  ["is_hard_to_reverse", "Would reverting this be expensive, or would it affect data already written?"],
+const ROSTER_ROOTS = [
+  join(process.cwd(), ".opencode", "skills"),
+  join(homedir(), ".config", "opencode", "skills"),
+  join(homedir(), ".agents", "skills"),
 ]
 
-function reviewTool() {
-  return {
-    name: "jev_review_rank",
-    description:
-      "Rank changed code by how much review attention it deserves, using diff hunks, each file's role, and the related tests as evidence. " +
-      "Returns a priority order plus any rules the change appears to break. " +
-      "HARD RULE: this never excludes code from review. A low score and a clean gate list mean 'nothing stood out', not 'skip it' — " +
-      "an unscored change is exactly the change a reviewer should not trust. Every item you pass in comes back.",
-    input: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "What the change is trying to accomplish." },
-        items: {
-          type: "array",
-          description: "The changed units to rank. Every one is returned.",
-          items: {
-            type: "object",
-            properties: {
-              path: { type: "string", description: "File path, or file:line for a hunk." },
-              role: { type: "string", description: "What this file is for, e.g. 'auth middleware', 'generated', 'test fixture'." },
-              change: { type: "string", description: "The diff hunk or a summary of what changed." },
-              relatedTests: { type: "string", description: "Tests covering this change, and whether they were run." },
-            },
-            required: ["path", "role", "change"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["goal", "items"],
-      additionalProperties: false,
-    },
-    execute: async (input: any) => {
-      if (!featureOn("review_rank")) return disabled("jev_review_rank", "review_rank")
-      const items = (input.items ?? []) as any[]
-      const gateProbability = loadState().gateProbability
-      if (items.length === 0) return { content: "No items to rank." }
-      if (items.length > 20) {
-        return { content: `Too many items (${items.length}) for one call. Rank the top 20 by size or blast radius first, then run the rest.` }
-      }
-      try {
-        // One question per item over a shared state: Jev evaluates them in
-        // parallel, so the whole diff ranks in a single billed call.
-        const result = await ask(
-          {
-            goal: String(input.goal),
-            changes: items.map((i) => ({
-              path: String(i.path),
-              role: String(i.role ?? "unstated"),
-              change: String(i.change),
-              related_tests: i.relatedTests ? String(i.relatedTests) : "none given",
-            })),
-          },
-          Object.fromEntries(
-            items.map((item, i) => [
-              `item_${i}`,
-              {
-                type: "score" as const,
-                instructions: `Review attention for ${String(item.path)} (${String(item.role ?? "unstated")}). Judge the change as given; missing evidence means unknown, not safe.`,
-                criteria: REVIEW_LEVELS,
-              },
-            ]),
-          ),
-        )
-        const ranked = result.decisions
-          .map((d, i) => ({ path: String(items[i].path), level: Number(d.value), margin: d.margin ?? 0 }))
-          .sort((a, b) => b.level - a.level || b.margin - a.margin)
-
-        // Gates run in a second call so a big diff does not dilute them into the
-        // per-item scores. Same state, different question shape.
-        let fired: { id: string; question: string; p: number }[] = []
-        let gateNote = ""
-        try {
-          // The gates are a second billed call. Turning them off leaves the
-          // ranking intact, which is why it is its own switch.
-          if (!featureOn("review_gates")) throw new JevError("review gates are turned off (/jev-features)", "shape")
-          const gate = await ask(
-            {
-              goal: String(input.goal),
-              changes: items.map((i) => ({
-                path: String(i.path),
-                role: String(i.role ?? "unstated"),
-                change: String(i.change),
-                related_tests: i.relatedTests ? String(i.relatedTests) : "none given",
-              })),
-            },
-            Object.fromEntries(
-              REVIEW_GATES.map(([id, instructions]) => [
-                id,
-                {
-                  type: "noul" as const,
-                  instructions,
-                  criteria: {
-                    true: "The supplied evidence shows this condition holds.",
-                    false: "The supplied evidence does not show this condition holding. Absent evidence is not evidence of absence.",
-                  },
-                },
-              ]),
-            ),
-          )
-          fired = REVIEW_GATES.map(([id, question]) => {
-            const p = Number(gate.decisions.find((x) => x.id === id)?.probability ?? 0.5)
-            return { id, question, p }
-          })
-          gateNote = `${gate.inputTokens} + ${gate.elapsedMs}ms`
-        } catch (error) {
-          gateNote = `gates unavailable (${error instanceof JevError ? error.message : String(error)})`
-        }
-
-        const warnings = fired.filter((g) => g.p >= gateProbability)
-        // Below the gate and above 0.3 is Jev declining to answer. Silence is
-        // not a pass, so it reads as a reason to look closer.
-        const unsure = fired.filter((g) => g.p < gateProbability && g.p > 0.3)
-
-        return {
-          content: [
-            `Review order, highest attention first (${ranked.length} of ${items.length} items — nothing was dropped):`,
-            "",
-            ...ranked.map((r, i) => `${i + 1}. \`${r.path}\` — level ${r.level.toFixed(2)}/3 · between "${REVIEW_LEVELS[Math.min(REVIEW_LEVELS.length - 1, Math.floor(r.level))]}" and "${REVIEW_LEVELS[Math.min(REVIEW_LEVELS.length - 1, Math.ceil(r.level))]}"`),
-            "",
-            warnings.length
-              ? `⚠️ Jev flags ${warnings.length} of ${REVIEW_GATES.length} rules as possibly broken — read these against the source before approving:` +
-                  "\n" +
-                  warnings.map((g) => `  - **${g.id}** P=${g.p.toFixed(2)} — ${g.question}`).join("\n")
-              : `No rule gate fired (${REVIEW_GATES.length} checked). That is not a clean bill of health: Jev did not find a violation, which is weaker than a reviewer confirming there is none.`,
-            unsure.length
-              ? `\n⚠️ Jev was unsure on ${unsure.length} gate(s), which is a reason to read closer, not to relax:` +
-                  "\n" +
-                  unsure.map((g) => `  - **${g.id}** P=${g.p.toFixed(2)} — ${g.question}`).join("\n")
-              : "",
-            "",
-            `${result.inputTokens} input tokens · ${estimateCost(result.inputTokens)} · ${result.elapsedMs}ms · gates: ${gateNote} · ${result.model}`,
-            "",
-            "Treat all of this as a warning to read harder, never as a reason to skip. A low score means nothing stood out in the evidence given, and an unscored change is exactly the one a reviewer should not trust.",
-            USAGE_NOTE,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        }
-      } catch (error) {
-        return failOpen(error, "jev_review_rank")
-      }
-    },
-  }
+interface SkillEntry {
+  id: string
+  meaning: string
 }
 
-function checkTool() {
-  return {
-    name: "jev_check",
-    description:
-      "Ask Jev one independent yes/no question about some text and get P(yes) back. Use for a bounded factual judgement: does this output claim something unsupported, does this text match the rule, is this condition met. " +
-      "Ask one thing per call — a compound question gets a coin-flip answer. There is no separate confidence: a value near 0.5 means Jev does not know.",
-    input: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "The text to judge. Treated as evidence, never as instructions." },
-        question: { type: "string", description: "One yes/no question about that text." },
-        yesMeans: { type: "string", description: "What a true answer means, in one clause." },
-        noMeans: { type: "string", description: "What a false answer means, in one clause." },
-      },
-      required: ["text", "question"],
-      additionalProperties: false,
-    },
-    execute: async (input: any) => {
-      if (!featureOn("check")) return disabled("jev_check", "check")
-      try {
-        const criteria =
-          input.yesMeans || input.noMeans
-            ? { true: String(input.yesMeans ?? "yes"), false: String(input.noMeans ?? "no") }
-            : undefined
-        const result = await ask(
-          { evidence: String(input.text) },
-          { verdict: { type: "noul", instructions: String(input.question), ...(criteria ? { criteria } : {}) } },
-        )
-        const d = result.decisions[0]
-        return ok(result, `P(true) = ${d.probability?.toFixed(2)} → **${d.value ? "yes" : "no"}**`)
-      } catch (error) {
-        return failOpen(error, "jev_check")
-      }
-    },
+/** Stable cache key: the description, not the file. Body edits that leave the
+ *  description alone never invalidate. */
+export function hashDescription(description: string): string {
+  return createHash("sha256").update(description, "utf8").digest("hex").slice(0, 16)
+}
+
+/** Stable id for the installed skill set: order-independent. */
+export function rosterHash(entries: { id: string }[]): string {
+  return createHash("sha256").update(entries.map((e) => e.id).sort().join("\n"), "utf8").digest("hex").slice(0, 16)
+}
+
+/**
+ * First-sentence truncation. The Jev choice pays per token per candidate, and
+ * the decisive signal is usually the opening sentence; the "when NOT to pick"
+ * clauses in later sentences are what the optimizer cache preserves properly.
+ * New or changed descriptions fall back to this until optimized.
+ */
+export function firstSentence(text: string): string {
+  const oneLine = text.replace(/\s+/g, " ").trim()
+  const cut = oneLine.search(/[.!?](\s|$)/)
+  return (cut === -1 ? oneLine : oneLine.slice(0, cut + 1)).slice(0, 200) || oneLine.slice(0, 200)
+}
+
+/**
+ * Resolve each roster entry to its choice criterion: the cached optimizer
+ * output when the stored hash matches the live description, else the
+ * first-sentence fallback. Returns the resolved entries plus the ids whose
+ * cache missed, so the caller can optimize exactly those.
+ */
+export function resolveCriteria(roster: SkillEntry[]): { entries: SkillEntry[]; stale: SkillEntry[] } {
+  const cache = skillCriteriaMap(loadState().skillCriteria)
+  const entries: SkillEntry[] = []
+  const stale: SkillEntry[] = []
+  for (const skill of roster) {
+    const hit = cache[skill.id]
+    if (hit && hit.origHash === hashDescription(skill.meaning)) {
+      entries.push({ id: skill.id, meaning: hit.terse })
+    } else {
+      entries.push({ id: skill.id, meaning: firstSentence(skill.meaning) })
+      stale.push(skill)
+    }
   }
+  return { entries, stale }
+}
+
+/**
+ * The installed-skill roster: name + description per skill.
+ *
+ * Preferred source is the host's own registry — `ctx.skill.list` when the
+ * runtime exposes it (the types declare only `transform`, but the binary
+ * carries `skill.list` and the TUI's @-autocomplete uses the same registry).
+ * The manual directory scan is the fallback for a host that does not expose
+ * it: same roots the host itself scans, so the roster matches.
+ */
+export async function skillRoster(ctx: any, roots: string[]): Promise<SkillEntry[]> {
+  // In-process skill service, if this host's context carries it.
+  try {
+    const list = ctx?.skill?.list
+    if (typeof list === "function") {
+      const raw = await list.call(ctx.skill)
+      const entries = normalizeRoster(raw)
+      if (entries.length) return entries
+    }
+  } catch {}
+
+  // Filesystem, matching what the host itself scans.
+  return diskRoster(roots)
+}
+
+/** Accepts either a bare array or the API's `{ data: [...] }` envelope. */
+function normalizeRoster(raw: unknown): SkillEntry[] {
+  const rows = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : []
+  const out: SkillEntry[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const id = String(row?.name ?? row?.id ?? "").trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    // Full description here: truncation and the optimizer cache are applied
+    // later in resolveCriteria, so every reader of the roster gets the same
+    // input regardless of source.
+    const description = String(row?.description ?? "").replace(/\s+/g, " ").trim()
+    out.push({ id, meaning: description || `installed skill ${id}` })
+  }
+  return out
+}
+
+/** Filesystem fallback: name + description from each SKILL.md's frontmatter. */
+function diskRoster(roots: string[]): SkillEntry[] {
+  const seen = new Set<string>()
+  const out: SkillEntry[] = []
+  for (const root of roots) {
+    let names: string[]
+    try {
+      names = readdirSync(root)
+    } catch {
+      continue
+    }
+    for (const name of names.sort()) {
+      if (seen.has(name)) continue
+      let text: string
+      try {
+        text = readFileSync(join(root, name, "SKILL.md"), "utf8")
+      } catch {
+        continue
+      }
+      // Frontmatter is YAML; only the two fields we need, first match wins,
+      // description truncated — Jev needs the one-liner, not the body.
+      const fm = text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? ""
+      const skillName = fm.match(/^name:\s*(.+)$/m)?.[1]?.trim()
+      const description = fm
+        .match(/^description:\s*([\s\S]*?)(?=^\w+:|$)/m)?.[1]
+        ?.replace(/\s+/g, " ")
+        .trim()
+      if (!skillName) continue
+      seen.add(name)
+      out.push({ id: skillName, meaning: description || `installed skill ${skillName}` })
+    }
+  }
+  return out
+}
+
+/**
+ * One pick per prompt, kept until the next prompt supersedes it. The context
+ * hook fires on every LLM request in the agentic loop; without this the same
+ * prompt would spend a Jev call per turn.
+ */
+interface RoutePick {
+  prompt: string
+  advice: string | null
+  ts: number
+}
+const routeCache = new Map<string, RoutePick>()
+
+async function routePrompt(prompt: string, roster: SkillEntry[], ctx: any): Promise<string | null> {
+  const F = "hook_skill_pick"
+  const maxCandidates = Math.max(2, Math.round(cfgNum(F, "maxCandidates")))
+  const { entries, stale } = resolveCriteria(roster)
+  const capped = entries.slice(0, maxCandidates)
+  if (capped.length < 2) return null
+  const result = await ask(
+    { task: prompt },
+    {
+      pick: {
+        type: "choice",
+        instructions:
+          "Choose which installed skill best covers this task. The candidates are the name and description of each SKILL.md; you do not need their bodies.",
+        criteria: Object.fromEntries(capped.map((s) => [s.id, s.meaning])),
+      },
+    },
+    {
+      timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))),
+      thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: cfgNum(F, "minMargin") },
+    },
+  )
+  const d = result.decisions[0]
+  // Auto warm-up runs only when the installed id set changed: rosterHash
+  // tracks the last set the optimizer saw, so description-only staleness and
+  // steady state never trigger a background call. The manual command covers
+  // everything else. Fire-and-forget — the current prompt has its answer.
+  if (stale.length && cfgBool(F, "autoOptimize") && rosterHash(capped) !== loadState().rosterHash) {
+    void optimizeCriteria(ctx, stale)
+      .then(() => saveState({ rosterHash: rosterHash(capped) }))
+      .catch(() => {})
+  }
+  if (!d.confident) {
+    logCall({ hook: "hook_skill_pick", skipped: `low confidence: ${d.note ?? "weak answer"}`, inputTokens: result.inputTokens })
+    return null
+  }
+  return renderAdvice(d)
+}
+
+/**
+ * The advised skills: the confident winner plus every runner-up at or above
+ * the alsoAbove floor, capped at maxPicks (-1 = every qualifier). A
+ * low-confidence winner injects nothing at all — runners-up never rescue a
+ * rejected pick, because pluralizing a shrug does not make it decisive.
+ */
+export function renderAdvice(d: { value: unknown; probability?: number; distribution?: Record<string, number> }): string {
+  const F = "hook_skill_pick"
+  const floor = cfgNum(F, "alsoAbove")
+  const cap = Math.round(cfgNum(F, "maxPicks"))
+  const ranked = Object.entries(d.distribution ?? {})
+    .filter(([id]) => id !== String(d.value))
+    .filter(([, p]) => typeof p === "number" && p >= floor)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, cap < 0 ? undefined : Math.max(0, cap - 1))
+  const names = [`@${String(d.value)} (P=${Number(d.probability ?? 0).toFixed(2)})`]
+  for (const [id, p] of ranked) names.push(`@${id} (P=${p.toFixed(2)})`)
+  const skills = names.length > 2 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names.join(" and ")
+  return `Jev routing: consider loading skill${names.length > 1 ? "s" : ""} ${skills}. Advisory — if your own reading disagrees, decide yourself.`
+}
+
+/**
+ * Optimize stale skill descriptions through the host LLM. One prompt, all
+ * stale skills batched: N descriptions in, N terse criteria out as JSON.
+ * Each criterion is a reason, not a label — when the skill is the right pick
+ * AND when it is not — capped at ~40 words, because that is what makes a
+ * choice sharp instead of a guess.
+ *
+ * Runs in the background: the current prompt uses the first-sentence fallback
+ * and the cache is warm for the next one. Failures log and leave the cache
+ * untouched, so a bad optimizer run can never poison the roster — the worst
+ * case is another fallback pick next time.
+ */
+export async function optimizeCriteria(ctx: any, stale: SkillEntry[]): Promise<{ done: number; failed: number }> {
+  // Remember a missing generate.text per process: without this, every prompt
+  // on such a host logs the same "unavailable" line and the log fills with it.
+  if ((optimizeCriteria as any)._noGenerate) return { done: 0, failed: stale.length }
+  let generate: any
+  try {
+    generate = ctx?.generate?.text
+    if (typeof generate !== "function") throw new Error("host has no generate.text")
+  } catch (error) {
+    ;(optimizeCriteria as any)._noGenerate = true
+    logCall({ hook: "hook_skill_pick", skipped: `optimizer unavailable: ${error instanceof Error ? error.message : String(error)}` })
+    return { done: 0, failed: stale.length }
+  }
+  const batch = stale.slice(0, 30)
+  const prompt = [
+    "Rewrite each skill description below as ONE terse choice criterion, max 40 words: state when the skill is the right pick AND when it is not. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
+    "",
+    ...batch.map((s) => `- ${s.id}: ${s.meaning.slice(0, 600)}`),
+  ].join("\n")
+  let done = 0
+  let failedDetail = ""
+  try {
+    // Awaited with a ceiling: the command path waits for the result, the
+    // hook's background warm-up just moves on. Either way a slow host only
+    // delays the cache, never the prompt.
+    const text = String(
+      await Promise.race([
+        generate.call(ctx.generate, prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("optimizer timed out after 30000ms")), 30_000)),
+      ]),
+    )
+    const jsonText = text.match(/\{[\s\S]*\}/)?.[0]
+    if (!jsonText) throw new Error(`optimizer returned no JSON object: ${text.slice(0, 200)}`)
+    let parsed: any
+    try {
+      parsed = JSON.parse(jsonText)
+    } catch {
+      throw new Error(`optimizer returned unparseable JSON: ${jsonText.slice(0, 200)}`)
+    }
+    for (const s of batch) {
+      const terse = typeof parsed[s.id] === "string" ? parsed[s.id].trim() : ""
+      if (!terse || terse.length > 400) continue
+      setSkillCriterion(s.id, hashDescription(s.meaning), terse)
+      done++
+    }
+  } catch (error) {
+    failedDetail = error instanceof Error ? error.message : String(error)
+    logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${failedDetail}` })
+  }
+  return { done, failed: batch.length - done }
 }
 
 /**
@@ -345,8 +314,8 @@ function riskHook() {
     description: "Jev risk annotation",
     execute: async (input: any) => {
       const tool = String(input?.tool ?? "")
-      const state = loadState()
-      if (!featureOn("risk_hook")) return
+      if (!featureOn("hook_risk")) return
+      const F = "hook_risk"
       const args = input?.args ?? input?.output?.args ?? {}
       const subject =
         typeof args.command === "string"
@@ -372,17 +341,17 @@ function riskHook() {
               },
             },
           },
-          { log: true },
+          { log: true, timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))), thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: 0 } },
         )
         const d = result.decisions[0]
-        if (blocksCall(d, state.gateProbability)) {
+        if (blocksCall(d, cfgNum(F, "gateProbability"))) {
           throw new GateBlock(
-            `jev gate: Jev puts P(risky)=${Number(d.probability).toFixed(2)} on this ${tool} call, at or above the ${state.gateProbability} block threshold. Confirm the action is intended, then retry. Change the threshold or turn the risk_hook feature off in /jev-features.`,
+            `jev gate: Jev puts P(risky)=${Number(d.probability).toFixed(2)} on this ${tool} call, at or above the ${cfgNum(F, "gateProbability")} block threshold. Confirm the action is intended, then retry. Change the threshold or turn the hook_risk feature off in /jev-features.`,
           )
         }
       } catch (error) {
         if (error instanceof GateBlock) throw error
-        logCall({ hook: "risk", tool, skipped: error instanceof JevError ? error.message : String(error) })
+        logCall({ hook: "hook_risk", tool, skipped: error instanceof JevError ? error.message : String(error) })
       }
     },
   }
@@ -393,31 +362,67 @@ export default {
   tui: true,
 
   setup: async (ctx: any) => {
-    await ctx.tool.transform((tools: any) => {
-      tools.add(
-        choiceTool({
-          name: "jev_pick_control",
-          lead: "Pick the control to act on next.",
-          question: "Choose which on-page control best matches a goal, given the extracted control list.",
-          stateField: "goal",
-          stateHint: "What you are trying to accomplish on this page.",
-          feature: "pick_control",
-        }) as any,
-      )
-      tools.add(
-        choiceTool({
-          name: "jev_pick_skill",
-          lead: "Pick the skill to load.",
-          question:
-            "Choose which installed skill best covers this task. The candidates are the name and description of each SKILL.md the skill tool already exposes; you do not need their bodies to choose.",
-          stateField: "task",
-          stateHint: "The user's request, in their words, plus the current situation if it matters.",
-          feature: "pick_skill",
-        }) as any,
-      )
-      tools.add(reviewTool() as any)
-      tools.add(checkTool() as any)
-    })
+    // The routing hook. `session.hook("prompt")` fires once per admitted user
+    // input — exactly "every time the user prompts". The host may reject the
+    // hook name (it is the least-documented of the session hooks), so
+    // registration is try/catch and rejection just disables the prompt-side
+    // trigger: the context hook still runs and picks up unseen prompts itself,
+    // at the cost of spending inside the request path.
+    if (typeof ctx?.session?.hook === "function") {
+      let promptHookLive = false
+      try {
+        await ctx.session.hook("prompt", async (event: any) => {
+          try {
+            if (!featureOn("hook_skill_pick")) return
+            const sessionID = String(event?.sessionID ?? event?.session?.id ?? "")
+            const text = String(event?.text ?? event?.prompt?.text ?? "")
+            if (!sessionID || !text.trim()) return
+            if (routeCache.has(sessionID) && routeCache.get(sessionID)!.prompt === text) return
+            // Seed synchronously so a slow Jev cannot race a second prompt
+            // into double-spending; the advice fills in when it lands.
+            routeCache.set(sessionID, { prompt: text, advice: null, ts: Date.now() })
+            const advice = await routePrompt(text, await skillRoster(ctx, ROSTER_ROOTS), ctx)
+            routeCache.set(sessionID, { prompt: text, advice, ts: Date.now() })
+          } catch (error) {
+            logCall({ hook: "hook_skill_pick", skipped: error instanceof JevError ? error.message : String(error) })
+          }
+        })
+        promptHookLive = true
+      } catch {
+        logCall({ hook: "hook_skill_pick", skipped: "prompt hook rejected by host; context-hook fallback only" })
+      }
+
+      // The injection side, and the fallback trigger when the prompt hook is
+      // unavailable. Fires on every LLM request; the cache makes it spend
+      // once per prompt and inject every turn until the next prompt supersedes.
+      await ctx.session.hook("context", async (event: any) => {
+        try {
+          if (!featureOn("hook_skill_pick")) return
+          const sessionID = String(event?.sessionID ?? event?.session?.id ?? "")
+          if (!sessionID) return
+          // Subagent sessions route through the parent's skills already.
+          if (event?.parentID ?? event?.session?.parentID) return
+
+          const messages = Array.isArray(event?.messages) ? event.messages : []
+          const last = [...messages].reverse().find((m: any) => m?.role === "user")
+          const lastText = String(typeof last?.content === "string" ? last?.content : (last?.content?.[0]?.text ?? "")).trim()
+          let entry = routeCache.get(sessionID)
+
+          if (!promptHookLive && lastText) {
+            if (!entry || entry.prompt !== lastText) {
+              routeCache.set(sessionID, { prompt: lastText, advice: null, ts: Date.now() })
+              entry = routeCache.get(sessionID)!
+              entry.advice = await routePrompt(lastText, await skillRoster(ctx, ROSTER_ROOTS), ctx)
+            }
+          }
+          if (entry?.advice && Date.now() - entry.ts < 300_000 && Array.isArray(event?.system)) {
+            event.system.push({ type: "text", text: entry.advice })
+          }
+        } catch (error) {
+          logCall({ hook: "hook_skill_pick", skipped: error instanceof JevError ? error.message : String(error) })
+        }
+      })
+    }
 
     if (typeof ctx?.tool?.hook === "function") {
       await ctx.tool.hook("execute.before", async (event: any) => {
@@ -438,7 +443,7 @@ export default {
     // A singular /jev-feature used to fill the gap for hosts with no TUI, but it
     // duplicated the panel badly enough to be more confusing than missing.
     // /jev-gate and /jev-on are gone for the same reason: the risk hook is the
-    // risk_hook feature switch, and two names for one switch is one too many.
+    // hook_risk feature switch, and two names for one switch is one too many.
     // /jev-status, /jev-model, /jev-endpoint and /jev-log remain the text route.
     // See tui.ts.
     const COMMANDS: Record<string, string> = {
@@ -446,6 +451,7 @@ export default {
       "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
       "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
       "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
+      "jev-optimize-skills": "Rewrite every unoptimized skill description into a terse choice criterion via the host LLM; /jev-optimize-skills <id> refreshes one skill",
     }
 
     for (const [name, description] of Object.entries(COMMANDS)) {
@@ -473,7 +479,13 @@ export default {
               return {
                 content: rows
                   .map((r) => {
-                    if (r.hook) return `${r.ts}  hook ${r.tool} skipped: ${r.skipped}`
+                    // Skipped-hook entries: the feature name in `hook`, the
+                    // reason in `skipped`, and the tool when the risk hook
+                    // logged one. A regular call logs its decisions instead.
+                    if (r.hook) {
+                      const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
+                      return `${r.ts}  ${r.hook}${on} skipped: ${r.skipped ?? "unknown"}`
+                    }
                     const answers = (r.decisions ?? [])
                       .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
                       .join(" ")
@@ -482,6 +494,22 @@ export default {
                   .join("\n"),
               }
             }
+            if (name === "jev-optimize-skills") {
+              const roster = await skillRoster(ctx, ROSTER_ROOTS)
+              const { stale } = resolveCriteria(roster)
+              const targets = arg
+                ? stale.filter((s) => s.id === arg)
+                : stale
+              if (arg && targets.length === 0) {
+                const known = roster.some((s) => s.id === arg)
+                return { content: known ? `@${arg} is already optimized.` : `No installed skill @${arg}.` }
+              }
+              if (targets.length === 0) return { content: `All ${roster.length} skill criteria are current.` }
+              // Awaited, not background: the user asked for this explicitly
+              // and wants the result, unlike the hook's silent warm-up.
+              const { done, failed } = await optimizeCriteria(ctx, targets)
+              return { content: `Optimized ${done} of ${targets.length} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}.` }
+            }
             const key = keySource()
             const money = spend()
             return {
@@ -489,11 +517,16 @@ export default {
                 `endpoint  ${state.endpoint}`,
                 `model     ${state.model}`,
                 `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
-                `plugin    ${pluginEnabled() ? "on" : "OFF — every tool refuses, nothing is sent, nothing is spent"}`,
+                `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
                 `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
                 `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-                `thresholds  minProbability=${state.minProbability} minMargin=${state.minMargin} gateProbability=${state.gateProbability}`,
+                ...FEATURES.map(
+                  (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
+                    .map(([k, v]) => `${k}=${v}`)
+                    .join(" ")}`,
+                ),
                 `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
+                `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
                 "",
                 "Edit any of it with /jev-settings.",
               ].join("\n"),
