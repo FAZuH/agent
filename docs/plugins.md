@@ -65,7 +65,8 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   numbers; there are no global thresholds.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
-  live in `skillCriteria` in the state file, keyed by description hash.
+  live in `skillCriteria` in `~/.local/share/fazuh-agent/jev-data.json`, keyed
+  by description hash.
 - **`/jev-log`**: recent calls: what was sent, what came back, what it cost.
   Skipped-hook lines read `<feature> [on <tool>] skipped: <reason>`; a regular
   call lists its decisions and token count.
