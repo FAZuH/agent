@@ -100,3 +100,10 @@ list into python. Instead:
 - @ocv2-move: `POST /api/session/{id}/move` for changing project directory
 - @ocv2-pluginhealth: `GET /api/plugin` diagnosis
 - @notes: durable notes for OpenCode v2 quirks, tool behavior, and host-specific guidance
+
+## Memory
+
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
+`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
+a new finding after it live-verifies. If the hindsight tools are absent,
+continue without memory.

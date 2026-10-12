@@ -42,3 +42,10 @@ Until all three answers are yes, the session is not in restricted mode.
 1. If the user proves the tool works, state the error plainly.
 2. Run the original command through the correct top-level tool.
 3. Do not add more sandbox tests.
+
+## Memory
+
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
+`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
+a new finding after it live-verifies. If the hindsight tools are absent,
+continue without memory.
