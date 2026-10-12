@@ -110,7 +110,9 @@ is the restart case.
 - Stop and report on any failing check, missing pointer file, or target that
   refuses to sync. A partial update with a clear report beats a silent fix.
 - Follow the repository's own rules for anything you touch beyond deploying:
-  `agent-map` for layout, `skill-doctor` when a skill link or name moved.
+  the source layout is `skills/<category>/<name>/`, `agents/<role>/<name>.md`,
+  `plugins/<name>/`, `commands/<name>.md`; `skill-doctor` when a skill link or
+  name moved.
 
 ## Dependency graph
 

@@ -16,7 +16,6 @@ Load these before the first tool call, every session:
 | `@antislop-copywriting` | The anti-slop filter for writing in general. |
 | `@agent-map` | Skill routing. |
 | `@terse` | Terse docs and comments: keep only what earns its place. |
-| `@jev-use` | A judgement over enumerable options goes to Jev, not to deliberation. |
 
 ## Working habits
 
