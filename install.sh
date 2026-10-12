@@ -14,6 +14,8 @@ fi
 
 BONUS=0
 CHECK=0
+DIGEST_MAIL=0
+DIGEST_PHONE=0
 TMP_DIR=""
 
 # Pinned versions of everything this script fetches: the skills and rea-agents
@@ -35,13 +37,16 @@ GI_END="<!-- global-instruction:end -->"
 
 usage() {
   cat <<EOF
-Usage: ${0##*/} [-b] [-c]
+Usage: ${0##*/} [-b] [-c] [--digest|--mail-digest|--phone-digest]
 
-Install the required OpenCode setup.
-  -b           also install the bonus skills
-  -c, --check  print every required command, optional package, and installed
-               artifact as [ok] or [missing], then exit. Installs nothing.
-               Exits 1 if a required item is missing.
+Install the required OpenCode setup. Digest agents are opt-in.
+  -b             also install the bonus skills
+  -c, --check    print every required command, optional package, and installed
+                 artifact as [ok] or [missing], then exit. Installs nothing.
+                 Exits 1 if a required item is missing.
+  --mail-digest  deploy the mail digest agent and its schedule
+  --phone-digest deploy the phone digest agent and its schedule
+  --digest       both digests (same as --mail-digest --phone-digest)
 EOF
 }
 
@@ -204,18 +209,18 @@ ensure_agent_values() {
 }
 
 # digest/<name>/... mirrors to ~/.config/fazuh-agent/digest/<name>/... with
-# {{USER_HOME}} substituted. Any dir under digest/ rides the same rule; dest
-# dirs with no repo source are removed.
-deploy_digest() {
-  local src="$ROOT/digest" dest="$HOME/.config/fazuh-agent/digest" d name target f
+# {{USER_HOME}} substituted. Only the named digests are deployed; dest dirs
+# with no repo source are removed.
+deploy_digest() { # <digest-name>...
+  local src="$ROOT/digest" dest="$HOME/.config/fazuh-agent/digest" name target f
+  (($#)) || return 0
   [[ -d "$src" ]] || return 0
   mkdir -p "$dest"
-  for d in "$src"/*/; do
-    [[ -d "$d" ]] || continue
-    name="$(basename "$d")"
+  for name in "$@"; do
+    [[ -d "$src/$name" ]] || continue
     target="$dest/$name"
     mkdir -p "$target"
-    rsync -a --delete "$d" "$target/"
+    rsync -a --delete "$src/$name/" "$target/"
     while IFS= read -r -d '' f; do
       grep -q '{{USER_HOME}}' "$f" 2>/dev/null || continue
       sed -i "s|{{USER_HOME}}|$HOME|g" "$f"
@@ -225,7 +230,7 @@ deploy_digest() {
     [[ -d "$target" ]] || continue
     [[ -d "$src/$(basename "$target")" ]] || rm -rf "$target"
   done
-  info "deployed digest agents to $dest"
+  info "deployed digest agents ($*) to $dest"
 }
 
 install_ffmpeg_skill() {
@@ -373,6 +378,9 @@ checklist() {
     if [[ "$path" == /* ]]; then
       if [[ -e "$path" ]]; then
         printf '  [ok]      %-16s %s\n' "$name" "$path"
+      elif [[ "$name" == digest-* ]]; then
+        printf '  [off]     %-16s %s — enable with --%s-digest\n' \
+          "$name" "$path" "${name#digest-}"
       else
         printf '  [MISSING] %-16s %s\n' "$name" "$path"
         missing=1
@@ -397,6 +405,9 @@ while (($#)); do
   case "$1" in
     -b) BONUS=1 ;;
     -c|--check) CHECK=1 ;;
+    --mail-digest) DIGEST_MAIL=1 ;;
+    --phone-digest) DIGEST_PHONE=1 ;;
+    --digest) DIGEST_MAIL=1; DIGEST_PHONE=1 ;;
     -h|--help) usage; exit 0 ;;
     *)
       usage >&2
@@ -450,14 +461,24 @@ ensure_agent_values
 git -C "$ROOT" submodule update --init
 cargo install --path "$ROOT/scripts"
 
-step "Deploying digest agents and schedules"
-deploy_digest
-# Override the unattended model with DIGEST_MODEL=... ./install.sh
-DIGEST_MODEL="${DIGEST_MODEL:-opencode/mimo-v2.6-flash-free}"
-"$HOME/.cargo/bin/mail-digest" setup --model "$DIGEST_MODEL" \
-  --workdir "$HOME/.config/fazuh-agent/digest/mail-digest"
-"$HOME/.cargo/bin/phone-digest" setup --model "$DIGEST_MODEL" \
-  --workdir "$HOME/.config/fazuh-agent/digest/phone-digest"
+# Digests are opt-in: --mail-digest, --phone-digest, or --digest for both.
+if ((DIGEST_MAIL || DIGEST_PHONE)); then
+  step "Deploying digest agents and schedules"
+  DIGESTS=()
+  if ((DIGEST_MAIL)); then DIGESTS+=("mail-digest"); fi
+  if ((DIGEST_PHONE)); then DIGESTS+=("phone-digest"); fi
+  deploy_digest "${DIGESTS[@]}"
+  # Override the unattended model with DIGEST_MODEL=... ./install.sh
+  DIGEST_MODEL="${DIGEST_MODEL:-opencode/mimo-v2.6-flash-free}"
+  if ((DIGEST_MAIL)); then
+    "$HOME/.cargo/bin/mail-digest" setup --model "$DIGEST_MODEL" \
+      --workdir "$HOME/.config/fazuh-agent/digest/mail-digest"
+  fi
+  if ((DIGEST_PHONE)); then
+    "$HOME/.cargo/bin/phone-digest" setup --model "$DIGEST_MODEL" \
+      --workdir "$HOME/.config/fazuh-agent/digest/phone-digest"
+  fi
+fi
 
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g
