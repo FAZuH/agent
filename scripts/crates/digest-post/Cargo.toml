@@ -1,0 +1,12 @@
+[package]
+name = "digest-post"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+ureq = { version = "3", default-features = false, features = ["rustls", "multipart"] }
+
+[lints]
+workspace = true

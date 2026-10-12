@@ -1,4 +1,5 @@
-# Mail digest — 4 mails across 2 accounts
+# Mail digest
+4 mails across 2 accounts
 <t:1770000000:R>
 ## gmail
 - 🟡 Alice <a@x.com> — Your monthly invoice is here

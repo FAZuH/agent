@@ -1,29 +1,30 @@
-# 📬 Mail digest 2026-09-12 — 14 mails across 3 accounts
-
+# Mail digest
+14 mails across 3 accounts
+2026-09-12
 ## gmail (10)
-**🔴 Needs attention**
-• Sender 0 <s0@mail.example> — Long subject line number 0 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 0 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-• Sender 3 <s3@mail.example> — Long subject line number 3 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 3 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-• Sender 6 <s6@mail.example> — Long subject line number 6 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 6 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-**⚪ Routine**
-• Digest Bot — Digest part 0 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest part 1 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest part 2 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest part 3 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest part 4 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest part 5 (part dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)
-  ↳ Digest repeated (taildddddddddddddddddddddddddddddddddddddddd)
-
+### 🔴 Needs attention
+- Sender 0 <s0@mail.example> — Long subject line number 0 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 0 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+- Sender 1 <s1@mail.example> — Long subject line number 1 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 1 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+### 🟡 Notable
+- Sender 2 <s2@mail.example> — Long subject line number 2 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 2 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+### ⚪ Routine
+- Sender 3 <s3@mail.example> — Long subject line number 3 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 3 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+- Sender 4 <s4@mail.example> — Long subject line number 4 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 4 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+- Sender 5 <s5@mail.example> — Long subject line number 5 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 5 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+- Sender 6 <s6@mail.example> — Long subject line number 6 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 6 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+- Digest Bot — Digest part 0 (Gist for mail 7 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+  - ↳ Digest part 1 (Gist for mail 8 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+  - ↳ Digest part 2 (Gist for mail 9 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
 ## work (2)
-**🟡 Notable**
-• Sender 1 <s1@mail.example> — Long subject line number 1 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 1 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-• Sender 4 <s4@mail.example> — Long subject line number 4 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 4 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-
+### 🟡 Notable
+- Digest Bot — Digest part 3 (Gist for mail 10 ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+### ⚪ Routine
+- Digest Bot — Digest part 4 (Gist for mail 11 ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
 ## école (2)
-**⚪ Routine**
-• Sender 2 <s2@mail.example> — Long subject line number 2 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 2 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-• Sender 5 <s5@mail.example> — Long subject line number 5 sssssssssssssssssssssssssssssssssssssssssssssssssssss (Gist for mail 5 gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
-
+### 🟡 Notable
+- Digest Bot — Digest part 5 (Gist for mail 12 ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
+### ⚪ Routine
+- Digest Bot — Digest repeated (Gist for mail 13 ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg)
 ## Errors
 - ⚠️ smtp: queue backed up
 - ⚠️ rules: 2 rejects

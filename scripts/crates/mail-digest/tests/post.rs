@@ -123,6 +123,10 @@ fn multipart(body: &[u8], boundary: &str) -> Vec<(Vec<String>, Vec<u8>)> {
         .collect()
 }
 
+fn update_golden() -> bool {
+    std::env::var_os("UPDATE_GOLDEN").is_some()
+}
+
 #[test]
 fn posts_match_expected_fixtures() {
     let _env = env_lock();
@@ -130,9 +134,11 @@ fn posts_match_expected_fixtures() {
     let credentials = temp.path().join("credentials");
     let key = credentials.join("discord").join("mail-digest.key");
     fs::create_dir_all(key.parent().unwrap()).unwrap();
-    // SAFETY: held env lock serializes this CREDENTIALS_DIRECTORY write
-    // against every other env-writing test in this binary.
+    // SAFETY: held env lock serializes these env writes against every other
+    // env-writing test in this binary. HOME points at the temp dir so a real
+    // notify.key on the machine can never leak a mention into a fixture.
     unsafe { std::env::set_var("CREDENTIALS_DIRECTORY", &credentials) };
+    unsafe { std::env::set_var("HOME", temp.path()) };
 
     for dir in fixture_dirs() {
         let name = dir.file_name().unwrap().to_string_lossy().into_owned();
@@ -146,11 +152,16 @@ fn posts_match_expected_fixtures() {
 
         let posted =
             execute(&input, TODAY, EPOCH, false).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-        assert_eq!(
-            posted.log_line(),
-            expected_stdout.trim_end_matches('\n'),
-            "{name}: log line"
-        );
+        let log_line = posted.log_line();
+        if update_golden() {
+            fs::write(dir.join("expected-stdout.txt"), format!("{log_line}\n")).unwrap();
+        } else {
+            assert_eq!(
+                log_line,
+                expected_stdout.trim_end_matches('\n'),
+                "{name}: log line"
+            );
+        }
 
         let request = rx.recv().unwrap();
         assert_eq!(request.method, "POST", "{name}: method");
@@ -243,24 +254,40 @@ fn ping_prefixes_the_mention_to_the_posted_content() {
     fs::write(&notify, "https://discord.com/api/webhooks/x\n424242\n").unwrap();
     let input =
         r#"{"items":[{"account":"gmail","sender":"S","subject":"U","gist":"G","tier":"urgent"}]}"#;
-    execute(input, TODAY, EPOCH, true).expect("ping post");
+    execute(input, TODAY, EPOCH, false).expect("urgent item pings without --ping");
 
     let request = rx.recv().unwrap();
     let payload: Value = serde_json::from_slice(&request.body).unwrap();
     assert_eq!(
         payload["content"].as_str().unwrap(),
-        "<@424242>\n# Mail digest — 1 mails across 1 accounts\n<t:1770000000:R>\n## gmail\n- 🔴 S — G"
+        "<@424242>\n# Mail digest\n1 mails across 1 accounts\n<t:1770000000:R>\n## gmail\n- 🔴 S — G"
     );
 
-    // without the flag, no mention
+    // --ping alone (no urgent item) also pings
+    let plain =
+        r#"{"items":[{"account":"gmail","sender":"S","subject":"U","gist":"G","tier":"routine"}]}"#;
     let (url, rx) = spawn_sink(204);
     fs::write(&key, format!("{url}\n")).unwrap();
-    execute(input, TODAY, EPOCH, false).expect("plain post");
+    execute(plain, TODAY, EPOCH, true).expect("--ping post");
+    let request = rx.recv().unwrap();
+    let payload: Value = serde_json::from_slice(&request.body).unwrap();
+    assert!(
+        payload["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("<@424242>"),
+        "--ping must mention"
+    );
+
+    // no urgent item and no flag: no mention
+    let (url, rx) = spawn_sink(204);
+    fs::write(&key, format!("{url}\n")).unwrap();
+    execute(plain, TODAY, EPOCH, false).expect("plain post");
     let request = rx.recv().unwrap();
     let payload: Value = serde_json::from_slice(&request.body).unwrap();
     assert!(
         !payload["content"].as_str().unwrap().starts_with("<@"),
-        "no mention without --ping"
+        "no mention without --ping or an urgent item"
     );
 }
 
