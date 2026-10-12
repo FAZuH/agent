@@ -1,3 +1,5 @@
+## [0.13.13](https://github.com/FAZuH/agent/compare/v0.13.12...v0.13.13) (2026-10-12)
+
 ## [0.13.12](https://github.com/FAZuH/agent/compare/v0.13.11...v0.13.12) (2026-10-12)
 
 
@@ -30,11 +32,4 @@
 * **plugin:** add dispatch command ([971e4d4](https://github.com/FAZuH/agent/commit/971e4d4d1d815834b62dfaebbc0c49a461a43daa))
 * **script:** replace reverse-skill with REA npm setup ([eb76d1b](https://github.com/FAZuH/agent/commit/eb76d1b114a18e9cdbcdb07c579d1381e6f12606))
 * **skill:** read all four lesson files, sweep on write ([be045c6](https://github.com/FAZuH/agent/commit/be045c612c8b725e8b98a5131932f9ab7175cac3))
-
-## [0.13.8](https://github.com/FAZuH/agent/compare/v0.13.7...v0.13.8) (2026-10-10)
-
-
-### Bug Fixes
-
-* **script:** incorrect external skill package name ([3e038fa](https://github.com/FAZuH/agent/commit/3e038fafa71244dadf5ea7cfa557ed6c4ba3488a))
 
