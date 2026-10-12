@@ -101,4 +101,4 @@ No `.scratch/` workspace: keep the log in working notes. Auto runs always end wi
 
 Approval gates only, in skills and agents that reference this skill. Verification steps (tests, CI, checklists) and interaction gates (quizzes) are not approval gates and do not reference it.
 
-Harness permission rules (`ask` / `allow` / `deny`) are a separate layer: a gate calls the `question` tool, not a permission prompt. Never implement a gate as a frontmatter `ask` rule (depth-2 `ask` prompts hang on v2; question forms propagate). See @notes and the `ocv2-findings.md` note for the v2 behavior.
+Harness permission rules (`ask` / `allow` / `deny`) are a separate layer: a gate calls the `question` tool, not a permission prompt. Never implement a gate as a frontmatter `ask` rule (depth-2 `ask` prompts hang on v2; question forms propagate). See the hindsight memory (bank `coding-agent::faz-lab`, tag `topic:opencode-v2`) for the v2 behavior.

@@ -153,3 +153,10 @@ comment.
 
 This skill diagnoses loading. To author one, read
 @ocv2-plugins.
+
+## Memory
+
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
+`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
+a new finding after it live-verifies. If the hindsight tools are absent,
+continue without memory.

@@ -116,3 +116,10 @@ Message ID is the newest `type: assistant` after wait. In `chat` mode, add: `"Ju
 - Inbox: a prompt sent while busy lands in `GET /api/session/{id}/inbox` with `delivery: steer|queue`. `queue` is the default after interrupt; `steer` waits for idle. `POST /api/session/{id}/interrupt` aborts a stuck `chat` shell loop, then `DELETE /api/session/{id}/inbox/{inboxID}` drops a stuck queued item.
 - Resumed sessions do NOT notify the parent: RESUME means steer/queue a prompt into an existing `ses_…` instead of spawning fresh, and the parent gets no completion notification. The `subagent` tool's "you will be notified when it completes" covers only newly-spawned sessions. Detect idle by **polling `GET /api/session/{sessionID}`** for `.data.outcome` (and `.data.time.idle`); it flips to `succeeded` / `failed` when the loop stops. Resume when the same unit of work continues across a model/quota switch, then poll.
 - For warm delegation policy and the required fork → switch → first-prompt order, use @forkflow.
+
+## Memory
+
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
+`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
+a new finding after it live-verifies. If the hindsight tools are absent,
+continue without memory.

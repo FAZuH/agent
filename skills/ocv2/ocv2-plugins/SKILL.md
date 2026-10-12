@@ -212,3 +212,10 @@ dialog lifecycle without a TUI. It cannot check pixels, and any
 5. **Registration from a component body works; registration from `setup` alone
    does not** for keymap layers.
 6. **Trust the runtime over the types, and the log over both.**
+
+## Memory
+
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
+`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
+a new finding after it live-verifies. If the hindsight tools are absent,
+continue without memory.

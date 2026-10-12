@@ -11,7 +11,7 @@ changing that system. Create one when the task produces reusable knowledge.
 
 ## OpenCode v2 findings
 
-The OpenCode v2 note is `{{USER_HOME}}/.config/fazuh-agent/notes/ocv2-findings.md`. Skills needing a finding read that note through this skill, never a second copy.
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged `topic:opencode-v2` (migrated from the retired `ocv2-findings.md` note). `recall` them via the hindsight MCP; never keep a second copy in a note.
 
 ## Write a note
 
