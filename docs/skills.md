@@ -75,7 +75,7 @@ the category directory never reaches the installed name.
 
 ## Meta
 
-- ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Map and maintain this personal-public agent repository.
+- ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Pick the installed skill, agent, plugin, command, or CLI for a task; search outward when nothing fits.
 - ⭐ **[update-fazuh-agent](../skills/meta/update-fazuh-agent/SKILL.md)**: Update the installed setup from the agent repository: pull, redeploy, verify.
 - **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` and `uninstall.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
@@ -104,10 +104,9 @@ These skills are loaded only when another skill or agent references them.
 - **[ocv2-move](../skills/ocv2/ocv2-move/SKILL.md)**: Move a v2 session to another project directory.
 - **[ocv2-plugins](../skills/ocv2/ocv2-plugins/SKILL.md)**: Write v2 plugins: the measured contract, tools, hooks, commands, the TUI surface, and verification.
 - **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin loading: what loaded, why it failed, whether `setup()` ran, and what hot-reloads.
-- **[jev-use](../skills/ocv2/jev-use/SKILL.md)**: Ask Jev instead of deliberating when a decision is a judgement over enumerable options.
 - **[ocv2-unfuck](../skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.
 
 Run `./sync.sh list` to see the deployed skills, and
-[agent-map](../skills/meta/agent-map/SKILL.md) for the repository rules they
-follow. To know which skill to load at a given point in the work, read the
-[skill guide](skill-guide.md).
+[agent-map](../skills/meta/agent-map/SKILL.md) for what is installed and how to
+pick or search for the right one. To know which skill to load at a given point
+in the work, read the [skill guide](skill-guide.md).

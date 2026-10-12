@@ -44,7 +44,7 @@ flowchart LR
 ```
 
 - **ask-matt**: which existing skill or flow fits this situation.
-- **agent-map**: where an item belongs in this repository and which rules it follows.
+- **agent-map**: what is installed — skills, agents, plugins, commands, CLIs — and how to search outward when nothing fits.
 - **pdf-read**: pull text, tables, or figures out of a spec or a paper.
 - **triage**: move an issue or an external pull request to a state where an agent can pick it up.
 - **setup-matt-pocock-skills**: one-time tracker and doc layout setup.
@@ -289,12 +289,14 @@ Adding or editing a skill, an agent, a plugin, or a command.
 
 ```mermaid
 flowchart LR
-  M[agent-map] --> W[writing-for-agents]
-  W -->|add its docs entry| S[skill-doctor]
+  W[writing-for-agents] --> D[docs/skills.md entry]
+  D --> S[skill-doctor]
   S --> C[commit]
 ```
 
-- **agent-map** decides which source directory the item belongs in.
+- **writing-for-agents** covers skill and agent document structure; the source
+  directory follows the repo layout (`skills/<category>/<name>/`,
+  `agents/<role>/<name>.md`, `plugins/<name>/`, `commands/<name>.md`).
 - **simple-english** and **readme** cover the prose and the front door.
 - `sync.sh` never deploys a hand-edited target copy; edit here, then push.
 
