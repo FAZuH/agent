@@ -26,7 +26,11 @@ These are items you must do in specific situations.
 - For latex, follow @presenting-latex.
 - @presenting-latex : Writing latex
 - @prompt-user : Asking follow-up questions or telling the user to do something. This does not apply to @learn quizzes. The user will most likely ignore your prompts to the user if you do not follow this exact format.
-- Hindsight memory: on non-trivial work, `recall` before planning and `retain` decisions/outcomes after review passes. If the hindsight MCP tools are absent, continue without memory. Docs: @hindsight-docs.
+- Hindsight memory is the default memory, not an occasional extra.
+  - `recall` before planning, diagnosing, or answering anything about prior work, a tool's behavior, or this user's setup. Assume a learned fact may already exist; a cheap recall beats a re-derivation.
+  - `retain` anything likely to be asked again, once verified: decisions and outcomes after review passes, tool/service quirks after a live check, research answers, user corrections and preferences.
+  - Skip one-off task trivia; a polluted bank buries the good facts.
+  - If the hindsight MCP tools are absent, continue without memory. Docs: @hindsight-docs.
 
 ## Shell discipline
 
