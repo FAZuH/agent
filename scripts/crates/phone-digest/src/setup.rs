@@ -45,7 +45,10 @@ fn run_octask(args: &[String]) -> Result<()> {
         .status()
         .context("setup: failed to run octask (is it installed?)")?;
     if !status.success() {
-        bail!("setup: octask failed with exit {}", status.code().unwrap_or(1));
+        bail!(
+            "setup: octask failed with exit {}",
+            status.code().unwrap_or(1)
+        );
     }
     Ok(())
 }
@@ -72,7 +75,12 @@ pub fn run_setup(args: &SetupArgs) -> Result<()> {
         .map(|out| out.status.success())
         .unwrap_or(false);
     if exists {
-        let mut edit = vec!["edit".to_owned(), TASK.to_owned(), "--model".to_owned(), model];
+        let mut edit = vec![
+            "edit".to_owned(),
+            TASK.to_owned(),
+            "--model".to_owned(),
+            model,
+        ];
         if args.oncalendar.is_some() {
             edit.push("--oncalendar".to_owned());
             edit.push(oncalendar);

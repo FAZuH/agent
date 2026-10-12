@@ -1,20 +1,21 @@
 //! Discord digest poster. The agent supplies DATA only; ordering, truncation,
-//! mention neutralization and chunking live here. `--ping` prepends a user
-//! mention to the first chunk (id from `notify.key` line 2).
-
-use std::env;
-use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
-use std::time::Duration;
+//! mention neutralization and the inline/file split live in `digest-post`.
+//! The mention pings when any item is urgent or `--ping` is set.
 
 use anyhow::Error;
 use anyhow::Result;
+use digest_post::DISCORD_MAX;
+use digest_post::Rendered;
+use digest_post::clean;
+use digest_post::fit;
+use digest_post::header;
+use digest_post::mention_id;
+pub use digest_post::ping_user_id;
+pub use digest_post::webhook_roots;
+use digest_post::webhook_url;
 use serde_json::Map;
 use serde_json::Value;
-use ureq::Agent;
 
-pub const MAX_CHARS: usize = 1800;
 pub const MAX_ITEMS: usize = 100;
 pub const TIERS: [(&str, &str); 3] = [
     ("urgent", "🔴 urgent"),
@@ -23,11 +24,10 @@ pub const TIERS: [(&str, &str); 3] = [
 ];
 pub const WEBHOOK_NAMES: [&str; 2] = ["phone-digest.key", "notify.key"];
 
+const USER_AGENT: &str = "octask-phone-digest/1.0";
 const CAP_APP: usize = 30;
 const CAP_TITLE: usize = 60;
 const CAP_GIST: usize = 120;
-const POST_TIMEOUT: Duration = Duration::from_secs(30);
-const USER_AGENT: &str = "octask-phone-digest/1.0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
@@ -37,36 +37,35 @@ pub struct Item {
     pub tier: String,
 }
 
-/// One Discord message per element: `# Phone digest — N notifications` plus
-/// the `<t:<epoch>:R>` generation line open the FIRST chunk only, tier
-/// sections follow, `(cont.)` headers resume later chunks, all counted in
-/// characters like Python's `len(str)`. Never splits a line, so a tier
-/// header always lands whole.
-pub fn render_chunks(items: &[Item], epoch: i64) -> Vec<String> {
-    let header = format!(
-        "# Phone digest — {} notifications\n<t:{epoch}:R>",
-        items.len()
+/// The digest, under or over Discord's message limit: `# Phone digest`,
+/// summary, `<t:<epoch>:R>` and the tier-sorted `- app: title — gist` list
+/// inline; past the limit a compact summary carries the full list as a
+/// markdown attachment. `mention_chars` reserves room for the `<@id>` line.
+pub fn render(items: &[Item], epoch: i64, today: &str, mention_chars: usize) -> Rendered {
+    let budget = DISCORD_MAX.saturating_sub(mention_chars);
+    let summary = format!("{} notifications", items.len());
+    let mut inline = vec![header("Phone digest", &summary, epoch)];
+    inline.extend(detail_lines(items));
+    let attachment = format!(
+        "# Phone digest\n{summary}\n{today}\n{}",
+        detail_lines(items).join("\n")
     );
-    const CONT: &str = "# Phone digest (cont.)";
-    let mut chunks: Vec<String> = Vec::new();
-    let mut current = vec![header.clone()];
-    let mut size = header.chars().count();
-    for line in detail_lines(items) {
-        let len = line.chars().count();
-        if size + len + 1 > MAX_CHARS && current.len() > 1 {
-            chunks.push(current.join("\n"));
-            current = vec![CONT.to_string()];
-            size = CONT.chars().count();
-        }
-        size += len + 1;
-        current.push(line);
-    }
-    chunks.push(current.join("\n"));
-    chunks
+    fit(
+        inline.join("\n"),
+        header(
+            "Phone digest",
+            &format!("{summary} (full digest attached)"),
+            epoch,
+        ),
+        format!("phone-digest-{today}.md"),
+        attachment,
+        budget,
+    )
 }
 
 /// `## <emoji> <tier>` headers (non-empty tiers only, urgent first) plus
-/// `app: title — gist` bullets.
+/// `- app: title — gist` markdown list items, so the file preview of an
+/// attached digest keeps one entry per line.
 pub fn detail_lines(items: &[Item]) -> Vec<String> {
     let mut sorted = items.to_vec();
     sorted.sort_by_key(|item| tier_rank(&item.tier));
@@ -88,7 +87,7 @@ pub fn detail_lines(items: &[Item]) -> Vec<String> {
         if !gist.is_empty() && gist != title {
             detail += &format!(" — {gist}");
         }
-        lines.push(format!("• {detail}"));
+        lines.push(format!("- {detail}"));
     }
     lines
 }
@@ -105,14 +104,6 @@ fn tier_label(tier: &str) -> &str {
         .iter()
         .find(|(name, _)| *name == tier)
         .map_or(TIERS[TIERS.len() - 1].1, |(_, label)| label)
-}
-
-/// Collapse whitespace, truncate to `cap` characters, then defuse mass
-/// mentions, in the Python order, so a truncated `@everyone@` stays cut.
-pub fn clean(text: &str, cap: usize) -> String {
-    crate::ingest::cap(text, cap)
-        .replace("@everyone", "at-everyone")
-        .replace("@here", "at-here")
 }
 
 /// `{"items": [...]}` payload to capped items; unknown or missing tier is
@@ -164,50 +155,6 @@ fn bad_json() -> Error {
     Error::msg("argument must be {\"items\": [...]} JSON")
 }
 
-/// Webhook credential roots, in lookup order: `$CREDENTIALS_DIRECTORY/discord`
-/// first (when set), then `~/.config/fazuh-agent/secrets/discord`.
-pub fn webhook_roots(credentials_dir: Option<&Path>, home: &Path) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Some(dir) = credentials_dir.filter(|dir| !dir.as_os_str().is_empty()) {
-        roots.push(dir.join("discord"));
-    }
-    roots.push(home.join(".config/fazuh-agent/secrets/discord"));
-    roots
-}
-
-/// Discord user id to ping (`--ping`): line 2 of `notify.key` under the
-/// same roots as the webhook (the webhook itself may come from
-/// `phone-digest.key`). None when no `notify.key` carries an id.
-pub fn ping_user_id(credentials_dir: Option<&Path>, home: &Path) -> Option<String> {
-    for root in webhook_roots(credentials_dir, home) {
-        let Ok(content) = fs::read_to_string(root.join("notify.key")) else {
-            continue;
-        };
-        let id = content.lines().nth(1)?.trim();
-        if !id.is_empty() {
-            return Some(id.to_string());
-        }
-    }
-    None
-}
-
-fn webhook_url() -> Result<String> {
-    let credentials = env::var_os("CREDENTIALS_DIRECTORY");
-    for root in webhook_roots(credentials.as_deref().map(Path::new), &crate::home_dir()?) {
-        for name in WEBHOOK_NAMES {
-            let path = root.join(name);
-            if path.is_file() {
-                let first = fs::read_to_string(&path)
-                    .map_err(|e| Error::new(e).context(format!("read {}", path.display())))?;
-                return Ok(first.lines().next().unwrap_or_default().trim().to_string());
-            }
-        }
-    }
-    Err(Error::msg(
-        "no Discord webhook found (phone-digest.key / notify.key)",
-    ))
-}
-
 pub fn post(payload: &str, ping: bool) -> Result<()> {
     let items = parse_items(payload)?;
     if items.is_empty() {
@@ -216,34 +163,25 @@ pub fn post(payload: &str, ping: bool) -> Result<()> {
     }
 
     let epoch = chrono::Utc::now().timestamp();
-    let mut chunks = render_chunks(&items, epoch);
-    if ping {
-        let credentials = env::var_os("CREDENTIALS_DIRECTORY");
-        let id = ping_user_id(credentials.as_deref().map(Path::new), &crate::home_dir()?)
-            .ok_or_else(|| Error::msg("no Discord user id to ping (line 2 of notify.key)"))?;
-        chunks[0] = format!("<@{id}>\n{}", chunks[0]);
-    }
-    let webhook = webhook_url()?;
-    let agent: Agent = Agent::config_builder()
-        .timeout_global(Some(POST_TIMEOUT))
-        .build()
-        .into();
-    for chunk in &chunks {
-        let status = send_chunk(&agent, &webhook, chunk)?;
-        println!("posted {} chars, http {status}", chunk.chars().count());
-    }
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    // explicit --ping with no id is an error the agent must see; an
+    // urgent-only auto-ping degrades to no mention so the digest still posts
+    let ping_id = if ping {
+        Some(
+            mention_id()
+                .ok_or_else(|| Error::msg("no Discord user id to ping (line 2 of notify.key)"))?,
+        )
+    } else if items.iter().any(|item| item.tier == "urgent") {
+        mention_id()
+    } else {
+        None
+    };
+    let mention_chars = ping_id.as_ref().map_or(0, |id| id.chars().count() + 3); // <@id>\n
+    let rendered = render(&items, epoch, &today, mention_chars);
+    let webhook = webhook_url(&WEBHOOK_NAMES)?;
+    let posted = digest_post::post(&webhook, &rendered, ping_id.as_deref(), USER_AGENT)?;
+    println!("{}", posted.log_line());
     Ok(())
-}
-
-fn send_chunk(agent: &Agent, webhook: &str, content: &str) -> Result<u16> {
-    let body = serde_json::json!({ "content": content }).to_string();
-    let response = agent
-        .post(webhook)
-        .header("Content-Type", "application/json")
-        .header("User-Agent", USER_AGENT)
-        .send(body)
-        .map_err(|e| Error::new(e).context("post failed"))?;
-    Ok(response.status().as_u16())
 }
 
 #[cfg(test)]
@@ -253,17 +191,25 @@ mod tests {
     use std::path::PathBuf;
 
     use anyhow::Result;
+    use digest_post::Rendered;
+    use digest_post::clean;
 
     use super::Item;
     use super::WEBHOOK_NAMES;
-    use super::clean;
     use super::parse_items;
     use super::ping_user_id;
-    use super::render_chunks;
+    use super::render;
     use super::webhook_roots;
 
     fn items(json: &str) -> Vec<Item> {
         parse_items(json).expect("parses")
+    }
+
+    fn inline(items: &[Item]) -> String {
+        match render(items, 1770000000, "2026-09-12", 0) {
+            Rendered::Inline(text) => text,
+            other => panic!("expected inline, got {other:?}"),
+        }
     }
 
     #[test]
@@ -339,21 +285,21 @@ mod tests {
                  {"app": "u1", "title": "t", "tier": "urgent"}
                ]}"#,
         );
-        let chunks = render_chunks(&parsed, 1770000000);
-        assert_eq!(chunks.len(), 1);
-        let lines: Vec<&str> = chunks[0].lines().collect();
+        let text = inline(&parsed);
+        let lines: Vec<&str> = text.lines().collect();
         assert_eq!(
             lines,
             [
-                "# Phone digest — 4 notifications",
+                "# Phone digest",
+                "4 notifications",
                 "<t:1770000000:R>",
                 "## 🔴 urgent",
-                "• u1: t",
+                "- u1: t",
                 "## 🟡 notable",
-                "• n1: t",
+                "- n1: t",
                 "## 🟢 routine",
-                "• r1: t",
-                "• r2: t",
+                "- r1: t",
+                "- r2: t",
             ]
         );
     }
@@ -361,10 +307,9 @@ mod tests {
     #[test]
     fn empty_tier_sections_are_omitted() {
         let parsed = items(r#"{"items": [{"app": "a", "title": "t", "tier": "routine"}]}"#);
-        let text = render_chunks(&parsed, 1770000000).join("\n");
         assert_eq!(
-            text,
-            "# Phone digest — 1 notifications\n<t:1770000000:R>\n## 🟢 routine\n• a: t"
+            inline(&parsed),
+            "# Phone digest\n1 notifications\n<t:1770000000:R>\n## 🟢 routine\n- a: t"
         );
     }
 
@@ -373,14 +318,14 @@ mod tests {
         let parsed = items(
             r#"{"items": [{"app": "a", "title": "same", "gist": "same"}, {"app": "b", "title": "t", "gist": ""}, {"app": "c", "title": "t2", "gist": "more"}]}"#,
         );
-        let chunks = render_chunks(&parsed, 1770000000);
-        assert!(chunks[0].contains("• a: same\n"), "{:?}", chunks[0]);
-        assert!(chunks[0].contains("• b: t\n"), "{:?}", chunks[0]);
-        assert!(chunks[0].contains("• c: t2 — more"));
+        let text = inline(&parsed);
+        assert!(text.contains("- a: same\n"), "{text:?}");
+        assert!(text.contains("- b: t\n"), "{text:?}");
+        assert!(text.contains("- c: t2 — more"));
     }
 
     #[test]
-    fn chunks_split_at_1800_chars_with_a_continuation_header() {
+    fn past_the_discord_limit_it_becomes_an_attachment() {
         let mut payload = String::from("{\"items\": [");
         for n in 0..24 {
             if n > 0 {
@@ -394,101 +339,49 @@ mod tests {
         }
         payload.push_str("]}");
         let parsed = items(&payload);
-        let chunks = render_chunks(&parsed, 1770000000);
-        assert!(chunks.len() > 1, "expected a split, got {}", chunks.len());
-        for chunk in &chunks {
-            assert!(
-                chunk.chars().count() <= 1800,
-                "chunk is {} chars",
-                chunk.chars().count()
-            );
-            assert!(!chunk.contains("\n\n"), "blank line in chunk: {chunk:?}");
-        }
-        assert!(chunks[1].starts_with("# Phone digest (cont.)\n"));
-        assert!(!chunks[1].contains("<t:"), "ts line leaked into chunk 2");
-        assert!(!chunks[0].contains("(cont.)"));
-        // every bullet survives exactly once
-        let bullets = chunks
-            .iter()
-            .flat_map(|chunk| chunk.lines())
-            .filter(|line| line.starts_with('•'))
-            .count();
+        let Rendered::File {
+            summary,
+            filename,
+            text,
+        } = render(&parsed, 1770000000, "2026-09-12", 0)
+        else {
+            panic!("24 long items must overflow the inline budget");
+        };
+        assert_eq!(
+            summary,
+            "# Phone digest\n24 notifications (full digest attached)\n<t:1770000000:R>"
+        );
+        assert_eq!(filename, "phone-digest-2026-09-12.md");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            &lines[..4],
+            [
+                "# Phone digest",
+                "24 notifications",
+                "2026-09-12",
+                "## 🟢 routine"
+            ]
+        );
+        let bullets = lines.iter().filter(|line| line.starts_with("- ")).count();
         assert_eq!(bullets, 24);
+        assert!(!text.contains("\n\n"), "blank line in attachment");
     }
 
     #[test]
-    fn header_and_timestamp_only_on_first_chunk() {
-        let mut payload = String::from("{\"items\": [");
-        for n in 0..24 {
-            if n > 0 {
-                payload.push(',');
-            }
-            payload.push_str(&format!(
-                "{{\"app\": \"app{n}\", \"title\": \"{}\", \"gist\": \"{}\", \"tier\": \"routine\"}}",
-                "t".repeat(60),
-                "g".repeat(120),
-            ));
-        }
-        payload.push_str("]}");
-        let parsed = items(&payload);
-        let chunks = render_chunks(&parsed, 1770000000);
-        assert!(chunks.len() > 1, "expected a split, got {}", chunks.len());
-        assert_eq!(
-            chunks[0].lines().take(2).collect::<Vec<_>>(),
-            ["# Phone digest — 24 notifications", "<t:1770000000:R>"]
+    fn the_mention_budget_shrinks_the_inline_body() {
+        let parsed = items(
+            r#"{"items": [{"app": "a", "title": "t", "tier": "routine"}, {"app": "b", "title": "u", "tier": "routine"}]}"#,
         );
-        for chunk in &chunks[1..] {
-            assert_eq!(chunk.lines().next().unwrap(), "# Phone digest (cont.)");
-            assert!(!chunk.contains("# Phone digest — 24"));
-            assert!(!chunk.contains("<t:1770000000:R>"));
-        }
-    }
-
-    #[test]
-    fn a_tier_header_can_start_a_continuation_chunk() {
-        // Long bullets force a split inside the urgent section; every line,
-        // section headers included, must land whole in exactly one chunk.
-        let mut payload = String::from("{\"items\": [");
-        for n in 0..20 {
-            if n > 0 {
-                payload.push(',');
-            }
-            payload.push_str(&format!(
-                "{{\"app\": \"u{n}\", \"title\": \"{}\", \"gist\": \"{}\", \"tier\": \"urgent\"}}",
-                "t".repeat(60),
-                "g".repeat(120),
-            ));
-        }
-        payload.push_str(r#",{"app": "r1", "title": "short", "tier": "routine"}]}"#);
-        let parsed = items(&payload);
-        let chunks = render_chunks(&parsed, 1770000000);
-        assert!(chunks.len() > 1, "expected a split, got {}", chunks.len());
-        let all = chunks.join("\n");
-        let lines: Vec<&str> = all.lines().collect();
-        assert_eq!(
-            lines.iter().filter(|l| **l == "## 🔴 urgent").count(),
-            1,
-            "section header duplicated or cut: {chunks:#?}"
-        );
-        assert_eq!(lines.iter().filter(|l| **l == "## 🟢 routine").count(), 1);
-        for chunk in &chunks {
-            assert!(chunk.chars().count() <= 1800, "chunk too long");
-            for line in chunk.lines() {
-                assert!(
-                    line.starts_with("# ")
-                        || line.starts_with("<t:")
-                        || line.starts_with("## ")
-                        || line.starts_with('•'),
-                    "ragged fragment line: {line:?}"
-                );
-            }
-        }
-        // the routine bullet is not orphaned from its header by a split
-        let owner = chunks
-            .iter()
-            .position(|c| c.contains("## 🟢 routine"))
-            .expect("routine header");
-        assert!(chunks[owner].contains("• r1: short"));
+        let small = match render(&parsed, 1770000000, "2026-09-12", 0) {
+            Rendered::Inline(text) => text,
+            other => panic!("expected inline, got {other:?}"),
+        };
+        // the same body with a mention reserved still fits
+        assert!(matches!(
+            render(&parsed, 1770000000, "2026-09-12", 20),
+            Rendered::Inline(_)
+        ));
+        assert!(small.chars().count() < 1980);
     }
 
     #[test]
@@ -503,16 +396,13 @@ mod tests {
         payload.push_str("]}");
         let parsed = items(&payload);
         assert_eq!(parsed.len(), 100);
-        let chunks = render_chunks(&parsed, 1770000000);
         assert!(
-            chunks[0].starts_with("# Phone digest — 100 notifications\n<t:1770000000:R>\n"),
-            "unexpected header: {:?}",
-            chunks[0]
+            inline(&parsed).starts_with("# Phone digest\n100 notifications\n<t:1770000000:R>\n"),
+            "unexpected header"
         );
-        let bullets = chunks
-            .iter()
-            .flat_map(|chunk| chunk.lines())
-            .filter(|line| line.starts_with('•'))
+        let bullets = inline(&parsed)
+            .lines()
+            .filter(|line| line.starts_with("- "))
             .count();
         assert_eq!(bullets, 100);
     }

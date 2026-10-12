@@ -3,36 +3,33 @@
 //! The agent only supplies DATA; this module owns the entire output: grouped
 //! by receiver account, tiers ordered urgent → notable → routine inside each
 //! account, field truncation, mass-mention neutralization. Unknown tiers
-//! become routine. The digest carries the tier as an emoji on each bullet
-//! (🔴 urgent / 🟡 notable / 🟢 routine), a `<t:<epoch>:R>` generation line
-//! under the header, and a trailing `## ⚠️ errors` section; no blank lines. A
-//! digest that fits the inline budget posts as this text; an over-budget
-//! digest posts a compact summary line alongside a markdown file attachment
-//! carrying the original per-account full text.
+//! become routine. The post is a static `# Mail digest` title, a summary
+//! line, the `<t:<epoch>:R>` generation line, then per-account bullets
+//! (tier emoji 🔴 urgent / 🟡 notable / 🟢 routine) and a trailing
+//! `## ⚠️ errors` section; no blank lines. Past Discord's 2000-char limit
+//! the post becomes a compact summary alongside a markdown file attachment
+//! carrying the per-account full text. The mention pings when any item is
+//! urgent or the agent passed `--ping`.
 
 pub mod setup;
 
 use std::collections::BTreeMap;
-use std::env;
-use std::path::Path;
-use std::path::PathBuf;
-use std::time::Duration;
 
 use anyhow::Result;
 use anyhow::anyhow;
+use digest_post::DISCORD_MAX;
+pub use digest_post::Posted;
+pub use digest_post::Rendered;
+use digest_post::clean;
+use digest_post::field_str;
+use digest_post::fit;
+use digest_post::header;
+use digest_post::mention_id;
+use digest_post::webhook_url;
 use serde_json::Value;
-use ureq::unversioned::multipart::Form;
-use ureq::unversioned::multipart::Part;
 
-const MAX_INLINE: usize = 1800;
 const USER_AGENT: &str = "octask-mail-digest/1.0";
-/// Fallback credential dir when `CREDENTIALS_DIRECTORY` is unset:
-/// `~/.config/fazuh-agent/secrets/discord` (same lookup order as phone-digest).
-fn home_secrets_dir() -> Option<PathBuf> {
-    env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(|home| PathBuf::from(home).join(".config/fazuh-agent/secrets/discord"))
-}
+const WEBHOOK_NAMES: [&str; 1] = ["mail-digest.key"];
 const TIER_TITLES: [(&str, &str); 3] = [
     ("urgent", "🔴 Needs attention"),
     ("notable", "🟡 Notable"),
@@ -40,72 +37,7 @@ const TIER_TITLES: [(&str, &str); 3] = [
 ];
 const TIER_EMOJI: [&str; 3] = ["🔴", "🟡", "🟢"];
 
-/// What the digest will be, before it reaches Discord.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Rendered {
-    /// Empty inbox: post this notice instead of a digest.
-    Notice(String),
-    /// Within budget: post this text inline.
-    Inline(String),
-    /// Over budget: attach `text` as `filename`, post `summary` alongside.
-    File {
-        summary: String,
-        filename: String,
-        text: String,
-    },
-}
-
-impl Rendered {
-    fn char_count(&self) -> usize {
-        match self {
-            Rendered::Notice(text) | Rendered::Inline(text) => text.chars().count(),
-            Rendered::File { text, .. } => text.chars().count(),
-        }
-    }
-}
-
-/// How the post went, enough to write the operator's log line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Posted {
-    Notice { status: u16 },
-    Inline { chars: usize, status: u16 },
-    File { chars: usize, status: u16 },
-}
-
-impl Posted {
-    pub fn log_line(&self) -> String {
-        match self {
-            Posted::Notice { status } => format!("posted inline, http {status}"),
-            Posted::Inline { chars, status } => {
-                format!("posted inline {chars} chars, http {status}")
-            }
-            Posted::File { chars, status } => format!("posted file {chars} chars, http {status}"),
-        }
-    }
-}
-
-/// Collapse whitespace, cap to `cap` characters, defuse mass mentions.
-fn clean(text: &str, cap: usize) -> String {
-    let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    joined
-        .chars()
-        .take(cap)
-        .collect::<String>()
-        .replace("@everyone", "at-everyone")
-        .replace("@here", "at-here")
-}
-
 /// The `str(...)` coercion of whatever JSON value a field holds.
-fn field_str(value: &Value) -> String {
-    match value {
-        Value::Null => "None".to_string(),
-        Value::Bool(true) => "True".to_string(),
-        Value::Bool(false) => "False".to_string(),
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
-    }
-}
-
 fn field(obj: &serde_json::Map<String, Value>, key: &str, cap: usize) -> String {
     clean(&obj.get(key).map(field_str).unwrap_or_default(), cap)
 }
@@ -200,22 +132,24 @@ fn digest_block(mail: &[Mail]) -> Vec<String> {
     lines
 }
 
-/// Per-account blocks with tier sub-headers and `• sender — subject (gist)`
-/// bullets. Used only as the attached markdown over the inline budget.
+/// Per-account attachment blocks with `### <tier>` sub-headers and
+/// `- <sender> — <subject> (<gist>)` markdown list items — real list syntax
+/// so Discord's markdown file preview keeps one entry per line. A repeated
+/// sender nests as an indented `  - ↳ <subject> (<gist>)`.
 fn attachment_block(mail: &[Mail]) -> Vec<String> {
     let mut lines = Vec::new();
     let mut last_tier: Option<usize> = None;
     let mut last_sender: Option<&str> = None;
     for m in mail {
         if last_tier != Some(m.tier) {
-            lines.push(format!("**{}**", TIER_TITLES[m.tier].1));
+            lines.push(format!("### {}", TIER_TITLES[m.tier].1));
             last_tier = Some(m.tier);
             last_sender = None;
         }
         if last_sender == Some(m.sender.as_str()) {
-            lines.push(format!("  ↳ {} ({})", m.subject, m.gist));
+            lines.push(format!("  - ↳ {} ({})", m.subject, m.gist));
         } else {
-            lines.push(format!("• {} — {} ({})", m.sender, m.subject, m.gist));
+            lines.push(format!("- {} — {} ({})", m.sender, m.subject, m.gist));
             last_sender = Some(&m.sender);
         }
     }
@@ -236,22 +170,27 @@ fn error_lines(errors: &[(String, String)]) -> Vec<String> {
     lines
 }
 
+fn counts_line(accounts: &BTreeMap<String, Vec<Mail>>) -> String {
+    let n: usize = accounts.values().map(Vec::len).sum();
+    format!("{n} mails across {} accounts", accounts.len())
+}
+
 fn attachment_text(
     accounts: &BTreeMap<String, Vec<Mail>>,
     errors: &[(String, String)],
-    n: usize,
-    k: usize,
     today: &str,
 ) -> String {
-    let mut lines = vec![format!(
-        "# 📬 Mail digest {today} — {n} mails across {k} accounts"
-    )];
+    let mut lines = vec![
+        "# Mail digest".to_string(),
+        counts_line(accounts),
+        today.to_string(),
+    ];
     for (account, mail) in accounts {
-        lines.push(format!("\n## {account} ({})", mail.len()));
+        lines.push(format!("## {account} ({})", mail.len()));
         lines.extend(attachment_block(mail));
     }
     if !errors.is_empty() {
-        lines.push("\n## Errors".to_string());
+        lines.push("## Errors".to_string());
         lines.extend(
             errors
                 .iter()
@@ -261,163 +200,91 @@ fn attachment_text(
     lines.join("\n")
 }
 
+/// Any item with the urgent tier: auto-pings even without `--ping`.
+fn has_urgent(arg: &str) -> bool {
+    serde_json::from_str::<Value>(arg).is_ok_and(|data| {
+        data.get("items")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item.get("tier").and_then(Value::as_str) == Some("urgent"))
+            })
+    })
+}
+
 /// Turn the agent's JSON into the digest.
 ///
 /// `today` is the `YYYY-MM-DD` stamp used in the attachment name and body;
 /// `epoch` is the generation instant in seconds, rendered as the
-/// `<t:<epoch>:R>` line.
-pub fn render(arg: &str, today: &str, epoch: i64) -> Result<Rendered> {
+/// `<t:<epoch>:R>` line. `mention_chars` reserves room for the `<@id>` line
+/// inside the inline budget.
+pub fn render(arg: &str, today: &str, epoch: i64, mention_chars: usize) -> Result<Rendered> {
     let data: Value =
         serde_json::from_str(arg).map_err(|_| anyhow!("argument must be a JSON object"))?;
     if !data.is_object() {
         return Err(anyhow!("argument must be a JSON object"));
     }
+    let budget = DISCORD_MAX.saturating_sub(mention_chars);
 
     let Grouped { accounts, errors } = group(&data);
-    let n = accounts.values().map(Vec::len).sum::<usize>();
-    let k = accounts.len();
-
-    let mut lines = vec![
-        format!("# Mail digest — {n} mails across {k} accounts"),
-        format!("<t:{epoch}:R>"),
-    ];
-    if n == 0 && errors.is_empty() {
-        lines.push("📬 no mail in the last 24h.".to_string());
-        return Ok(Rendered::Notice(lines.join("\n")));
+    let summary = counts_line(&accounts);
+    if accounts.values().map(Vec::len).sum::<usize>() == 0 && errors.is_empty() {
+        let notice = format!(
+            "{}\n📬 no mail in the last 24h.",
+            header("Mail digest", &summary, epoch)
+        );
+        return Ok(Rendered::Inline(notice));
     }
+
+    let mut lines = vec![header("Mail digest", &summary, epoch)];
     for (account, mail) in &accounts {
         lines.push(format!("## {account}"));
         lines.extend(digest_block(mail));
     }
     lines.extend(error_lines(&errors));
-    let digest = lines.join("\n");
+    let inline = lines.join("\n");
 
-    if digest.chars().count() <= MAX_INLINE {
-        return Ok(Rendered::Inline(digest));
-    }
-    let counts = accounts
-        .iter()
-        .map(|(account, mail)| format!("{account} ({})", mail.len()))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let mut summary = format!(
-        "# Mail digest — {n} mails across {k} accounts (full digest attached): {counts}\n<t:{epoch}:R>"
-    );
+    let attached = format!("{summary} (full digest attached)");
+    let mut file_summary = header("Mail digest", &attached, epoch);
     for line in error_lines(&errors) {
-        summary.push('\n');
-        summary.push_str(&line);
+        file_summary.push('\n');
+        file_summary.push_str(&line);
     }
-    Ok(Rendered::File {
-        summary: summary.chars().take(MAX_INLINE).collect(),
-        filename: format!("mail-digest-{today}.md"),
-        text: attachment_text(&accounts, &errors, n, k, today),
-    })
-}
-
-/// Digest webhook: systemd credential dir when present
-/// (`LoadCredential=discord:<dir>`), else the on-disk store.
-fn webhook_url() -> Result<String> {
-    let candidate: Option<PathBuf> = match env::var("CREDENTIALS_DIRECTORY") {
-        Ok(dir) if !dir.is_empty() => {
-            let path = Path::new(&dir).join("discord").join("mail-digest.key");
-            path.is_file().then_some(path)
-        }
-        _ => None,
-    };
-    let path = candidate
-        .or_else(|| home_secrets_dir().map(|dir| dir.join("mail-digest.key")))
-        .ok_or_else(|| anyhow!("no webhook key file: set CREDENTIALS_DIRECTORY or HOME"))?;
-    let content = std::fs::read_to_string(&path)?;
-    Ok(content
-        .lines()
-        .next()
-        .ok_or_else(|| anyhow!("empty webhook key file {}", path.display()))?
-        .trim()
-        .to_string())
-}
-
-/// Discord user id to ping (`--ping`): line 2 of `notify.key`, next to the
-/// webhook key file. `None` when the file or the line is missing.
-pub fn ping_user_id() -> Option<String> {
-    let path = env::var_os("CREDENTIALS_DIRECTORY")
-        .map(PathBuf::from)
-        .map(|dir| dir.join("discord").join("notify.key"))
-        .or_else(|| home_secrets_dir().map(|dir| dir.join("notify.key")))?;
-    let content = std::fs::read_to_string(path).ok()?;
-    let id = content.lines().nth(1)?.trim();
-    (!id.is_empty()).then(|| id.to_string())
-}
-
-fn post_json(webhook: &str, content: &str, secs: u64) -> Result<u16> {
-    let body = serde_json::to_vec(&serde_json::json!({ "content": content }))?;
-    let response = ureq::post(webhook)
-        .config()
-        .timeout_global(Some(Duration::from_secs(secs)))
-        .build()
-        .header("User-Agent", USER_AGENT)
-        .content_type("application/json")
-        .send(body)?;
-    Ok(response.status().as_u16())
-}
-
-fn post_file(webhook: &str, summary: &str, filename: &str, text: &str) -> Result<u16> {
-    let payload = serde_json::to_vec(&serde_json::json!({ "content": summary }))?;
-    let form = Form::new()
-        .part("payload_json", Part::bytes(&payload))
-        .part(
-            "files[0]",
-            Part::bytes(text.as_bytes())
-                .file_name(filename)
-                .mime_str("text/markdown")?,
-        );
-    let response = ureq::post(webhook)
-        .config()
-        .timeout_global(Some(Duration::from_secs(60)))
-        .build()
-        .header("User-Agent", USER_AGENT)
-        .send(form)?;
-    Ok(response.status().as_u16())
+    Ok(fit(
+        inline,
+        file_summary,
+        format!("mail-digest-{today}.md"),
+        attachment_text(&accounts, &errors, today),
+        budget,
+    ))
 }
 
 /// Render and post, returning how it went. Split out so tests can pin the
-/// date, the generation epoch, and point the webhook at a sink. `ping`
-/// prepends a `<@id>` mention to the posted content/summary.
+/// date, the generation epoch, and point the webhook at a sink. Pings when
+/// any item is urgent or `ping` (`--ping`) is set; the mention is prepended
+/// to the posted content/summary. A missing ping id fails an explicit
+/// `--ping` (the agent asked for a ping it cannot deliver) but silently
+/// drops an urgent-only auto-ping: the digest still posts.
 pub fn execute(arg: &str, today: &str, epoch: i64, ping: bool) -> Result<Posted> {
-    let rendered = render(arg, today, epoch)?;
-    let webhook = webhook_url()?;
-    let chars = rendered.char_count();
-    let posted = match &rendered {
-        Rendered::Notice(text) => Posted::Notice {
-            status: post_json(&webhook, &prefix_ping(text, ping)?, 30)?,
-        },
-        Rendered::Inline(text) => Posted::Inline {
-            chars,
-            status: post_json(&webhook, &prefix_ping(text, ping)?, 30)?,
-        },
-        Rendered::File {
-            summary,
-            filename,
-            text,
-        } => Posted::File {
-            chars,
-            status: post_file(&webhook, &prefix_ping(summary, ping)?, filename, text)?,
-        },
+    let ping_id = if ping {
+        Some(
+            mention_id()
+                .ok_or_else(|| anyhow!("no Discord user id to ping (line 2 of notify.key)"))?,
+        )
+    } else if has_urgent(arg) {
+        mention_id()
+    } else {
+        None
     };
-    Ok(posted)
-}
-
-/// Prepend the Discord mention when pinging; pass the text through when not.
-fn prefix_ping(text: &str, ping: bool) -> Result<String> {
-    if !ping {
-        return Ok(text.to_string());
-    }
-    let id = ping_user_id()
-        .ok_or_else(|| anyhow!("no Discord user id to ping (line 2 of notify.key)"))?;
-    Ok(format!("<@{id}>\n{text}"))
+    let mention_chars = ping_id.as_ref().map_or(0, |id| id.chars().count() + 3); // <@id>\n
+    let rendered = render(arg, today, epoch, mention_chars)?;
+    let webhook = webhook_url(&WEBHOOK_NAMES)?;
+    digest_post::post(&webhook, &rendered, ping_id.as_deref(), USER_AGENT)
 }
 
 /// The `mail-digest` entry point: render with the current date and generation
-/// instant, post, log. `ping` prepends a user mention (agent-originated mail).
+/// instant, post, log. Pings when any item is urgent or `--ping` is passed.
 pub fn run(arg: &str, ping: bool) -> Result<()> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let epoch = chrono::Utc::now().timestamp();

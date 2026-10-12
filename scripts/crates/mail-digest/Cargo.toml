@@ -7,8 +7,8 @@ edition = "2024"
 anyhow = { workspace = true }
 chrono = "0.4"
 clap = { workspace = true }
+digest-post = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
-ureq = { version = "3", default-features = false, features = ["rustls", "multipart"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

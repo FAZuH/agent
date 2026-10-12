@@ -69,8 +69,8 @@ pub struct DrainArgs {
 pub struct PostArgs {
     /// {"items": [{"app": str, "title": str, "gist": str, "tier": str}]}
     pub json: String,
-    /// ping the user (mention them in the first message), pass when any
-    /// item is agent-originated
+    /// ping the user (mention them in the post), pass when any item is
+    /// agent-originated; urgent items ping even without it
     #[arg(long)]
     pub ping: bool,
 }

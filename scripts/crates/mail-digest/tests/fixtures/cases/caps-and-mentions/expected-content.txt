@@ -1,4 +1,5 @@
-# Mail digest — 3 mails across 2 accounts
+# Mail digest
+3 mails across 2 accounts
 <t:1770000000:R>
 ## (unknown)
 - 🟢  — no account
