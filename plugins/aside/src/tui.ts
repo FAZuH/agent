@@ -38,7 +38,8 @@ export default {
           toast("Fork returned no session id.", "error")
           return
         }
-        await ctx.client.session.prompt({ sessionID: sid, text })
+        const ask = `This session was forked via /aside from ${parentID} by the user. Do not resume previous task. Prior history is context only. The user only wants you to answer this question, nothing else:\n\n${text}`
+        await ctx.client.session.prompt({ sessionID: sid, text: ask })
         ctx.ui.router.navigate({ type: "session", sessionID: sid })
       } catch (error: any) {
         toast(`aside failed: ${error?.message ?? error}`, "error")

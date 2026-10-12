@@ -37,7 +37,8 @@ export default {
             })
             const sid: string = forked?.data?.id ?? forked?.id
             if (!sid) return { content: "aside failed: fork returned no id." }
-            await ctx.session.prompt({ sessionID: sid, text })
+            const ask = `This session was forked via /aside from ${parentID} by the user. Do not resume previous task. Prior history is context only. The user only wants you to answer this question, nothing else:\n\n${text}`
+            await ctx.session.prompt({ sessionID: sid, text: ask })
             return { content: `Forked to \`${sid}\` — continue there.\nAsked: ${text.slice(0, 200)}` }
           } catch (error) {
             return { content: `aside failed: ${error instanceof Error ? error.message : String(error)}` }
