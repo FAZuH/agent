@@ -11,9 +11,6 @@ permissions:
   - action: subagent
     resource: "*"
     effect: allow
-  - action: "pty_*"
-    resource: "*"
-    effect: allow
 ---
 
 Implement from a spec, ticket, or plan. Follow @implement; drive @tdd (red-green, one vertical slice at a time) at pre-agreed seams where possible. Adding, modifying, or removing tests: load @test-guidelines first (@gui-test-guidelines for UI suites) and follow it.
@@ -44,7 +41,6 @@ Verifying your own implementation: fix failures in scope, rerun the smallest rel
 - Start command from docs and manifests, background PTY, watch startup, port binding, errors.
 - `curl -sI` the local URL before reporting up.
 - Startup fails: check port conflict (`lsof`, `ss`); report the owner, never kill blindly. No app code or config edits to force a start.
-- Asked to start or monitor a crashed server: restart it. Asked to stop: `pty_kill`.
 - Status, URL, port, blockers. Never large logs.
 
 Rules:
