@@ -29,7 +29,7 @@
 
 import { appendFileSync } from "node:fs"
 import { join } from "node:path"
-import { FEATURES, featureOn, featureStored, keySource, loadState, pluginEnabled, readLog, saveState, setEnabled, setFeature, spend, writeKey, type JevState } from "./state.ts"
+import { FEATURES, FEATURE_DEFAULTS, featureOn, featureStored, keySource, loadState, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, writeKey, type JevState } from "./state.ts"
 
 const DATA_DIR = join(process.env.HOME ?? "", ".config", "fazuh-agent", "data")
 
@@ -46,8 +46,13 @@ function summary(): string {
     `plugin     ${pluginEnabled() ? "on" : "OFF — nothing is sent and nothing is spent"}`,
     `features   ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
     `off        ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
-    `thresholds minProbability=${s.minProbability} minMargin=${s.minMargin} gateProbability=${s.gateProbability}`,
+    ...FEATURES.map((f) => {
+      const cfg = s.config[f.key] ?? {}
+      const rendered = Object.entries(cfg).map(([k, v]) => `${k}=${v}`).join(" ") || "(defaults)"
+      return `config.${f.key.padEnd(9)} ${rendered}`
+    }),
     `spend      ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
+    `logMax     ${s.logMax} lines`,
   ].join("\n")
 }
 
@@ -268,8 +273,8 @@ export default {
               const next = setEnabled(!master)
               toast(
                 next
-                  ? "Jev on. The six switches below decide what it does."
-                  : "Jev off. No tool call is sent and nothing is spent. The six switches keep their values.",
+                  ? "Jev on. The switches below decide what it does."
+                  : "Jev off. No hook runs and nothing is spent. The switches keep their values.",
               )
               redraw?.()
             },
@@ -286,7 +291,7 @@ export default {
                 toast(next ? `${f.label} on` : `${f.label} off`)
                 redraw?.()
               },
-              f.key === "risk_hook" ? "Hooks" : "Tools",
+              "Hooks",
             )
           }),
         ]
@@ -362,30 +367,74 @@ export default {
               onConfirm: (v: string) => saveState({ keyFile: v.trim() }),
             }),
           "Provider"),
-          row("minprobability", "minProbability", String(s.minProbability), () =>
-            ask(render, {
-              title: "minProbability",
-              description: "A choice below this top probability is reported as low confidence. 0 to 1.",
-              value: String(s.minProbability),
-              onConfirm: (v: string) => saveState({ minProbability: clamp01(v, s.minProbability) }),
+          // One row per per-feature setting, generated from FEATURE_DEFAULTS,
+          // so the panel cannot drift from what the plugin honours. 0-1 fields
+          // clamp to the range; timeouts, counts, and maxPicks take integers
+          // (-1 = uncapped); booleans toggle in place without a prompt.
+          ...Object.entries(FEATURE_DEFAULTS).flatMap(([feature, fields]) =>
+            Object.keys(fields).map((key) => {
+              const current = s.config[feature]?.[key] ?? fields[key]
+              if (typeof fields[key] === "boolean") {
+                return row(
+                  `${feature}.${key}`,
+                  `${feature}.${key}`,
+                  current ? "on" : "off",
+                  () => {
+                    setFeatureConfig(feature, key, !(current === true))
+                    toast(`${feature}.${key} ${!(current === true) ? "on" : "off"}`)
+                    render()
+                  },
+                  feature,
+                )
+              }
+              return row(
+                `${feature}.${key}`,
+                `${feature}.${key}`,
+                String(current),
+                () =>
+                  ask(render, {
+                    title: `${feature}.${key}`,
+                    description:
+                      key === "timeout"
+                        ? "Milliseconds before the Jev call gives up. Fail-open: nothing injected, nothing blocked."
+                        : key === "maxCandidates"
+                          ? "Most skills to offer Jev. The provider's choice limit is 255."
+                          : key === "maxPicks"
+                            ? "Most skills the advisory names. -1 names every qualifier."
+                            : key === "alsoAbove"
+                              ? "Runners-up at or above this probability join the winner. 0 to 1."
+                              : key === "gateProbability"
+                                ? "Blocks a call at or above this. Only when confident. 0 to 1."
+                                : "A choice below this is reported as low confidence. 0 to 1.",
+                    value: String(current),
+                    onConfirm: (v: string) =>
+                      setFeatureConfig(
+                        feature,
+                        key,
+                        key === "timeout" || key === "maxCandidates" || key === "maxPicks"
+                          ? clampCount(v, typeof current === "number" ? current : Number(fields[key]), key === "maxPicks")
+                          : clamp01(v, typeof current === "number" ? current : Number(fields[key])),
+                      ),
+                  }),
+                feature,
+              )
             }),
-          "Confidence"),
-          row("minmargin", "minMargin", String(s.minMargin), () =>
+          ),
+          row("logmax", "logMax", String(s.logMax), () =>
             ask(render, {
-              title: "minMargin",
-              description: "A choice below this gap to the runner-up is low confidence. 0 to 1.",
-              value: String(s.minMargin),
-              onConfirm: (v: string) => saveState({ minMargin: clamp01(v, s.minMargin) }),
+              title: "Call log cap",
+              description: "jev-calls.jsonl keeps at most this many lines; older lines are pruned to the tail. Minimum 10.",
+              value: String(s.logMax),
+              onConfirm: (v: string) => {
+                const n = Number(String(v).trim())
+                if (!Number.isFinite(n) || n < 10 || !Number.isInteger(n)) {
+                  toast(`Not an integer >= 10 — still ${s.logMax}.`, "error")
+                  return
+                }
+                setLogMax(n)
+              },
             }),
-          "Confidence"),
-          row("gateprobability", "gateProbability", String(s.gateProbability), () =>
-            ask(render, {
-              title: "gateProbability",
-              description: "Blocks a tool call and warns on a review gate at or above this. Only when confident. 0 to 1.",
-              value: String(s.gateProbability),
-              onConfirm: (v: string) => saveState({ gateProbability: clamp01(v, s.gateProbability) }),
-            }),
-          "Confidence"),
+          "Plugin"),
           row("features", "Features", `${FEATURES.filter((f) => featureOn(f.key)).length} of ${FEATURES.length} on`, () => openFeatures(), "Plugin"),
           row("status", "Status", `${money.calls} calls · $${money.usd.toFixed(6)}`, () => toast(summary()), "Plugin"),
           row("log", "Recent calls", "", () => toast(recentCalls()), "Plugin"),
@@ -407,6 +456,16 @@ export default {
       return n
     }
 
+    /** Counts that admit -1 as "no limit" (maxPicks). */
+    function clampCount(raw: string, current: number, allowUncapped: boolean): number {
+      const n = Number(String(raw).trim())
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < (allowUncapped ? -1 : 1) || (allowUncapped && n === 0)) {
+        toast(allowUncapped ? `Not -1 or a positive integer — still ${current}.` : `Not a positive integer — still ${current}.`, "error")
+        return current
+      }
+      return n
+    }
+
     // ——— registration (must happen inside a rendered component) ———
 
     function recentCalls(): string {
@@ -414,7 +473,10 @@ export default {
       if (rows.length === 0) return "No calls logged yet."
       return rows
         .map((r) => {
-          if (r.hook) return `${r.ts}  hook ${r.tool} skipped`
+          if (r.hook) {
+            const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
+            return `${r.ts}  ${r.hook}${on} skipped: ${r.skipped ?? "unknown"}`
+          }
           const answers = (r.decisions ?? []).map((d: any) => `${d.id}=${JSON.stringify(d.value)}`).join(" ")
           return `${r.ts}  ${answers}  ${r.inputTokens ?? 0}tok`
         })

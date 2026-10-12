@@ -33,13 +33,27 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
-  { key: "pick_skill", label: "Skill picker", what: "jev_pick_skill — which skill to load" },
-  { key: "pick_control", label: "Control picker", what: "jev_pick_control — which on-page control to click" },
-  { key: "review_rank", label: "Review ranking", what: "jev_review_rank — review priority per changed file" },
-  { key: "check", label: "Yes/no check", what: "jev_check — one bounded question about a piece of text" },
-  { key: "review_gates", label: "Review rule gates", what: "The seven rule checks inside jev_review_rank. Ranking still works without them." },
-  { key: "risk_hook", label: "Risk hook", what: "Asks Jev whether each bash/edit/write is irreversible or leaks a secret" },
+  { key: "hook_skill_pick", label: "Skill picker hook", what: "Asks Jev which skill fits each prompt and advises it in context" },
+  { key: "hook_risk", label: "Risk hook", what: "Asks Jev whether each bash/edit/write is irreversible or leaks a secret" },
 ]
+
+/**
+ * Per-feature settings. Each feature carries its own numbers because they
+ * judge different things: the skill hook weighs a choice among ~90 candidates
+ * and needs a timeout, the risk hook blocks on a noul. A field absent from a
+ * stored config falls back to the default here.
+ */
+export const FEATURE_DEFAULTS: Record<string, Record<string, number | boolean>> = {
+  // Probability floor fits the truncated criteria (measured P=0.89 on a
+  // correct pick); the margin gate still rejects near-ties underneath it.
+  // Timeout fits the measured ~2.5s full-roster call with headroom for a slow
+  // provider. maxPicks caps the advised skills (-1 = every qualifier);
+  // alsoAbove is the runner-up floor, the same 0.25 the TypeSafe triage
+  // example uses for its second-team copy. autoOptimize warms the optimizer
+  // cache when the installed id set changes.
+  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true },
+  hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000 },
+}
 
 export interface JevState {
   /**
@@ -66,17 +80,28 @@ export interface JevState {
   enabled: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
   features: Record<string, boolean>
-  /** A choice below this top probability is reported as low-confidence. */
-  minProbability: number
-  /** A choice below this gap to the runner-up is reported as low-confidence. */
-  minMargin: number
   /**
-   * The risk gate blocks a call at or above this probability, and the review
-   * tool warns on a gate at or above it. One number, two uses, on purpose:
-   * they are the same judgement at different scales. Only honoured when the
-   * answer is also confident, so a weak high probability cannot block.
+   * Per-feature settings, keyed from FEATURE_DEFAULTS: timeouts in ms,
+   * probabilities 0-1, counts, and the autoOptimize flag. A field absent here
+   * falls back to FEATURE_DEFAULTS, so an old or partial file cannot
+   * unconfigure a feature.
    */
-  gateProbability: number
+  config: Record<string, Record<string, number | boolean>>
+  /** Call-log cap: logCall keeps at most this many lines, pruned to the tail. */
+  logMax: number
+  /**
+   * Optimized skill descriptions for the routing hook: skill id → terse
+   * choice criterion, keyed by hash of the original description so a body
+   * edit that leaves the description alone never invalidates. Entries carry
+   * a format version so a future format change invalidates cleanly.
+   */
+  skillCriteria: Record<string, { origHash: string; terse: string; v: number }>
+  /**
+   * Hash of the installed skill id set the optimizer last saw. Auto warm-up
+   * fires only when the live id set differs, so description-only staleness
+   * and steady state never trigger a background call.
+   */
+  rosterHash: string
 }
 
 /**
@@ -92,11 +117,15 @@ export const DEFAULTS: JevState = {
   keyFile: DEFAULT_SECRET_FILE,
   think: false,
   enabled: true,
-  features: { risk_hook: false },
-  minProbability: 0.8,
-  minMargin: 0.15,
-  gateProbability: 0.7,
+  features: { hook_skill_pick: false, hook_risk: false },
+  config: FEATURE_DEFAULTS,
+  logMax: 500,
+  skillCriteria: {},
+  rosterHash: "",
 }
+
+/** Current cache-entry format. Bump to invalidate every stored criterion. */
+export const SKILL_CRITERIA_VERSION = 1
 
 const num = (raw: unknown, fallback: number): number =>
   typeof raw === "number" && Number.isFinite(raw) ? raw : fallback
@@ -107,12 +136,69 @@ const num = (raw: unknown, fallback: number): number =>
  * stops a typo in the JSON from inventing a switch.
  */
 export function featureMap(raw: unknown, legacyGate?: unknown): Record<string, boolean> {
-  // `gate` was the risk hook before it became a feature. An unmigrated file
-  // still has it, and reading only `features` would silently drop an enabled
-  // gate — the one switch that can stop a tool call.
-  const stored = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
-  if (typeof legacyGate === "boolean") stored.risk_hook ??= legacyGate
+  // `gate` was the risk hook before it became a feature, and `pick_skill`/
+  // `risk_hook` were renamed to `hook_skill_pick`/`hook_risk`. An unmigrated
+  // file still carries the old spellings, and reading only the new keys would
+  // silently flip configured hooks off — including the one that can stop a
+  // tool call.
+  const stored = (raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {}) as Record<string, unknown>
+  if (typeof legacyGate === "boolean") stored.hook_risk ??= legacyGate
+  stored.hook_skill_pick ??= stored.pick_skill
+  stored.hook_risk ??= stored.risk_hook
   return Object.fromEntries(FEATURES.map((f) => [f.key, stored[f.key] ?? DEFAULTS.features[f.key] ?? true]))
+}
+
+/**
+ * Per-feature settings, merged over FEATURE_DEFAULTS so an old or partial
+ * state file cannot unconfigure a feature. Unknown features and non-numeric
+ * values are dropped the same way featureMap drops unknown switches.
+ */
+export function featureConfigMap(raw: unknown): Record<string, Record<string, number | boolean>> {
+  const stored = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  return Object.fromEntries(
+    FEATURES.map((f) => {
+      const defaults = FEATURE_DEFAULTS[f.key] ?? {}
+      // The pre-rename keys live under the old names in an unmigrated file.
+      const oldKey = f.key === "hook_skill_pick" ? "pick_skill" : f.key === "hook_risk" ? "risk_hook" : f.key
+      const own = ((stored[f.key] ?? stored[oldKey]) && typeof (stored[f.key] ?? stored[oldKey]) === "object"
+        ? (stored[f.key] ?? stored[oldKey])
+        : {}) as Record<string, unknown>
+      return [
+        f.key,
+        Object.fromEntries(
+          Object.entries(defaults).map(([k, v]) => [k, typeof v === "boolean" ? toBool(own[k], v) : num(own[k], v)]),
+        ),
+      ]
+    }),
+  )
+}
+
+/** Stored booleans, plus the 1/0 the previous schema wrote, nothing else. */
+export function toBool(raw: unknown, fallback: boolean): boolean {
+  if (typeof raw === "boolean") return raw
+  if (raw === 1) return true
+  if (raw === 0) return false
+  return fallback
+}
+
+/** One feature's settings. The only read path the call sites use. */
+export function featureConfig(feature: string): Record<string, number | boolean> {
+  const state = loadState()
+  return { ...(FEATURE_DEFAULTS[feature] ?? {}), ...(state.config[feature] ?? {}) }
+}
+
+/** Number field with its default; booleans and garbage fall back. */
+export function cfgNum(feature: string, key: string): number {
+  const fallback = FEATURE_DEFAULTS[feature]?.[key]
+  const raw = featureConfig(feature)[key] ?? fallback
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : typeof fallback === "number" ? fallback : 0
+}
+
+/** Boolean field with its default; the legacy 1/0 still reads correctly. */
+export function cfgBool(feature: string, key: string): boolean {
+  const fallback = FEATURE_DEFAULTS[feature]?.[key]
+  const raw = featureConfig(feature)[key] ?? fallback
+  return toBool(raw, fallback === true)
 }
 
 export function loadState(): JevState {
@@ -123,9 +209,33 @@ export function loadState(): JevState {
     // A fresh object each time: DEFAULTS.features is module-level, and
     // setFeature mutates what loadState returns, which would otherwise rewrite
     // the defaults themselves in memory.
-    return { ...DEFAULTS, features: featureMap(DEFAULTS.features) }
+    return { ...DEFAULTS, features: featureMap(DEFAULTS.features), config: featureConfigMap(DEFAULTS.config) }
   }
   const str = (value: unknown, fallback: string) => (typeof value === "string" && value.trim() ? value : fallback)
+  // Migration: the global minProbability/minMargin/gateProbability seeded the
+  // per-feature config, so an unmigrated file keeps its tuned thresholds
+  // instead of snapping back to defaults on the first load after upgrade.
+  const legacy: Record<string, Record<string, number>> = {
+    hook_skill_pick: {
+      minProbability: num(raw.minProbability, FEATURE_DEFAULTS.hook_skill_pick.minProbability),
+      minMargin: num(raw.minMargin, FEATURE_DEFAULTS.hook_skill_pick.minMargin),
+    },
+    hook_risk: {
+      gateProbability: num(raw.gateProbability, FEATURE_DEFAULTS.hook_risk.gateProbability),
+      minProbability: num(raw.minProbability, FEATURE_DEFAULTS.hook_risk.minProbability),
+    },
+  }
+  const storedConfig = raw.config && typeof raw.config === "object" ? raw.config : {}
+  // Deep-merge per feature: a stored partial config (say, only timeout) must
+  // not wipe the legacy threshold seeds for the same feature. A file written
+  // before the rename carries the config under the old feature keys.
+  const merged: Record<string, Record<string, number>> = {}
+  for (const f of FEATURES) {
+    const fromLegacy = legacy[f.key] ?? {}
+    const oldKey = f.key === "hook_skill_pick" ? "pick_skill" : f.key === "hook_risk" ? "risk_hook" : f.key
+    const fromStored = (storedConfig as Record<string, unknown>)[f.key] ?? (storedConfig as Record<string, unknown>)[oldKey]
+    merged[f.key] = { ...fromLegacy, ...(fromStored && typeof fromStored === "object" ? fromStored : {}) }
+  }
   return {
     endpoint: str(raw.endpoint, DEFAULTS.endpoint),
     model: str(raw.model, DEFAULTS.model),
@@ -135,10 +245,56 @@ export function loadState(): JevState {
     think: raw.think === true,
     enabled: raw.enabled !== false,
     features: featureMap(raw.features, raw.gate),
-    minProbability: num(raw.minProbability, DEFAULTS.minProbability),
-    minMargin: num(raw.minMargin, DEFAULTS.minMargin),
-    gateProbability: num(raw.gateProbability, DEFAULTS.gateProbability),
+    config: featureConfigMap(merged),
+    logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
+    skillCriteria: skillCriteriaMap(raw.skillCriteria),
+    rosterHash: typeof raw.rosterHash === "string" ? raw.rosterHash : "",
   }
+}
+
+/**
+ * Stored optimizer cache. Only entries matching the current version with a
+ * non-empty terse string survive; anything else is dropped so a corrupt or
+ * foreign-format entry can never poison the roster.
+ */
+export function skillCriteriaMap(raw: unknown): JevState["skillCriteria"] {
+  const stored = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  const out: JevState["skillCriteria"] = {}
+  for (const [id, entry] of Object.entries(stored)) {
+    if (!entry || typeof entry !== "object") continue
+    const e = entry as Record<string, unknown>
+    if (e.v !== SKILL_CRITERIA_VERSION) continue
+    if (typeof e.origHash !== "string" || !e.origHash) continue
+    if (typeof e.terse !== "string" || !e.terse.trim() || e.terse.length > 400) continue
+    out[id] = { origHash: e.origHash, terse: e.terse.trim(), v: SKILL_CRITERIA_VERSION }
+  }
+  return out
+}
+
+export function setSkillCriterion(id: string, origHash: string, terse: string): void {
+  const next = loadState()
+  next.skillCriteria[id] = { origHash, terse: terse.trim().slice(0, 400), v: SKILL_CRITERIA_VERSION }
+  saveState({ skillCriteria: next.skillCriteria })
+}
+
+export function setFeatureConfig(feature: string, key: string, value: number | boolean): void {
+  if (!(feature in FEATURE_DEFAULTS)) throw new Error(`unknown jev feature: ${feature}`)
+  const known = FEATURE_DEFAULTS[feature]?.[key]
+  if (known === undefined) throw new Error(`unknown jev config key: ${feature}.${key}`)
+  if (typeof known === "boolean") {
+    if (typeof value !== "boolean") throw new Error(`${feature}.${key} takes true/false`)
+  } else if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${feature}.${key} takes a number`)
+  }
+  const next = loadState()
+  next.config[feature] = { ...(next.config[feature] ?? {}), [key]: value }
+  saveState({ config: next.config })
+}
+
+export function setLogMax(value: number): number {
+  const max = Math.max(10, Math.round(value))
+  saveState({ logMax: max })
+  return max
 }
 
 /** The master switch. Off means nothing leaves the machine and nothing spends. */
@@ -226,12 +382,28 @@ function dirnameOf(path: string): string {
 }
 
 /** Append one line per call. Never records the key. */
+let logWrites = 0
 export function logCall(entry: Record<string, unknown>): void {
   try {
     mkdirSync(DATA_DIR, { recursive: true })
     // 0600: a logged payload is a shell command or file body, redacted but not
     // secret-free, and this is the same directory as the key.
     writeFileSync(LOG_FILE, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, { flag: "a", mode: 0o600 })
+    chmodSync(LOG_FILE, 0o600)
+    // The log is unbounded by nature; prune to the configured tail. Every 16th
+    // write, not every write: one read+rewrite is amortized over 15 appends,
+    // and a 16-call burst between prunes stays well under any sane logMax.
+    if (++logWrites % 16 === 0) pruneLog()
+  } catch {}
+}
+
+/** Keep the last `logMax` non-empty lines. Safe no-op on a missing log. */
+export function pruneLog(): void {
+  try {
+    const max = loadState().logMax
+    const lines = readFileSync(LOG_FILE, "utf8").split("\n").filter(Boolean)
+    if (lines.length <= max) return
+    writeFileSync(LOG_FILE, `${lines.slice(-max).join("\n")}\n`, { mode: 0o600 })
     chmodSync(LOG_FILE, 0o600)
   } catch {}
 }

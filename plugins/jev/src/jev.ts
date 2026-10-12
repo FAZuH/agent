@@ -12,7 +12,7 @@
  * the ones worth paying for.
  */
 
-import { loadState, logCall, resolveKey, type JevState } from "./state.ts"
+import { FEATURE_DEFAULTS, loadState, logCall, resolveKey, type JevState } from "./state.ts"
 
 export type JevKind = "noul" | "choice" | "score"
 
@@ -37,6 +37,11 @@ export interface Decision {
   confidence?: number
   /** Gap between the winner and the runner-up. */
   margin?: number
+  /**
+   * The full ranked distribution, choice only. Lets callers name runners-up
+   * instead of throwing the whole distribution away after the winner.
+   */
+  distribution?: Record<string, number>
   /** False when the answer is too weak or too close to act on. */
   confident: boolean
   /** Why it is not confident, for the agent to read. */
@@ -99,8 +104,10 @@ function labelsOf(criteria: JevQuestion["criteria"]): string[] {
   return criteria ? Object.keys(criteria) : []
 }
 
-function isConfidentProbability(p: number, minProbability: number): boolean {
-  return p >= minProbability
+/** Confidence thresholds, per call: each feature carries its own numbers. */
+export interface Thresholds {
+  minProbability: number
+  minMargin: number
 }
 
 /** For a noul the answer is P(yes), so certainty is distance from a coin flip. */
@@ -240,7 +247,7 @@ async function postChat(state: JevState, prompt: string, timeoutMs: number): Pro
   return content
 }
 
-export function normalize(id: string, question: JevQuestion, answer: any, state: JevState): Decision {
+export function normalize(id: string, question: JevQuestion, answer: any, thresholds: Thresholds): Decision {
   if (!answer || typeof answer !== "object") throw new JevError(`${id}: no answer object`, "bad-answer")
   if (answer.type !== question.type) {
     throw new JevError(`${id}: asked ${question.type}, got ${String(answer.type)}`, "bad-answer")
@@ -253,7 +260,7 @@ export function normalize(id: string, question: JevQuestion, answer: any, state:
     // it. Measuring P(yes) against minProbability instead would call 0.97
     // confident but 0.03 not, which is backwards.
     const certainty = noulCertainty(p)
-    const confident = certainty >= state.minProbability && p !== 0.5
+    const confident = certainty >= thresholds.minProbability && p !== 0.5
     return {
       id,
       kind: "noul",
@@ -305,7 +312,7 @@ export function normalize(id: string, question: JevQuestion, answer: any, state:
     if (!Number.isFinite(score) || score < 0 || score > labels.length - 1) {
       throw new JevError(`${id}: score ${String(answer.score)} outside 0..${labels.length - 1}`, "bad-answer")
     }
-    return { id, kind: "score", value: score, margin, confident: margin >= state.minMargin }
+    return { id, kind: "score", value: score, margin, confident: margin >= thresholds.minMargin }
   }
 
   const choice = answer.choice
@@ -318,8 +325,8 @@ export function normalize(id: string, question: JevQuestion, answer: any, state:
   const top = table[choice]
   const confidence = Number.isFinite(Number(answer.confidence)) ? Number(answer.confidence) : undefined
   const reasons: string[] = []
-  if (!isConfidentProbability(top, state.minProbability)) reasons.push(`top probability ${top.toFixed(2)} < ${state.minProbability}`)
-  if (margin < state.minMargin) reasons.push(`margin ${margin.toFixed(2)} < ${state.minMargin}`)
+  if (top < thresholds.minProbability) reasons.push(`top probability ${top.toFixed(2)} < ${thresholds.minProbability}`)
+  if (margin < thresholds.minMargin) reasons.push(`margin ${margin.toFixed(2)} < ${thresholds.minMargin}`)
   if (REVIEW_LABELS.has(choice)) reasons.push(`"${choice}" is a hand-back label`)
   return {
     id,
@@ -328,6 +335,7 @@ export function normalize(id: string, question: JevQuestion, answer: any, state:
     probability: top,
     confidence,
     margin,
+    distribution: Object.fromEntries(ranked),
     confident: reasons.length === 0,
     note: reasons.length ? reasons.join("; ") : undefined,
   }
@@ -359,9 +367,13 @@ function require_key(): string {
 export async function ask(
   stateBody: JevStateBody,
   questions: Record<string, JevQuestion>,
-  opts: { timeoutMs?: number; log?: boolean } = {},
+  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds } = {},
 ): Promise<JevResult> {
   const state = loadState()
+  const thresholds: Thresholds = opts.thresholds ?? {
+    minProbability: FEATURE_DEFAULTS.hook_skill_pick.minProbability,
+    minMargin: FEATURE_DEFAULTS.hook_skill_pick.minMargin,
+  }
   // Unconfigured is a state, not a bug: say which setting is missing rather
   // than posting an empty URL or letting the model see a bare TypeError.
   if (!state.endpoint || !state.model) {
@@ -454,15 +466,16 @@ export async function ask(
       throw new JevError("Jev returned non-JSON", "shape")
     }
     if (body?.error) throw new JevError(`Jev error: ${JSON.stringify(body.error).slice(0, 300)}`, "http")
-    if (!body?.answers || typeof body.answers !== "object") throw new JevError("Jev returned no answers object", "shape")
-    answers = body.answers
-    inputTokens = Number(body?.usage?.input_tokens ?? 0)
+    // Some providers (or gateways in front of them) nest the System One
+    // payload one level deeper: { result: { answers }, success }. Accept
+    // both, refusing anything that has neither.
+    ;({ answers, inputTokens } = answersOf(body))
   }
 
   const elapsedMs = Date.now() - started
   let decisions: Decision[]
   try {
-    decisions = Object.entries(questions).map(([id, q]) => normalize(id, q, answers[id], state))
+    decisions = Object.entries(questions).map(([id, q]) => normalize(id, q, answers[id], thresholds))
   } catch (error) {
     // Logged, not swallowed: the raw reply is the only way to see what the
     // model actually returned, and a validation failure is a finding about the
@@ -500,4 +513,17 @@ export async function ask(
 /** Jev costs $0.04/M input tokens and nothing for output. */
 export function estimateCost(inputTokens: number): string {
   return `$${((inputTokens / 1_000_000) * 0.04).toFixed(6)}`
+}
+
+/**
+ * Find the answers object in a System One reply. Native providers return it
+ * at top level; some endpoints (or gateways in front of them) nest the whole
+ * payload one level deeper under `result`. Exported so the unwrap is tested,
+ * because the wrong unwrap reads as "the model is broken" when the model is
+ * fine and the envelope is the problem.
+ */
+export function answersOf(body: any): { answers: Record<string, any>; inputTokens: number } {
+  const envelope = body?.answers && typeof body.answers === "object" ? body : body?.result
+  if (!envelope?.answers || typeof envelope.answers !== "object") throw new JevError("Jev returned no answers object", "shape")
+  return { answers: envelope.answers, inputTokens: Number(envelope?.usage?.input_tokens ?? body?.usage?.input_tokens ?? 0) }
 }

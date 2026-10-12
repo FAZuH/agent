@@ -4,6 +4,13 @@ Written before any code, then kept current as the port landed. Everything here
 was verified against the live machine or a primary source on 2026-09-30;
 anything unverified is marked as such.
 
+> **2026-10 update:** the four LLM-invoked tools (`jev_pick_skill`,
+> `jev_check`, `jev_review_rank`, `jev_pick_control`) and the `@jev-use` skill
+> were removed. The judgement is that Jev's power is automatic hooks, not tools
+> an LLM has to decide to call: the plugin is now two hooks (`pick_skill`,
+> `risk_hook`) and per-feature config replacing the global thresholds. The
+> tool-era records below are kept as the build history they are.
+
 For how to *use* the plugin, see [Jev](../jev.md). This file is why it is built
 the way it is, what was checked with real requests, and what is still unproven.
 
