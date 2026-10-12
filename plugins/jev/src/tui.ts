@@ -28,10 +28,7 @@
  */
 
 import { appendFileSync } from "node:fs"
-import { join } from "node:path"
-import { FEATURES, FEATURE_DEFAULTS, featureOn, featureStored, keySource, loadState, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, writeKey, type JevState } from "./state.ts"
-
-const DATA_DIR = join(process.env.HOME ?? "", ".config", "fazuh-agent", "data")
+import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, featureOn, featureStored, keySource, loadState, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, writeKey, type JevState } from "./state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
 
@@ -68,7 +65,7 @@ export default {
     const trace = (event: string, detail: Record<string, unknown> = {}) => {
       try {
         appendFileSync(
-          join(DATA_DIR, "jev-tui.log"),
+          TUI_LOG_FILE,
           `${new Date().toISOString()} ${event} ${JSON.stringify(detail)}\n`,
           { mode: 0o600 },
         )
@@ -370,7 +367,8 @@ export default {
           // One row per per-feature setting, generated from FEATURE_DEFAULTS,
           // so the panel cannot drift from what the plugin honours. 0-1 fields
           // clamp to the range; timeouts, counts, and maxPicks take integers
-          // (-1 = uncapped); booleans toggle in place without a prompt.
+          // (-1 = uncapped); booleans toggle in place without a prompt;
+          // strings save trimmed text.
           ...Object.entries(FEATURE_DEFAULTS).flatMap(([feature, fields]) =>
             Object.keys(fields).map((key) => {
               const current = s.config[feature]?.[key] ?? fields[key]
@@ -384,6 +382,28 @@ export default {
                     toast(`${feature}.${key} ${!(current === true) ? "on" : "off"}`)
                     render()
                   },
+                  feature,
+                )
+              }
+              if (typeof fields[key] === "string") {
+                return row(
+                  `${feature}.${key}`,
+                  `${feature}.${key}`,
+                  String(current) || "(host model)",
+                  () =>
+                    ask(render, {
+                      title: `${feature}.${key}`,
+                      description: "providerID/modelID for the optimizer, e.g. 9router/free. Empty uses the host's model.",
+                      value: String(current),
+                      onConfirm: (v: string) => {
+                        const text = v.trim()
+                        if (text && !text.includes("/")) {
+                          toast("Needs providerID/modelID, e.g. 9router/free.", "error")
+                          return
+                        }
+                        setFeatureConfig(feature, key, text)
+                      },
+                    }),
                   feature,
                 )
               }
