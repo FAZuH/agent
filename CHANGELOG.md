@@ -1,3 +1,5 @@
+## [0.13.17](https://github.com/FAZuH/agent/compare/v0.13.16...v0.13.17) (2026-10-13)
+
 ## [0.13.16](https://github.com/FAZuH/agent/compare/v0.13.15...v0.13.16) (2026-10-13)
 
 
@@ -27,11 +29,4 @@
 ## [0.13.14](https://github.com/FAZuH/agent/compare/v0.13.13...v0.13.14) (2026-10-12)
 
 ## [0.13.13](https://github.com/FAZuH/agent/compare/v0.13.12...v0.13.13) (2026-10-12)
-
-## [0.13.12](https://github.com/FAZuH/agent/compare/v0.13.11...v0.13.12) (2026-10-12)
-
-
-### Bug Fixes
-
-* digest agents appended --ping to routine-only posts ([cd7a895](https://github.com/FAZuH/agent/commit/cd7a8957ee2ca16621c9f17f73640197a1065950))
 
