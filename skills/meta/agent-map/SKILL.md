@@ -41,7 +41,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 `orchestrate`, `workflows` (routing table and procedures), `forkflow` (warm
 session forks), `session` (spec and checkpoints in `.scratch/`), `task-context`
 (context packets), `prepare-compact`, `finish`, `scratch-finish`, `self-improve`,
-`session-retro`, `papercut-sweep`, `long-horizon` (overnight runs),
+`session-retro`, `friction-sweep`, `long-horizon` (overnight runs),
 `offload` (remote machines), `worktree-new`, `worktree-finish`,
 `worktree-close`, `pr-to-close`.
 
@@ -144,7 +144,7 @@ handwriting,latex,math,obsidian,ocr,summarize,translate}`.
 
 ### CLIs
 
-`papercuts` (friction log), `bgrun` (background jobs), `octask` (schedules),
+`bgrun` (background jobs), `octask` (schedules),
 `opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `jegrep` (semantic
 grep, needs the jev shim), `imagescan`, `pdf-build`, `skill-graph`,
 `mail-digest`/`phone-digest` (opt-in digests), `himalaya-gen-config`.

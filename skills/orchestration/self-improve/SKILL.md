@@ -1,12 +1,12 @@
 ---
 name: self-improve
-description: Run gated self-improvement, collect proposals via session-retro, validate via skill-doctor, offer the papercut-sweep. Use when the user says "self-improve", asks for a retro/doctor check, wants to run self-improvement without finishing the session, or asks what is in the improvement backlog.
+description: Run gated self-improvement, collect proposals via session-retro, validate via skill-doctor, offer the friction-sweep. Use when the user says "self-improve", asks for a retro/doctor check, wants to run self-improvement without finishing the session, or asks what is in the improvement backlog.
 ---
 
 # Self-improve
 
 Run the collect + validate check, then offer the sweep. This
-skill only collects and validates; application belongs to @papercut-sweep.
+skill only collects and validates; application belongs to @friction-sweep.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
@@ -31,22 +31,22 @@ Always follow the rules in the *Rules* section at the bottom.
    section says why this skill does not fix it.
 3. **Offer the sweep, do not run it.** **GATE offer-sweep (normal → do
    not run the sweep; note its availability in the report):** running
-   @papercut-sweep is additional work offered, never auto-run. In auto mode
+   @friction-sweep is additional work offered, never auto-run. In auto mode
    this gate skips, so just report the backlog line instead of asking. If
-   @session-retro filed any papercuts, or @skill-doctor reported
-   `broken`/`drift`, or `papercuts -g list --status open` shows open `self::`
-   entries, tell the user:
+   @session-retro filed any friction entries, or @skill-doctor reported
+   `broken`/`drift`, or a `recall` (query "friction open backlog") surfaces
+   `type:friction` + `status:open` + `scope:` entries, tell the user:
 
-   > Self-improvement backlog ready: `N` papercuts filed this session, `M`
-   > open total, doctor `broken X / drift Y`. Run @papercut-sweep now? [y/N]
+   > Self-improvement backlog ready: `N` friction entries filed this session, `M`
+   > open total, doctor `broken X / drift Y`. Run @friction-sweep now? [y/N]
 
-   Do not run @papercut-sweep without an explicit "yes". If the user says
+   Do not run @friction-sweep without an explicit "yes". If the user says
    no, leave the backlog for a later sweep.
 
 ## Rules
 
-- Never edit skills, agent defs, or config here; never apply fixes. Application belongs to @papercut-sweep. New skills need a separate `writing-for-agents` workflow after explicit approval.
-- Both gates (`papercut-file` in step 1, `offer-sweep` in step 3) are
+- Never edit skills, agent defs, or config here; never apply fixes. Application belongs to @friction-sweep. New skills need a separate `writing-for-agents` workflow after explicit approval.
+- Both gates (`friction-file` in step 1, `offer-sweep` in step 3) are
   `normal` gates: explicit user approval required; they skip only in auto
   mode (vocabulary: @gate).
 - In a restricted/read-only agent (e.g. Plan mode): keep the deviation log

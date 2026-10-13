@@ -25,7 +25,7 @@ the category directory never reaches the installed name.
 - ⭐ **[finish](../skills/orchestration/finish/SKILL.md)**: End a session, archive its workspace, summarize, and route closeout.
 - **[self-improve](../skills/orchestration/self-improve/SKILL.md)**: Run the gated retrospective and skill-system improvement check.
 - **[session-retro](../skills/orchestration/session-retro/SKILL.md)**: Propose self-improvement lessons after a session.
-- **[papercut-sweep](../skills/orchestration/papercut-sweep/SKILL.md)**: Sweep approved global self-improvement entries.
+- **[friction-sweep](../skills/orchestration/friction-sweep/SKILL.md)**: Sweep open Hindsight friction entries into applied improvements.
 - **[long-horizon](../skills/orchestration/long-horizon/SKILL.md)**: Keep long-running agent work alive with supervisors and heartbeats.
 - **[offload](../skills/orchestration/offload/SKILL.md)**: Move builds, checks, and agent batches to remote machines.
 - **[scratch-finish](../skills/orchestration/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace.

@@ -90,8 +90,8 @@ Capture anything that is cheap to lose and expensive to rediscover:
 - **Commands**: exact verification commands (build, lint, test, typecheck)
   and any one-off commands that worked.
 - **Gotchas**: non-obvious findings, dead ends, API quirks, decisions and
-  their rationale. If a friction point hit a papercuts log, reference it; do
-  not duplicate it.
+  their rationale. If a friction point was filed to Hindsight, reference its
+  `document_id`; do not duplicate it.
 - **Secrets**: do NOT write credentials or tokens. Note where they live
   instead (env var, file path).
 
@@ -123,7 +123,7 @@ by clearing it.
 Give the user a concise report:
 
 - Where each piece of state was persisted (session doc path, checkpoint,
-  todo list, memory, papercuts).
+  todo list, memory; friction is already in Hindsight).
 - The goal that was cleared, and the objective they must re-create after
   compaction.
 - The single next step they can paste into a fresh session to continue.

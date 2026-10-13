@@ -1,12 +1,12 @@
 ---
 name: worktree-close
-description: Finish a worktree session and clean up the git worktree. Runs the end-of-session finish workflow, then removes the worktree and its branch, keeping untracked items (.scratch/, .papercuts.jsonl) on the main project dir. Use when the user says "close the worktree", "finish and clean up the worktree", or "merge and remove the worktree". Also use when the user references @worktree-new, @worktree-close, or @worktree-finish.
+description: Finish a worktree session and clean up the git worktree. Runs the end-of-session finish workflow, then removes the worktree and its branch, keeping untracked items (.scratch/) on the main project dir. Use when the user says "close the worktree", "finish and clean up the worktree", or "merge and remove the worktree". Also use when the user references @worktree-new, @worktree-close, or @worktree-finish.
 ---
 
 # Worktree close
 
 Run the end-of-session finish workflow, then remove the worktree and its branch.
-Keeps untracked items (`.scratch/`, `.papercuts.jsonl`) on the main project dir.
+Keeps untracked items (`.scratch/`) on the main project dir.
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a

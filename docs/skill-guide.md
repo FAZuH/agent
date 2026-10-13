@@ -192,7 +192,7 @@ Commit, document, archive, improve.
 flowchart LR
   M[Merged] --> F[finish]
   F --> A[scratch-finish, worktree-finish]
-  A --> I[self-improve, papercut-sweep]
+  A --> I[self-improve, friction-sweep]
   I --> N[Next ticket]
 ```
 
@@ -205,7 +205,7 @@ flowchart LR
 - **setup-dev-docs**: bootstrap, audit, or refresh `docs/dev/`.
 - **session-retro**: propose lessons from the session that just ended.
 - **self-improve**: the gated retrospective and skill check.
-- **papercut-sweep**: apply the approved self-improvement backlog.
+- **friction-sweep**: apply the approved self-improvement backlog.
 
 ## Any time
 

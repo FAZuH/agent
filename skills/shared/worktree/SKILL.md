@@ -1,13 +1,13 @@
 ---
 name: worktree
-description: Work on a feature/branch inside a separate git worktree so the main working tree stays clean. Use whenever the user wants to work on a branch, create a worktree, start a new isolated task, or do cleanup/finish of a worktree. Keeps untracked project files (like .scratch/ and .papercuts.jsonl) on the main project dir so they survive worktree creation and cleanup.
+description: Work on a feature/branch inside a separate git worktree so the main working tree stays clean. Use whenever the user wants to work on a branch, create a worktree, start a new isolated task, or do cleanup/finish of a worktree. Keeps untracked project files (like .scratch/) on the main project dir so they survive worktree creation and cleanup.
 ---
 
 # Worktree branch work
 
-One branch, one git worktree. The main tree keeps all untracked project state, so creating or removing a worktree never touches `.scratch/`, `.papercuts.jsonl`, or other untracked files.
+One branch, one git worktree. The main tree keeps all untracked project state, so creating or removing a worktree never touches `.scratch/` or other untracked files.
 
-> **Untracked means main-tree only.** `.scratch/` (see @scratch) and `.papercuts.jsonl` are untracked, so they live only in the main tree: never create or edit them inside a worktree.
+> **Untracked means main-tree only.** `.scratch/` (see @scratch) is untracked, so it lives only in the main tree: never create or edit it inside a worktree.
 >
 > **A concurrent session's broad `git clean` deletes them.** Scope cleans to your own paths (`git clean -fd -- <path>`) or dry-run first (`git clean -nd`). Untracked means "not on any branch", not "not wanted".
 
@@ -51,7 +51,7 @@ Only when the branch work is done (merged, or the user wants the worktree gone).
    ```
    git branch -D <branch>
    ```
-4. **Verify**: `git worktree list` shows it gone; `.scratch/` and `.papercuts.jsonl` still in the main tree.
+4. **Verify**: `git worktree list` shows it gone; `.scratch/` still in the main tree.
 
 ## Safety rules
 

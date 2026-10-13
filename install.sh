@@ -19,11 +19,10 @@ DIGEST_PHONE=0
 TMP_DIR=""
 
 # Pinned versions of everything this script fetches: the skills and rea-agents
-# npm packages by version, papercuts and the git checkouts by commit. Move a
+# npm packages by version, and the git checkouts by commit. Move a
 # pin with the update-pins skill; it checks the remote and reports the diff
 # before editing.
 SKILLS_CLI_VERSION="1.7.0"
-PAPERCUTS_REV="369b2aeb6f4d6414ddaf2df71d90c8a0419e06bf"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
 REA_AGENTS_VERSION="6.4.0"
@@ -283,7 +282,7 @@ required_packages() {
   cat <<'PACKAGES'
 opencode::the harness every skill runs in
 git::the install itself
-cargo::papercuts, bgrun, octask
+cargo::bgrun, octask
 npx::the skills CLI
 rsync::sync.sh
 python3::install.sh, skill-doctor
@@ -319,7 +318,6 @@ PACKAGES
 installed_items() {
   cat <<ITEMS
 octask:scheduled-task
-papercuts:the papercuts CLI
 bgrun:the bgrun skill and CLI
 skills:$HOME/.config/opencode/skills
 agents:$HOME/.config/opencode/agents
@@ -453,7 +451,6 @@ install_skill miqdadbadjuber/anti-slop
 # The hindsight repo carries a full docs site; its clone blows past the skills
 # CLI's 300s default on a slow link and aborts the whole run, so raise the cap.
 SKILLS_CLONE_TIMEOUT_MS=900000 install_skill https://github.com/vectorize-io/hindsight --skill hindsight-docs
-cargo install --git https://github.com/FAZuH/papercuts --rev "$PAPERCUTS_REV"
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"
 
 step "Installing repository packages"

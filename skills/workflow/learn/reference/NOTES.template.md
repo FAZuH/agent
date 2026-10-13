@@ -9,7 +9,7 @@
 
 ## Protocol quirks
 
-<!-- Pace/signaling preferences, UI workarounds; cite papercut ids when they exist. -->
+<!-- Pace/signaling preferences, UI workarounds; cite friction document_ids when they exist. -->
 
 -
 

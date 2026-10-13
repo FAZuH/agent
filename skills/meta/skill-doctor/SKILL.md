@@ -48,8 +48,8 @@ State lives under the XDG data home (never in the config dir):
 **NEVER create, edit, or delete anything under `~/.agents/skills` or
 `~/.claude/skills`.** They are install targets only: even for one-line fixes,
 even when a file is obviously wrong, even when the fix is trivial. If a fix
-belongs there, propose the change upstream in the source repo AND file
-`papercuts -g add --tag self::skill "..."`, or hand the user the reinstall
+belongs there, propose the change upstream in the source repo AND retain a
+friction entry (`type:friction`, `scope:skill`), or hand the user the reinstall
 command so their tooling rewrites the copy. Owned roots you may edit directly:
 `~/.config/opencode/skills` and `~/Projects/agent/skills`.
 
@@ -76,7 +76,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    - **Stale-name retarget**: propose retargeting the reference in OWNED
      roots; apply after OK; then reinstall.
    - **Missing subagent** (routes to a nonexistent agent def): report to the
-     user and file a `papercuts -g` entry; do not invent agent definitions.
+     user and retain a friction entry (`type:friction`, `scope:agent-def`); do not invent agent definitions.
    - **Collision**: document the winner (config over agents), propose removing
      the loser copy only in owned roots; never touch install targets.
    - **Drift repo-vs-installed**: give the user the reinstall command below.
@@ -101,10 +101,10 @@ python3 scripts/build_graph.py | head -1
 # High-severity findings only
 python3 scripts/build_graph.py | grep '"severity":"high"'
 
-# File friction whose fix lives outside this repo
-papercuts -g add --tag self::skill "gui-test-guidelines references test-writing-guidelines, a name that no longer exists (renamed to test-guidelines)"
-papercuts -g list --tag self::skill --status open
-papercuts -g resolve pc_abc1234 --note "created local agent defs"
+# File friction whose fix lives outside this repo (see @global-instruction)
+# retain { content: "…", document_id: "friction-<slug>",
+#          tags: ["type:friction","severity:minor","scope:skill","status:open"] }
+# open backlog: recall "friction open backlog", keep type:friction+status:open
 
 # Repo changes need a push, global installs are copies, not symlinks
 ~/Projects/agent/sync.sh push -g

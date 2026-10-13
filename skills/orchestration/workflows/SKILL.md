@@ -22,7 +22,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Run test/lint/typecheck suites | `implement` | Verification-only mode; concise analysis, no edits |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
-| Finish a session (docs + archive + summary + delegates to @commit/@self-improve) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated @session-retro + @skill-doctor, offers @papercut-sweep, never auto-runs it); only when the user explicitly asks |
+| Finish a session (docs + archive + summary + delegates to @commit/@self-improve) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated @session-retro + @skill-doctor, offers @friction-sweep, never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `implement` | Server-only mode; owns PTY lifecycle |
 | Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
 | Read/transcribe image files | `image-viewer` | Vision, read-only |

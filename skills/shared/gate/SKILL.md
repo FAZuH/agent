@@ -60,7 +60,7 @@ One-line tag; mechanics live here.
 **GATE <id> (<class> → <auto-resolution>):** <what the gate guards>
 ```
 
-- `<id>`: stable, lowercase-hyphenated (`commit-approval`, `papercut-file`, `new-scope`). Used in the gate log and re-gates.
+- `<id>`: stable, lowercase-hyphenated (`commit-approval`, `friction-file`, `new-scope`). Used in the gate log and re-gates.
 - `<class>`: `always` | `normal` | `subagent`.
 - `<auto-resolution>`: the concrete thing "proceed" means when the gate skips. Load-bearing: without it, "skip the gate" is ambiguous.
 - Trailing text is what the gate protects (keep it; site-specific detail, not duplicated mechanics).
