@@ -39,12 +39,12 @@ Remove this repository's installed files from the current user account.
 Default:
   - Remove sync-managed skills, agents, plugins, commands, and scripts.
   - Uninstall the local Cargo package 'agent'.
-  - Keep OpenCode, papercuts, bgrun, external skills, OS packages, and this
+  - Keep OpenCode, bgrun, external skills, OS packages, and this
     checkout.
 
 Options:
   --dry-run              Show what would be removed without changing files.
-  --external-packages    Also uninstall papercuts and bgrun from this installer.
+  --external-packages    Also uninstall bgrun from this installer.
   --external-skills      Also remove the external skills installed by install.sh,
                          including the REA registration and skill.
   --embedded-rules       Also remove the rules this installer embedded in
@@ -144,7 +144,7 @@ remove_external_packages() {
   fi
   local name listing
   listing="$(cargo install --list 2>/dev/null || true)"
-  for name in papercuts bgrun; do
+  for name in bgrun; do
     if ! grep -Eq "^$name v[^ ]+ \(https://github\.com/FAZuH/${name}[^)]*\):" <<<"$listing"; then
       info "$name is not installed from FAZuH/$name; kept"
       continue

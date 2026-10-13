@@ -9,7 +9,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -17,9 +17,9 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { blocksCall, firstSentence, hashDescription, renderAdvice, resolveCriteria, rosterHash } = await import("./index.ts")
+const { blocksCall, firstSentence, hashDescription, optimizeCriteria, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, pluginEnabled, pruneLog, setEnabled, setFeature, setFeatureConfig } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, pluginEnabled, pruneLog, setEnabled, setFeature, setFeatureConfig } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -223,9 +223,27 @@ describe("skill criteria", () => {
     expect(hashDescription("abc")).not.toBe(hashDescription("abd"))
   })
 
+  test("stripCriterionPreamble drops the Pick label and re-capitalizes", () => {
+    expect(stripCriterionPreamble("Pick for config, migration, plugins.")).toBe("Config, migration, plugins.")
+    expect(stripCriterionPreamble("Pick when unsure which skill fits. Skip when obvious.")).toBe("Unsure which skill fits. Skip when obvious.")
+    expect(stripCriterionPreamble("Pick to file a bug with repro steps.")).toBe("File a bug with repro steps.")
+    expect(stripCriterionPreamble("Pick as the default filter on coding tasks.")).toBe("The default filter on coding tasks.")
+    // Anything else passes through untouched.
+    expect(stripCriterionPreamble("Edit or write any interface.")).toBe("Edit or write any interface.")
+  })
+
+  test("a cached criterion reads clean even when stored with the old prefix", async () => {
+    const { setSkillCriterion: realSet, DATA_FILE } = await import("./state.ts")
+    rmSync(DATA_FILE, { force: true })
+    realSet("demo", hashDescription("Full description."), "Pick for demo work. Skip for prose.")
+    const { entries } = resolveCriteria([{ id: "demo", meaning: "Full description." }])
+    expect(entries[0].meaning).toBe("Demo work. Skip for prose.")
+    rmSync(DATA_FILE, { force: true })
+  })
+
   test("a matching cache entry wins; a changed description falls back", async () => {
-    const { setSkillCriterion: realSet } = await import("./state.ts")
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    const { setSkillCriterion: realSet, DATA_FILE } = await import("./state.ts")
+    rmSync(DATA_FILE, { force: true })
     const desc = "Full original description here."
     realSet("demo", hashDescription(desc), "Terse criterion.")
     const { entries, stale } = resolveCriteria([
@@ -240,7 +258,7 @@ describe("skill criteria", () => {
     const { entries: e2, stale: s2 } = resolveCriteria([{ id: "demo", meaning: "Edited description now." }])
     expect(e2[0].meaning).toBe("Edited description now.")
     expect(s2.map((s) => s.id)).toEqual(["demo"])
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    rmSync(DATA_FILE, { force: true })
   })
 
   test("corrupt cache entries are dropped, not surfaced", async () => {
@@ -473,5 +491,137 @@ describe("master switch", () => {
     setEnabled(true)
     expect(featureStored("hook_skill_pick")).toBe(false)
     expect(featureOn("hook_skill_pick")).toBe(false)
+  })
+})
+
+describe("string config (optimizeModel)", () => {
+  test("defaults to empty and cfgStr reads stored text", () => {
+    rmSync(join(scratch, "jev-state.json"), { force: true })
+    expect(FEATURE_DEFAULTS.hook_skill_pick.optimizeModel).toBe("")
+    expect(cfgStr("hook_skill_pick", "optimizeModel")).toBe("")
+    setFeatureConfig("hook_skill_pick", "optimizeModel", "9router/free")
+    expect(cfgStr("hook_skill_pick", "optimizeModel")).toBe("9router/free")
+    setFeatureConfig("hook_skill_pick", "optimizeModel", "")
+  })
+
+  test("setFeatureConfig refuses a number for a string key", () => {
+    expect(() => setFeatureConfig("hook_skill_pick", "optimizeModel", 5 as any)).toThrow(/takes text/)
+  })
+
+  test("a non-string stored value falls back to the default", () => {
+    const cfg = featureConfigMap({ hook_skill_pick: { optimizeModel: 42 } })
+    expect(cfg.hook_skill_pick.optimizeModel).toBe("")
+  })
+})
+
+describe("legacy layout migration", () => {
+  test("splits the combined state file and moves the log", () => {
+    const oldDir = join(scratch, "legacy", "data")
+    mkdirSync(oldDir, { recursive: true })
+    writeFileSync(
+      join(oldDir, "jev-state.json"),
+      JSON.stringify({
+        endpoint: "https://host/v1/systemone",
+        model: "m",
+        logMax: 700,
+        skillCriteria: { demo: { origHash: "abc", terse: "T.", v: 1 } },
+        rosterHash: "deadbeef",
+      }),
+    )
+    writeFileSync(join(oldDir, "jev-calls.jsonl"), '{"ts":"x","hook":"hook_skill_pick"}\n')
+    const target = {
+      state: join(scratch, "legacy", "jev-state.json"),
+      data: join(scratch, "legacy", "jev-data.json"),
+      log: join(scratch, "legacy", "jev-calls.jsonl"),
+    }
+    expect(migrateLegacyLayout(oldDir, target)).toBe("migrated")
+    const state = JSON.parse(readFileSync(target.state, "utf8"))
+    expect(state.endpoint).toBe("https://host/v1/systemone")
+    expect(state.skillCriteria).toBeUndefined()
+    expect(state.rosterHash).toBeUndefined()
+    const data = JSON.parse(readFileSync(target.data, "utf8"))
+    expect(data.skillCriteria.demo.terse).toBe("T.")
+    expect(data.rosterHash).toBe("deadbeef")
+    expect(readFileSync(target.log, "utf8")).toContain("hook_skill_pick")
+    // Second run is a no-op: target.state exists now.
+    expect(migrateLegacyLayout(oldDir, target)).toBe("skipped")
+    rmSync(join(scratch, "legacy"), { recursive: true, force: true })
+  })
+
+  test("a missing old file or a corrupt one skips", () => {
+    const target = { state: join(scratch, "m2-state.json"), data: join(scratch, "m2-data.json"), log: join(scratch, "m2-log.jsonl") }
+    expect(migrateLegacyLayout(join(scratch, "nope"), target)).toBe("skipped")
+    const badDir = join(scratch, "bad")
+    mkdirSync(badDir, { recursive: true })
+    writeFileSync(join(badDir, "jev-state.json"), "{corrupt")
+    expect(migrateLegacyLayout(badDir, target)).toBe("skipped")
+    rmSync(badDir, { recursive: true, force: true })
+  })
+})
+
+describe("optimizer", () => {
+  const reset = () => {
+    const self = optimizeCriteria as any
+    self._noGenerate = false
+    self._latched = false
+    self._failures = 0
+    rmSync(join(scratch, "jev-state.json"), { force: true })
+    rmSync(join(scratch, "jev-data.json"), { force: true })
+  }
+  const stale = [{ id: "demo", meaning: "Full description. Second sentence." }]
+
+  test("sends a {prompt, model} payload, unwraps {text}, writes criteria", async () => {
+    reset()
+    let seen: any
+    const ctx = {
+      generate: {
+        text: async (payload: any) => {
+          seen = payload
+          return { text: JSON.stringify({ demo: "Use when doing demo." }) }
+        },
+      },
+    }
+    const { done } = await optimizeCriteria(ctx, stale, { manual: true })
+    expect(done).toBe(1)
+    expect(typeof seen).toBe("object")
+    expect(seen.prompt).toContain("- demo: Full description.")
+    expect(seen.model).toBeNull()
+    const { loadData } = await import("./state.ts")
+    expect(loadData().skillCriteria.demo.terse).toBe("Use when doing demo.")
+  })
+
+  test("optimizeModel overrides the payload model as Model.Ref", async () => {
+    reset()
+    setFeatureConfig("hook_skill_pick", "optimizeModel", "9router/free")
+    let seen: any
+    const ctx = { generate: { text: async (payload: any) => ((seen = payload), { text: "{}" }) } }
+    await optimizeCriteria(ctx, stale, { manual: true })
+    expect(seen.model).toEqual({ providerID: "9router", id: "free" })
+    setFeatureConfig("hook_skill_pick", "optimizeModel", "")
+  })
+
+  test("three failures latch the auto path; manual still runs; success clears", async () => {
+    reset()
+    const failing = { generate: { text: async () => { throw Object.assign(new Error("Expected object"), { _tag: "InvalidRequestError", kind: "Payload" }) } } }
+    // Auto path: 1st and 2nd failures log, 3rd trips the latch.
+    await optimizeCriteria(failing, stale)
+    await optimizeCriteria(failing, stale)
+    await optimizeCriteria(failing, stale)
+    expect((optimizeCriteria as any)._latched).toBe(true)
+    // Latched auto path never reaches the host.
+    let calls = 0
+    const counting = { generate: { text: async () => { calls++; return { text: "{}" } } } }
+    await optimizeCriteria(counting, stale)
+    expect(calls).toBe(0)
+    // Manual bypasses the latch.
+    await optimizeCriteria(counting, stale, { manual: true })
+    expect(calls).toBe(1)
+    // A real success clears the latch and the counter.
+    const working = { generate: { text: async () => ({ text: JSON.stringify({ demo: "Criterion." }) }) } }
+    await optimizeCriteria(working, stale, { manual: true })
+    expect((optimizeCriteria as any)._latched).toBe(false)
+    await optimizeCriteria(counting, stale)
+    expect(calls).toBe(2)
+    reset()
   })
 })

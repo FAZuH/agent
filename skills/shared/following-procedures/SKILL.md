@@ -28,9 +28,9 @@ Running list, entries written immediately, never reconstructed:
 
 - `[date] step N: what happened, why`
 
-Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction/issue backlog (e.g. `.papercuts.jsonl`): log there. Else: working notes.
+Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction: Hindsight (`type:friction`, per @global-instruction). Else: working notes.
 
-Hiccups (tool failures, dead ends, environment friction) go to the friction backlog wherever one exists.
+Hiccups (tool failures, dead ends, environment friction) are retained to Hindsight as friction entries wherever one exists.
 
 ## Interruption
 

@@ -1,6 +1,6 @@
 ---
 name: global-instruction
-description: The common, machine-agnostic operating rules for every session: the skills that must always load, the working habits, shell discipline, and the papercuts contract. Load this first in every session; the host AGENTS.md names it. Use when the user says "global instructions", when a rule's full text is needed rather than the host one-liner, or in any repo whose AGENTS.md points here.
+description: The common, machine-agnostic operating rules for every session: the skills that must always load, the working habits, shell discipline, and the friction contract. Load this first in every session; the host AGENTS.md names it. Use when the user says "global instructions", when a rule's full text is needed rather than the host one-liner, or in any repo whose AGENTS.md points here.
 ---
 
 # Global Instruction
@@ -45,13 +45,23 @@ These are items you must do in specific situations.
 - Before editing a repo config file, check it is not a symlink. The edit tool
   writes through the link into the shared target.
 
-## Papercuts
+## Friction
 
-The `papercuts` CLI ships with this repo's `install.sh`. File friction before moving on (dead-end tool call, broken link, confusing setup, flaky command, misleading error):
+File friction before moving on (dead-end tool call, broken link, confusing setup,
+flaky command, misleading error). Defer environment improvements to the end of
+the session instead of fixing them mid-task. The store is Hindsight: one bank,
+every project and node.
 
-- `papercuts add "<doing > blocked-by>"`, one or two sentences. Tool failures: attach `--cmd` / `--exit` / `--stderr-file`. Never raw env dumps.
+- File with `retain`: one or two sentences (`"<doing> > <blocked-by>"`),
+  `document_id: "friction-<short-slug>"`, tags `type:friction`,
+  `severity:minor|major|blocker`, `machine:<hostname>`, `status:open`, plus
+  `project:<repo>` for repo friction or `scope:skill|agent-def|tool|process`
+  for fixes that outlive one repo.
 - Severity: `minor`, `major` for time sinks, `blocker` for walls.
-- File in the moment, keep working. Friction, not a bug tracker.
-- Repo store: `.papercuts.jsonl` at the repo root, append-only. Check `git status` before assuming it is tracked. `papercuts resolve <id>` marks one fixed.
-- Global store: `papercuts -g` (`self::skill` / `self::agent-def` / `self::tool` / `self::process`; @papercut-sweep sweeps). Repo sanding stays repo-local.
-- `papercuts schema` prints the contract; `papercuts doctor` validates the log. `papercuts list --format md` clears the backlog.
+- List open: `recall` by query, then keep only results whose `tags` include
+  `type:friction` and `status:open`. The server-side tag filter is unreliable
+  (measured 2026-10-13); tags ride on every result, so filter client-side.
+- Resolved: `retain` again with the same `document_id` and a `status:resolved`
+  tag (`update_mode: "upsert"`). Never a duplicate.
+- File in the moment, keep working. Friction, not a bug tracker. @friction-sweep
+  acts on open entries; repo code friction gets fixed in normal work.

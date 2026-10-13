@@ -42,7 +42,7 @@ the wreckage procedure only if the retry fails too.
 4. **Two consecutive kills without progress** → stop re-spawning and report.
    Direct execution is the user's call, never a default.
 5. **Log it:** one deviation-log line per kill + recovery path; infra
-   errors also go to the papercuts backlog.
+   errors also get retained to the Hindsight friction store.
 
 ## Rules
 

@@ -1,6 +1,6 @@
 ---
 name: worktree-new
-description: Start working on a task in a new git worktree branch, keeping untracked items (.scratch/, .papercuts.jsonl) on the main project dir. Use when the user says "start a new worktree for X", "work on this in a worktree", or "spin up a worktree". Also use when the user references @worktree-new, @worktree-close, or @worktree-finish.
+description: Start working on a task in a new git worktree branch, keeping untracked items (.scratch/) on the main project dir. Use when the user says "start a new worktree for X", "work on this in a worktree", or "spin up a worktree". Also use when the user references @worktree-new, @worktree-close, or @worktree-finish.
 ---
 
 # Worktree new
@@ -40,5 +40,5 @@ The user wants to begin work on a feature or task in an isolated git worktree. T
 ## Safety rules
 
 - Always create the worktree from the **main** tree, not from inside another worktree.
-- Never create or edit untracked main-tree items (`.scratch/`, `.papercuts.jsonl`) inside the worktree.
+- Never create or edit untracked main-tree items (`.scratch/`) inside the worktree.
 - Don't run `git worktree remove` or `git branch -D` while work is in progress; that belongs to @worktree-close.

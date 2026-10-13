@@ -80,8 +80,6 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
   `simple-english`.
 - [FAZuH/bgrun](https://github.com/FAZuH/bgrun): the `bgrun` skill and the
   `bgrun` CLI, which runs a command as a systemd user unit.
-- [FAZuH/papercuts](https://github.com/FAZuH/papercuts): the `papercuts` CLI,
-  installed with `cargo install`.
 
 Add `-b` to also install the bonus items: `anti-slop` for filtering generic AI
 output, `ffmpeg-skill` for editing media locally, and REA for reverse
@@ -115,7 +113,7 @@ JavaScript, Electron, and .NET inspection need none of them.
 ### Pinned versions
 
 `install.sh` pins everything it fetches outside the `skills` CLI: the CLI's and
-REA's npm versions, and the papercuts, bgrun, and ffmpeg-skill commits. The
+REA's npm versions, and the bgrun and ffmpeg-skill commits. The
 pin block sits at the top of `install.sh`. To move one, load the `update-pins`
 skill: it checks each remote, shows the diff between the pinned and current
 commit, and only edits after you approve. `uninstall.sh` mirrors the npm pins
@@ -130,8 +128,8 @@ because a newer CLI cannot remove what it did not write.
 
 The default removes the sync-managed skills, agents, plugins, commands, and
 scripts, and uninstalls the local `agent` Cargo package. It keeps OpenCode,
-`papercuts`, the external skills, operating-system packages, and the checkout.
-Add `--external-packages` to remove `papercuts` too, or `--external-skills` to
+the external skills, operating-system packages, and the checkout.
+Add `--external-packages` to remove `bgrun` too, or `--external-skills` to
 remove the external skills listed under Install.
 
 ## Usage

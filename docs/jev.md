@@ -55,7 +55,8 @@ near-ties underneath it.
 Sending every full description on every prompt costs ~9k input tokens. Each
 skill's description is rewritten once, by the host LLM, into a terse choice
 criterion — when the skill is the right pick *and* when it is not, max ~40
-words — and cached in the state file under `skillCriteria`:
+words — and cached in the local data file (`jev-data.json`, see Files) under
+`skillCriteria`:
 
 ```json
 { "<skill-id>": { "origHash": "<sha256 of the original description, 16 hex>", "terse": "…", "v": 1 } }
@@ -70,16 +71,25 @@ optimizer run can never poison the roster.
 - **Auto warm-up** (`hook_skill_pick.autoOptimize`, default true): when a pick
   runs and the installed skill id set differs from the set the optimizer last
   saw, the optimizer fires once in the background. The current prompt uses the
-  fallback; the cache is warm for the next one. Description-only staleness and
-  steady state never trigger it — that is what `/jev-optimize-skills` is for.
-  Set to false to disable the silent warm-up entirely.
+  fallback; the cache is warm for the next one, and only a run that wrote
+  criteria marks the set seen, so a failure retries on the next process
+  instead of being assumed warm. Description-only staleness and steady state
+  never trigger it — that is what `/jev-optimize-skills` is for. Set to false
+  to disable the silent warm-up entirely.
 - **`/jev-optimize-skills`**: optimize every stale skill now (awaited, reports
   done/failed); `/jev-optimize-skills <id>` refreshes one skill. Works on every
   host including desktop, because it is a command, not a TUI panel.
 - The optimizer runs through the host LLM (`ctx.generate.text`, the same
   channel that writes titles and compaction summaries), capability-probed at
-  runtime. On a host without it, auto warm-up logs once per process and stays
-  off; the manual command reports the same.
+  runtime. The payload is `{ prompt, model }`; `hook_skill_pick.optimizeModel`
+  (default empty = the host's model) overrides the model as
+  `providerID/modelID`. On a host without `generate.text`, auto warm-up logs
+  once per process and stays off; the manual command reports the same.
+- **Failure latch**: three consecutive failures (host error, no JSON, or a
+  response that yields no criteria) turn the *auto* path off for the rest of
+  the process with one log line, so a broken host cannot fill the log or spend
+  a call on every prompt. The manual command bypasses the latch; a success
+  clears it.
 
 **`hook_risk`** (off by default): every `bash`, `edit`, `write`, and
 `apply_patch` call is sent to Jev and logged. It is blocked only when the
@@ -149,6 +159,7 @@ load, so tuned thresholds survive the upgrade.
 | `hook_skill_pick` | `maxPicks` | `-1` | most skills the advisory names (-1 = every qualifier, 1 = winner only) |
 | `hook_skill_pick` | `alsoAbove` | `0.25` | runners-up at or above this join the winner |
 | `hook_skill_pick` | `autoOptimize` | `true` | warm the optimizer cache when the installed skill set changes |
+| `hook_skill_pick` | `optimizeModel` | `""` | host model override for the optimizer, as `providerID/modelID`; empty = host model |
 | `hook_risk` | `gateProbability` | `0.7` | blocks a call at or above this, when also confident |
 | `hook_risk` | `minProbability` | `0.8` | a noul whose certainty is below this is never confident, so never blocks |
 | `hook_risk` | `timeout` | `5000` | ms before the risk call gives up; the call then proceeds (fail-open) |
@@ -289,14 +300,21 @@ supervises it.
 
 ## Where things live
 
+Three XDG homes, three syncabilities: config syncs between machines, data is
+expensive to rebuild so it stays local, the log is local history. Env
+overrides: `JEV_CONFIG_DIR`, `JEV_DATA_HOME`, `JEV_STATE_HOME`,
+`JEV_SECRET_DIR`. An old layout under `~/.config/fazuh-agent/data/` splits
+into these on first load after the upgrade.
+
 | Path | What |
 | --- | --- |
-| `~/.config/fazuh-agent/data/jev-state.json` | every setting, 0600 |
-| `~/.config/fazuh-agent/data/jev-calls.jsonl` | one line per call: payload, answers, cost, 0600; capped at `logMax` lines, pruned to the tail |
-| `~/.config/fazuh-agent/data/jev-tui.log` | TUI diagnostics, written on every panel open |
+| `~/.config/fazuh-agent/jev-state.json` | every setting (syncable), 0600 |
+| `~/.local/share/fazuh-agent/jev-data.json` | `skillCriteria` cache + `rosterHash` (local), 0600 |
+| `~/.local/state/fazuh-agent/jev-calls.jsonl` | one line per call: payload, answers, cost (local); capped at `logMax` lines, pruned to the tail |
+| `~/.local/state/fazuh-agent/jev-tui.log` | TUI diagnostics, written on every panel open |
 | `~/.config/fazuh-agent/secrets/jev_api_key` | the key, 0600 |
 | `plugins/jev/src/jev.ts` | the client, redaction, and answer validator |
-| `plugins/jev/src/state.ts` | settings, key resolution, the call log |
+| `plugins/jev/src/state.ts` | the three homes, key resolution, the call log |
 | `plugins/jev/src/index.ts` | the two hooks, the optimizer, and the text commands |
 | `plugins/jev/src/tui.ts` | the two panels and the key dialog |
 
@@ -325,7 +343,13 @@ the silence.
 **A hook fails silently.** That is fail-open working. The reason is in
 `/jev-log`: a missing key, a timeout, an HTTP status, or a malformed answer.
 
-**A panel does not open.** Read `~/.config/fazuh-agent/data/jev-tui.log`. It logs
+**`optimizer failed: Expected object` fills the log.** Fixed: the optimizer now
+sends the payload object the host schema wants (`{ prompt, model }`) instead of
+a bare string — the old shape was rejected by the host's payload validation
+before any JSON reached the parser. Three consecutive failures now also latch
+the auto path off for the process.
+
+**A panel does not open.** Read `~/.local/state/fazuh-agent/jev-tui.log`. It logs
 the TUI API shape and any error on every panel open. That log exists because this
 failure was once silent.
 

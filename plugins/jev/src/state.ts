@@ -11,13 +11,26 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-// Overridable so tests get a throwaway directory instead of the live config.
-// Without this a test that flips a feature rewrites the user's real settings.
-const DATA_DIR = process.env.JEV_DATA_DIR ?? join(homedir(), ".config", "fazuh-agent", "data")
-const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(homedir(), ".config", "fazuh-agent", "secrets")
+// Three homes, three syncabilities. Config syncs between machines; data is
+// expensive to rebuild (every entry cost an LLM call) so it stays local;
+// the log is local history. Each has an env override for tests and odd
+// setups. JEV_DATA_DIR is the previous single-dir override and still
+// redirects all three, so existing test setups keep working.
+const CONFIG_DIR = process.env.JEV_CONFIG_DIR ?? process.env.JEV_DATA_DIR ?? join(homedir(), ".config", "fazuh-agent")
+const DATA_HOME =
+  process.env.JEV_DATA_HOME ?? process.env.JEV_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "fazuh-agent")
+const STATE_HOME =
+  process.env.JEV_STATE_HOME ?? process.env.JEV_DATA_DIR ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "fazuh-agent")
+const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(CONFIG_DIR, "secrets")
 
-export const STATE_FILE = join(DATA_DIR, "jev-state.json")
-export const LOG_FILE = join(DATA_DIR, "jev-calls.jsonl")
+/** Syncable settings. Moved up from data/ so the whole dir syncs cleanly. */
+export const STATE_FILE = join(CONFIG_DIR, "jev-state.json")
+/** Local optimizer cache: skillCriteria plus the rosterHash it was built from. */
+export const DATA_FILE = join(DATA_HOME, "jev-data.json")
+/** Local call history. */
+export const LOG_FILE = join(STATE_HOME, "jev-calls.jsonl")
+/** TUI diagnostics. */
+export const TUI_LOG_FILE = join(STATE_HOME, "jev-tui.log")
 /** Default key location, overridable so another provider can use another file. */
 export const DEFAULT_SECRET_FILE = join(SECRET_DIR, "jev_api_key")
 
@@ -43,15 +56,18 @@ export const FEATURES: Feature[] = [
  * and needs a timeout, the risk hook blocks on a noul. A field absent from a
  * stored config falls back to the default here.
  */
-export const FEATURE_DEFAULTS: Record<string, Record<string, number | boolean>> = {
+export type ConfigValue = number | boolean | string
+
+export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // Probability floor fits the truncated criteria (measured P=0.89 on a
   // correct pick); the margin gate still rejects near-ties underneath it.
   // Timeout fits the measured ~2.5s full-roster call with headroom for a slow
   // provider. maxPicks caps the advised skills (-1 = every qualifier);
   // alsoAbove is the runner-up floor, the same 0.25 the TypeSafe triage
   // example uses for its second-team copy. autoOptimize warms the optimizer
-  // cache when the installed id set changes.
-  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true },
+  // cache when the installed id set changes. optimizeModel overrides the
+  // model for the optimizer's generate.text call; empty means the host model.
+  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true, optimizeModel: "" },
   hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000 },
 }
 
@@ -82,26 +98,15 @@ export interface JevState {
   features: Record<string, boolean>
   /**
    * Per-feature settings, keyed from FEATURE_DEFAULTS: timeouts in ms,
-   * probabilities 0-1, counts, and the autoOptimize flag. A field absent here
-   * falls back to FEATURE_DEFAULTS, so an old or partial file cannot
-   * unconfigure a feature.
+   * probabilities 0-1, counts, the autoOptimize flag, and the optimizeModel
+   * override. A field absent here falls back to FEATURE_DEFAULTS, so an old
+   * or partial file cannot unconfigure a feature.
    */
-  config: Record<string, Record<string, number | boolean>>
+  config: Record<string, Record<string, ConfigValue>>
   /** Call-log cap: logCall keeps at most this many lines, pruned to the tail. */
   logMax: number
-  /**
-   * Optimized skill descriptions for the routing hook: skill id → terse
-   * choice criterion, keyed by hash of the original description so a body
-   * edit that leaves the description alone never invalidates. Entries carry
-   * a format version so a future format change invalidates cleanly.
-   */
-  skillCriteria: Record<string, { origHash: string; terse: string; v: number }>
-  /**
-   * Hash of the installed skill id set the optimizer last saw. Auto warm-up
-   * fires only when the live id set differs, so description-only staleness
-   * and steady state never trigger a background call.
-   */
-  rosterHash: string
+  // skillCriteria and rosterHash live in jev-data.json, not here. See
+  // loadData/saveData: this interface stays syncable-only.
 }
 
 /**
@@ -120,9 +125,22 @@ export const DEFAULTS: JevState = {
   features: { hook_skill_pick: false, hook_risk: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
-  skillCriteria: {},
-  rosterHash: "",
 }
+
+/**
+ * Local optimizer cache. skillCriteria maps skill id → terse choice
+ * criterion, keyed by hash of the original description so a body edit that
+ * leaves the description alone never invalidates. rosterHash is the installed
+ * id set the cache was built from; auto warm-up fires only when the live set
+ * differs. Entries carry a format version so a future change invalidates
+ * cleanly. Expensive to rebuild, so this file stays local, never synced.
+ */
+export interface JevData {
+  skillCriteria: Record<string, { origHash: string; terse: string; v: number }>
+  rosterHash: string
+}
+
+export const DATA_DEFAULTS: JevData = { skillCriteria: {}, rosterHash: "" }
 
 /** Current cache-entry format. Bump to invalidate every stored criterion. */
 export const SKILL_CRITERIA_VERSION = 1
@@ -150,10 +168,10 @@ export function featureMap(raw: unknown, legacyGate?: unknown): Record<string, b
 
 /**
  * Per-feature settings, merged over FEATURE_DEFAULTS so an old or partial
- * state file cannot unconfigure a feature. Unknown features and non-numeric
+ * state file cannot unconfigure a feature. Unknown features and wrong-typed
  * values are dropped the same way featureMap drops unknown switches.
  */
-export function featureConfigMap(raw: unknown): Record<string, Record<string, number | boolean>> {
+export function featureConfigMap(raw: unknown): Record<string, Record<string, ConfigValue>> {
   const stored = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
   return Object.fromEntries(
     FEATURES.map((f) => {
@@ -166,12 +184,17 @@ export function featureConfigMap(raw: unknown): Record<string, Record<string, nu
       return [
         f.key,
         Object.fromEntries(
-          Object.entries(defaults).map(([k, v]) => [k, typeof v === "boolean" ? toBool(own[k], v) : num(own[k], v)]),
+          Object.entries(defaults).map(([k, v]) => [
+            k,
+            typeof v === "boolean" ? toBool(own[k], v) : typeof v === "string" ? asStr(own[k], v) : num(own[k], v),
+          ]),
         ),
       ]
     }),
   )
 }
+
+const asStr = (value: unknown, fallback: string) => (typeof value === "string" ? value : fallback)
 
 /** Stored booleans, plus the 1/0 the previous schema wrote, nothing else. */
 export function toBool(raw: unknown, fallback: boolean): boolean {
@@ -182,7 +205,7 @@ export function toBool(raw: unknown, fallback: boolean): boolean {
 }
 
 /** One feature's settings. The only read path the call sites use. */
-export function featureConfig(feature: string): Record<string, number | boolean> {
+export function featureConfig(feature: string): Record<string, ConfigValue> {
   const state = loadState()
   return { ...(FEATURE_DEFAULTS[feature] ?? {}), ...(state.config[feature] ?? {}) }
 }
@@ -199,6 +222,13 @@ export function cfgBool(feature: string, key: string): boolean {
   const fallback = FEATURE_DEFAULTS[feature]?.[key]
   const raw = featureConfig(feature)[key] ?? fallback
   return toBool(raw, fallback === true)
+}
+
+/** String field with its default; anything else falls back. */
+export function cfgStr(feature: string, key: string): string {
+  const fallback = FEATURE_DEFAULTS[feature]?.[key]
+  const raw = featureConfig(feature)[key] ?? fallback
+  return typeof raw === "string" ? raw : typeof fallback === "string" ? fallback : ""
 }
 
 export function loadState(): JevState {
@@ -247,9 +277,28 @@ export function loadState(): JevState {
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
+  }
+}
+
+/** Read the local optimizer cache. A missing or corrupt file is empty cache. */
+export function loadData(): JevData {
+  let raw: any
+  try {
+    raw = JSON.parse(readFileSync(DATA_FILE, "utf8"))
+  } catch {
+    return { skillCriteria: {}, rosterHash: "" }
+  }
+  return {
     skillCriteria: skillCriteriaMap(raw.skillCriteria),
     rosterHash: typeof raw.rosterHash === "string" ? raw.rosterHash : "",
   }
+}
+
+export function saveData(patch: Partial<JevData>): JevData {
+  const next = { ...loadData(), ...patch }
+  mkdirSync(dirnameOf(DATA_FILE), { recursive: true })
+  writeFileSync(DATA_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
+  return next
 }
 
 /**
@@ -257,9 +306,9 @@ export function loadState(): JevState {
  * non-empty terse string survive; anything else is dropped so a corrupt or
  * foreign-format entry can never poison the roster.
  */
-export function skillCriteriaMap(raw: unknown): JevState["skillCriteria"] {
+export function skillCriteriaMap(raw: unknown): JevData["skillCriteria"] {
   const stored = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
-  const out: JevState["skillCriteria"] = {}
+  const out: JevData["skillCriteria"] = {}
   for (const [id, entry] of Object.entries(stored)) {
     if (!entry || typeof entry !== "object") continue
     const e = entry as Record<string, unknown>
@@ -272,17 +321,19 @@ export function skillCriteriaMap(raw: unknown): JevState["skillCriteria"] {
 }
 
 export function setSkillCriterion(id: string, origHash: string, terse: string): void {
-  const next = loadState()
+  const next = loadData()
   next.skillCriteria[id] = { origHash, terse: terse.trim().slice(0, 400), v: SKILL_CRITERIA_VERSION }
-  saveState({ skillCriteria: next.skillCriteria })
+  saveData({ skillCriteria: next.skillCriteria })
 }
 
-export function setFeatureConfig(feature: string, key: string, value: number | boolean): void {
+export function setFeatureConfig(feature: string, key: string, value: ConfigValue): void {
   if (!(feature in FEATURE_DEFAULTS)) throw new Error(`unknown jev feature: ${feature}`)
   const known = FEATURE_DEFAULTS[feature]?.[key]
   if (known === undefined) throw new Error(`unknown jev config key: ${feature}.${key}`)
   if (typeof known === "boolean") {
     if (typeof value !== "boolean") throw new Error(`${feature}.${key} takes true/false`)
+  } else if (typeof known === "string") {
+    if (typeof value !== "string") throw new Error(`${feature}.${key} takes text`)
   } else if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`${feature}.${key} takes a number`)
   }
@@ -333,7 +384,7 @@ export function setFeature(key: string, on: boolean): boolean {
 
 export function saveState(patch: Partial<JevState>): JevState {
   const next = { ...loadState(), ...patch }
-  mkdirSync(DATA_DIR, { recursive: true })
+  mkdirSync(CONFIG_DIR, { recursive: true })
   writeFileSync(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
   return next
 }
@@ -385,9 +436,9 @@ function dirnameOf(path: string): string {
 let logWrites = 0
 export function logCall(entry: Record<string, unknown>): void {
   try {
-    mkdirSync(DATA_DIR, { recursive: true })
+    mkdirSync(dirnameOf(LOG_FILE), { recursive: true })
     // 0600: a logged payload is a shell command or file body, redacted but not
-    // secret-free, and this is the same directory as the key.
+    // secret-free.
     writeFileSync(LOG_FILE, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, { flag: "a", mode: 0o600 })
     chmodSync(LOG_FILE, 0o600)
     // The log is unbounded by nature; prune to the configured tail. Every 16th
@@ -431,4 +482,60 @@ export function spend(): { calls: number; tokens: number; usd: number } {
   const rows = readLog(1000)
   const tokens = rows.reduce((sum, row: any) => sum + (row.inputTokens ?? 0), 0)
   return { calls: rows.length, tokens, usd: (tokens / 1_000_000) * 0.04 }
+}
+
+/**
+ * One-shot migration from the old single-dir layout:
+ *   ~/.config/fazuh-agent/data/jev-state.json  → config + data split
+ *   ~/.config/fazuh-agent/data/jev-calls.jsonl → ~/.local/state/fazuh-agent/
+ *
+ * Runs only when the old file exists and target.state does not, so it fires
+ * once and never touches an already-migrated install. The old state file is
+ * left in place as the rollback path.
+ */
+export function migrateLegacyLayout(
+  oldDir = join(homedir(), ".config", "fazuh-agent", "data"),
+  target = { state: STATE_FILE, data: DATA_FILE, log: LOG_FILE },
+): "skipped" | "migrated" {
+  const oldState = join(oldDir, "jev-state.json")
+  const oldLog = join(oldDir, "jev-calls.jsonl")
+  if (!existsSync(oldState) || existsSync(target.state)) return "skipped"
+  let raw: any
+  try {
+    raw = JSON.parse(readFileSync(oldState, "utf8"))
+  } catch {
+    return "skipped"
+  }
+  // Split: skillCriteria + rosterHash move to the data file.
+  const data: JevData = {
+    skillCriteria: skillCriteriaMap(raw.skillCriteria),
+    rosterHash: typeof raw.rosterHash === "string" ? raw.rosterHash : "",
+  }
+  delete raw.skillCriteria
+  delete raw.rosterHash
+  mkdirSync(dirnameOf(target.state), { recursive: true })
+  writeFileSync(target.state, `${JSON.stringify(raw, null, 2)}\n`, "utf8")
+  mkdirSync(dirnameOf(target.data), { recursive: true })
+  writeFileSync(target.data, `${JSON.stringify(data, null, 2)}\n`, "utf8")
+  // Move the log to the state dir.
+  if (existsSync(oldLog) && !existsSync(target.log)) {
+    mkdirSync(dirnameOf(target.log), { recursive: true })
+    writeFileSync(target.log, readFileSync(oldLog, "utf8"), { mode: 0o600 })
+    chmodSync(target.log, 0o600)
+  }
+  // Old state file left in place as the rollback path; target.state now
+  // exists, so this never runs again.
+  return "migrated"
+}
+
+// Guarded at the call site: with env overrides (tests) the default oldDir
+// still points at the real home while targets redirect to scratch, which
+// would migrate live files into a temp dir.
+if (
+  !process.env.JEV_CONFIG_DIR &&
+  !process.env.JEV_DATA_DIR &&
+  !process.env.JEV_DATA_HOME &&
+  !process.env.JEV_STATE_HOME
+) {
+  migrateLegacyLayout()
 }

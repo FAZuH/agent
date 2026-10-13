@@ -10,7 +10,7 @@
  */
 
 import { ask, JevError } from "./jev.ts"
-import { cfgBool, cfgNum, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, setSkillCriterion, skillCriteriaMap, SKILL_CRITERIA_VERSION, spend, FEATURES } from "./state.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES } from "./state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { readFileSync, readdirSync } from "node:fs"
@@ -65,19 +65,30 @@ export function firstSentence(text: string): string {
 }
 
 /**
+ * The optimizer once opened every criterion with "Pick for/to/when …", which
+ * says nothing: the choice already asks which skill to pick. Stripped on read,
+ * so stored entries clean themselves up without re-spending.
+ */
+export function stripCriterionPreamble(text: string): string {
+  const bare = text.replace(/^Pick (?:for |to |when |as |before |until )?/, "")
+  const first = bare.charAt(0)
+  return (first >= "a" && first <= "z" ? first.toUpperCase() + bare.slice(1) : bare) || text
+}
+
+/**
  * Resolve each roster entry to its choice criterion: the cached optimizer
  * output when the stored hash matches the live description, else the
  * first-sentence fallback. Returns the resolved entries plus the ids whose
  * cache missed, so the caller can optimize exactly those.
  */
 export function resolveCriteria(roster: SkillEntry[]): { entries: SkillEntry[]; stale: SkillEntry[] } {
-  const cache = skillCriteriaMap(loadState().skillCriteria)
+  const cache = loadData().skillCriteria
   const entries: SkillEntry[] = []
   const stale: SkillEntry[] = []
   for (const skill of roster) {
     const hit = cache[skill.id]
     if (hit && hit.origHash === hashDescription(skill.meaning)) {
-      entries.push({ id: skill.id, meaning: hit.terse })
+      entries.push({ id: skill.id, meaning: stripCriterionPreamble(hit.terse) })
     } else {
       entries.push({ id: skill.id, meaning: firstSentence(skill.meaning) })
       stale.push(skill)
@@ -201,9 +212,13 @@ async function routePrompt(prompt: string, roster: SkillEntry[], ctx: any): Prom
   // tracks the last set the optimizer saw, so description-only staleness and
   // steady state never trigger a background call. The manual command covers
   // everything else. Fire-and-forget — the current prompt has its answer.
-  if (stale.length && cfgBool(F, "autoOptimize") && rosterHash(capped) !== loadState().rosterHash) {
+  if (stale.length && cfgBool(F, "autoOptimize") && rosterHash(capped) !== loadData().rosterHash) {
     void optimizeCriteria(ctx, stale)
-      .then(() => saveState({ rosterHash: rosterHash(capped) }))
+      .then(({ done }) => {
+        // Only mark the roster seen on real progress: a failed run stays
+        // stale so the next process retries instead of assuming it's warm.
+        if (done > 0) saveData({ rosterHash: rosterHash(capped) })
+      })
       .catch(() => {})
   }
   if (!d.confident) {
@@ -245,38 +260,60 @@ export function renderAdvice(d: { value: unknown; probability?: number; distribu
  * and the cache is warm for the next one. Failures log and leave the cache
  * untouched, so a bad optimizer run can never poison the roster — the worst
  * case is another fallback pick next time.
+ *
+ * Three consecutive failures latch the AUTO path off for the rest of the
+ * process (the log showed one failure per prompt otherwise); the manual
+ * command bypasses the latch and a success clears it.
  */
-export async function optimizeCriteria(ctx: any, stale: SkillEntry[]): Promise<{ done: number; failed: number }> {
+export async function optimizeCriteria(
+  ctx: any,
+  stale: SkillEntry[],
+  opts: { manual?: boolean } = {},
+): Promise<{ done: number; failed: number }> {
+  const self = optimizeCriteria as any
   // Remember a missing generate.text per process: without this, every prompt
   // on such a host logs the same "unavailable" line and the log fills with it.
-  if ((optimizeCriteria as any)._noGenerate) return { done: 0, failed: stale.length }
+  if (self._noGenerate) return { done: 0, failed: stale.length }
+  if (self._latched && !opts.manual) return { done: 0, failed: stale.length }
   let generate: any
   try {
     generate = ctx?.generate?.text
     if (typeof generate !== "function") throw new Error("host has no generate.text")
   } catch (error) {
-    ;(optimizeCriteria as any)._noGenerate = true
+    self._noGenerate = true
     logCall({ hook: "hook_skill_pick", skipped: `optimizer unavailable: ${error instanceof Error ? error.message : String(error)}` })
     return { done: 0, failed: stale.length }
   }
   const batch = stale.slice(0, 30)
   const prompt = [
-    "Rewrite each skill description below as ONE terse choice criterion, max 40 words: state when the skill is the right pick AND when it is not. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
+    "Rewrite each skill description below as ONE terse choice criterion, max 40 words: when the skill is the right pick AND when it is not. Start directly with the trigger; never open with \"Pick for/when/to\" or any label. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
     "",
     ...batch.map((s) => `- ${s.id}: ${s.meaning.slice(0, 600)}`),
   ].join("\n")
+  // optimizeModel overrides the host model: providerID/modelID split on the
+  // first slash (model ids themselves contain slashes). Empty = host default.
+  const override = cfgStr("hook_skill_pick", "optimizeModel").trim()
+  const payload = {
+    prompt,
+    model: override ? { providerID: override.slice(0, override.indexOf("/")), id: override.slice(override.indexOf("/") + 1) } : null,
+  }
+  if (override && !override.includes("/")) {
+    const detail = `optimizeModel must be providerID/modelID, got "${override}"`
+    logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${detail}` })
+    self._failures = (self._failures ?? 0) + 1
+    if (self._failures >= 3) latch(self, detail)
+    return { done: 0, failed: batch.length }
+  }
   let done = 0
-  let failedDetail = ""
   try {
     // Awaited with a ceiling: the command path waits for the result, the
     // hook's background warm-up just moves on. Either way a slow host only
     // delays the cache, never the prompt.
-    const text = String(
-      await Promise.race([
-        generate.call(ctx.generate, prompt),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("optimizer timed out after 30000ms")), 30_000)),
-      ]),
-    )
+    const raw = await Promise.race([
+      generate.call(ctx.generate, payload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("optimizer timed out after 30000ms")), 30_000)),
+    ])
+    const text = typeof raw === "string" ? raw : String(raw?.text ?? raw?.data?.text ?? "")
     const jsonText = text.match(/\{[\s\S]*\}/)?.[0]
     if (!jsonText) throw new Error(`optimizer returned no JSON object: ${text.slice(0, 200)}`)
     let parsed: any
@@ -286,16 +323,42 @@ export async function optimizeCriteria(ctx: any, stale: SkillEntry[]): Promise<{
       throw new Error(`optimizer returned unparseable JSON: ${jsonText.slice(0, 200)}`)
     }
     for (const s of batch) {
-      const terse = typeof parsed[s.id] === "string" ? parsed[s.id].trim() : ""
+      const terse = stripCriterionPreamble((typeof parsed[s.id] === "string" ? parsed[s.id] : "").trim())
       if (!terse || terse.length > 400) continue
       setSkillCriterion(s.id, hashDescription(s.meaning), terse)
       done++
     }
-  } catch (error) {
-    failedDetail = error instanceof Error ? error.message : String(error)
-    logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${failedDetail}` })
+    if (done > 0) {
+      self._failures = 0
+      self._latched = false
+    } else {
+      // Host answered but nothing landed: counts toward the latch too, so a
+      // silently-junk response cannot spend a call on every prompt forever.
+      self._failures = (self._failures ?? 0) + 1
+      const detail = "host returned no usable criteria"
+      if (self._failures >= 3) latch(self, detail)
+      else logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${detail}` })
+    }
+  } catch (error: any) {
+    const tag = typeof error?._tag === "string" ? `${error._tag}${error.kind ? `(${error.kind})` : ""} ` : ""
+    const frame = error instanceof Error ? String(error.stack ?? "").split("\n")[1]?.trim() : ""
+    const detail = `${tag}${error instanceof Error ? error.message : String(error)}${frame ? ` @ ${frame}` : ""}`
+    self._failures = (self._failures ?? 0) + 1
+    if (self._failures >= 3) latch(self, detail)
+    else logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${detail}` })
   }
   return { done, failed: batch.length - done }
+}
+
+/** Trip the auto-path latch after OPTIMIZER_LATCH consecutive failures. */
+const OPTIMIZER_LATCH = 3
+function latch(self: any, detail: string): void {
+  if (self._latched) return
+  self._latched = true
+  logCall({
+    hook: "hook_skill_pick",
+    skipped: `optimizer off for this process after ${OPTIMIZER_LATCH} consecutive failures (last: ${detail}); /jev-optimize-skills retries, restart clears`,
+  })
 }
 
 /**
@@ -506,8 +569,9 @@ export default {
               }
               if (targets.length === 0) return { content: `All ${roster.length} skill criteria are current.` }
               // Awaited, not background: the user asked for this explicitly
-              // and wants the result, unlike the hook's silent warm-up.
-              const { done, failed } = await optimizeCriteria(ctx, targets)
+              // and wants the result, unlike the hook's silent warm-up. Manual
+              // bypasses the failure latch; a success clears it.
+              const { done, failed } = await optimizeCriteria(ctx, targets, { manual: true })
               return { content: `Optimized ${done} of ${targets.length} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}.` }
             }
             const key = keySource()

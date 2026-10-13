@@ -54,7 +54,6 @@ Memory template:
   - target
   - node_modules/
   - .scratch/
-  - .papercuts.jsonl
   - <per-repo additions>
 - toolchain_notes: <whatever parity the repo needs>
 - last_verified: <YYYY-MM-DD>
@@ -81,8 +80,7 @@ Memory template:
    `safe.directory` and a git identity there when a fresh clone needs one.
    Done when `git -C <remote_root> status` works over ssh.
 3. **Decide excludes**: start from the universal base (`.git` and `target` with
-   NO trailing slash, `node_modules/`, `.scratch/`,
-   `.papercuts.jsonl`), then add per-repo entries from `git status
+   NO trailing slash, `node_modules/`, `.scratch/`), then add per-repo entries from `git status
    --ignored`, `.gitignore`, `du -sh */` for large dirs, and `AGENTS.md`
    hints. Write the final list to memory. Done when every ignored or heavy
    dir has an explicit keep-or-exclude decision.
