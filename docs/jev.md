@@ -64,7 +64,9 @@ words — and cached in the local data file (`jev-data.json`, see Files) under
 
 The cache key is the description hash, not the file: body edits that leave the
 description alone never invalidate; a description edit (or a new skill) misses
-and falls back to the description's first sentence until optimized. Corrupt,
+and falls back to the description's first sentence until optimized. Criteria
+are stripped of the optimizer's old `Pick for/when …` preamble on read, so
+stored entries clean themselves without a re-run. Corrupt,
 foreign-version, empty, or overlong entries are dropped on load, so a bad
 optimizer run can never poison the roster.
 
