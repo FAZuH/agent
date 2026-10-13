@@ -65,6 +65,17 @@ export function firstSentence(text: string): string {
 }
 
 /**
+ * The optimizer once opened every criterion with "Pick for/to/when …", which
+ * says nothing: the choice already asks which skill to pick. Stripped on read,
+ * so stored entries clean themselves up without re-spending.
+ */
+export function stripCriterionPreamble(text: string): string {
+  const bare = text.replace(/^Pick (?:for |to |when |as |before |until )?/, "")
+  const first = bare.charAt(0)
+  return (first >= "a" && first <= "z" ? first.toUpperCase() + bare.slice(1) : bare) || text
+}
+
+/**
  * Resolve each roster entry to its choice criterion: the cached optimizer
  * output when the stored hash matches the live description, else the
  * first-sentence fallback. Returns the resolved entries plus the ids whose
@@ -77,7 +88,7 @@ export function resolveCriteria(roster: SkillEntry[]): { entries: SkillEntry[]; 
   for (const skill of roster) {
     const hit = cache[skill.id]
     if (hit && hit.origHash === hashDescription(skill.meaning)) {
-      entries.push({ id: skill.id, meaning: hit.terse })
+      entries.push({ id: skill.id, meaning: stripCriterionPreamble(hit.terse) })
     } else {
       entries.push({ id: skill.id, meaning: firstSentence(skill.meaning) })
       stale.push(skill)
@@ -275,7 +286,7 @@ export async function optimizeCriteria(
   }
   const batch = stale.slice(0, 30)
   const prompt = [
-    "Rewrite each skill description below as ONE terse choice criterion, max 40 words: state when the skill is the right pick AND when it is not. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
+    "Rewrite each skill description below as ONE terse choice criterion, max 40 words: when the skill is the right pick AND when it is not. Start directly with the trigger; never open with \"Pick for/when/to\" or any label. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
     "",
     ...batch.map((s) => `- ${s.id}: ${s.meaning.slice(0, 600)}`),
   ].join("\n")
@@ -312,7 +323,7 @@ export async function optimizeCriteria(
       throw new Error(`optimizer returned unparseable JSON: ${jsonText.slice(0, 200)}`)
     }
     for (const s of batch) {
-      const terse = typeof parsed[s.id] === "string" ? parsed[s.id].trim() : ""
+      const terse = stripCriterionPreamble((typeof parsed[s.id] === "string" ? parsed[s.id] : "").trim())
       if (!terse || terse.length > 400) continue
       setSkillCriterion(s.id, hashDescription(s.meaning), terse)
       done++

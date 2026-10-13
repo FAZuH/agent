@@ -17,7 +17,7 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { blocksCall, firstSentence, hashDescription, optimizeCriteria, renderAdvice, resolveCriteria, rosterHash } = await import("./index.ts")
+const { blocksCall, firstSentence, hashDescription, optimizeCriteria, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
 const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, pluginEnabled, pruneLog, setEnabled, setFeature, setFeatureConfig } = await import(
   "./state.ts"
@@ -221,6 +221,24 @@ describe("skill criteria", () => {
   test("hashDescription is stable and keyed on content", () => {
     expect(hashDescription("abc")).toBe(hashDescription("abc"))
     expect(hashDescription("abc")).not.toBe(hashDescription("abd"))
+  })
+
+  test("stripCriterionPreamble drops the Pick label and re-capitalizes", () => {
+    expect(stripCriterionPreamble("Pick for config, migration, plugins.")).toBe("Config, migration, plugins.")
+    expect(stripCriterionPreamble("Pick when unsure which skill fits. Skip when obvious.")).toBe("Unsure which skill fits. Skip when obvious.")
+    expect(stripCriterionPreamble("Pick to file a bug with repro steps.")).toBe("File a bug with repro steps.")
+    expect(stripCriterionPreamble("Pick as the default filter on coding tasks.")).toBe("The default filter on coding tasks.")
+    // Anything else passes through untouched.
+    expect(stripCriterionPreamble("Edit or write any interface.")).toBe("Edit or write any interface.")
+  })
+
+  test("a cached criterion reads clean even when stored with the old prefix", async () => {
+    const { setSkillCriterion: realSet, DATA_FILE } = await import("./state.ts")
+    rmSync(DATA_FILE, { force: true })
+    realSet("demo", hashDescription("Full description."), "Pick for demo work. Skip for prose.")
+    const { entries } = resolveCriteria([{ id: "demo", meaning: "Full description." }])
+    expect(entries[0].meaning).toBe("Demo work. Skip for prose.")
+    rmSync(DATA_FILE, { force: true })
   })
 
   test("a matching cache entry wins; a changed description falls back", async () => {
