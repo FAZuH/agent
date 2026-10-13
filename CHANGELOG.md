@@ -1,3 +1,16 @@
+## [0.13.16](https://github.com/FAZuH/agent/compare/v0.13.15...v0.13.16) (2026-10-13)
+
+
+### Features
+
+* **plugin:** optimizer model override, failure latch, and XDG data split ([1d593a5](https://github.com/FAZuH/agent/commit/1d593a5c05f0a14f6276523ddc5c66dee9276de4))
+* replace the papercuts CLI with Hindsight friction entries ([de37f98](https://github.com/FAZuH/agent/commit/de37f98232277d0a31087187ff447142303c7980))
+
+
+### Bug Fixes
+
+* **plugin:** drop the Pick preamble from optimized criteria ([ff295f8](https://github.com/FAZuH/agent/commit/ff295f8ab90da5562da1fdc2741a0a38307f8be7))
+
 ## [0.13.15](https://github.com/FAZuH/agent/compare/v0.13.14...v0.13.15) (2026-10-12)
 
 
@@ -21,12 +34,4 @@
 ### Bug Fixes
 
 * digest agents appended --ping to routine-only posts ([cd7a895](https://github.com/FAZuH/agent/commit/cd7a8957ee2ca16621c9f17f73640197a1065950))
-
-## [0.13.11](https://github.com/FAZuH/agent/compare/v0.13.10...v0.13.11) (2026-10-12)
-
-
-### Features
-
-* **script:** extract digest-post crate and rework digest posts ([634ed95](https://github.com/FAZuH/agent/commit/634ed9589bab4a1186b1da23437b419a13ec2d69))
-* **script:** make digest deployment opt-in in install.sh ([a82fce6](https://github.com/FAZuH/agent/commit/a82fce6bc5ccc44d062739984b320bb4b3c4b9af))
 
