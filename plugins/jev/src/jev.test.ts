@@ -495,18 +495,43 @@ describe("master switch", () => {
 })
 
 describe("call toasts", () => {
-  test("a decision, a skip, and a failure each render one line", () => {
-    expect(toastLine({ hook: "hook_risk", decisions: [{ id: "risky", value: true, confident: true }], inputTokens: 120 })).toEqual({
-      message: "hook_risk: risky=true · 120tok",
+  test("a decision, a skip, and a failure each render under a hook title", () => {
+    expect(
+      toastLine({
+        hook: "hook_risk",
+        decisions: [{ id: "risky", kind: "noul", value: true, probability: 0.87, confident: true }],
+        subject: "shell command: rm -rf ./build",
+        inputTokens: 120,
+      }),
+    ).toEqual({
+      title: "jev (hook_risk)",
+      message: "* risky (0.87)\n* shell command: rm -rf ./build\n* 120tok",
       variant: "info",
     })
     expect(toastLine({ hook: "hook_skill_pick", skipped: "low confidence: margin 0.05" })).toEqual({
-      message: "hook_skill_pick: low confidence: margin 0.05",
+      title: "jev (hook_skill_pick)",
+      message: "* low confidence: margin 0.05",
       variant: "info",
     })
-    expect(toastLine({ hook: "hook_risk", error: "Jev HTTP 401" })).toEqual({ message: "hook_risk: Jev HTTP 401", variant: "error" })
+    expect(toastLine({ hook: "hook_risk", error: "Jev HTTP 401" })).toEqual({
+      title: "jev (hook_risk)",
+      message: "* Jev HTTP 401",
+      variant: "error",
+    })
     // No hook, no feature to attribute it to, so no toast.
     expect(toastLine({ decisions: [] })).toBeNull()
+  })
+
+  test("a not-risky answer says so, with the number the gate compared", () => {
+    const line = toastLine({ hook: "hook_risk", decisions: [{ id: "risky", kind: "noul", value: false, probability: 0.05, confident: true }] })!
+    expect(line.message).toBe("* not risky (0.05)")
+  })
+
+  test("a long tool call is clipped onto one line", () => {
+    const line = toastLine({ hook: "hook_risk", decisions: [], subject: `bash -c ${"x".repeat(400)}` })!
+    expect(line.message.startsWith("* bash -c ")).toBe(true)
+    expect(line.message.endsWith("…")).toBe(true)
+    expect(line.message.split("\n")).toHaveLength(1)
   })
 
   test("the tail returns new entries oldest-first and advances past them", () => {
@@ -532,7 +557,7 @@ describe("call toasts", () => {
 
   test("a low-confidence answer is marked in the line", () => {
     const line = toastLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", confident: false }] })!
-    expect(line.message).toBe('hook_skill_pick: pick="commit" (low)')
+    expect(line.message).toBe('* pick="commit" (low)')
   })
 
   test("the global switch, then the feature's own, gates a toast", () => {

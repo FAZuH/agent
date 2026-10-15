@@ -260,11 +260,26 @@ documented non-closing API does not exist.
 gates all of them, so both must be on. Default is off globally, on per feature:
 turn the master on and every hook announces until you opt one out.
 
-One line per call, built from the call log: `hook_risk: risky=false · 120tok`,
-the skip reason, or a failure. The server draws no UI and the TUI module is the
-only place a toast exists, so the TUI polls the log the server already writes
-(every 2s) instead of a second channel. A TUI host is required: the desktop app
-never toasts.
+One toast per call, built from the call log: a `jev (<hook>)` title over one
+bullet per fact — the verdict with the probability the gate compared, the tool
+call it judged, and the tokens it cost:
+
+```
+jev (hook_risk)
+
+* not risky (0.05)
+* shell command: rm -rf ./build
+* 120tok
+```
+
+A noul reads `risky` / `not risky` rather than a boolean, because the number is
+what `gateProbability` is compared against and the label alone hides it. A weak
+answer appends `(low)`. The subject is clipped to 120 characters and, like
+everything else in the log, redacted. A skip or a failure replaces the bullets
+with that one line. The server draws no UI and the TUI module is the only place a
+toast exists, so the TUI polls the log the server already writes (every 2s)
+instead of a second channel. A TUI host is required: the desktop app never
+toasts.
 
 ## How confidence works
 

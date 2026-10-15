@@ -410,22 +410,46 @@ export function newSince(rows: any[], after: string): { fresh: any[]; after: str
   return { fresh: [], after: typeof newest === "string" && newest < after ? newest : after }
 }
 
+/** The tool call a hook judged, in one clipped line. What the log already stores, shortened for a toast. */
+const TOOL_CLIP = 120
+
+function clip(text: string, max: number): string {
+  const one = text.replace(/\s+/g, " ").trim()
+  return one.length > max ? `${one.slice(0, max)}…` : one
+}
+
 /**
- * The one-line toast for a logged call, or null when the entry names no hook
- * and so cannot be attributed to a feature. The variants are the two the TUI
- * is already seen to honour.
+ * One decision as `risky (0.87)`: the label a person reads first, then the
+ * probability, because the number is what the gate compares and a bare boolean
+ * hides it. A weak answer says so, because a confident-looking 0.51 is a lie.
  */
-export function toastLine(row: any): { message: string; variant: "info" | "error" } | null {
+function describe(d: any): string {
+  const pct = typeof d?.probability === "number" ? ` (${d.probability.toFixed(2)})` : ""
+  const low = d?.confident ? "" : " (low)"
+  if (d?.kind === "noul") return `${d.value ? "risky" : "not risky"}${pct}${low}`
+  return `${d?.id}=${JSON.stringify(d?.value)}${pct}${low}`
+}
+
+/**
+ * The toast for a logged call: a `jev (<hook>)` title over one bullet per fact.
+ * A title plus bullets instead of one crowded line, so the hook, the verdict,
+ * and the cost each get their own row instead of being flattened into a
+ * sentence. Null when the entry names no hook, so it cannot be attributed.
+ */
+export function toastLine(row: any): { title: string; message: string; variant: "info" | "error" } | null {
   const hook = typeof row?.hook === "string" ? row.hook : ""
   if (!hook) return null
-  const clip = (text: string) => (text.length > 200 ? `${text.slice(0, 200)}…` : text)
-  if (row.error) return { message: `${hook}: ${clip(String(row.error))}`, variant: "error" }
-  if (row.skipped) return { message: `${hook}: ${clip(String(row.skipped))}`, variant: "info" }
-  const answers = (Array.isArray(row.decisions) ? row.decisions : [])
-    .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
-    .join(" ")
-  const tokens = row.inputTokens ? ` · ${row.inputTokens}tok` : ""
-  return { message: `${hook}: ${answers}${tokens}`, variant: "info" }
+  const title = `jev (${hook})`
+  const bullets: string[] = []
+
+  if (row.error) return { title, message: `* ${clip(String(row.error), 200)}`, variant: "error" }
+  if (row.skipped) return { title, message: `* ${clip(String(row.skipped), 200)}`, variant: "info" }
+
+  for (const d of Array.isArray(row.decisions) ? row.decisions : []) bullets.push(describe(d))
+  if (row.subject) bullets.push(clip(String(row.subject), TOOL_CLIP))
+  if (row.inputTokens) bullets.push(`${row.inputTokens}tok`)
+  if (!bullets.length) return { title, message: "* no answer recorded", variant: "info" }
+  return { title, message: bullets.map((b) => `* ${b}`).join("\n"), variant: "info" }
 }
 
 export function setFeature(key: string, on: boolean): boolean {

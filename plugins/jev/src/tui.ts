@@ -92,9 +92,9 @@ export default {
       }
     }
 
-    const toast = (message: string, variant = "info") => {
+    const toast = (message: string, variant = "info", title = "jev") => {
       try {
-        ctx.ui?.toast?.show?.({ title: "jev", message, variant })
+        ctx.ui?.toast?.show?.({ title, message, variant })
       } catch (error: any) {
         trace("toast-failed", { message, error: String(error?.message ?? error) })
       }
@@ -536,7 +536,7 @@ export default {
         for (const row of fresh) {
           if (!toastsOn(row.hook)) continue
           const line = toastLine(row)
-          if (line) toast(line.message, line.variant)
+          if (line) toast(line.message, line.variant, line.title)
         }
       }, 2000)
     }

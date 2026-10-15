@@ -367,7 +367,7 @@ function require_key(): string {
 export async function ask(
   stateBody: JevStateBody,
   questions: Record<string, JevQuestion>,
-  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds; hook?: string } = {},
+  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds; hook?: string; subject?: string } = {},
 ): Promise<JevResult> {
   const state = loadState()
   const thresholds: Thresholds = opts.thresholds ?? {
@@ -506,6 +506,10 @@ export async function ask(
       decisions,
       inputTokens,
       elapsedMs,
+      // What was judged, so a toast can name the call instead of only its
+      // cost. Redacted like everything else here: a shell command or a patch
+      // carries the same secrets the payload does.
+      ...(opts.subject ? { subject: redact(opts.subject) } : {}),
     })
   }
 
