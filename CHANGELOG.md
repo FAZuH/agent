@@ -1,3 +1,19 @@
+## [0.13.18](https://github.com/FAZuH/agent/compare/v0.13.17...v0.13.18) (2026-10-15)
+
+
+### Features
+
+* **plugin:** add ralph, the self-referential iteration loop ([88a2d3f](https://github.com/FAZuH/agent/commit/88a2d3f08ec1f04fa1b42697b8899f7bccb5e52c))
+* **plugin:** jev call toasts as a hook title and one bullet per fact ([fbfedef](https://github.com/FAZuH/agent/commit/fbfedef524530d0700d538b644004ac2ba85278c))
+* **plugin:** skip the jev risk check while permissions auto-accept ([a336378](https://github.com/FAZuH/agent/commit/a336378996fb8059e4ed3bad8655a249e30be99e))
+* **plugin:** toast each Jev call, switchable per feature and globally ([e07d875](https://github.com/FAZuH/agent/commit/e07d8751901d17a055700095c6068c486af4b5d6))
+
+
+### Bug Fixes
+
+* **plugin:** judge the shell tool under the name v2 reports ([bf82d2c](https://github.com/FAZuH/agent/commit/bf82d2cafbd1bf33971cd6500d06461a95affd89))
+* **plugin:** resolve the optimizer's model instead of sending none ([6a3a7f9](https://github.com/FAZuH/agent/commit/6a3a7f9e8b1e9619e6aae30f345a028b4953cd4e))
+
 ## [0.13.17](https://github.com/FAZuH/agent/compare/v0.13.16...v0.13.17) (2026-10-13)
 
 ## [0.13.16](https://github.com/FAZuH/agent/compare/v0.13.15...v0.13.16) (2026-10-13)
@@ -27,6 +43,4 @@
 * **plugin:** aside forks stop resuming prior task ([3d6a4fb](https://github.com/FAZuH/agent/commit/3d6a4fbd1ee89d39b8762dd33d2c5f33391b5e04))
 
 ## [0.13.14](https://github.com/FAZuH/agent/compare/v0.13.13...v0.13.14) (2026-10-12)
-
-## [0.13.13](https://github.com/FAZuH/agent/compare/v0.13.12...v0.13.13) (2026-10-12)
 
