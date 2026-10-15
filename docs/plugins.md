@@ -90,6 +90,34 @@ which answers once in place. In the TUI the switch is automatic; on hosts
 with no TUI module (desktop, API, mini) use `/aside-fork`, which forks and
 asks but leaves the view alone — the fork id is in the reply.
 
+## ralph (`fazuh.ralph`)
+
+The [Ralph Wiggum](https://ghuntley.com/ralph/) loop in the session that started
+it: one prompt, fed back to the model until it is done. The prompt never changes;
+the repository does, so each iteration reads the previous one's work and improves
+it. Ported from the upstream plugin (anthropics/claude-code), which drives the
+loop from a Stop hook, and from open-ralph-wiggum, which drives it from an
+external CLI. OpenCode v2 has no Stop hook, so the loop rides session events:
+`session.text.ended` remembers the last thing the model said, `session.idle`
+decides whether to finish, stop, or prompt again.
+
+One loop per session, in memory. A plugin reload stops a running loop instead of
+resurrecting one nobody is watching; `/ralph-status` says so. The completion
+promise is checked before the iteration cap, so a turn that finished the work on
+the last allowed iteration reports `complete` rather than `max`. Three turns with
+no output stop the loop, so an unlimited run cannot ping-pong forever.
+
+- **`/ralph-loop <task>`**: starts the loop. `--max-iterations N` (0 = unlimited),
+  `--completion-promise TEXT` (default `COMPLETE`), `--abort-promise TEXT` for a
+  task that turns out to be impossible as written. The task needs no quotes;
+  quote a multi-word promise.
+- **`/cancel-ralph`**: stops the loop in this session and reports the iteration.
+- **`/ralph-status`**: every active loop with its iteration, elapsed time, promises, and task.
+
+Server-side toasts are impossible from a plugin, so every decision is appended to
+`~/.local/state/fazuh-agent/ralph-loops.jsonl` and the TUI tail announces starts,
+stops, and errors.
+
 ## Commands
 
 Command definitions are a separate item class and live in `commands/`, not in
