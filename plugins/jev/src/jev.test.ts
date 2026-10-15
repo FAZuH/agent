@@ -17,7 +17,7 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { blocksCall, firstSentence, hashDescription, optimizeCriteria, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
+const { blocksCall, firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
 const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastsOn } = await import(
   "./state.ts"
@@ -549,7 +549,40 @@ describe("call toasts", () => {
     // An entry naming no known feature never toasts.
     expect(toastsOn("not_a_feature")).toBe(false)
     saveState({ toast: false })
-    setFeatureConfig("hook_risk", "toast", true)
+    setFeatureConfig("hook_risk", "toast", true)  })
+})
+
+describe("optimizer model choice", () => {
+  const session = { id: "ses_x", model: { providerID: "9router", id: "oc/deepseek-v4.1-flash-free" } }
+  const hostDefault = { location: {}, data: { providerID: "nvidia", id: "nvidia/nemotron-3.5-super-vl-120b-a12b" } }
+
+  test("an override splits on the first slash, because ids contain slashes", () => {
+    expect(optimizerModel("9router/oc/deepseek-v4.1-flash-free", null, null)).toEqual({
+      providerID: "9router",
+      id: "oc/deepseek-v4.1-flash-free",
+    })
+  })
+
+  test("an override wins over every resolved model", () => {
+    expect(optimizerModel("nvidia/z-ai/glm-5.3", session, hostDefault)).toEqual({ providerID: "nvidia", id: "z-ai/glm-5.3" })
+  })
+
+  test("no override prefers the session's model over the host default", () => {
+    // The host default was the model answering 404; the session is running on
+    // its own, so that one is the one known to work.
+    expect(optimizerModel("  ", session, hostDefault)).toEqual({ providerID: "9router", id: "oc/deepseek-v4.1-flash-free" })
+    expect(optimizerModel("", null, hostDefault)).toEqual({ providerID: "nvidia", id: "nvidia/nemotron-3.5-super-vl-120b-a12b" })
+    expect(optimizerModel("", null, null)).toBeNull()
+  })
+
+  test("a runtime session without a model is not a model", () => {
+    expect(optimizerModel("", { id: "ses_y" }, undefined)).toBeNull()
+  })
+
+  test("a malformed override is never silently replaced by another model", () => {
+    expect(optimizerModel("9router", session, hostDefault)).toBeNull()
+    expect(optimizerModel("/oc/x", session, hostDefault)).toBeNull()
+    expect(optimizerModel("9router/", session, hostDefault)).toBeNull()
   })
 })
 
@@ -628,32 +661,59 @@ describe("optimizer", () => {
     rmSync(join(scratch, "jev-data.json"), { force: true })
   }
   const stale = [{ id: "demo", meaning: "Full description. Second sentence." }]
+  // The host side of the model lookup: a session with a model, and a host
+  // default. Both are what the optimizer resolves when no override is set.
+  const hostDefault = { location: {}, data: { providerID: "9router", id: "oc/host-free" } }
+  const host = (generate: any) => ({ generate, model: { default: async () => hostDefault } })
 
   test("sends a {prompt, model} payload, unwraps {text}, writes criteria", async () => {
     reset()
     let seen: any
-    const ctx = {
-      generate: {
-        text: async (payload: any) => {
-          seen = payload
-          return { text: JSON.stringify({ demo: "Use when doing demo." }) }
-        },
+    const ctx = host({
+      text: async (payload: any) => {
+        seen = payload
+        return { text: JSON.stringify({ demo: "Use when doing demo." }) }
       },
-    }
+    })
     const { done } = await optimizeCriteria(ctx, stale, { manual: true })
     expect(done).toBe(1)
     expect(typeof seen).toBe("object")
     expect(seen.prompt).toContain("- demo: Full description.")
-    expect(seen.model).toBeNull()
+    // No override and no session model: the host default is named explicitly.
+    expect(seen.model).toEqual({ providerID: "9router", id: "oc/host-free" })
     const { loadData } = await import("./state.ts")
     expect(loadData().skillCriteria.demo.terse).toBe("Use when doing demo.")
+  })
+
+  test("the session's own model beats the host default", async () => {
+    reset()
+    let seen: any
+    const ctx = {
+      generate: { text: async (payload: any) => ((seen = payload), { text: JSON.stringify({ demo: "Criterion." }) }) },
+      model: { default: async () => hostDefault },
+      session: { get: async ({ sessionID }: any) => ({ id: sessionID, model: { providerID: "9router", id: "oc/deepseek-v4.1-flash-free" } }) },
+    }
+    await optimizeCriteria(ctx, stale, { manual: true, sessionID: "ses_demo" })
+    expect(seen.model).toEqual({ providerID: "9router", id: "oc/deepseek-v4.1-flash-free" })
+  })
+
+  test("a missing model is a logged failure, not a host call", async () => {
+    reset()
+    let calls = 0
+    const ctx = { generate: { text: async () => (calls++, { text: "{}" }) } }
+    const { failed } = await optimizeCriteria(ctx, stale, { manual: true })
+    expect(calls).toBe(0)
+    expect(failed).toBe(1)
+    const { readLog } = await import("./state.ts")
+    expect(readLog(1)[0].skipped).toContain("no model to generate with")
+    reset()
   })
 
   test("optimizeModel overrides the payload model as Model.Ref", async () => {
     reset()
     setFeatureConfig("hook_skill_pick", "optimizeModel", "9router/free")
     let seen: any
-    const ctx = { generate: { text: async (payload: any) => ((seen = payload), { text: "{}" }) } }
+    const ctx = host({ text: async (payload: any) => ((seen = payload), { text: "{}" }) })
     await optimizeCriteria(ctx, stale, { manual: true })
     expect(seen.model).toEqual({ providerID: "9router", id: "free" })
     setFeatureConfig("hook_skill_pick", "optimizeModel", "")
@@ -661,7 +721,7 @@ describe("optimizer", () => {
 
   test("three failures latch the auto path; manual still runs; success clears", async () => {
     reset()
-    const failing = { generate: { text: async () => { throw Object.assign(new Error("Expected object"), { _tag: "InvalidRequestError", kind: "Payload" }) } } }
+    const failing = host({ text: async () => { throw Object.assign(new Error("Expected object"), { _tag: "InvalidRequestError", kind: "Payload" }) } })
     // Auto path: 1st and 2nd failures log, 3rd trips the latch.
     await optimizeCriteria(failing, stale)
     await optimizeCriteria(failing, stale)
@@ -669,14 +729,14 @@ describe("optimizer", () => {
     expect((optimizeCriteria as any)._latched).toBe(true)
     // Latched auto path never reaches the host.
     let calls = 0
-    const counting = { generate: { text: async () => { calls++; return { text: "{}" } } } }
+    const counting = host({ text: async () => { calls++; return { text: "{}" } } })
     await optimizeCriteria(counting, stale)
     expect(calls).toBe(0)
     // Manual bypasses the latch.
     await optimizeCriteria(counting, stale, { manual: true })
     expect(calls).toBe(1)
     // A real success clears the latch and the counter.
-    const working = { generate: { text: async () => ({ text: JSON.stringify({ demo: "Criterion." }) }) } }
+    const working = host({ text: async () => ({ text: JSON.stringify({ demo: "Criterion." }) }) })
     await optimizeCriteria(working, stale, { manual: true })
     expect((optimizeCriteria as any)._latched).toBe(false)
     await optimizeCriteria(counting, stale)

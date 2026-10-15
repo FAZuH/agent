@@ -186,7 +186,7 @@ interface RoutePick {
 }
 const routeCache = new Map<string, RoutePick>()
 
-async function routePrompt(prompt: string, roster: SkillEntry[], ctx: any): Promise<string | null> {
+async function routePrompt(prompt: string, roster: SkillEntry[], ctx: any, sessionID = ""): Promise<string | null> {
   const F = "hook_skill_pick"
   const maxCandidates = Math.max(2, Math.round(cfgNum(F, "maxCandidates")))
   const { entries, stale } = resolveCriteria(roster)
@@ -214,7 +214,7 @@ async function routePrompt(prompt: string, roster: SkillEntry[], ctx: any): Prom
   // steady state never trigger a background call. The manual command covers
   // everything else. Fire-and-forget — the current prompt has its answer.
   if (stale.length && cfgBool(F, "autoOptimize") && rosterHash(capped) !== loadData().rosterHash) {
-    void optimizeCriteria(ctx, stale)
+    void optimizeCriteria(ctx, stale, { sessionID })
       .then(({ done }) => {
         // Only mark the roster seen on real progress: a failed run stays
         // stale so the next process retries instead of assuming it's warm.
@@ -250,6 +250,39 @@ export function renderAdvice(d: { value: unknown; probability?: number; distribu
   return `Jev routing: consider loading skill${names.length > 1 ? "s" : ""} ${skills}. Advisory — if your own reading disagrees, decide yourself.`
 }
 
+/** A model reference for generate.text: the pair the host resolves a provider from. */
+export interface OptimizerModel {
+  providerID: string
+  id: string
+}
+
+/**
+ * The model a generate.text call should name, in order: the `optimizeModel`
+ * setting, the model the calling session already runs on, then the host
+ * default. An override is `providerID/modelID` and only the first slash splits
+ * it, because model ids contain slashes themselves.
+ *
+ * Naming no model at all hands the choice to the host default, which on this
+ * machine resolved to a provider model that answers HTTP 404 — and three of
+ * those in a row latch the optimizer off for the life of the process. The
+ * session's own model is the safer second choice: the session is demonstrably
+ * running on it.
+ */
+export function optimizerModel(override: string, session: unknown, hostDefault: unknown): OptimizerModel | null {
+  const ref = (value: any): OptimizerModel | null => {
+    const m = value?.model ?? value?.data?.model ?? value?.data ?? value
+    return typeof m?.providerID === "string" && typeof m?.id === "string" && m.providerID && m.id
+      ? { providerID: m.providerID, id: m.id }
+      : null
+  }
+  const o = override.trim()
+  if (o) {
+    const slash = o.indexOf("/")
+    return slash > 0 && slash < o.length - 1 ? { providerID: o.slice(0, slash), id: o.slice(slash + 1) } : null
+  }
+  return ref(session) ?? ref(hostDefault)
+}
+
 /**
  * Optimize stale skill descriptions through the host LLM. One prompt, all
  * stale skills batched: N descriptions in, N terse criteria out as JSON.
@@ -269,7 +302,7 @@ export function renderAdvice(d: { value: unknown; probability?: number; distribu
 export async function optimizeCriteria(
   ctx: any,
   stale: SkillEntry[],
-  opts: { manual?: boolean } = {},
+  opts: { manual?: boolean; sessionID?: string } = {},
 ): Promise<{ done: number; failed: number }> {
   const self = optimizeCriteria as any
   // Remember a missing generate.text per process: without this, every prompt
@@ -291,20 +324,37 @@ export async function optimizeCriteria(
     "",
     ...batch.map((s) => `- ${s.id}: ${s.meaning.slice(0, 600)}`),
   ].join("\n")
-  // optimizeModel overrides the host model: providerID/modelID split on the
-  // first slash (model ids themselves contain slashes). Empty = host default.
-  const override = cfgStr("hook_skill_pick", "optimizeModel").trim()
-  const payload = {
-    prompt,
-    model: override ? { providerID: override.slice(0, override.indexOf("/")), id: override.slice(override.indexOf("/") + 1) } : null,
-  }
-  if (override && !override.includes("/")) {
-    const detail = `optimizeModel must be providerID/modelID, got "${override}"`
+  // The model to generate with: the setting, then this session's own model,
+  // then the host default. See optimizerModel for why "name no model" is not
+  // safe here — the host default was the thing answering 404.
+  const override = cfgStr("hook_skill_pick", "optimizeModel")
+  if (override.trim() && !override.trim().includes("/")) {
+    const detail = `optimizeModel must be providerID/modelID, got "${override.trim()}"`
     logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${detail}` })
     self._failures = (self._failures ?? 0) + 1
     if (self._failures >= 3) latch(self, detail)
     return { done: 0, failed: batch.length }
   }
+  let model = optimizerModel(override, null, null)
+  if (!model) {
+    let session: unknown = null
+    let hostDefault: unknown = null
+    try {
+      if (opts.sessionID && typeof ctx?.session?.get === "function") session = await ctx.session.get({ sessionID: opts.sessionID })
+      if (typeof ctx?.model?.default === "function") hostDefault = await ctx.model.default()
+    } catch {
+      // A lookup failure is not fatal on its own; the failure below names it.
+    }
+    model = optimizerModel(override, session, hostDefault)
+  }
+  if (!model) {
+    const detail = "no model to generate with: set optimizeModel in /jev-settings to providerID/modelID"
+    logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${detail}` })
+    self._failures = (self._failures ?? 0) + 1
+    if (self._failures >= 3) latch(self, detail)
+    return { done: 0, failed: batch.length }
+  }
+  const payload = { prompt, model }
   let done = 0
   try {
     // Awaited with a ceiling: the command path waits for the result, the
@@ -343,7 +393,10 @@ export async function optimizeCriteria(
   } catch (error: any) {
     const tag = typeof error?._tag === "string" ? `${error._tag}${error.kind ? `(${error.kind})` : ""} ` : ""
     const frame = error instanceof Error ? String(error.stack ?? "").split("\n")[1]?.trim() : ""
-    const detail = `${tag}${error instanceof Error ? error.message : String(error)}${frame ? ` @ ${frame}` : ""}`
+    // The provider the host actually used and the model asked for: the two
+    // facts that turn "it 404ed" into something actionable.
+    const service = typeof error?.service === "string" && error.service ? ` [${error.service}]` : ""
+    const detail = `${tag}${error instanceof Error ? error.message : String(error)}${service}${frame ? ` @ ${frame}` : ""} (model ${model.providerID}/${model.id})`
     self._failures = (self._failures ?? 0) + 1
     if (self._failures >= 3) latch(self, detail)
     else logCall({ hook: "hook_skill_pick", skipped: `optimizer failed: ${detail}` })
@@ -445,7 +498,7 @@ export default {
             // Seed synchronously so a slow Jev cannot race a second prompt
             // into double-spending; the advice fills in when it lands.
             routeCache.set(sessionID, { prompt: text, advice: null, ts: Date.now() })
-            const advice = await routePrompt(text, await skillRoster(ctx, ROSTER_ROOTS), ctx)
+            const advice = await routePrompt(text, await skillRoster(ctx, ROSTER_ROOTS), ctx, sessionID)
             routeCache.set(sessionID, { prompt: text, advice, ts: Date.now() })
           } catch (error) {
             logCall({ hook: "hook_skill_pick", skipped: error instanceof JevError ? error.message : String(error) })
@@ -476,7 +529,7 @@ export default {
             if (!entry || entry.prompt !== lastText) {
               routeCache.set(sessionID, { prompt: lastText, advice: null, ts: Date.now() })
               entry = routeCache.get(sessionID)!
-              entry.advice = await routePrompt(lastText, await skillRoster(ctx, ROSTER_ROOTS), ctx)
+              entry.advice = await routePrompt(lastText, await skillRoster(ctx, ROSTER_ROOTS), ctx, sessionID)
             }
           }
           if (entry?.advice && Date.now() - entry.ts < 300_000 && Array.isArray(event?.system)) {
@@ -572,7 +625,10 @@ export default {
               // Awaited, not background: the user asked for this explicitly
               // and wants the result, unlike the hook's silent warm-up. Manual
               // bypasses the failure latch; a success clears it.
-              const { done, failed } = await optimizeCriteria(ctx, targets, { manual: true })
+              const { done, failed } = await optimizeCriteria(ctx, targets, {
+                manual: true,
+                sessionID: String(input?.sessionID ?? input?.invocation?.sessionID ?? "") || undefined,
+              })
               return { content: `Optimized ${done} of ${targets.length} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}.` }
             }
             const key = keySource()
