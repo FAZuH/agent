@@ -144,6 +144,7 @@ endpoint path have no portable default.
 | `keyFile` | `~/.config/fazuh-agent/secrets/jev_api_key` | `/jev-settings` |
 | `think` | `false` | toggle in `/jev-settings` |
 | `enabled` | `true` | `/jev-features` |
+| `toast` | `false` | toggle in `/jev-settings`; master switch for the per-call TUI toasts |
 | `logMax` | `500` | `/jev-settings`; call-log line cap, pruned to the tail |
 
 Per-feature settings live under `config` in the state file. Each feature
@@ -162,9 +163,11 @@ load, so tuned thresholds survive the upgrade.
 | `hook_skill_pick` | `alsoAbove` | `0.25` | runners-up at or above this join the winner |
 | `hook_skill_pick` | `autoOptimize` | `true` | warm the optimizer cache when the installed skill set changes |
 | `hook_skill_pick` | `optimizeModel` | `""` | host model override for the optimizer, as `providerID/modelID`; empty = host model |
+| `hook_skill_pick` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 | `hook_risk` | `gateProbability` | `0.7` | blocks a call at or above this, when also confident |
 | `hook_risk` | `minProbability` | `0.8` | a noul whose certainty is below this is never confident, so never blocks |
 | `hook_risk` | `timeout` | `5000` | ms before the risk call gives up; the call then proceeds (fail-open) |
+| `hook_risk` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 
 A state file written before the feature rename (`pick_skill`/`risk_hook`) is
 migrated on load: switches, config, and tuned thresholds all carry over.
@@ -226,7 +229,7 @@ any list the provider exposes.
 | Command | Where | What it does |
 | --- | --- | --- |
 | `/jev-features` | TUI | the panel: `Plugin`, then the two hook switches |
-| `/jev-settings` | TUI | endpoint, model, key, key source, per-feature config |
+| `/jev-settings` | TUI | endpoint, model, key, key source, per-feature config, toasts |
 | `/jev-key` | TUI | paste a key, written at 0600 |
 | `/jev-status` | either | endpoint, model, key source, plugin state, per-feature config, spend |
 | `/jev-model <id>` | either | set the wire model id |
@@ -243,6 +246,19 @@ The panel closes when you change a row, because the only dialog primitive a
 plugin can reach resolves on selection. [Issue #3](https://github.com/FAZuH/agent/issues/3)
 tracks left/right to change a row in place, and records the measured reason the
 documented non-closing API does not exist.
+
+## Call toasts
+
+`toast` in `/jev-settings` turns on a TUI toast per Jev call. Each feature's own
+`toast` field decides whether its calls are announced, and the global switch
+gates all of them, so both must be on. Default is off globally, on per feature:
+turn the master on and every hook announces until you opt one out.
+
+One line per call, built from the call log: `hook_risk: risky=false · 120tok`,
+the skip reason, or a failure. The server draws no UI and the TUI module is the
+only place a toast exists, so the TUI polls the log the server already writes
+(every 2s) instead of a second channel. A TUI host is required: the desktop app
+never toasts.
 
 ## How confidence works
 
