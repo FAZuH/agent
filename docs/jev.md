@@ -106,6 +106,19 @@ Jev failure, a coin-flip answer, and a weak answer all pass through. The hook
 is off by default, because a blocked call has an error message rather than an
 interactive prompt.
 
+The hook skips itself entirely while the client auto-accepts permissions, and
+logs one `skipped: auto-accept mode: risk check not run` line per session
+rather than one per call. Auto mode is client-side: the host raises
+`permission.asked` exactly as it does in prompt mode and the TUI answers it
+itself, so no event, session field, or API response records it. The one durable
+evidence is the setting the palette toggle writes,
+`~/.config/opencode/cli.json` → `session.permissions: "autoaccept"`, which the
+plugin reads (re-read on mtime change; a missing, unparsable, or JSONC-with-
+trailing-commas file is handled, and anything unreadable means *run the check*).
+The blind spot is `opencode --auto`: the flag sets the mode with no file behind
+it, so that launch reads as prompt mode and the check still runs — the safe
+direction to be wrong in.
+
 Both hooks are wired to fire on prompt admission (`session.hook("prompt")`)
 and context build (`session.hook("context")`). The prompt hook is the least
 documented of the session hooks, so registration is capability-probed: if the

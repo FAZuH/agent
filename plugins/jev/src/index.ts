@@ -10,6 +10,7 @@
  */
 
 import { ask, JevError } from "./jev.ts"
+import { autoAccept } from "./autopermit.ts"
 import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES } from "./state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -406,6 +407,9 @@ export async function optimizeCriteria(
 
 /** Trip the auto-path latch after OPTIMIZER_LATCH consecutive failures. */
 const OPTIMIZER_LATCH = 3
+
+/** Sessions already told that auto-accept skipped the risk check: one line each, not one per call. */
+const autoSkipped = new Set<string>()
 function latch(self: any, detail: string): void {
   if (self._latched) return
   self._latched = true
@@ -433,6 +437,18 @@ function riskHook() {
       const tool = String(input?.tool ?? "")
       if (!featureOn("hook_risk")) return
       const F = "hook_risk"
+      // Auto-accept mode: the client approves every permission request itself, so
+      // nobody is watching a gate that stops a call. Skip the whole check, spend
+      // nothing, and say so once per session so silence is not mistaken for a
+      // dead hook.
+      if (autoAccept()) {
+        const key = String(input?.sessionID ?? "unknown")
+        if (!autoSkipped.has(key)) {
+          autoSkipped.add(key)
+          logCall({ hook: F, tool, skipped: "auto-accept mode: risk check not run" })
+        }
+        return
+      }
       const args = input?.args ?? input?.output?.args ?? {}
       const subject =
         typeof args.command === "string"
@@ -458,7 +474,7 @@ function riskHook() {
               },
             },
           },
-          { log: true, timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))), thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: 0 }, hook: F },
+          { log: true, timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))), thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: 0 }, hook: F, subject },
         )
         const d = result.decisions[0]
         if (blocksCall(d, cfgNum(F, "gateProbability"))) {
@@ -545,7 +561,7 @@ export default {
       await ctx.tool.hook("execute.before", async (event: any) => {
         const tool = String(event?.tool ?? "").toLowerCase()
         if (!["bash", "edit", "write", "apply_patch"].includes(tool)) return
-        await riskHook().execute({ tool, args: event?.args ?? event?.input })
+        await riskHook().execute({ tool, sessionID: event?.sessionID, args: event?.args ?? event?.input })
       })
     }
 

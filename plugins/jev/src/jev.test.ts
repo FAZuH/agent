@@ -8,7 +8,7 @@
  * several tests write settings and the real file is the user's, not the test's.
  */
 
-import { afterAll, describe, expect, test } from "bun:test"
+import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -19,6 +19,7 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { blocksCall, firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
+const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastsOn } = await import(
   "./state.ts"
 )
@@ -491,6 +492,72 @@ describe("master switch", () => {
     setEnabled(true)
     expect(featureStored("hook_skill_pick")).toBe(false)
     expect(featureOn("hook_skill_pick")).toBe(false)
+  })
+})
+
+describe("auto-accept detection", () => {
+  const cli = join(scratch, "cli.json")
+
+  afterEach(() => {
+    delete process.env[CONTENT_ENV]
+    delete process.env[CONFIG_PATH_ENV]
+    resetAutoAcceptCache()
+  })
+
+  const writeCli = (text: string) => {
+    writeFileSync(cli, text, "utf8")
+    process.env[CONFIG_PATH_ENV] = cli
+    resetAutoAcceptCache()
+  }
+
+  test("the palette toggle's value is the signal", () => {
+    writeCli('{"session":{"permissions":"autoaccept"}}')
+    expect(autoAccept()).toBe(true)
+    writeCli('{"session":{"permissions":"prompt"}}')
+    expect(autoAccept()).toBe(false)
+  })
+
+  test("prompt mode, an absent key, and junk all mean the check runs", () => {
+    writeCli('{"session":{"permissions":"prompt"}}')
+    expect(autoAccept()).toBe(false)
+    writeCli('{"session":{}}')
+    expect(autoAccept()).toBe(false)
+    writeCli('{"permission":"allow"}')
+    expect(autoAccept()).toBe(false)
+    writeCli("{ not json")
+    expect(autoAccept()).toBe(false)
+    // No file at all: fail toward running the check.
+    process.env[CONFIG_PATH_ENV] = join(scratch, "missing.json")
+    resetAutoAcceptCache()
+    expect(autoAccept()).toBe(false)
+  })
+
+  test("the host's own content override wins over the file", () => {
+    writeCli('{"session":{"permissions":"prompt"}}')
+    process.env[CONTENT_ENV] = '{"session":{"permissions":"autoaccept"}}'
+    expect(autoAccept()).toBe(true)
+  })
+
+  test("a change to the file is picked up without a restart", () => {
+    writeCli('{"session":{"permissions":"prompt"}}')
+    expect(autoAccept()).toBe(false)
+    writeCli('{"session":{"permissions":"autoaccept"}}')
+    expect(autoAccept()).toBe(true)
+  })
+
+  test("cli.json is JSONC: a trailing comma parses, and a comma inside a string survives", () => {
+    writeCli('{"plugins":["a",],"session":{"permissions":"autoaccept",},}')
+    expect(autoAccept()).toBe(true)
+    // A value holding ",]" keeps its comma: stripping there would corrupt JSON.
+    expect(stripTrailingCommas('{"a":"x,]","b":1,}')).toBe('{"a":"x,]","b":1}')
+    expect(parseConfig('{"a":"x,]","session":{"permissions":"prompt"}}')?.a).toBe("x,]")
+  })
+
+  test("an escaped quote does not end the string early", () => {
+    // The value is q", — the comma is inside the string, and the one after the
+    // closing quote is the trailing comma.
+    expect(parseConfig('{"a":"q\\",","session":{"permissions":"autoaccept"}}')?.a).toBe('q",')
+    expect(parseConfig('{"a":"q\\",","session":{"permissions":"autoaccept"}}')?.session.permissions).toBe("autoaccept")
   })
 })
 
