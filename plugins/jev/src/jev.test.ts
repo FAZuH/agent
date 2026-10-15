@@ -17,7 +17,7 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { blocksCall, firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
+const { RISK_TOOLS, blocksCall, firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastsOn } = await import(
@@ -492,6 +492,21 @@ describe("master switch", () => {
     setEnabled(true)
     expect(featureStored("hook_skill_pick")).toBe(false)
     expect(featureOn("hook_skill_pick")).toBe(false)
+  })
+})
+
+describe("risk hook tool filter", () => {
+  test("the shell tool is judged under both of its names", () => {
+    // v2.0.28 sends `shell`; older hosts send `bash`. Missing either one means
+    // commands run unjudged while writes still keep the hook looking alive.
+    expect(RISK_TOOLS).toContain("shell")
+    expect(RISK_TOOLS).toContain("bash")
+  })
+
+  test("reads are not judged", () => {
+    expect(RISK_TOOLS).not.toContain("read")
+    expect(RISK_TOOLS).not.toContain("grep")
+    expect(RISK_TOOLS).not.toContain("webfetch")
   })
 })
 

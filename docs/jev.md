@@ -99,8 +99,9 @@ optimizer run can never poison the roster.
   a call on every prompt. The manual command bypasses the latch; a success
   clears it.
 
-**`hook_risk`** (off by default): every `bash`, `edit`, `write`, and
-`apply_patch` call is sent to Jev and logged. It is blocked only when the
+**`hook_risk`** (off by default): every `shell` (named `bash` on older hosts),
+`edit`, `write`, and `apply_patch` call is sent to Jev and logged. It is blocked
+only when the
 answer is *both* confident *and* at or above `hook_risk.gateProbability`, so a
 Jev failure, a coin-flip answer, and a weak answer all pass through. The hook
 is off by default, because a blocked call has an error message rather than an

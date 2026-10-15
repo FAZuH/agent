@@ -405,6 +405,15 @@ export async function optimizeCriteria(
   return { done, failed: batch.length - done }
 }
 
+/**
+ * The tools whose arguments carry text worth judging. `shell` is what v2.0.28
+ * reports for the shell tool — measured from a live `execute.before` event —
+ * and `bash` is the older name that still appears on other hosts. Matching only
+ * `bash` left the risk check judging file writes and nothing that runs a
+ * command, which looked like a healthy hook because writes still logged.
+ */
+export const RISK_TOOLS = ["shell", "bash", "edit", "write", "apply_patch"]
+
 /** Trip the auto-path latch after OPTIMIZER_LATCH consecutive failures. */
 const OPTIMIZER_LATCH = 3
 
@@ -560,7 +569,7 @@ export default {
     if (typeof ctx?.tool?.hook === "function") {
       await ctx.tool.hook("execute.before", async (event: any) => {
         const tool = String(event?.tool ?? "").toLowerCase()
-        if (!["bash", "edit", "write", "apply_patch"].includes(tool)) return
+        if (!RISK_TOOLS.includes(tool)) return
         await riskHook().execute({ tool, sessionID: event?.sessionID, args: event?.args ?? event?.input })
       })
     }
