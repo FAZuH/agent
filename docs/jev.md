@@ -83,10 +83,16 @@ optimizer run can never poison the roster.
   host including desktop, because it is a command, not a TUI panel.
 - The optimizer runs through the host LLM (`ctx.generate.text`, the same
   channel that writes titles and compaction summaries), capability-probed at
-  runtime. The payload is `{ prompt, model }`; `hook_skill_pick.optimizeModel`
-  (default empty = the host's model) overrides the model as
-  `providerID/modelID`. On a host without `generate.text`, auto warm-up logs
-  once per process and stays off; the manual command reports the same.
+  runtime. The payload is `{ prompt, model }`, and the model is resolved in
+  order: the `hook_skill_pick.optimizeModel` setting, then the model the
+  calling session already runs on, then the host default. Naming no model at
+  all is not an option, because that hands the choice to the host default: a
+  default the provider rejects (an nvidia entry answering 404, once measured)
+  fails every run and latches the optimizer off. The session's own model is
+  the safer second choice, since the session is demonstrably running on it. A
+  failed run logs the provider and the model it used. On a host without
+  `generate.text`, auto warm-up logs once per process and stays off; the
+  manual command reports the same.
 - **Failure latch**: three consecutive failures (host error, no JSON, or a
   response that yields no criteria) turn the *auto* path off for the rest of
   the process with one log line, so a broken host cannot fill the log or spend
@@ -162,7 +168,7 @@ load, so tuned thresholds survive the upgrade.
 | `hook_skill_pick` | `maxPicks` | `-1` | most skills the advisory names (-1 = every qualifier, 1 = winner only) |
 | `hook_skill_pick` | `alsoAbove` | `0.25` | runners-up at or above this join the winner |
 | `hook_skill_pick` | `autoOptimize` | `true` | warm the optimizer cache when the installed skill set changes |
-| `hook_skill_pick` | `optimizeModel` | `""` | host model override for the optimizer, as `providerID/modelID`; empty = host model |
+| `hook_skill_pick` | `optimizeModel` | `""` | optimizer model as `providerID/modelID`; empty = the session's own model, then the host default |
 | `hook_skill_pick` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 | `hook_risk` | `gateProbability` | `0.7` | blocks a call at or above this, when also confident |
 | `hook_risk` | `minProbability` | `0.8` | a noul whose certainty is below this is never confident, so never blocks |
