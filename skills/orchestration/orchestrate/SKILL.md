@@ -57,9 +57,9 @@ Never route by memory or guesswork, and never improvise a workflow.
 - Prefer resuming an existing session for the same unit of work (see Session
   reuse) over spawning cold.
 - Delegate noisy or long-running work so raw output stays out of your context.
-- A subagent reports a blocker (web-viewer found a broken dev server, or
-  verification could not start): re-route to `implement` with a server-only or
-  verification-only brief; never work around it yourself.
+- A subagent reports a blocker (a broken dev server, or verification that could
+  not start): re-route to `implement` with a server-only or verification-only
+  brief; never work around it yourself.
 - Read subagent reports fully; a concise failure report is actionable, not a
   dead end.
 - Pass only a child `sessionID` when resuming. Never pass the current

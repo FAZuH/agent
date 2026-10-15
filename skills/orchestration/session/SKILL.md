@@ -56,7 +56,7 @@ The core approach in enough detail that a fresh agent could re-derive it.
 
 ## Execution
 How to verify (tests, lint, build); which subagents to delegate to
-(implement, web-viewer).
+(implement).
 
 ## Gate log
 - (none yet)

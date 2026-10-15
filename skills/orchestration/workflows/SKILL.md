@@ -24,8 +24,7 @@ Task → subagent table. Use it whenever you must pick a subagent or a task does
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
 | Finish a session (docs + archive + summary + delegates to @commit/@self-improve) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated @session-retro + @skill-doctor, offers @friction-sweep, never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `implement` | Server-only mode; owns PTY lifecycle |
-| Inspect web pages visually | `web-viewer` | Playwright; no PTY, no bash |
-| Read/transcribe image files | `image-viewer` | Vision, read-only |
+
 | Preliminary codebase discovery | `research-discovery` | Starts immediately, no approval gate; returns `file:line` pointers |
 | Deep research (cited findings file) | @deep-research skill → delegates to `research-discovery` | Narrow question against primary sources; writes ONE cited findings `.md`, returns path |
 | Broad web research synthesis | `research-synthesis` | Returns a focused, cited brief in chat |
@@ -65,7 +64,7 @@ subagent.
 | Unit & integration tests | Plan with test guidelines, trim tautologies, implement test-first, iterate | Writing or running a test suite | `reference/testing.md` |
 | Hard-bug diagnosis | Tight feedback loop first, then fix with a regression test | A bug that resists a quick fix | `reference/bug-diagnosis.md` |
 | Documentation / decisions | ADRs, glossary, runbooks via `document`; ADR paper trail | Docs or architectural decisions | `reference/documentation.md` |
-| Visual verification | `web-viewer` for pages/UI, `image-viewer` for still images | UI or image needs visual judgment | `reference/visual-verification.md` |
+
 | Recover an interrupted subagent spawn | yourself | Spawn aborted / server restarted mid-task | `reference/interrupted-delegation.md` |
 | Batch of user requests needs validity check | yourself, before grilling | N items in, claims unverified | `reference/claim-audit-intake.md` |
 

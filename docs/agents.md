@@ -38,8 +38,6 @@ octask timer or edits the model on the existing one.
 
 ## Vision
 
-- **[image-viewer](../agents/vision/image-viewer.md)**: describes, transcribes, and analyzes image files.
-- **[web-viewer](../agents/vision/web-viewer.md)**: inspects web pages in a real browser and judges the result visually.
 - **[mermaid-maker](../agents/vision/mermaid-maker.md)**: authors one Mermaid diagram, renders it, and looks at the result.
 - **[svg-maker](../agents/vision/svg-maker.md)**: authors one hand-written SVG for spatial and geometric visuals.
 

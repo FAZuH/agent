@@ -119,7 +119,7 @@ Upstream-owned; install and update through `@external-skills`, never hand-edit.
 - **review**: `review` (standards+spec), `malware-check`, `pii-check`.
 - **research**: `research-discovery` (codebase pointers),
   `research-synthesis` (web brief).
-- **vision**: `image-viewer`, `web-viewer`, `mermaid-maker`, `svg-maker`.
+- **vision**: `mermaid-maker`, `svg-maker`.
 - **document**: `document` — ADRs, runbooks, README, changelog.
 
 Route with the `subagent` tool or `@orchestrate`; subagents report blockers
