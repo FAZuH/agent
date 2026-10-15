@@ -67,8 +67,9 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // example uses for its second-team copy. autoOptimize warms the optimizer
   // cache when the installed id set changes. optimizeModel overrides the
   // model for the optimizer's generate.text call; empty means the host model.
-  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true, optimizeModel: "" },
-  hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000 },
+  // toast is per feature; the global switch still has to be on.
+  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true, optimizeModel: "", toast: true },
+  hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000, toast: true },
 }
 
 export interface JevState {
@@ -94,6 +95,12 @@ export interface JevState {
   think: boolean
   /** The master switch. Off means the plugin does nothing at all. */
   enabled: boolean
+  /**
+   * Master switch for the TUI toasts. Off means no call is announced, whatever
+   * the per-feature `toast` fields say. Only the TUI plugin can draw a toast,
+   * so this does nothing on a host with no TUI module (the desktop app).
+   */
+  toast: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
   features: Record<string, boolean>
   /**
@@ -122,6 +129,7 @@ export const DEFAULTS: JevState = {
   keyFile: DEFAULT_SECRET_FILE,
   think: false,
   enabled: true,
+  toast: false,
   features: { hook_skill_pick: false, hook_risk: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
@@ -274,6 +282,7 @@ export function loadState(): JevState {
     protocol: raw.protocol === "chat" ? "chat" : "systemone",
     think: raw.think === true,
     enabled: raw.enabled !== false,
+    toast: raw.toast === true,
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
@@ -372,6 +381,51 @@ export function featureStored(key: string): boolean {
  */
 export function featureOn(key: string): boolean {
   return pluginEnabled() && featureStored(key)
+}
+
+/**
+ * Whether a logged call is announced as a toast: the global switch, then the
+ * feature's own `toast` field. Read fresh, so flipping either takes effect on
+ * the next poll without a restart.
+ */
+export function toastsOn(hook: string): boolean {
+  if (!pluginEnabled() || !loadState().toast) return false
+  if (!FEATURES.some((f) => f.key === hook)) return false
+  return cfgBool(hook, "toast")
+}
+
+/**
+ * The entries newer than `after`, oldest first, plus the timestamp to pass on
+ * the next read. Takes log rows newest-first, as `readLog` returns them. A
+ * backwards clock jump moves `after` back to the newest entry rather than
+ * leaving it in the future, where it would mute every later toast.
+ */
+export function newSince(rows: any[], after: string): { fresh: any[]; after: string } {
+  const fresh = rows.filter((r) => typeof r?.ts === "string" && r.ts > after)
+  if (fresh.length) {
+    fresh.reverse()
+    return { fresh, after: fresh[0].ts }
+  }
+  const newest = rows[0]?.ts
+  return { fresh: [], after: typeof newest === "string" && newest < after ? newest : after }
+}
+
+/**
+ * The one-line toast for a logged call, or null when the entry names no hook
+ * and so cannot be attributed to a feature. The variants are the two the TUI
+ * is already seen to honour.
+ */
+export function toastLine(row: any): { message: string; variant: "info" | "error" } | null {
+  const hook = typeof row?.hook === "string" ? row.hook : ""
+  if (!hook) return null
+  const clip = (text: string) => (text.length > 200 ? `${text.slice(0, 200)}…` : text)
+  if (row.error) return { message: `${hook}: ${clip(String(row.error))}`, variant: "error" }
+  if (row.skipped) return { message: `${hook}: ${clip(String(row.skipped))}`, variant: "info" }
+  const answers = (Array.isArray(row.decisions) ? row.decisions : [])
+    .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
+    .join(" ")
+  const tokens = row.inputTokens ? ` · ${row.inputTokens}tok` : ""
+  return { message: `${hook}: ${answers}${tokens}`, variant: "info" }
 }
 
 export function setFeature(key: string, on: boolean): boolean {

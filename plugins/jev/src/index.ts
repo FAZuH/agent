@@ -205,6 +205,7 @@ async function routePrompt(prompt: string, roster: SkillEntry[], ctx: any): Prom
     {
       timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))),
       thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: cfgNum(F, "minMargin") },
+      hook: F,
     },
   )
   const d = result.decisions[0]
@@ -404,7 +405,7 @@ function riskHook() {
               },
             },
           },
-          { log: true, timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))), thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: 0 } },
+          { log: true, timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeout"))), thresholds: { minProbability: cfgNum(F, "minProbability"), minMargin: 0 }, hook: F },
         )
         const d = result.decisions[0]
         if (blocksCall(d, cfgNum(F, "gateProbability"))) {
@@ -542,17 +543,17 @@ export default {
               return {
                 content: rows
                   .map((r) => {
-                    // Skipped-hook entries: the feature name in `hook`, the
-                    // reason in `skipped`, and the tool when the risk hook
-                    // logged one. A regular call logs its decisions instead.
-                    if (r.hook) {
+                    // A skipped or failed entry names the feature in `hook` and
+                    // the reason in `skipped`/`error`; the risk hook adds the
+                    // tool it judged. A regular call logs its decisions instead.
+                    if (r.skipped || r.error) {
                       const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
-                      return `${r.ts}  ${r.hook}${on} skipped: ${r.skipped ?? "unknown"}`
+                      return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
                     }
                     const answers = (r.decisions ?? [])
                       .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
                       .join(" ")
-                    return `${r.ts}  ${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * 0.04).toFixed(6)}`
+                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * 0.04).toFixed(6)}`
                   })
                   .join("\n"),
               }
@@ -582,6 +583,7 @@ export default {
                 `model     ${state.model}`,
                 `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
                 `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
+                `toast     ${state.toast ? "on" : "off"}`,
                 `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
                 `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
                 ...FEATURES.map(

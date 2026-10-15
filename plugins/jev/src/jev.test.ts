@@ -19,7 +19,7 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { blocksCall, firstSentence, hashDescription, optimizeCriteria, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, pluginEnabled, pruneLog, setEnabled, setFeature, setFeatureConfig } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -491,6 +491,65 @@ describe("master switch", () => {
     setEnabled(true)
     expect(featureStored("hook_skill_pick")).toBe(false)
     expect(featureOn("hook_skill_pick")).toBe(false)
+  })
+})
+
+describe("call toasts", () => {
+  test("a decision, a skip, and a failure each render one line", () => {
+    expect(toastLine({ hook: "hook_risk", decisions: [{ id: "risky", value: true, confident: true }], inputTokens: 120 })).toEqual({
+      message: "hook_risk: risky=true · 120tok",
+      variant: "info",
+    })
+    expect(toastLine({ hook: "hook_skill_pick", skipped: "low confidence: margin 0.05" })).toEqual({
+      message: "hook_skill_pick: low confidence: margin 0.05",
+      variant: "info",
+    })
+    expect(toastLine({ hook: "hook_risk", error: "Jev HTTP 401" })).toEqual({ message: "hook_risk: Jev HTTP 401", variant: "error" })
+    // No hook, no feature to attribute it to, so no toast.
+    expect(toastLine({ decisions: [] })).toBeNull()
+  })
+
+  test("the tail returns new entries oldest-first and advances past them", () => {
+    const rows = [
+      { ts: "2026-10-15T10:00:03Z", hook: "hook_risk" },
+      { ts: "2026-10-15T10:00:02Z", hook: "hook_skill_pick" },
+      { ts: "2026-10-15T10:00:01Z", hook: "hook_skill_pick" },
+    ]
+    const { fresh, after } = newSince(rows, "2026-10-15T10:00:02Z")
+    expect(fresh.map((r) => r.ts)).toEqual(["2026-10-15T10:00:03Z"])
+    expect(after).toBe("2026-10-15T10:00:03Z")
+    // Nothing new: the cursor holds, and an entry with no ts is never fresh.
+    const idle = newSince([{ hook: "hook_risk" }, { ts: "2026-10-15T10:00:03Z" }], after)
+    expect(idle.fresh).toEqual([])
+    expect(idle.after).toBe(after)
+  })
+
+  test("a backwards clock jump moves the cursor back instead of muting", () => {
+    const { fresh, after } = newSince([{ ts: "2020-01-01T00:00:00Z" }], "2026-10-15T10:00:00Z")
+    expect(fresh).toEqual([])
+    expect(after).toBe("2020-01-01T00:00:00Z")
+  })
+
+  test("a low-confidence answer is marked in the line", () => {
+    const line = toastLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", confident: false }] })!
+    expect(line.message).toBe('hook_skill_pick: pick="commit" (low)')
+  })
+
+  test("the global switch, then the feature's own, gates a toast", () => {
+    rmSync(join(scratch, "jev-state.json"), { force: true })
+    // Both features default to toasting; the global switch is off by default.
+    expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast === true)).toBe(true)
+    expect(toastsOn("hook_risk")).toBe(false)
+    saveState({ toast: true })
+    expect(toastsOn("hook_risk")).toBe(true)
+    setFeatureConfig("hook_risk", "toast", false)
+    expect(toastsOn("hook_risk")).toBe(false)
+    // The other feature keeps its own value.
+    expect(toastsOn("hook_skill_pick")).toBe(true)
+    // An entry naming no known feature never toasts.
+    expect(toastsOn("not_a_feature")).toBe(false)
+    saveState({ toast: false })
+    setFeatureConfig("hook_risk", "toast", true)
   })
 })
 
