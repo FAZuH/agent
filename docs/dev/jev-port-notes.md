@@ -68,6 +68,34 @@ change, and it is tracked in
 `~/.config/fazuh-agent/data/jev-tui.log` on every panel open, because guessing
 from the type definitions wasted most of the debugging time.
 
+### `ctx.generate.text` resolves a model you did not name
+
+Measured on v2.0.28, on a **server** plugin. `ctx.generate.text({ prompt, model })`
+is absent from the plugin type definitions like the TUI surface above, and it
+takes no session: the model is the caller's to name. What happens when you do
+not name one is the trap.
+
+| Fact | Measured behaviour |
+| --- | --- |
+| `model: null` or absent | the host resolves its **default model**, invisible to the plugin |
+| The host default here | `nvidia/nvidia/nemotron-3.5-super-vl-120b-a12b`, provider `nvidia` |
+| What that answers | plain text `404 page not found` on `/v1/chat/completions`, because the id is not an upstream model |
+| Same endpoint, valid model, no key | `401 Header of type authorization was missing`, so the 404 is a model id problem, not auth |
+| Error surfaced to the plugin | `Generate.UnavailableError` with `_tag`, `message`, and `service` = the providerID; `message` carries only the provider's status and body |
+| Session-scoped generation | resolves the **session's** model, which is why titles and compaction summaries are unaffected by a dead default |
+
+So a `404` from `generate.text` is the provider's own 404, and the message alone
+never names the model. `Generate.UnavailableError.service` names the provider;
+the plugin has to name the model itself. `ctx.model.default()` returns
+`{ location, data }`, `ctx.session.get({ sessionID })` returns the session with
+its `model` ref, and `ctx.model.list()` is the whole available catalogue.
+
+`plugins/jev/src/index.ts` therefore resolves explicitly: the
+`hook_skill_pick.optimizeModel` setting, then the session's own model, then the
+host default. Three failures in a row latch the optimizer's auto path off for
+the life of the process, which is what made a single bad default look like a
+broken plugin.
+
 ## How Jev is called
 
 Jev is a decision model, not a chat model. Request is the prompt: a `state` plus

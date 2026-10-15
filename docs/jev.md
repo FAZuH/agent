@@ -83,22 +83,42 @@ optimizer run can never poison the roster.
   host including desktop, because it is a command, not a TUI panel.
 - The optimizer runs through the host LLM (`ctx.generate.text`, the same
   channel that writes titles and compaction summaries), capability-probed at
-  runtime. The payload is `{ prompt, model }`; `hook_skill_pick.optimizeModel`
-  (default empty = the host's model) overrides the model as
-  `providerID/modelID`. On a host without `generate.text`, auto warm-up logs
-  once per process and stays off; the manual command reports the same.
+  runtime. The payload is `{ prompt, model }`, and the model is resolved in
+  order: the `hook_skill_pick.optimizeModel` setting, then the model the
+  calling session already runs on, then the host default. Naming no model at
+  all is not an option, because that hands the choice to the host default: a
+  default the provider rejects (an nvidia entry answering 404, once measured)
+  fails every run and latches the optimizer off. The session's own model is
+  the safer second choice, since the session is demonstrably running on it. A
+  failed run logs the provider and the model it used. On a host without
+  `generate.text`, auto warm-up logs once per process and stays off; the
+  manual command reports the same.
 - **Failure latch**: three consecutive failures (host error, no JSON, or a
   response that yields no criteria) turn the *auto* path off for the rest of
   the process with one log line, so a broken host cannot fill the log or spend
   a call on every prompt. The manual command bypasses the latch; a success
   clears it.
 
-**`hook_risk`** (off by default): every `bash`, `edit`, `write`, and
-`apply_patch` call is sent to Jev and logged. It is blocked only when the
+**`hook_risk`** (off by default): every `shell` (named `bash` on older hosts),
+`edit`, `write`, and `apply_patch` call is sent to Jev and logged. It is blocked
+only when the
 answer is *both* confident *and* at or above `hook_risk.gateProbability`, so a
 Jev failure, a coin-flip answer, and a weak answer all pass through. The hook
 is off by default, because a blocked call has an error message rather than an
 interactive prompt.
+
+The hook skips itself entirely while the client auto-accepts permissions, and
+logs one `skipped: auto-accept mode: risk check not run` line per session
+rather than one per call. Auto mode is client-side: the host raises
+`permission.asked` exactly as it does in prompt mode and the TUI answers it
+itself, so no event, session field, or API response records it. The one durable
+evidence is the setting the palette toggle writes,
+`~/.config/opencode/cli.json` → `session.permissions: "autoaccept"`, which the
+plugin reads (re-read on mtime change; a missing, unparsable, or JSONC-with-
+trailing-commas file is handled, and anything unreadable means *run the check*).
+The blind spot is `opencode --auto`: the flag sets the mode with no file behind
+it, so that launch reads as prompt mode and the check still runs — the safe
+direction to be wrong in.
 
 Both hooks are wired to fire on prompt admission (`session.hook("prompt")`)
 and context build (`session.hook("context")`). The prompt hook is the least
@@ -144,6 +164,7 @@ endpoint path have no portable default.
 | `keyFile` | `~/.config/fazuh-agent/secrets/jev_api_key` | `/jev-settings` |
 | `think` | `false` | toggle in `/jev-settings` |
 | `enabled` | `true` | `/jev-features` |
+| `toast` | `false` | toggle in `/jev-settings`; master switch for the per-call TUI toasts |
 | `logMax` | `500` | `/jev-settings`; call-log line cap, pruned to the tail |
 
 Per-feature settings live under `config` in the state file. Each feature
@@ -161,10 +182,12 @@ load, so tuned thresholds survive the upgrade.
 | `hook_skill_pick` | `maxPicks` | `-1` | most skills the advisory names (-1 = every qualifier, 1 = winner only) |
 | `hook_skill_pick` | `alsoAbove` | `0.25` | runners-up at or above this join the winner |
 | `hook_skill_pick` | `autoOptimize` | `true` | warm the optimizer cache when the installed skill set changes |
-| `hook_skill_pick` | `optimizeModel` | `""` | host model override for the optimizer, as `providerID/modelID`; empty = host model |
+| `hook_skill_pick` | `optimizeModel` | `""` | optimizer model as `providerID/modelID`; empty = the session's own model, then the host default |
+| `hook_skill_pick` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 | `hook_risk` | `gateProbability` | `0.7` | blocks a call at or above this, when also confident |
 | `hook_risk` | `minProbability` | `0.8` | a noul whose certainty is below this is never confident, so never blocks |
 | `hook_risk` | `timeout` | `5000` | ms before the risk call gives up; the call then proceeds (fail-open) |
+| `hook_risk` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 
 A state file written before the feature rename (`pick_skill`/`risk_hook`) is
 migrated on load: switches, config, and tuned thresholds all carry over.
@@ -226,7 +249,7 @@ any list the provider exposes.
 | Command | Where | What it does |
 | --- | --- | --- |
 | `/jev-features` | TUI | the panel: `Plugin`, then the two hook switches |
-| `/jev-settings` | TUI | endpoint, model, key, key source, per-feature config |
+| `/jev-settings` | TUI | endpoint, model, key, key source, per-feature config, toasts |
 | `/jev-key` | TUI | paste a key, written at 0600 |
 | `/jev-status` | either | endpoint, model, key source, plugin state, per-feature config, spend |
 | `/jev-model <id>` | either | set the wire model id |
@@ -243,6 +266,34 @@ The panel closes when you change a row, because the only dialog primitive a
 plugin can reach resolves on selection. [Issue #3](https://github.com/FAZuH/agent/issues/3)
 tracks left/right to change a row in place, and records the measured reason the
 documented non-closing API does not exist.
+
+## Call toasts
+
+`toast` in `/jev-settings` turns on a TUI toast per Jev call. Each feature's own
+`toast` field decides whether its calls are announced, and the global switch
+gates all of them, so both must be on. Default is off globally, on per feature:
+turn the master on and every hook announces until you opt one out.
+
+One toast per call, built from the call log: a `jev (<hook>)` title over one
+bullet per fact — the verdict with the probability the gate compared, the tool
+call it judged, and the tokens it cost:
+
+```
+jev (hook_risk)
+
+* not risky (0.05)
+* shell command: rm -rf ./build
+* 120tok
+```
+
+A noul reads `risky` / `not risky` rather than a boolean, because the number is
+what `gateProbability` is compared against and the label alone hides it. A weak
+answer appends `(low)`. The subject is clipped to 120 characters and, like
+everything else in the log, redacted. A skip or a failure replaces the bullets
+with that one line. The server draws no UI and the TUI module is the only place a
+toast exists, so the TUI polls the log the server already writes (every 2s)
+instead of a second channel. A TUI host is required: the desktop app never
+toasts.
 
 ## How confidence works
 

@@ -367,7 +367,7 @@ function require_key(): string {
 export async function ask(
   stateBody: JevStateBody,
   questions: Record<string, JevQuestion>,
-  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds } = {},
+  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds; hook?: string; subject?: string } = {},
 ): Promise<JevResult> {
   const state = loadState()
   const thresholds: Thresholds = opts.thresholds ?? {
@@ -481,6 +481,7 @@ export async function ask(
     // model actually returned, and a validation failure is a finding about the
     // prompt rather than a bug in this plugin.
     logCall({
+      hook: opts.hook,
       protocol: state.protocol,
       model: state.model,
       endpoint: state.endpoint,
@@ -496,6 +497,7 @@ export async function ask(
 
   if (opts.log !== false) {
     logCall({
+      hook: opts.hook,
       protocol: state.protocol,
       model: state.model,
       endpoint: state.endpoint,
@@ -504,6 +506,10 @@ export async function ask(
       decisions,
       inputTokens,
       elapsedMs,
+      // What was judged, so a toast can name the call instead of only its
+      // cost. Redacted like everything else here: a shell command or a patch
+      // carries the same secrets the payload does.
+      ...(opts.subject ? { subject: redact(opts.subject) } : {}),
     })
   }
 

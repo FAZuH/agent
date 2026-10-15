@@ -28,9 +28,12 @@
  */
 
 import { appendFileSync } from "node:fs"
-import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, featureOn, featureStored, keySource, loadState, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, writeKey, type JevState } from "./state.ts"
+import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastsOn, writeKey, type JevState } from "./state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
+
+/** One tail per TUI process: a second slot render must not add a second timer. */
+let tailStarted = false
 
 function summary(): string {
   const s = loadState()
@@ -41,6 +44,7 @@ function summary(): string {
     `model      ${s.model}`,
     `key        ${key.present ? `present (${key.from})` : "MISSING"}`,
     `plugin     ${pluginEnabled() ? "on" : "OFF — nothing is sent and nothing is spent"}`,
+    `toast      ${s.toast ? "on" : "off"}`,
     `features   ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
     `off        ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
     ...FEATURES.map((f) => {
@@ -88,9 +92,9 @@ export default {
       }
     }
 
-    const toast = (message: string, variant = "info") => {
+    const toast = (message: string, variant = "info", title = "jev") => {
       try {
-        ctx.ui?.toast?.show?.({ title: "jev", message, variant })
+        ctx.ui?.toast?.show?.({ title, message, variant })
       } catch (error: any) {
         trace("toast-failed", { message, error: String(error?.message ?? error) })
       }
@@ -455,6 +459,14 @@ export default {
               },
             }),
           "Plugin"),
+          // The toast master switch. Per-feature opt-outs are the `toast` rows
+          // the FEATURE_DEFAULTS loop below generates.
+          row("toast", "Toast calls", s.toast ? "on" : "off", () => {
+            const next = !s.toast
+            saveState({ toast: next })
+            toast(next ? "Toasts on. Each Jev call is announced in the TUI." : "Toasts off.")
+            render()
+          }, "Plugin"),
           row("features", "Features", `${FEATURES.filter((f) => featureOn(f.key)).length} of ${FEATURES.length} on`, () => openFeatures(), "Plugin"),
           row("status", "Status", `${money.calls} calls · $${money.usd.toFixed(6)}`, () => toast(summary()), "Plugin"),
           row("log", "Recent calls", "", () => toast(recentCalls()), "Plugin"),
@@ -493,19 +505,46 @@ export default {
       if (rows.length === 0) return "No calls logged yet."
       return rows
         .map((r) => {
-          if (r.hook) {
+          if (r.skipped || r.error) {
             const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
-            return `${r.ts}  ${r.hook}${on} skipped: ${r.skipped ?? "unknown"}`
+            return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
           }
           const answers = (r.decisions ?? []).map((d: any) => `${d.id}=${JSON.stringify(d.value)}`).join(" ")
-          return `${r.ts}  ${answers}  ${r.inputTokens ?? 0}tok`
+          return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens ?? 0}tok`
         })
         .join("\n")
+    }
+
+    /**
+     * The toast tail. Jev calls happen in the server process and this module is
+     * the only place a toast can be drawn, so the log the server already writes
+     * is the whole channel between them: poll its tail rather than invent a
+     * second file. The interval is the price of the process boundary.
+     *
+     * ponytail: a fixed 2s poll and a 200-line window. Move to a real event
+     * bridge if the TUI plugin ever gets one.
+     */
+    function startToasts(): void {
+      if (tailStarted) return
+      tailStarted = true
+      // Today's newest entry is the floor, so an already-full log never
+      // replays its history into the TUI on startup.
+      let after = readLog(1)[0]?.ts ?? ""
+      setInterval(() => {
+        const { fresh, after: next } = newSince(readLog(200), after)
+        after = next
+        for (const row of fresh) {
+          if (!toastsOn(row.hook)) continue
+          const line = toastLine(row)
+          if (line) toast(line.message, line.variant, line.title)
+        }
+      }, 2000)
     }
 
     ctx.ui?.slot?.({
       append: "app",
       render: () => {
+        startToasts()
         ctx.keymap.layer(() => ({
           mode: "global",
           priority: 1,

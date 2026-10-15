@@ -67,8 +67,9 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // example uses for its second-team copy. autoOptimize warms the optimizer
   // cache when the installed id set changes. optimizeModel overrides the
   // model for the optimizer's generate.text call; empty means the host model.
-  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true, optimizeModel: "" },
-  hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000 },
+  // toast is per feature; the global switch still has to be on.
+  hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true, optimizeModel: "", toast: true },
+  hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000, toast: true },
 }
 
 export interface JevState {
@@ -94,6 +95,12 @@ export interface JevState {
   think: boolean
   /** The master switch. Off means the plugin does nothing at all. */
   enabled: boolean
+  /**
+   * Master switch for the TUI toasts. Off means no call is announced, whatever
+   * the per-feature `toast` fields say. Only the TUI plugin can draw a toast,
+   * so this does nothing on a host with no TUI module (the desktop app).
+   */
+  toast: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
   features: Record<string, boolean>
   /**
@@ -122,6 +129,7 @@ export const DEFAULTS: JevState = {
   keyFile: DEFAULT_SECRET_FILE,
   think: false,
   enabled: true,
+  toast: false,
   features: { hook_skill_pick: false, hook_risk: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
@@ -274,6 +282,7 @@ export function loadState(): JevState {
     protocol: raw.protocol === "chat" ? "chat" : "systemone",
     think: raw.think === true,
     enabled: raw.enabled !== false,
+    toast: raw.toast === true,
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
@@ -372,6 +381,75 @@ export function featureStored(key: string): boolean {
  */
 export function featureOn(key: string): boolean {
   return pluginEnabled() && featureStored(key)
+}
+
+/**
+ * Whether a logged call is announced as a toast: the global switch, then the
+ * feature's own `toast` field. Read fresh, so flipping either takes effect on
+ * the next poll without a restart.
+ */
+export function toastsOn(hook: string): boolean {
+  if (!pluginEnabled() || !loadState().toast) return false
+  if (!FEATURES.some((f) => f.key === hook)) return false
+  return cfgBool(hook, "toast")
+}
+
+/**
+ * The entries newer than `after`, oldest first, plus the timestamp to pass on
+ * the next read. Takes log rows newest-first, as `readLog` returns them. A
+ * backwards clock jump moves `after` back to the newest entry rather than
+ * leaving it in the future, where it would mute every later toast.
+ */
+export function newSince(rows: any[], after: string): { fresh: any[]; after: string } {
+  const fresh = rows.filter((r) => typeof r?.ts === "string" && r.ts > after)
+  if (fresh.length) {
+    fresh.reverse()
+    return { fresh, after: fresh[0].ts }
+  }
+  const newest = rows[0]?.ts
+  return { fresh: [], after: typeof newest === "string" && newest < after ? newest : after }
+}
+
+/** The tool call a hook judged, in one clipped line. What the log already stores, shortened for a toast. */
+const TOOL_CLIP = 120
+
+function clip(text: string, max: number): string {
+  const one = text.replace(/\s+/g, " ").trim()
+  return one.length > max ? `${one.slice(0, max)}…` : one
+}
+
+/**
+ * One decision as `risky (0.87)`: the label a person reads first, then the
+ * probability, because the number is what the gate compares and a bare boolean
+ * hides it. A weak answer says so, because a confident-looking 0.51 is a lie.
+ */
+function describe(d: any): string {
+  const pct = typeof d?.probability === "number" ? ` (${d.probability.toFixed(2)})` : ""
+  const low = d?.confident ? "" : " (low)"
+  if (d?.kind === "noul") return `${d.value ? "risky" : "not risky"}${pct}${low}`
+  return `${d?.id}=${JSON.stringify(d?.value)}${pct}${low}`
+}
+
+/**
+ * The toast for a logged call: a `jev (<hook>)` title over one bullet per fact.
+ * A title plus bullets instead of one crowded line, so the hook, the verdict,
+ * and the cost each get their own row instead of being flattened into a
+ * sentence. Null when the entry names no hook, so it cannot be attributed.
+ */
+export function toastLine(row: any): { title: string; message: string; variant: "info" | "error" } | null {
+  const hook = typeof row?.hook === "string" ? row.hook : ""
+  if (!hook) return null
+  const title = `jev (${hook})`
+  const bullets: string[] = []
+
+  if (row.error) return { title, message: `* ${clip(String(row.error), 200)}`, variant: "error" }
+  if (row.skipped) return { title, message: `* ${clip(String(row.skipped), 200)}`, variant: "info" }
+
+  for (const d of Array.isArray(row.decisions) ? row.decisions : []) bullets.push(describe(d))
+  if (row.subject) bullets.push(clip(String(row.subject), TOOL_CLIP))
+  if (row.inputTokens) bullets.push(`${row.inputTokens}tok`)
+  if (!bullets.length) return { title, message: "* no answer recorded", variant: "info" }
+  return { title, message: bullets.map((b) => `* ${b}`).join("\n"), variant: "info" }
 }
 
 export function setFeature(key: string, on: boolean): boolean {

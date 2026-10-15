@@ -8,7 +8,7 @@
  * several tests write settings and the real file is the user's, not the test's.
  */
 
-import { afterAll, describe, expect, test } from "bun:test"
+import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -17,9 +17,10 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { blocksCall, firstSentence, hashDescription, optimizeCriteria, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
+const { RISK_TOOLS, blocksCall, firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, pluginEnabled, pruneLog, setEnabled, setFeature, setFeatureConfig } = await import(
+const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -494,6 +495,204 @@ describe("master switch", () => {
   })
 })
 
+describe("risk hook tool filter", () => {
+  test("the shell tool is judged under both of its names", () => {
+    // v2.0.28 sends `shell`; older hosts send `bash`. Missing either one means
+    // commands run unjudged while writes still keep the hook looking alive.
+    expect(RISK_TOOLS).toContain("shell")
+    expect(RISK_TOOLS).toContain("bash")
+  })
+
+  test("reads are not judged", () => {
+    expect(RISK_TOOLS).not.toContain("read")
+    expect(RISK_TOOLS).not.toContain("grep")
+    expect(RISK_TOOLS).not.toContain("webfetch")
+  })
+})
+
+describe("auto-accept detection", () => {
+  const cli = join(scratch, "cli.json")
+
+  afterEach(() => {
+    delete process.env[CONTENT_ENV]
+    delete process.env[CONFIG_PATH_ENV]
+    resetAutoAcceptCache()
+  })
+
+  const writeCli = (text: string) => {
+    writeFileSync(cli, text, "utf8")
+    process.env[CONFIG_PATH_ENV] = cli
+    resetAutoAcceptCache()
+  }
+
+  test("the palette toggle's value is the signal", () => {
+    writeCli('{"session":{"permissions":"autoaccept"}}')
+    expect(autoAccept()).toBe(true)
+    writeCli('{"session":{"permissions":"prompt"}}')
+    expect(autoAccept()).toBe(false)
+  })
+
+  test("prompt mode, an absent key, and junk all mean the check runs", () => {
+    writeCli('{"session":{"permissions":"prompt"}}')
+    expect(autoAccept()).toBe(false)
+    writeCli('{"session":{}}')
+    expect(autoAccept()).toBe(false)
+    writeCli('{"permission":"allow"}')
+    expect(autoAccept()).toBe(false)
+    writeCli("{ not json")
+    expect(autoAccept()).toBe(false)
+    // No file at all: fail toward running the check.
+    process.env[CONFIG_PATH_ENV] = join(scratch, "missing.json")
+    resetAutoAcceptCache()
+    expect(autoAccept()).toBe(false)
+  })
+
+  test("the host's own content override wins over the file", () => {
+    writeCli('{"session":{"permissions":"prompt"}}')
+    process.env[CONTENT_ENV] = '{"session":{"permissions":"autoaccept"}}'
+    expect(autoAccept()).toBe(true)
+  })
+
+  test("a change to the file is picked up without a restart", () => {
+    writeCli('{"session":{"permissions":"prompt"}}')
+    expect(autoAccept()).toBe(false)
+    writeCli('{"session":{"permissions":"autoaccept"}}')
+    expect(autoAccept()).toBe(true)
+  })
+
+  test("cli.json is JSONC: a trailing comma parses, and a comma inside a string survives", () => {
+    writeCli('{"plugins":["a",],"session":{"permissions":"autoaccept",},}')
+    expect(autoAccept()).toBe(true)
+    // A value holding ",]" keeps its comma: stripping there would corrupt JSON.
+    expect(stripTrailingCommas('{"a":"x,]","b":1,}')).toBe('{"a":"x,]","b":1}')
+    expect(parseConfig('{"a":"x,]","session":{"permissions":"prompt"}}')?.a).toBe("x,]")
+  })
+
+  test("an escaped quote does not end the string early", () => {
+    // The value is q", — the comma is inside the string, and the one after the
+    // closing quote is the trailing comma.
+    expect(parseConfig('{"a":"q\\",","session":{"permissions":"autoaccept"}}')?.a).toBe('q",')
+    expect(parseConfig('{"a":"q\\",","session":{"permissions":"autoaccept"}}')?.session.permissions).toBe("autoaccept")
+  })
+})
+
+describe("call toasts", () => {
+  test("a decision, a skip, and a failure each render under a hook title", () => {
+    expect(
+      toastLine({
+        hook: "hook_risk",
+        decisions: [{ id: "risky", kind: "noul", value: true, probability: 0.87, confident: true }],
+        subject: "shell command: rm -rf ./build",
+        inputTokens: 120,
+      }),
+    ).toEqual({
+      title: "jev (hook_risk)",
+      message: "* risky (0.87)\n* shell command: rm -rf ./build\n* 120tok",
+      variant: "info",
+    })
+    expect(toastLine({ hook: "hook_skill_pick", skipped: "low confidence: margin 0.05" })).toEqual({
+      title: "jev (hook_skill_pick)",
+      message: "* low confidence: margin 0.05",
+      variant: "info",
+    })
+    expect(toastLine({ hook: "hook_risk", error: "Jev HTTP 401" })).toEqual({
+      title: "jev (hook_risk)",
+      message: "* Jev HTTP 401",
+      variant: "error",
+    })
+    // No hook, no feature to attribute it to, so no toast.
+    expect(toastLine({ decisions: [] })).toBeNull()
+  })
+
+  test("a not-risky answer says so, with the number the gate compared", () => {
+    const line = toastLine({ hook: "hook_risk", decisions: [{ id: "risky", kind: "noul", value: false, probability: 0.05, confident: true }] })!
+    expect(line.message).toBe("* not risky (0.05)")
+  })
+
+  test("a long tool call is clipped onto one line", () => {
+    const line = toastLine({ hook: "hook_risk", decisions: [], subject: `bash -c ${"x".repeat(400)}` })!
+    expect(line.message.startsWith("* bash -c ")).toBe(true)
+    expect(line.message.endsWith("…")).toBe(true)
+    expect(line.message.split("\n")).toHaveLength(1)
+  })
+
+  test("the tail returns new entries oldest-first and advances past them", () => {
+    const rows = [
+      { ts: "2026-10-15T10:00:03Z", hook: "hook_risk" },
+      { ts: "2026-10-15T10:00:02Z", hook: "hook_skill_pick" },
+      { ts: "2026-10-15T10:00:01Z", hook: "hook_skill_pick" },
+    ]
+    const { fresh, after } = newSince(rows, "2026-10-15T10:00:02Z")
+    expect(fresh.map((r) => r.ts)).toEqual(["2026-10-15T10:00:03Z"])
+    expect(after).toBe("2026-10-15T10:00:03Z")
+    // Nothing new: the cursor holds, and an entry with no ts is never fresh.
+    const idle = newSince([{ hook: "hook_risk" }, { ts: "2026-10-15T10:00:03Z" }], after)
+    expect(idle.fresh).toEqual([])
+    expect(idle.after).toBe(after)
+  })
+
+  test("a backwards clock jump moves the cursor back instead of muting", () => {
+    const { fresh, after } = newSince([{ ts: "2020-01-01T00:00:00Z" }], "2026-10-15T10:00:00Z")
+    expect(fresh).toEqual([])
+    expect(after).toBe("2020-01-01T00:00:00Z")
+  })
+
+  test("a low-confidence answer is marked in the line", () => {
+    const line = toastLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", confident: false }] })!
+    expect(line.message).toBe('* pick="commit" (low)')
+  })
+
+  test("the global switch, then the feature's own, gates a toast", () => {
+    rmSync(join(scratch, "jev-state.json"), { force: true })
+    // Both features default to toasting; the global switch is off by default.
+    expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast === true)).toBe(true)
+    expect(toastsOn("hook_risk")).toBe(false)
+    saveState({ toast: true })
+    expect(toastsOn("hook_risk")).toBe(true)
+    setFeatureConfig("hook_risk", "toast", false)
+    expect(toastsOn("hook_risk")).toBe(false)
+    // The other feature keeps its own value.
+    expect(toastsOn("hook_skill_pick")).toBe(true)
+    // An entry naming no known feature never toasts.
+    expect(toastsOn("not_a_feature")).toBe(false)
+    saveState({ toast: false })
+    setFeatureConfig("hook_risk", "toast", true)  })
+})
+
+describe("optimizer model choice", () => {
+  const session = { id: "ses_x", model: { providerID: "9router", id: "oc/deepseek-v4.1-flash-free" } }
+  const hostDefault = { location: {}, data: { providerID: "nvidia", id: "nvidia/nemotron-3.5-super-vl-120b-a12b" } }
+
+  test("an override splits on the first slash, because ids contain slashes", () => {
+    expect(optimizerModel("9router/oc/deepseek-v4.1-flash-free", null, null)).toEqual({
+      providerID: "9router",
+      id: "oc/deepseek-v4.1-flash-free",
+    })
+  })
+
+  test("an override wins over every resolved model", () => {
+    expect(optimizerModel("nvidia/z-ai/glm-5.3", session, hostDefault)).toEqual({ providerID: "nvidia", id: "z-ai/glm-5.3" })
+  })
+
+  test("no override prefers the session's model over the host default", () => {
+    // The host default was the model answering 404; the session is running on
+    // its own, so that one is the one known to work.
+    expect(optimizerModel("  ", session, hostDefault)).toEqual({ providerID: "9router", id: "oc/deepseek-v4.1-flash-free" })
+    expect(optimizerModel("", null, hostDefault)).toEqual({ providerID: "nvidia", id: "nvidia/nemotron-3.5-super-vl-120b-a12b" })
+    expect(optimizerModel("", null, null)).toBeNull()
+  })
+
+  test("a runtime session without a model is not a model", () => {
+    expect(optimizerModel("", { id: "ses_y" }, undefined)).toBeNull()
+  })
+
+  test("a malformed override is never silently replaced by another model", () => {
+    expect(optimizerModel("9router", session, hostDefault)).toBeNull()
+    expect(optimizerModel("/oc/x", session, hostDefault)).toBeNull()
+    expect(optimizerModel("9router/", session, hostDefault)).toBeNull()
+  })
+})
+
 describe("string config (optimizeModel)", () => {
   test("defaults to empty and cfgStr reads stored text", () => {
     rmSync(join(scratch, "jev-state.json"), { force: true })
@@ -569,32 +768,59 @@ describe("optimizer", () => {
     rmSync(join(scratch, "jev-data.json"), { force: true })
   }
   const stale = [{ id: "demo", meaning: "Full description. Second sentence." }]
+  // The host side of the model lookup: a session with a model, and a host
+  // default. Both are what the optimizer resolves when no override is set.
+  const hostDefault = { location: {}, data: { providerID: "9router", id: "oc/host-free" } }
+  const host = (generate: any) => ({ generate, model: { default: async () => hostDefault } })
 
   test("sends a {prompt, model} payload, unwraps {text}, writes criteria", async () => {
     reset()
     let seen: any
-    const ctx = {
-      generate: {
-        text: async (payload: any) => {
-          seen = payload
-          return { text: JSON.stringify({ demo: "Use when doing demo." }) }
-        },
+    const ctx = host({
+      text: async (payload: any) => {
+        seen = payload
+        return { text: JSON.stringify({ demo: "Use when doing demo." }) }
       },
-    }
+    })
     const { done } = await optimizeCriteria(ctx, stale, { manual: true })
     expect(done).toBe(1)
     expect(typeof seen).toBe("object")
     expect(seen.prompt).toContain("- demo: Full description.")
-    expect(seen.model).toBeNull()
+    // No override and no session model: the host default is named explicitly.
+    expect(seen.model).toEqual({ providerID: "9router", id: "oc/host-free" })
     const { loadData } = await import("./state.ts")
     expect(loadData().skillCriteria.demo.terse).toBe("Use when doing demo.")
+  })
+
+  test("the session's own model beats the host default", async () => {
+    reset()
+    let seen: any
+    const ctx = {
+      generate: { text: async (payload: any) => ((seen = payload), { text: JSON.stringify({ demo: "Criterion." }) }) },
+      model: { default: async () => hostDefault },
+      session: { get: async ({ sessionID }: any) => ({ id: sessionID, model: { providerID: "9router", id: "oc/deepseek-v4.1-flash-free" } }) },
+    }
+    await optimizeCriteria(ctx, stale, { manual: true, sessionID: "ses_demo" })
+    expect(seen.model).toEqual({ providerID: "9router", id: "oc/deepseek-v4.1-flash-free" })
+  })
+
+  test("a missing model is a logged failure, not a host call", async () => {
+    reset()
+    let calls = 0
+    const ctx = { generate: { text: async () => (calls++, { text: "{}" }) } }
+    const { failed } = await optimizeCriteria(ctx, stale, { manual: true })
+    expect(calls).toBe(0)
+    expect(failed).toBe(1)
+    const { readLog } = await import("./state.ts")
+    expect(readLog(1)[0].skipped).toContain("no model to generate with")
+    reset()
   })
 
   test("optimizeModel overrides the payload model as Model.Ref", async () => {
     reset()
     setFeatureConfig("hook_skill_pick", "optimizeModel", "9router/free")
     let seen: any
-    const ctx = { generate: { text: async (payload: any) => ((seen = payload), { text: "{}" }) } }
+    const ctx = host({ text: async (payload: any) => ((seen = payload), { text: "{}" }) })
     await optimizeCriteria(ctx, stale, { manual: true })
     expect(seen.model).toEqual({ providerID: "9router", id: "free" })
     setFeatureConfig("hook_skill_pick", "optimizeModel", "")
@@ -602,7 +828,7 @@ describe("optimizer", () => {
 
   test("three failures latch the auto path; manual still runs; success clears", async () => {
     reset()
-    const failing = { generate: { text: async () => { throw Object.assign(new Error("Expected object"), { _tag: "InvalidRequestError", kind: "Payload" }) } } }
+    const failing = host({ text: async () => { throw Object.assign(new Error("Expected object"), { _tag: "InvalidRequestError", kind: "Payload" }) } })
     // Auto path: 1st and 2nd failures log, 3rd trips the latch.
     await optimizeCriteria(failing, stale)
     await optimizeCriteria(failing, stale)
@@ -610,14 +836,14 @@ describe("optimizer", () => {
     expect((optimizeCriteria as any)._latched).toBe(true)
     // Latched auto path never reaches the host.
     let calls = 0
-    const counting = { generate: { text: async () => { calls++; return { text: "{}" } } } }
+    const counting = host({ text: async () => { calls++; return { text: "{}" } } })
     await optimizeCriteria(counting, stale)
     expect(calls).toBe(0)
     // Manual bypasses the latch.
     await optimizeCriteria(counting, stale, { manual: true })
     expect(calls).toBe(1)
     // A real success clears the latch and the counter.
-    const working = { generate: { text: async () => ({ text: JSON.stringify({ demo: "Criterion." }) }) } }
+    const working = host({ text: async () => ({ text: JSON.stringify({ demo: "Criterion." }) }) })
     await optimizeCriteria(working, stale, { manual: true })
     expect((optimizeCriteria as any)._latched).toBe(false)
     await optimizeCriteria(counting, stale)
