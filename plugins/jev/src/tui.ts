@@ -274,8 +274,8 @@ export default {
               const next = setEnabled(!master)
               toast(
                 next
-                  ? "Jev on. The switches below decide what it does."
-                  : "Jev off. No hook runs and nothing is spent. The switches keep their values.",
+                  ? "Jev on"
+                  : "Jev off",
               )
               redraw?.()
             },
@@ -315,15 +315,15 @@ export default {
             saveState({ protocol: next })
             toast(
               next === "chat"
-                ? "Chat protocol. The same questions become a prompt, and the reply is parsed back into answers. No key is sent."
-                : "System One protocol. Posts state and questions, reads an answers object. Needs a key.",
+                ? "Chat protocol"
+                : "System One protocol",
             )
             render()
           }, "Provider"),
           row("think", "Thinking", s.think ? "on — slow, may judge better" : "off", () => {
             const next = !s.think
             saveState({ think: next })
-            toast(next ? "Thinking on. Some chat models spend ~50s a call with it on." : "Thinking off.")
+            toast(next ? "Thinking on" : "Thinking off.")
             render()
           }, "Provider"),
           row("endpoint", "Endpoint", s.endpoint, () =>
@@ -337,7 +337,7 @@ export default {
           row("model", "Model", s.model, () =>
             ask(render, {
               title: "Model id",
-              description: "The provider's WIRE model id, not the host's namespaced id",
+              description: "The provider's model id",
               value: s.model,
               onConfirm: (v: string) => saveState({ model: v.trim() }),
             }),
