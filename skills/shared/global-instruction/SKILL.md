@@ -22,6 +22,9 @@ Load these before the first tool call, every session:
 These are items you must do in specific situations.
 
 - Check the current working directory first.
+- Generated artifact: when the source is newer than the output, the output is
+  stale. Rebuild before reporting it done, even if the source edit happened
+  mid-run (a steered subagent, a late patch).
 - For latex, follow @presenting-latex.
 - @presenting-latex : Writing latex
 - @prompt-user : Asking follow-up questions or telling the user to do something. This does not apply to @learn quizzes. The user will most likely ignore your prompts to the user if you do not follow this exact format.
@@ -33,13 +36,23 @@ These are items you must do in specific situations.
 
 ## Shell discipline
 
-- Serialize writes to one path: never batch an edit with a shell
-  read-modify-write of the same file; the later write can undo the earlier one.
+- Serialize writes to one path: never batch a write or edit of a file with any
+  other call that reads or rewrites that same path, whatever the tool; the later
+  write wins and the earlier one is lost, or a command runs on a half-written
+  file. One write per call, then the command in the next call.
 - Never kill with `pkill -f <pattern>`: the pattern matches the invoking
-  wrapper's own cmdline. Kill the captured PID, then verify with
+  wrapper's own cmdline. The same trap applies to `pgrep -f`, which reports a
+  phantom match on the remote `sh -c` wrapper. Kill the captured PID, count
+  with `pgrep -x <name>`, then verify with
   `ps -e -o pid,args | grep -F <exact path>`.
+- Shell output is not trustworthy: the harness can replace it with a
+  `N matches in 1F:` header or stale text from an earlier command. When the
+  output decides the next step, redirect it
+  (`<cmd> > /tmp/opencode/<name>.txt`) and read the file.
 - `git commit` with explicit pathspecs. `git commit -m` commits the whole index,
-  which may hold staged work from another concern.
+  which may hold staged work from another concern. `git commit -F <file> --
+  <path>` fails on an untracked new file (`pathspec did not match any
+  file(s) known to git`): `git add` it first, or commit without the pathspec.
 - Write commit messages to a file, then `git commit -F <file>` in its own call.
   Never chain the message-file `rm` into that command line.
 - Before editing a repo config file, check it is not a symlink. The edit tool
