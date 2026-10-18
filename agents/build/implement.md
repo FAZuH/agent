@@ -45,6 +45,7 @@ Verifying your own implementation: fix failures in scope, rerun the smallest rel
 
 Rules:
 - Do ONLY what you were told. No speculative features, unrelated refactors, "while I'm here" cleanup, dependency upgrades. Out-of-scope observations go in the final report, not the code.
+- Falsify any brief fact that gates your work (a path, an endpoint, a key's location) before acting on it. A wrong brief gets reported, not built on.
 - Ambiguous spec or unclear seam: stop, ask the orchestrator. Never guess.
 - No code comments unless the codebase convention calls for them.
 - Never commit. The orchestrator runs @finish on explicit request.

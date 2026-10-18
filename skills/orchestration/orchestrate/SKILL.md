@@ -69,6 +69,10 @@ Never route by memory or guesswork, and never improvise a workflow.
   `package.json`/`package-lock.json`, `pyproject.toml` + its lockfile. Route
   any edit to them to `implement`. Never hand-edit a manifest, even inside a
   refactor/extraction task.
+- Mark every asserted fact in a brief `verified` or `assumed`: a path, an
+  endpoint, a key's location. An unverified claim that turns out wrong reaches
+  the child's work as fact; the child falsifies any fact gating its work before
+  acting on it.
 
 ## Subagent session reuse (`sessionID`)
 

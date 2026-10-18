@@ -98,5 +98,6 @@ the @worktree skill's "Finishing / cleanup" section.
 
 ## Safety rules
 
+- Decide the deploy source before the first commit. When an unmerged branch is what the live deploy runs, land the fix on that branch and merge once; fixing the base branch instead forces a cherry-pick, and the merge then carries the same patch twice (duplicate commits, a pre-push reset).
 - Never push the default branch; follow @pr-creator branch-safety rules.
 - Never claim a PR is ready until mergeability and relevant checks have been verified after the final push.

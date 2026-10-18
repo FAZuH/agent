@@ -24,6 +24,10 @@ now, per the friction contract in @global-instruction: one `retain` per item,
 `type:friction`, `status:open`, `document_id: friction-<slug>`. Nothing
 carries past this step unfiled — not a bug tracker, one or two sentences each.
 
+The `/finish` invocation is the approval to file: retain these directly, with
+no further gate. GATE `friction-file` in @session-retro covers only a standalone
+retro, where no `/finish` preceded it.
+
 ## 3. Commit changes
 
 Load the @commit skill and follow it exactly. Return its proposed groups unchanged. Do not duplicate its steps here.

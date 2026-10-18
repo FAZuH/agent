@@ -24,6 +24,7 @@ When invoked, you MUST:
 - **Write the test before the fix.** When a bug is found, the first commit is a failing test that reproduces it. If you cannot write one, you do not understand the bug.
 - **A unit is a behavior, not a method.** Tests target the public-facing ports or interfaces of a system. Never test private methods or internal implementation details directly. If a test breaks when you rename a private method or restructure an internal loop without changing behavior, the test is wrong.
 - **Test error paths, not just happy paths.** Every branch that can fail (invalid input, missing state, error responses, edge cases) requires a test. Untested branches are untested code.
+- **Test the collateral, not only the target.** A test for a delete, sync, or mirror operation must plant a sentinel in *every* path that operation could destroy, not just the one under test; a suite can be green because no fixture ever held the collateral. Falsify it: re-add the destructive flag and confirm the sentinel vanishes.
 
 ## The Trilemma (Know the Tradeoffs)
 Three properties, never all maximized at once:
@@ -53,6 +54,7 @@ Tests that violate these are integration tests: separate suite, separate perform
 - **Hold every input constant across an A/B.** Vary exactly one knob and name it in the write-up. Any other difference invalidates the comparison, including build state and cache state.
 - **Verify the run measured what you think it measured.** Changing an env var that reaches the compiler (`CARGO_INCREMENTAL`, `RUSTFLAGS`, `CARGO_PROFILE_*`) flips codegen flags and dirties build fingerprints, so the next run rebuilds the whole dependency graph. A cold full build then gets reported as a single-crate number. Check whether a full rebuild happened before quoting any timing.
 - **State warm or cold.** Cold-build and warm-build figures are not comparable, and neither is comparable to an incremental one.
+- **Prove a new predicate before trusting it.** Run it against a known-idle target and a known-busy one. A predicate that only ever ran green against one state is untested; testing the idle case alone hides the false positive.
 
 ## Structure
 - **One concept per test.** Assert one logical thing. Multiple unrelated assertions in a single test obscure which behavior failed.

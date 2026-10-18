@@ -14,6 +14,11 @@ The bottom of a message that needs something from the user. Two kinds:
 
 Bottom-most element: answer, report if any, then prompts. Nothing to prompt means no block at all.
 
+This is the block for a **simple question** or a short answer. When the user asks
+something and the reply is prose, answer plainly and put anything they must act
+on in this block. Do not open a @post-task report for a question — that report is
+for ending a multi-step task, and a question is not a task.
+
 ## Shape
 
 ```markdown
