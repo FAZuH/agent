@@ -1,3 +1,10 @@
+## [0.13.19](https://github.com/FAZuH/agent/compare/v0.13.18...v0.13.19) (2026-10-18)
+
+
+### Bug Fixes
+
+* **skill:** advertise following-procedures with frontmatter ([297ae7d](https://github.com/FAZuH/agent/commit/297ae7da1503cb1f281f2fc9de837c7d01170717))
+
 ## [0.13.18](https://github.com/FAZuH/agent/compare/v0.13.17...v0.13.18) (2026-10-15)
 
 
@@ -41,6 +48,4 @@
 ### Bug Fixes
 
 * **plugin:** aside forks stop resuming prior task ([3d6a4fb](https://github.com/FAZuH/agent/commit/3d6a4fbd1ee89d39b8762dd33d2c5f33391b5e04))
-
-## [0.13.14](https://github.com/FAZuH/agent/compare/v0.13.13...v0.13.14) (2026-10-12)
 
