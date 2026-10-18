@@ -60,6 +60,8 @@ The axes still apply, with these as the Standards checklist:
 
 ## Rules
 
+- A finding is reliable about the defect, not about the fix. Falsify a proposed fix against the tool's real semantics (`--exclude` gates transfer as well as deletion) before handing it off as the fix.
+- An integration that fails open needs positive evidence that it engaged: its own stat or log line, named in the acceptance criteria. A 200 and a green healthcheck prove nothing; the fail-open path returns them too.
 - Do only what you were told. No sidetracking: findings go in the report, not in
   the working tree.
 - Never edit or commit. If you spot a bug, describe it precisely; someone else
