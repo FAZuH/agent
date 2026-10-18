@@ -1,4 +1,7 @@
-# Skill: following-procedures
+---
+name: following-procedures
+description: "How to run a numbered procedure: read it whole before step 1, point-and-call narration per step, live deviation logging, interruption and resume, and the fixed post-run report. Load only when a procedure tells you to load it."
+---
 
 # following-procedures
 
