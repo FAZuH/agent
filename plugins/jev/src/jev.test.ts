@@ -9,7 +9,7 @@
  */
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -23,7 +23,9 @@ const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await 
 const { expandFileRefs, matchesPattern, parseRules, ruleApplies } = await import("./rules.ts")
 type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastOutcomeAllowed, toastsOn } = await import(
+const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
+const clearState = () => rmSync(STATE_FILE, { force: true })
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -288,21 +290,21 @@ describe("multi-pick advice", () => {
   })
 
   test("winner plus qualifiers render in rank order", () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     expect(renderAdvice(winner())).toBe(
       "Jev routing: consider loading skills @commit (P=0.88) and @changelog (P=0.31). Advisory — if your own reading disagrees, decide yourself.",
     )
   })
 
   test("no qualifiers renders the single-pick line", () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     expect(renderAdvice(winner({ distribution: { commit: 0.88, terse: 0.01 } }))).toBe(
       "Jev routing: consider loading skill @commit (P=0.88). Advisory — if your own reading disagrees, decide yourself.",
     )
   })
 
   test("maxPicks caps the named skills", async () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     const state = await import("./state.ts")
     state.setFeatureConfig("hook_skill_pick", "maxPicks", 2)
     state.setFeatureConfig("hook_skill_pick", "alsoAbove", 0.01)
@@ -342,7 +344,7 @@ describe("tool action scope", () => {
   })
 
   test("only the configured actions are examined", () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     expect(actionsInScope("hook_tool_risk", "shell")).toBe(true)
     expect(actionsInScope("hook_tool_risk", "edit")).toBe(true)
     // A read is not judged, so the hook never spends on one.
@@ -499,7 +501,7 @@ describe("per-feature config", () => {
   })
 
   test("legacy global thresholds seed the per-feature config", () => {
-    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ minProbability: 0.9, minMargin: 0.2, gateProbability: 0.6 }))
+    writeState({ minProbability: 0.9, minMargin: 0.2, gateProbability: 0.6 })
     const s = loadState()
     expect(s.config.hook_skill_pick.minProbability).toBe(0.9)
     expect(s.config.hook_skill_pick.minMargin).toBe(0.2)
@@ -510,13 +512,10 @@ describe("per-feature config", () => {
   })
 
   test("a pre-rename state file keeps its hooks on and its config", () => {
-    writeFileSync(
-      join(scratch, "jev-state.json"),
-      JSON.stringify({
-        features: { pick_skill: true, risk_hook: true },
-        config: { pick_skill: { timeout: 777 }, risk_hook: { timeout: 999, gateProbability: 0.9, minProbability: 0.95 } },
-      }),
-    )
+    writeState({
+      features: { pick_skill: true, risk_hook: true },
+      config: { pick_skill: { timeout: 777 }, risk_hook: { timeout: 999, gateProbability: 0.9, minProbability: 0.95 } },
+    })
     const s = loadState()
     expect(s.features.hook_skill_pick).toBe(true)
     expect(s.features.hook_tool_risk).toBe(true)
@@ -529,33 +528,30 @@ describe("per-feature config", () => {
   })
 
   test("the YOLO branch and the approval lifetime are global settings", () => {
-    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ yoloPropagate: "no-op", approveTtl: 30 }))
+    writeState({ yoloPropagate: "no-op", approveTtl: 30 })
     const s = loadState()
     expect(s.yoloPropagate).toBe("no-op")
     expect(s.approveTtl).toBe(30)
     // Anything else is the safe default.
-    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ yoloPropagate: "nonsense" }))
+    writeState({ yoloPropagate: "nonsense" })
     expect(loadState().yoloPropagate).toBe("block-notify")
   })
 
   test("logMax reads from state with a floor", () => {
-    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ logMax: 100 }))
+    writeState({ logMax: 100 })
     expect(loadState().logMax).toBe(100)
-    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ logMax: 2 }))
+    writeState({ logMax: 2 })
     expect(loadState().logMax).toBe(10)
   })
 
   test("a stored config value beats the legacy seed", () => {
-    writeFileSync(
-      join(scratch, "jev-state.json"),
-      JSON.stringify({ minProbability: 0.9, config: { hook_skill_pick: { minProbability: 0.7 } } }),
-    )
+    writeState({ minProbability: 0.9, config: { hook_skill_pick: { minProbability: 0.7 } } })
     expect(loadState().config.hook_skill_pick.minProbability).toBe(0.7)
   })
 
   test("setFeatureConfig writes one field and refuses unknown ones", () => {
     // The previous tests left their state file behind; start from defaults.
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     setFeatureConfig("hook_skill_pick", "timeout", 2000)
     expect(featureConfig("hook_skill_pick").timeout).toBe(2000)
     // Sibling fields survive the write.
@@ -567,7 +563,7 @@ describe("per-feature config", () => {
 
   test("pruneLog keeps the tail at logMax", async () => {
     const { LOG_FILE } = await import("./state.ts")
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     rmSync(LOG_FILE, { force: true })
     setFeatureConfig("hook_skill_pick", "timeout", FEATURE_DEFAULTS.hook_skill_pick.timeout) // writes default state, logMax=500
     for (let i = 0; i < 600; i++) logCall({ i })
@@ -880,7 +876,7 @@ describe("call toasts", () => {
   })
 
   test("the global switch, then the feature's own, gates a toast", () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     // Every feature defaults to toasting; the global switch is off by default.
     expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast === true)).toBe(true)
     expect(toastsOn("hook_tool_risk")).toBe(false)
@@ -898,7 +894,7 @@ describe("call toasts", () => {
 
 describe("toast outcomes", () => {
   test("a routine call stays quiet and a blocked one does not", () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "deny" })).toBe(true)
     expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "alert" })).toBe(true)
     expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(false)
@@ -958,7 +954,7 @@ describe("optimizer model choice", () => {
 
 describe("string config (optimizeModel)", () => {
   test("defaults to empty and cfgStr reads stored text", () => {
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     expect(FEATURE_DEFAULTS.hook_skill_pick.optimizeModel).toBe("")
     expect(cfgStr("hook_skill_pick", "optimizeModel")).toBe("")
     setFeatureConfig("hook_skill_pick", "optimizeModel", "9router/free")
@@ -977,6 +973,24 @@ describe("string config (optimizeModel)", () => {
 })
 
 describe("legacy layout migration", () => {
+  test("moves the state file into data/, where machine-local files belong", () => {
+    const root = mkdtempSync(join(tmpdir(), "jev-statepath-"))
+    try {
+      const oldPath = join(root, "jev-state.json")
+      const newPath = join(root, "data", "jev-state.json")
+      writeFileSync(oldPath, JSON.stringify({ endpoint: "https://host/v1" }), "utf8")
+      expect(migrateStatePath(oldPath, newPath)).toBe("migrated")
+      expect(JSON.parse(readFileSync(newPath, "utf8")).endpoint).toBe("https://host/v1")
+      // The old file stays as the rollback path.
+      expect(existsSync(oldPath)).toBe(true)
+      // A second run is a no-op, and so is a missing old file.
+      expect(migrateStatePath(oldPath, newPath)).toBe("skipped")
+      expect(migrateStatePath(join(root, "nope.json"), newPath)).toBe("skipped")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test("splits the combined state file and moves the log", () => {
     const oldDir = join(scratch, "legacy", "data")
     mkdirSync(oldDir, { recursive: true })
@@ -1027,7 +1041,7 @@ describe("optimizer", () => {
     self._noGenerate = false
     self._latched = false
     self._failures = 0
-    rmSync(join(scratch, "jev-state.json"), { force: true })
+    clearState()
     rmSync(join(scratch, "jev-data.json"), { force: true })
   }
   const stale = [{ id: "demo", meaning: "Full description. Second sentence." }]

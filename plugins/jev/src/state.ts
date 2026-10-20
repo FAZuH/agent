@@ -23,8 +23,11 @@ const STATE_HOME =
   process.env.JEV_STATE_HOME ?? process.env.JEV_DATA_DIR ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "fazuh-agent")
 const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(CONFIG_DIR, "secrets")
 
-/** Syncable settings. Moved up from data/ so the whole dir syncs cleanly. */
-export const STATE_FILE = join(CONFIG_DIR, "jev-state.json")
+/**
+ * Syncable settings live in data/ on purpose: the state is machine-local (an
+ * endpoint, a key path), and the config root is what syncs between machines.
+ */
+export const STATE_FILE = join(CONFIG_DIR, "data", "jev-state.json")
 /** Local optimizer cache: skillCriteria plus the rosterHash it was built from. */
 export const DATA_FILE = join(DATA_HOME, "jev-data.json")
 /** Local call history. */
@@ -102,7 +105,7 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // minProbability is the floor for the verdict's own label (four labels split
   // the probability mass, so 0.75 would almost never clear it) and minMargin
   // the gap to the runner-up. timeout 0 means wait for the provider, unbounded.
-  hook_tool_risk: { timeout: 3000, minProbability: 0.5, minMargin: 0.15, actions: "shell,edit", cache: true, alertWebhook: "", toast: true, toastOutcomes: "deny,alert" },
+  hook_tool_risk: { timeout: 3000, minProbability: 0.6, minMargin: 0.2, actions: "shell,edit", cache: true, alertWebhook: "", toast: true, toastOutcomes: "deny,alert" },
   // The rules file is YAML, and YAML reads JSON, so one loader takes both.
   // defaultEffect and defaultThreshold are the global bar; a rule overrides
   // either. actions is the coarse gate: nothing outside it is examined.
@@ -138,12 +141,11 @@ export interface JevState {
    * so this does nothing on a host with no TUI module (the desktop app).
    */
   toast: boolean
-  /**
-   * What a "propagate" verdict does while the client auto-accepts. The
-   * client answers its own permission requests in that mode, so an "ask"
-   * never reaches a human: "block-notify" denies the call and asks the user
-   * out of band, "no-op" sets the effect to "ask" and lets the client answer
-   * it. Shared by both tool hooks, so it lives here and not in one feature.
+  /** What a "propagate" verdict does while the client auto-accepts. The
+   *  client answers its own permission requests in that mode, so an "ask"
+   *  never reaches a human: "block-notify" denies the call and asks the user
+   *  out of band, "no-op" sets the effect to "ask" and lets the client answer
+   *  it. Shared by both tool hooks, so it lives here and not in one feature.
    */
   yoloPropagate: "block-notify" | "no-op"
   /** Seconds a blocked call stays approvable. */
@@ -618,9 +620,26 @@ export function setFeature(key: string, on: boolean): boolean {
 
 export function saveState(patch: Partial<JevState>): JevState {
   const next = { ...loadState(), ...patch }
-  mkdirSync(CONFIG_DIR, { recursive: true })
+  mkdirSync(dirnameOf(STATE_FILE), { recursive: true })
   writeFileSync(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
   return next
+}
+
+/**
+ * One-shot move of the state file from the config root into data/: the state
+ * is machine-local (an endpoint, a key path) and the config root is what
+ * syncs. The old file stays where it is as the rollback path.
+ */
+export function migrateStatePath(oldPath = join(CONFIG_DIR, "jev-state.json"), newPath = STATE_FILE): "skipped" | "migrated" {
+  if (oldPath === newPath || !existsSync(oldPath) || existsSync(newPath)) return "skipped"
+  try {
+    const raw = readFileSync(oldPath, "utf8")
+    mkdirSync(dirnameOf(newPath), { recursive: true })
+    writeFileSync(newPath, raw, "utf8")
+    return "migrated"
+  } catch {
+    return "skipped"
+  }
 }
 
 /** Where the key came from, for status output. The value is never returned. */
@@ -772,4 +791,5 @@ if (
   !process.env.JEV_STATE_HOME
 ) {
   migrateLegacyLayout()
+  migrateStatePath()
 }

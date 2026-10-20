@@ -159,7 +159,7 @@ export default {
     async function setKey(): Promise<void> {
       try {
         const value = await ctx.ui.dialog.prompt({
-          title: "Jev API key",
+          title: "API key",
           description: `Written at 0600 to ${short(loadState().keyFile)}. Never echoed, logged, or read back.`,
           placeholder: "paste the key",
         })
@@ -307,7 +307,7 @@ export default {
      * exactly what you had.
      */
     function openFeatures(): () => void {
-      redraw = panel("Jev features", () => {
+      redraw = panel("Features", () => {
         const master = pluginEnabled()
         return [
           row(
@@ -349,7 +349,7 @@ export default {
      * right, edit with enter, back to the list afterwards.
      */
     function openSettings(): () => void {
-      const render = panel("Jev settings", () => {
+      const render = panel("Settings", () => {
         const s: JevState = loadState()
         const key = keySource()
         const money = spend()
@@ -388,7 +388,7 @@ export default {
           "Provider"),
           row("key", "API key", key.present ? "set" : "MISSING", () =>
             ask(render, {
-              title: "Jev API key",
+              title: "API key",
               description: `Written at 0600 to ${short(s.keyFile)}. Never echoed, logged, or read back.`,
               placeholder: "paste the key",
               onConfirm: (v: string) => {
@@ -435,8 +435,8 @@ export default {
               }
               if (typeof fields[key] === "string") {
                 return row(
-                  `${feature}.${key}`,
-                  `${feature}.${key}`,
+                  key,
+                  key,
                   String(current) || "(empty)",
                   () =>
                     ask(render, {
@@ -456,8 +456,8 @@ export default {
                 )
               }
               return row(
-                `${feature}.${key}`,
-                `${feature}.${key}`,
+                key,
+                key,
                 String(current),
                 () =>
                   ask(render, {
@@ -554,20 +554,14 @@ export default {
 
     // ——— registration (must happen inside a rendered component) ———
 
-    /** The session the user is looking at. */
-    function currentSessionID(): string {
-      const route = ctx.ui.router?.current?.()
-      return route?.type === "session" ? String(route.sessionID ?? "") : ""
-    }
-
     /**
-     * The blocked calls waiting for the user, in this session. The server
-     * writes them; this is the list the picker offers.
+     * The blocked calls waiting for a human, newest first. Not filtered by
+     * the session on screen: a blocked call often ran in a subagent session
+     * that this window never shows, and the grant is keyed to the call's
+     * identity anyway, so approving it from anywhere still spends it right.
      */
     function pendingApprovals(): Approval[] {
-      const sessionID = currentSessionID()
-      if (!sessionID) return []
-      return readApprovals(loadState().approveTtl).filter((a) => a.sessionID === sessionID)
+      return readApprovals(loadState().approveTtl).reverse()
     }
 
     /**
@@ -588,8 +582,8 @@ export default {
       }
       const chosen = matches.length === 1 ? matches[0] : await pick(matches)
       if (!chosen) return
-      grant(chosen.token, currentSessionID())
-      toast(`Approved ${chosen.token}. The next matching call in this session is allowed once.`)
+      grant(chosen.token, chosen.sessionID)
+      toast(`Approved ${chosen.token}. The next matching call is allowed once.`)
     }
 
     /** The picker: the host's own searchable list of what is blocked. */
@@ -599,7 +593,7 @@ export default {
         options: matches.map((a) => ({
           title: `${a.token}  ${a.subject.split("\n")[0].slice(0, 80)}`,
           value: a.token,
-          description: a.reason,
+          description: `${a.reason} — ${a.sessionID}`,
         })),
         search: (query: string, options: any[]) =>
           options.filter(
@@ -654,6 +648,48 @@ export default {
       }, 2000)
     }
 
+    function recentCalls(): string {
+      const rows = readLog(12)
+      if (rows.length === 0) return "No calls logged yet."
+      return rows
+        .map((r) => {
+          if (r.skipped || r.error) {
+            const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
+            return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
+          }
+          const answers = (r.decisions ?? []).map((d: any) => `${d.id}=${JSON.stringify(d.value)}`).join(" ")
+          return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens ?? 0}tok`
+        })
+        .join("\n")
+    }
+
+    /**
+     * The toast tail. Jev calls happen in the server process and this module is
+     * the only place a toast can be drawn, so the log the server already writes
+     * is the whole channel between them: poll its tail rather than invent a
+     * second file. The interval is the price of the process boundary.
+     *
+     * ponytail: a fixed 2s poll and a 200-line window. Move to a real event
+     * bridge if the TUI plugin ever gets one.
+     */
+    function startToasts(): void {
+      if (tailStarted) return
+      tailStarted = true
+      // Today's newest entry is the floor, so an already-full log never
+      // replays its history into the TUI on startup.
+      let after = readLog(1)[0]?.ts ?? ""
+      setInterval(() => {
+        const { fresh, after: next } = newSince(readLog(200), after)
+        after = next
+        for (const row of fresh) {
+          if (!toastsOn(row.hook)) continue
+          if (!toastOutcomeAllowed(row)) continue
+          const line = toastLine(row)
+          if (line) toast(line.message, line.variant, line.title)
+        }
+      }, 2000)
+    }
+
     ctx.ui?.slot?.({
       append: "app",
       render: () => {
@@ -663,11 +699,11 @@ export default {
           priority: 1,
           enabled: true,
           commands: [
-            { id: "jev.settings", title: "Jev settings", group: "jev", palette: true, slash: { name: "jev-settings" }, run: () => guard("jev-settings", () => void openSettings()) },
-            { id: "jev.features", title: "Jev features", group: "jev", palette: true, slash: { name: "jev-features" }, run: () => guard("jev-features", () => void openFeatures()) },
-            { id: "jev.status", title: "Jev status", group: "jev", palette: true, slash: { name: "jev-status" }, run: () => guard("jev-status", () => toast(summary())) },
-            { id: "jev.key", title: "Set Jev API key", group: "jev", palette: true, slash: { name: "jev-key" }, run: () => guard("jev-key", () => void setKey()) },
-            { id: "jev.log", title: "Jev recent calls", group: "jev", palette: true, slash: { name: "jev-log" }, run: () => toast(recentCalls()) },
+            { id: "jev.settings", title: "Settings", group: "jev", palette: true, slash: { name: "jev-settings" }, run: () => guard("jev-settings", () => void openSettings()) },
+            { id: "jev.features", title: "Features", group: "jev", palette: true, slash: { name: "jev-features" }, run: () => guard("jev-features", () => void openFeatures()) },
+            { id: "jev.status", title: "Status", group: "jev", palette: true, slash: { name: "jev-status" }, run: () => guard("jev-status", () => toast(summary())) },
+            { id: "jev.key", title: "Set API key", group: "jev", palette: true, slash: { name: "jev-key" }, run: () => guard("jev-key", () => void setKey()) },
+            { id: "jev.log", title: "Recent calls", group: "jev", palette: true, slash: { name: "jev-log" }, run: () => toast(recentCalls()) },
             {
               id: "jev.approve",
               title: "Approve a blocked call",
