@@ -401,7 +401,9 @@ is clipped to what the sidebar has room for, so the prefix decides how much
 of the call is left, and the action prefix the subject already carries is
 left off. A row that decided nothing (a cached verdict, a rule that could
 not be read) is not shown: the section is a history of decisions, not of
-the plugin's inner life. `sidebarCount` caps the lines, `sidebarSubject`
+the plugin's inner life. Nor is a call the hook did not act on — a doubtful
+skill pick, whose advice never reached the agent, and an unsure verdict that
+let the call through. `sidebarCount` caps the lines, `sidebarSubject`
 drops the call, and `sidebar` turns the section off.
 
 The header folds like the host's own sections: the arrow is a click, and
