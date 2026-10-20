@@ -62,6 +62,11 @@ const FIELD_HELP: Record<string, string> = {
   toastOutcomes: "What a call has to end in for this feature to announce it: allow, ask, deny, alert, or all. A skip is never announced.",
 }
 
+/** The per-feature settings that are a choice between two words. */
+const FIELD_CHOICES: Record<string, [string, string]> = {
+  "hook_tool_risk.undecided": ["allow", "ask"],
+}
+
 /** The range a numeric setting takes. Anything unlisted is a whole number. */
 const FIELD_MIN: Record<string, number> = {
   minProbability: 0,
@@ -437,6 +442,22 @@ export default {
                     render()
                   },
                   FEATURES.find((f) => f.key === feature)?.label ?? feature,
+                )
+              }
+              // A two-valued setting is a toggle, not free text.
+              const choice = FIELD_CHOICES[`${feature}.${key}`]
+              if (choice) {
+                return row(
+                  key,
+                  key,
+                  String(current),
+                  () => {
+                    const next = current === choice[0] ? choice[1] : choice[0]
+                    setFeatureConfig(feature, key, next)
+                    toast(`${feature}.${key} ${next}`)
+                    render()
+                  },
+                  feature,
                 )
               }
               if (typeof fields[key] === "string") {

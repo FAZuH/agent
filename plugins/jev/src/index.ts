@@ -665,9 +665,14 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
     verdictCache.set(key, outcome)
   }
   logDecision(F, info, result, outcome, undefined, {
-    label: d.confident ? verdict : "undecided",
+    // An unsure answer is recorded as what it became, not as a meta-label: the
+    // confidence already says how sure it was.
+    label: d.confident ? verdict : outcomeLabel(outcome),
     confidence,
     outcome: effectOutcome(outcome),
+    // The hook acted when it decided, or when an unsure answer was escalated
+    // to the user. An unsure answer that let the call through is no decision.
+    acted: d.confident || (outcome !== null && outcome.effect !== "allow"),
   })
   return outcome
 }
@@ -680,6 +685,13 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
 function undecidedOutcome(info: CallInfo): Outcome | null {
   if (cfgStr("hook_tool_risk", "undecided") !== "ask") return null
   return askOutcome(info, "the model was not confident")
+}
+
+/** The verdict an outcome amounts to: the word the log and the toast use. */
+function outcomeLabel(outcome: Outcome | null): Verdict {
+  if (!outcome) return "allow"
+  if (outcome.alert) return "alert"
+  return outcome.effect === "deny" ? "deny" : outcome.effect
 }
 
 /** What happened to the call, for the toast filter. */
@@ -767,6 +779,8 @@ async function standardOutcome(ctx: any, info: CallInfo): Promise<Outcome | null
     label,
     confidence: closest,
     outcome: effectOutcome(outcome),
+    // The rules were judged either way, so the call is a decision.
+    acted: true,
   })
   return outcome
 }
@@ -791,7 +805,7 @@ function logDecision(
   result: { sent: unknown; decisions: any[]; inputTokens: number; elapsedMs: number },
   outcome: Outcome | null,
   rules: { id: string; probability: number; violated: boolean }[] | undefined,
-  verdict: { label: string; confidence?: number; outcome: string },
+  verdict: { label: string; confidence?: number; outcome: string; acted?: boolean },
 ): void {
   logCall({
     hook,
@@ -804,6 +818,7 @@ function logDecision(
     verdict: verdict.label,
     confidence: verdict.confidence,
     outcome: verdict.outcome,
+    ...(typeof verdict.acted === "boolean" ? { acted: verdict.acted } : {}),
     ...(outcome?.effect === "deny" ? { blocked: outcome.reason } : {}),
     ...(outcome?.token ? { token: outcome.token } : {}),
     ...(rules ? { rules } : {}),

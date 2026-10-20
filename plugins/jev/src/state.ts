@@ -607,6 +607,8 @@ export function toastLine(row: any): { title: string; message: string; variant: 
 export function toastOutcomeAllowed(row: any): boolean {
   // Nothing was decided, so there is nothing to say.
   if (row?.skipped && !row?.verdict && !(Array.isArray(row?.decisions) && row.decisions.length)) return false
+  // The plugin did not act on it, so it is not a decision worth announcing.
+  if (!rowActed(row)) return false
   const hook = typeof row?.hook === "string" ? row.hook : ""
   const feature = FEATURES.find((f) => f.key === hook)
   if (!feature) return true
@@ -639,6 +641,20 @@ export function maskUrl(url: string): string {
   }
 }
 
+/**
+ * Whether the plugin acted on this call. Its own verdict counts, and so does
+ * an answer it was confident enough to use: the skill picker injects advice
+ * only when it is sure, so a doubtful pick is not a decision and is not
+ * shown. An error is always worth showing.
+ */
+export function rowActed(row: any): boolean {
+  if (row?.error) return true
+  // The hook says whether it acted on the call.
+  if (typeof row?.acted === "boolean") return row.acted
+  const decision = Array.isArray(row?.decisions) ? row.decisions[0] : undefined
+  return decision?.confident === true
+}
+
 /** The short hook names the sidebar uses; the full ones are too wide. */
 export const HOOK_SHORT: Record<string, string> = {
   hook_skill_pick: "pick",
@@ -648,11 +664,13 @@ export const HOOK_SHORT: Record<string, string> = {
 
 /** One sidebar line: the hook, the verdict, the confidence. Terse on purpose. */
 /** The whole sidebar line, prefix included: the sidebar is this wide. */
-const SIDEBAR_TOTAL = 35
+const SIDEBAR_TOTAL = 36
 
 export function sidebarLine(row: any): string | null {
   const short = HOOK_SHORT[String(row?.hook ?? "")] ?? String(row?.hook ?? "?")
   if (row?.error) return `${short} err`
+  // A call the plugin did not act on is not a decision.
+  if (!rowActed(row)) return null
   const { label } = headline(row)
   // A skip decided nothing, so it says nothing here either.
   if (!label) return null

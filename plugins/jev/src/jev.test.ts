@@ -898,48 +898,63 @@ describe("call toasts", () => {
 describe("toast outcomes", () => {
   test("a routine call stays quiet and a blocked one does not", () => {
     clearState()
-    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "deny" })).toBe(true)
-    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "alert" })).toBe(true)
-    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(false)
-    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "ask" })).toBe(false)
-    expect(toastOutcomeAllowed({ hook: "hook_tool_standard", outcome: "deny" })).toBe(true)
-    expect(toastOutcomeAllowed({ hook: "hook_tool_standard", outcome: "allow" })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "deny", acted: true })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "alert", acted: true })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow", acted: true })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "ask", acted: true })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_standard", outcome: "deny", acted: true })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_standard", outcome: "allow", acted: true })).toBe(false)
   })
 
   test("the list is the feature's own setting", () => {
     setFeatureConfig("hook_tool_risk", "toastOutcomes", "all")
-    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow", acted: true })).toBe(true)
     setFeatureConfig("hook_tool_risk", "toastOutcomes", "deny,alert")
-    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow", acted: true })).toBe(false)
   })
 
   test("a skip is never announced: nothing was decided, so there is nothing to say", () => {
     expect(toastOutcomeAllowed({ hook: "hook_skill_pick", skipped: "low confidence: margin 0.05" })).toBe(false)
     expect(toastOutcomeAllowed({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBe(false)
     // A call that was decided announces, and a feature with no list always does.
-    expect(toastOutcomeAllowed({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit" }] })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", confident: true }] })).toBe(true)
   })
 })
 
 describe("sidebar line", () => {
   test("the hook, the verdict, and the call", () => {
-    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "deny", subject: "shell: rm -rf ./build" })).toBe("risk deny rm -rf ./build")
-    expect(sidebarLine({ hook: "hook_tool_standard", verdict: "block", subject: "edit: secrets/.env" })).toBe("rules block secrets/.env")
-    expect(sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit" }], subject: "review the plugin" })).toBe(
-      "pick commit review the plugin",
-    )
+    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "deny", acted: true, subject: "shell: rm -rf ./build" })).toBe("risk deny rm -rf ./build")
+    expect(sidebarLine({ hook: "hook_tool_standard", verdict: "block", acted: true, subject: "edit: secrets/.env" })).toBe("rules block secrets/.env")
+    expect(
+      sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", confident: true }], subject: "review the plugin" }),
+    ).toBe("pick commit review the plugin")
   })
 
   test("the call is clipped, the action prefix is not repeated", () => {
     const long = "shell: docker build -t registry.fazuh.com/9router:0.5.104-fazuh2 --build-arg APP_VERSION=0.5.104 ~/Projects/9router"
-    const line = sidebarLine({ hook: "hook_tool_risk", verdict: "accept", subject: long })!
-    expect(line.startsWith("risk accept docker build")).toBe(true)
-    expect(line.length).toBeLessThanOrEqual(35)
+    const line = sidebarLine({ hook: "hook_tool_risk", verdict: "allow", acted: true, subject: long })!
+    expect(line.startsWith("risk allow docker build")).toBe(true)
+    expect(line.length).toBeLessThanOrEqual(36)
   })
 
   test("a row that decided nothing says nothing", () => {
     expect(sidebarLine({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBeNull()
     expect(sidebarLine({ hook: "hook_tool_risk", error: "Jev HTTP 401" })).toBe("risk err")
+  })
+
+  test("a pick the model was not sure about is not shown", () => {
+    // The skill picker injects advice only when it is sure, so a doubtful
+    // pick is not a decision.
+    expect(sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", probability: 0.2, confident: false }] })).toBeNull()
+    expect(sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", probability: 0.8, confident: true }] })).toBe(
+      "pick commit",
+    )
+  })
+
+  test("a hook that did not act on the call shows nothing", () => {
+    // The risk hook lets an unsure call through: that is no decision.
+    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "allow", confidence: 0.4, outcome: "allow", acted: false })).toBeNull()
+    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "allow", confidence: 0.9, outcome: "allow", acted: true })).toBe("risk allow")
   })
 })
 
