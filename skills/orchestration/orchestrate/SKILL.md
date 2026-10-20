@@ -64,7 +64,8 @@ Never route by memory or guesswork, and never improvise a workflow.
   dead end.
 - Pass only a child `sessionID` when resuming. Never pass the current
   session ID. Omit optional subagent fields, including `model`, unless the
-  task requires them; empty strings are rejected.
+  task requires them; empty strings are rejected. A resume after a model or
+  provider failure re-states the model (see Session reuse).
 - Build manifests and lockfiles are SOURCE: `Cargo.toml`/`Cargo.lock`,
   `package.json`/`package-lock.json`, `pyproject.toml` + its lockfile. Route
   any edit to them to `implement`. Never hand-edit a manifest, even inside a
@@ -94,7 +95,8 @@ session is not a reason to re-spawn.
 SPAWN FRESH (omit `sessionID`) only when the task calls for it:
 
 - unrelated work / a different feature where fresh context is cleaner, or
-- you need that agent running in parallel (one session cannot be two places).
+- you need that agent running in parallel (one session cannot be two places), or
+- the session id no longer resolves and the work still needs doing.
 
 Keep the same `agent` when resuming. The session already carries its agent
 and system prompt. Tell the subagent it is continuing,
@@ -102,16 +104,32 @@ reference its last report, and ask for a delta rather than a full re-report, so
 your own context stays lean too.
 
 A long-resumed child can come back as `Subagent completed without a text
-response` having changed nothing. Check the tree against the base commit
-(`git diff --stat`) before believing it, then re-dispatch the same brief to a
-**fresh** session rather than resuming the same one again.
+response`. **Check the tree before believing it**: `git diff --stat` against the
+base commit. A child that changed files is alive and its report was lost;
+resume the same session with a delta brief. A child that changed nothing is
+idle or gone: confirm the session id against the API before concluding it is
+gone, then resume it; spawn fresh when the id no longer resolves. **A session
+that has learned the codebase is worth more than a fresh one**: the learning
+is the expensive part, and a spawn pays it again.
+
+**On a resume, re-POST the model.** A session that died on a provider or
+free-tier error resumes cleanly on a different model; one carrying the failing
+model dies again. A cold spawn omits the model field; a resume re-states it.
 
 Persist live session ids in the active session doc (via @session): a
-`Subagent sessions` list keyed by agent: `implement: ses_...`,
-`review: ses_...`. Verification and server work use the `implement` session.
-Record each id as it comes back; this
+`Subagent sessions` list keyed by lane: `lane-a: implement ses_...`,
+`lane-b: implement ses_...`. Verification and server work use the lane's
+`implement` session. Record each id as it comes back; this
 survives compaction and lets a fresh orchestrator resume the same
 workers.
+
+## Parallel lanes
+
+When the work decomposes into independent units, run them as lanes.
+`reference/parallel-lanes.md` in @workflows holds the procedure: the write
+scopes, the chain for a shared file, the gate, and the merge. One writer per
+file. Each lane keeps one session for its whole life; the next ticket in a
+lane resumes it. See Session reuse.
 
 ## Run mode and delegation
 

@@ -64,6 +64,7 @@ subagent.
 | Unit & integration tests | Plan with test guidelines, trim tautologies, implement test-first, iterate | Writing or running a test suite | `reference/testing.md` |
 | Hard-bug diagnosis | Tight feedback loop first, then fix with a regression test | A bug that resists a quick fix | `reference/bug-diagnosis.md` |
 | Documentation / decisions | ADRs, glossary, runbooks via `document`; ADR paper trail | Docs or architectural decisions | `reference/documentation.md` |
+| Parallel lanes | Declare scopes → dispatch every lane → gate the shared files → collect → verify once | Work that decomposes into units touching different files | `reference/parallel-lanes.md` |
 
 | Recover an interrupted subagent spawn | yourself | Spawn aborted / server restarted mid-task | `reference/interrupted-delegation.md` |
 | Batch of user requests needs validity check | yourself, before grilling | N items in, claims unverified | `reference/claim-audit-intake.md` |

@@ -83,6 +83,11 @@ flowchart TD
 - step9 -> step8
 - step10 -> step9
 
+**Parallel lanes.** When the work decomposes into independent units touching
+different files, fan out per `reference/parallel-lanes.md` instead of
+serialising the chain. The steps inside a lane stay a chain; the lanes run
+concurrently, and a file two lanes need becomes a chain of its own.
+
 When @forkflow is available, the handoff is `research report →
 fork → switch implement → first prompt`. The implement session owns verification;
 review forks from its report as a separate read-only child.
@@ -99,11 +104,13 @@ orchestration waits until exercised on a real ticket.
 - FINISH only runs on explicit user request.
 - VERIFY always runs before REVIEW; no implementation reaches review with failing tests.
 - Loop REVIEW → IMPLEMENT → VERIFY while review turns up fixes; always resume the same sessions.
+- A lane starts only when its scope is disjoint from every other lane's scope.
 
 ## Parallel multi-repo batches
 
 When one piece of work spans multiple repositories (e.g. a dependee/dependency pair),
-run the batch in parallel:
+run the batch in parallel. This is a lane batch with one lane per repo;
+`reference/parallel-lanes.md` holds the general procedure.
 
 - One independent `implement` agent per repo. Never share a session across repos.
 - Downstream compile gate: after any change that affects a dependee's view
