@@ -54,7 +54,7 @@ export interface Feature {
 
 export const FEATURES: Feature[] = [
   { key: "hook_skill_pick", label: "Skill picker", what: "Asks Jev which skill fits each prompt and advises it in context" },
-  { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: accept, propagate, deny, or alert" },
+  { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: allow, ask, deny, or alert" },
   { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
 ]
 
@@ -105,7 +105,7 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // minProbability is the floor for the verdict's own label (four labels split
   // the probability mass, so 0.75 would almost never clear it) and minMargin
   // the gap to the runner-up. timeout 0 means wait for the provider, unbounded.
-  hook_tool_risk: { timeout: 3000, minProbability: 0.6, minMargin: 0.2, actions: "shell,edit", cache: true, alertWebhook: "", toast: true, toastOutcomes: "deny,alert" },
+  hook_tool_risk: { timeout: 3000, minProbability: 0.6, minMargin: 0.2, actions: "shell,edit", cache: true, alertWebhook: "", undecided: "allow", toast: true, toastOutcomes: "deny,alert" },
   // The rules file is YAML, and YAML reads JSON, so one loader takes both.
   // defaultEffect and defaultThreshold are the global bar; a rule overrides
   // either. actions is the coarse gate: nothing outside it is examined.
@@ -141,13 +141,13 @@ export interface JevState {
    * so this does nothing on a host with no TUI module (the desktop app).
    */
   toast: boolean
-  /** What a "propagate" verdict does while the client auto-accepts. The
+  /** What an "ask" verdict does while the client auto-accepts. The
    *  client answers its own permission requests in that mode, so an "ask"
    *  never reaches a human: "block-notify" denies the call and asks the user
    *  out of band, "no-op" sets the effect to "ask" and lets the client answer
    *  it. Shared by both tool hooks, so it lives here and not in one feature.
    */
-  yoloPropagate: "block-notify" | "no-op"
+  yoloAsk: "block-notify" | "no-op"
   /** Seconds a blocked call stays approvable. */
   approveTtl: number
   /** The sidebar section with the recent hook calls. */
@@ -185,11 +185,11 @@ export const DEFAULTS: JevState = {
   think: false,
   enabled: true,
   toast: false,
-  yoloPropagate: "block-notify",
+  yoloAsk: "block-notify",
   approveTtl: 600,
   sidebar: true,
   sidebarCount: 5,
-  sidebarSubject: false,
+  sidebarSubject: true,
   features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
@@ -359,11 +359,12 @@ export function loadState(): JevState {
     think: raw.think === true,
     enabled: raw.enabled !== false,
     toast: raw.toast === true,
-    yoloPropagate: raw.yoloPropagate === "no-op" ? "no-op" : "block-notify",
+    // The old spelling carries over: an ask is an ask whatever the field is called.
+    yoloAsk: (raw.yoloAsk ?? raw.yoloPropagate) === "no-op" ? "no-op" : "block-notify",
     approveTtl: Math.max(0, Math.round(num(raw.approveTtl, DEFAULTS.approveTtl))),
     sidebar: raw.sidebar !== false,
     sidebarCount: Math.min(20, Math.max(1, Math.round(num(raw.sidebarCount, DEFAULTS.sidebarCount)))),
-    sidebarSubject: raw.sidebarSubject === true,
+    sidebarSubject: raw.sidebarSubject !== false,
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
@@ -646,13 +647,27 @@ export const HOOK_SHORT: Record<string, string> = {
 }
 
 /** One sidebar line: the hook, the verdict, the confidence. Terse on purpose. */
+/** The whole sidebar line, prefix included: the sidebar is this wide. */
+const SIDEBAR_TOTAL = 35
+
 export function sidebarLine(row: any): string | null {
   const short = HOOK_SHORT[String(row?.hook ?? "")] ?? String(row?.hook ?? "?")
   if (row?.error) return `${short} err`
-  const { label, probability } = headline(row)
+  const { label } = headline(row)
   // A skip decided nothing, so it says nothing here either.
   if (!label) return null
-  return `${short} ${label}${probability === undefined ? "" : ` ${probability.toFixed(2)}`}`
+  const prefix = `${short} ${label} `
+  return `${prefix}${sidebarDetail(row, SIDEBAR_TOTAL - prefix.length)}`.trimEnd()
+}
+
+/**
+ * The call itself, in the space the line has: the subject without the action
+ * prefix it already carries ("shell: rm -rf ./build" -> "rm -rf ./build").
+ */
+function sidebarDetail(row: any, budget: number): string {
+  const subject = String(row?.subject ?? "").replace(/\s+/g, " ").trim()
+  // clip adds the ellipsis on top of the budget, so it gets one less.
+  return clip(subject.replace(/^[a-z_]+:\s*/, ""), Math.max(3, budget - 1))
 }
 
 export function setFeature(key: string, on: boolean): boolean {

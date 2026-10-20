@@ -17,7 +17,7 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { actionsInScope, firstSentence, hashDescription, normalizeAction, optimizeCriteria, optimizerModel, propagateOutcome, renderAdvice, resolveCriteria, rosterHash, stronger, stripCriterionPreamble, verdictOutcome } = await import("./index.ts")
+const { actionsInScope, firstSentence, hashDescription, normalizeAction, optimizeCriteria, optimizerModel, askOutcome, renderAdvice, resolveCriteria, rosterHash, stronger, stripCriterionPreamble, verdictOutcome } = await import("./index.ts")
 const { answersOf, JevError, normalize, redact, signalFor } = await import("./jev.ts")
 const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await import("./approve.ts")
 const { expandFileRefs, matchesPattern, parseRules, ruleApplies } = await import("./rules.ts")
@@ -377,8 +377,8 @@ describe("verdict outcomes", () => {
     dir: scratch,
   }
 
-  test("accept allows the call, even one the host wanted to ask about", () => {
-    expect(verdictOutcome("accept", 0.9, info)?.effect).toBe("allow")
+  test("allow lets the call through, even one the host wanted to ask about", () => {
+    expect(verdictOutcome("allow", 0.9, info)?.effect).toBe("allow")
   })
 
   test("deny blocks with a reason the agent reads", () => {
@@ -403,7 +403,7 @@ describe("verdict outcomes", () => {
   })
 })
 
-describe("propagate in auto-accept mode", () => {
+describe("an ask in auto-accept mode", () => {
   const info = {
     sessionID: "ses_prop",
     action: "shell",
@@ -425,18 +425,18 @@ describe("propagate in auto-accept mode", () => {
     resetAutoAcceptCache()
   }
 
-  test("while the client prompts, propagate is an ordinary ask", () => {
+  test("while the client prompts, an ask is an ordinary ask", () => {
     clientMode("prompt")
-    const out = propagateOutcome(info, "why")
+    const out = askOutcome(info, "why")
     expect(out.effect).toBe("ask")
     expect(out.token).toBeUndefined()
   })
 
-  test("while the client auto-accepts, propagate blocks and records the call", () => {
+  test("while the client auto-accepts, an ask blocks and records the call", () => {
     // The client answers its own permission requests in that mode, so an ask
     // would never reach a human: the call is blocked and recorded instead.
     clientMode("autoaccept")
-    const out = propagateOutcome(info, "why")
+    const out = askOutcome(info, "why")
     expect(out.effect).toBe("deny")
     expect(out.token).toMatch(/^[0-9a-f]{6}$/)
     expect(out.message).toContain(`/jev-approve ${out.token}`)
@@ -528,13 +528,16 @@ describe("per-feature config", () => {
   })
 
   test("the YOLO branch and the approval lifetime are global settings", () => {
-    writeState({ yoloPropagate: "no-op", approveTtl: 30 })
+    writeState({ yoloAsk: "no-op", approveTtl: 30 })
     const s = loadState()
-    expect(s.yoloPropagate).toBe("no-op")
+    expect(s.yoloAsk).toBe("no-op")
     expect(s.approveTtl).toBe(30)
     // Anything else is the safe default.
-    writeState({ yoloPropagate: "nonsense" })
-    expect(loadState().yoloPropagate).toBe("block-notify")
+    writeState({ yoloAsk: "nonsense" })
+    expect(loadState().yoloAsk).toBe("block-notify")
+    // The old spelling still reads: the field was renamed, not the meaning.
+    writeState({ yoloPropagate: "no-op" })
+    expect(loadState().yoloAsk).toBe("no-op")
   })
 
   test("logMax reads from state with a floor", () => {
@@ -919,10 +922,19 @@ describe("toast outcomes", () => {
 })
 
 describe("sidebar line", () => {
-  test("the hook, the verdict, the confidence", () => {
-    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "deny", confidence: 0.87 })).toBe("risk deny 0.87")
-    expect(sidebarLine({ hook: "hook_tool_standard", verdict: "block", confidence: 0.93 })).toBe("rules block 0.93")
-    expect(sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", probability: 0.88 }] })).toBe("pick commit 0.88")
+  test("the hook, the verdict, and the call", () => {
+    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "deny", subject: "shell: rm -rf ./build" })).toBe("risk deny rm -rf ./build")
+    expect(sidebarLine({ hook: "hook_tool_standard", verdict: "block", subject: "edit: secrets/.env" })).toBe("rules block secrets/.env")
+    expect(sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit" }], subject: "review the plugin" })).toBe(
+      "pick commit review the plugin",
+    )
+  })
+
+  test("the call is clipped, the action prefix is not repeated", () => {
+    const long = "shell: docker build -t registry.fazuh.com/9router:0.5.104-fazuh2 --build-arg APP_VERSION=0.5.104 ~/Projects/9router"
+    const line = sidebarLine({ hook: "hook_tool_risk", verdict: "accept", subject: long })!
+    expect(line.startsWith("risk accept docker build")).toBe(true)
+    expect(line.length).toBeLessThanOrEqual(35)
   })
 
   test("a row that decided nothing says nothing", () => {

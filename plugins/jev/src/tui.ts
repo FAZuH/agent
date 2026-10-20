@@ -56,7 +56,7 @@ const FIELD_HELP: Record<string, string> = {
   cache: "Reuse a verdict for the same call in the same session.",
   alertWebhook: "POST the alert to a Discord webhook. Empty turns it off.",
   rulesFile: "The rules file. YAML, and YAML reads JSON, so a .json file works too.",
-  defaultEffect: "What a violated rule does: block or propagate.",
+  defaultEffect: "What a violated rule does: block or ask.",
   defaultThreshold: "The bar a rule score must reach. 0 to 1.",
   fileMaxChars: "Characters a {file:...} reference may add to a rule.",
   toastOutcomes: "What a call has to end in for this feature to announce it: allow, ask, deny, alert, or all. A skip is never announced.",
@@ -504,16 +504,16 @@ export default {
             toast(next ? "Toasts on. Each Jev call is announced in the TUI." : "Toasts off.")
             render()
           }, "Plugin"),
-          // What a "propagate" verdict does while the client auto-accepts. The
+          // What an "ask" verdict does while the client auto-accepts. The
           // client answers its own permission requests in that mode, so an
           // ask never reaches a human.
-          row("yolo", "YOLO propagate", s.yoloPropagate === "no-op" ? "no-op" : "block-notify", () => {
-            const next = s.yoloPropagate === "no-op" ? "block-notify" : "no-op"
-            saveState({ yoloPropagate: next })
+          row("yolo", "YOLO ask", s.yoloAsk === "no-op" ? "no-op" : "block-notify", () => {
+            const next = s.yoloAsk === "no-op" ? "block-notify" : "no-op"
+            saveState({ yoloAsk: next })
             toast(
               next === "no-op"
-                ? "Propagate does nothing while the client auto-accepts."
-                : "Propagate blocks the call and asks you while the client auto-accepts.",
+                ? "An ask does nothing while the client auto-accepts."
+                : "An ask blocks the call and asks you while the client auto-accepts.",
             )
             render()
           }, "Plugin"),
@@ -746,12 +746,32 @@ export default {
         return
       }
       const [store, update] = ctx.storage.memory("jev-sidebar", { initial: { lines: [] as string[] } })
+      // The fold state is durable, like the host's own sidebar sections.
+      const [view, setView] = ctx.storage.store("jev-view", { initial: { open: true } })
+      // The host's own sidebar sections: a box, a bold label in the base
+      // colour, and the rows in the muted one.
+      const theme = ctx.theme
       const draw = () => {
         const lines: string[] = store?.lines ?? []
         if (!lines.length) return null
-        return jsx("box", {
-          children: [jsx("text", { children: "Jev" }), ...lines.map((line) => jsx("text", { children: line }))],
+        const open = view?.open !== false
+        // The host's own sections: a header row that folds on a click, the
+        // arrow, and the label in the base colour.
+        const header = jsx("box", {
+          flexDirection: "row",
+          gap: 1,
+          onMouseDown: () => {
+            void setView((draft: any) => {
+              draft.open = draft.open !== true
+            })
+          },
+          children: [
+            jsx("text", { fg: theme?.text?.base, children: open ? "\u25BC" : "\u25B6" }),
+            jsx("text", { fg: theme?.text?.base, children: jsx("b", { children: "Jev" }) }),
+          ],
         })
+        const rows = open ? lines.map((line) => jsx("text", { fg: theme?.text?.muted, children: line })) : []
+        return jsx("box", { children: [header, ...rows] })
       }
       ctx.ui.slot({ append: "sidebar.content", render: draw })
       // The lines ride the same poll the toasts use: the log the server writes
@@ -764,16 +784,14 @@ export default {
           })
           return
         }
-        const rows = readLog(60).reverse().filter((row: any) => HOOK_SHORT[row?.hook])
+        // readLog is newest first already.
+        const rows = readLog(60).filter((row: any) => HOOK_SHORT[row?.hook])
         const lines: string[] = []
         for (const row of rows.slice(0, state.sidebarCount * 2)) {
           const line = sidebarLine(row)
           if (!line) continue
           lines.push(line)
           if (lines.length >= state.sidebarCount) break
-          if (state.sidebarSubject && row?.subject) {
-            lines.push(`  ${String(row.subject).replace(/\s+/g, " ").trim().slice(0, 24)}`)
-          }
         }
         update((draft: any) => {
           draft.lines = lines

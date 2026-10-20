@@ -34,11 +34,11 @@ export interface Rule {
   match: { action?: string; resource?: string }
   text: string
   threshold?: number
-  effect?: "block" | "propagate"
+  effect?: "block" | "ask"
 }
 
 /** What a violated rule does. */
-export type RuleEffect = "block" | "propagate"
+export type RuleEffect = "block" | "ask"
 
 /** The parsed file, with the source it came from. */
 export interface RuleSet {
@@ -48,7 +48,7 @@ export interface RuleSet {
   error?: string
 }
 
-const EFFECTS: RuleEffect[] = ["block", "propagate"]
+const EFFECTS: RuleEffect[] = ["block", "ask"]
 
 /** The YAML parser, when the host has one. */
 function yaml(): { parse: (text: string) => unknown } | null {
