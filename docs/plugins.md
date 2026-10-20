@@ -64,6 +64,9 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   file with `{file:<path>}`, and a rule may override the global action and
   threshold. A file that cannot be parsed changes nothing and says so in the
   log.
+- **Sidebar section**: the plugin adds a `Jev` section to the TUI sidebar with
+  the recent hook calls, one terse line each. `sidebar`, `sidebarCount` and
+  `sidebarSubject` in `/jev-settings` control it.
 - **`/jev-features`**: the panel. **Plugin** at the top is the master switch:
   on or off, and it does not touch the three below it. Off means no hook runs
   and nothing is sent, so nothing is spent, while the three keep their values,

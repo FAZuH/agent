@@ -256,6 +256,9 @@ endpoint path have no portable default.
 | `enabled` | `true` | `/jev-features` |
 | `toast` | `false` | toggle in `/jev-settings`; master switch for the per-call TUI toasts |
 | `yoloPropagate` | `block-notify` | what a `propagate` verdict does while the client auto-accepts: `block-notify` or `no-op` |
+| `sidebar` | `true` | the sidebar section with the recent hook calls |
+| `sidebarCount` | `5` | how many recent calls the sidebar shows (1-20) |
+| `sidebarSubject` | `false` | whether each sidebar line also carries a clipped subject |
 | `approveTtl` | `600` | seconds a blocked call stays approvable; `0` keeps it forever |
 | `logMax` | `500` | `/jev-settings`; call-log line cap, pruned to the tail |
 
@@ -375,6 +378,28 @@ The panel closes when you change a row, because the only dialog primitive a
 plugin can reach resolves on selection. [Issue #3](https://github.com/FAZuH/agent/issues/3)
 tracks left/right to change a row in place, and records the measured reason the
 documented non-closing API does not exist.
+
+## The sidebar section
+
+The plugin adds a `Jev` section to the TUI sidebar: the recent hook calls,
+one terse line each — the hook, the verdict and the confidence.
+
+```
+Jev
+risk accept 0.77
+risk deny 0.87
+pick commit 0.88
+```
+
+A row that decided nothing (a cached verdict, a rule that could not be read)
+is not shown: the section is a history of decisions, not of the plugin's
+inner life. `sidebarCount` caps the lines, `sidebarSubject` adds the subject
+on a second line, and `sidebar` turns the section off.
+
+A slot claim must return a real element. A bare string is an orphan text
+node, and the host's tree walk treats that as a crash. The element runtime
+comes from the host — a plugin imports `@opentui/solid/jsx-runtime` and
+nothing is vendored.
 
 ## Call toasts
 
