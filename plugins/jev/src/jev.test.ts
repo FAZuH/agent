@@ -25,7 +25,7 @@ type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
 const clearState = () => rmSync(STATE_FILE, { force: true })
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastOutcomeAllowed, toastsOn } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -915,6 +915,21 @@ describe("toast outcomes", () => {
     expect(toastOutcomeAllowed({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBe(false)
     // A call that was decided announces, and a feature with no list always does.
     expect(toastOutcomeAllowed({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit" }] })).toBe(true)
+  })
+})
+
+describe("masked urls", () => {
+  test("a webhook url shows the host and the tail, never the whole thing", () => {
+    const url = "https://discord.com/api/webhooks/123456789/AbCdEf-secret-token"
+    const masked = maskUrl(url)
+    expect(masked).toBe("discord.com/…/AbCdEf")
+    expect(masked).not.toContain("secret-token")
+    expect(masked).not.toContain("123456789")
+  })
+
+  test("an empty or broken url is harmless", () => {
+    expect(maskUrl("")).toBe("")
+    expect(maskUrl("not a url")).toBe("not a url…")
   })
 })
 

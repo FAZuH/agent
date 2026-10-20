@@ -53,9 +53,9 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
-  { key: "hook_skill_pick", label: "Skill picker hook", what: "Asks Jev which skill fits each prompt and advises it in context" },
-  { key: "hook_tool_risk", label: "Tool risk hook", what: "Asks Jev what to do with each tool call: accept, propagate, deny, or alert" },
-  { key: "hook_tool_standard", label: "Tool standard hook", what: "Scores every rule in the rules file against each tool call" },
+  { key: "hook_skill_pick", label: "Skill picker", what: "Asks Jev which skill fits each prompt and advises it in context" },
+  { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: accept, propagate, deny, or alert" },
+  { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
 ]
 
 /**
@@ -608,6 +608,22 @@ export function toastOutcomeAllowed(row: any): boolean {
   const outcome = typeof row?.outcome === "string" ? row.outcome.toLowerCase() : ""
   if (!outcome) return true
   return list.includes(outcome)
+}
+
+/**
+ * A webhook URL is a credential. Show the host and the tail, never the whole
+ * thing: a settings screen gets pasted into screenshots.
+ */
+export function maskUrl(url: string): string {
+  const text = String(url ?? "").trim()
+  if (!text) return ""
+  try {
+    const parsed = new URL(text)
+    const tail = parsed.pathname.split("/").filter(Boolean).at(-1) ?? ""
+    return `${parsed.host}/…/${tail.slice(0, 6)}`
+  } catch {
+    return text.slice(0, 12) + "…"
+  }
 }
 
 export function setFeature(key: string, on: boolean): boolean {

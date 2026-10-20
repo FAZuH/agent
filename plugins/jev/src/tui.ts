@@ -29,7 +29,7 @@
 
 import { appendFileSync } from "node:fs"
 import { grant, readApprovals, type Approval } from "./approve.ts"
-import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
+import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, maskUrl, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
 
@@ -93,7 +93,10 @@ function summary(): string {
     `off        ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "none"}`,
     ...FEATURES.map((f) => {
       const cfg = s.config[f.key] ?? {}
-      const rendered = Object.entries(cfg).map(([k, v]) => `${k}=${v}`).join(" ") || "(defaults)"
+      const rendered =
+        Object.entries(cfg)
+          .map(([k, v]) => `${k}=${k === "alertWebhook" ? maskUrl(String(v)) : v}`)
+          .join(" ") || "(defaults)"
       return `config.${f.key.padEnd(9)} ${rendered}`
     }),
     `spend      ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
@@ -430,14 +433,14 @@ export default {
                     toast(`${feature}.${key} ${!(current === true) ? "on" : "off"}`)
                     render()
                   },
-                  feature,
+                  FEATURES.find((f) => f.key === feature)?.label ?? feature,
                 )
               }
               if (typeof fields[key] === "string") {
                 return row(
                   key,
                   key,
-                  String(current) || "(empty)",
+                  key === "alertWebhook" ? maskUrl(String(current)) || "(empty)" : String(current) || "(empty)",
                   () =>
                     ask(render, {
                       title: `${feature}.${key}`,
@@ -452,7 +455,7 @@ export default {
                         setFeatureConfig(feature, key, text)
                       },
                     }),
-                  feature,
+                  FEATURES.find((f) => f.key === feature)?.label ?? feature,
                 )
               }
               return row(
@@ -466,12 +469,12 @@ export default {
                     value: String(current),
                     onConfirm: (v: string) =>
                       setFeatureConfig(
-                        feature,
+                        FEATURES.find((f) => f.key === feature)?.label ?? feature,
                         key,
                         clampNumber(v, typeof current === "number" ? current : Number(fields[key]), key),
                       ),
                   }),
-                feature,
+                FEATURES.find((f) => f.key === feature)?.label ?? feature,
               )
             }),
           ),
