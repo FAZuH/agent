@@ -150,6 +150,12 @@ export interface JevState {
   yoloPropagate: "block-notify" | "no-op"
   /** Seconds a blocked call stays approvable. */
   approveTtl: number
+  /** The sidebar section with the recent hook calls. */
+  sidebar: boolean
+  /** How many recent calls the sidebar shows. */
+  sidebarCount: number
+  /** Whether each sidebar line also carries a clipped subject. */
+  sidebarSubject: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
   features: Record<string, boolean>
   /**
@@ -181,6 +187,9 @@ export const DEFAULTS: JevState = {
   toast: false,
   yoloPropagate: "block-notify",
   approveTtl: 600,
+  sidebar: true,
+  sidebarCount: 5,
+  sidebarSubject: false,
   features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
@@ -352,6 +361,9 @@ export function loadState(): JevState {
     toast: raw.toast === true,
     yoloPropagate: raw.yoloPropagate === "no-op" ? "no-op" : "block-notify",
     approveTtl: Math.max(0, Math.round(num(raw.approveTtl, DEFAULTS.approveTtl))),
+    sidebar: raw.sidebar !== false,
+    sidebarCount: Math.min(20, Math.max(1, Math.round(num(raw.sidebarCount, DEFAULTS.sidebarCount)))),
+    sidebarSubject: raw.sidebarSubject === true,
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
@@ -624,6 +636,23 @@ export function maskUrl(url: string): string {
   } catch {
     return text.slice(0, 12) + "…"
   }
+}
+
+/** The short hook names the sidebar uses; the full ones are too wide. */
+export const HOOK_SHORT: Record<string, string> = {
+  hook_skill_pick: "pick",
+  hook_tool_risk: "risk",
+  hook_tool_standard: "rules",
+}
+
+/** One sidebar line: the hook, the verdict, the confidence. Terse on purpose. */
+export function sidebarLine(row: any): string | null {
+  const short = HOOK_SHORT[String(row?.hook ?? "")] ?? String(row?.hook ?? "?")
+  if (row?.error) return `${short} err`
+  const { label, probability } = headline(row)
+  // A skip decided nothing, so it says nothing here either.
+  if (!label) return null
+  return `${short} ${label}${probability === undefined ? "" : ` ${probability.toFixed(2)}`}`
 }
 
 export function setFeature(key: string, on: boolean): boolean {

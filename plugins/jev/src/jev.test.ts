@@ -25,7 +25,7 @@ type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
 const clearState = () => rmSync(STATE_FILE, { force: true })
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastOutcomeAllowed, toastsOn } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -915,6 +915,19 @@ describe("toast outcomes", () => {
     expect(toastOutcomeAllowed({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBe(false)
     // A call that was decided announces, and a feature with no list always does.
     expect(toastOutcomeAllowed({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit" }] })).toBe(true)
+  })
+})
+
+describe("sidebar line", () => {
+  test("the hook, the verdict, the confidence", () => {
+    expect(sidebarLine({ hook: "hook_tool_risk", verdict: "deny", confidence: 0.87 })).toBe("risk deny 0.87")
+    expect(sidebarLine({ hook: "hook_tool_standard", verdict: "block", confidence: 0.93 })).toBe("rules block 0.93")
+    expect(sidebarLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", probability: 0.88 }] })).toBe("pick commit 0.88")
+  })
+
+  test("a row that decided nothing says nothing", () => {
+    expect(sidebarLine({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBeNull()
+    expect(sidebarLine({ hook: "hook_tool_risk", error: "Jev HTTP 401" })).toBe("risk err")
   })
 })
 

@@ -29,12 +29,15 @@
 
 import { appendFileSync } from "node:fs"
 import { grant, readApprovals, type Approval } from "./approve.ts"
-import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, maskUrl, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
+import { FEATURES, FEATURE_DEFAULTS, HOOK_SHORT, TUI_LOG_FILE, maskUrl, sidebarLine, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
 
 /** One tail per TUI process: a second slot render must not add a second timer. */
 let tailStarted = false
+let sidebarStarted = false
+/** Refills the sidebar lines. Set once the section exists. */
+let refreshSidebar: () => void = () => {}
 
 /**
  * What each setting means, and what it takes. The panel reads these instead
@@ -514,6 +517,33 @@ export default {
             )
             render()
           }, "Plugin"),
+          row("sidebar", "Sidebar section", s.sidebar ? "on" : "off", () => {
+            const next = !s.sidebar
+            saveState({ sidebar: next })
+            toast(next ? "Sidebar on. The recent Jev calls appear in the sidebar." : "Sidebar off.")
+            render()
+          }, "Plugin"),
+          row("sidebarcount", "Sidebar calls", String(s.sidebarCount), () =>
+            ask(render, {
+              title: "Sidebar calls",
+              description: "How many recent calls the sidebar shows. 1 to 20.",
+              value: String(s.sidebarCount),
+              onConfirm: (v: string) => {
+                const n = Number(String(v).trim())
+                if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 20) {
+                  toast(`Not a whole number between 1 and 20 — still ${s.sidebarCount}.`, "error")
+                  return
+                }
+                saveState({ sidebarCount: n })
+              },
+            }),
+          "Plugin"),
+          row("sidebarsubject", "Sidebar subjects", s.sidebarSubject ? "on" : "off", () => {
+            const next = !s.sidebarSubject
+            saveState({ sidebarSubject: next })
+            toast(next ? "Subjects on. Each sidebar line carries a clipped subject." : "Subjects off.")
+            render()
+          }, "Plugin"),
           row("approvettl", "Approval TTL", `${s.approveTtl}s`, () =>
             ask(render, {
               title: "Approval TTL",
@@ -648,6 +678,7 @@ export default {
           const line = toastLine(row)
           if (line) toast(line.message, line.variant, line.title)
         }
+        refreshSidebar()
       }, 2000)
     }
 
@@ -690,8 +721,67 @@ export default {
           const line = toastLine(row)
           if (line) toast(line.message, line.variant, line.title)
         }
+        refreshSidebar()
       }, 2000)
     }
+
+    // ——— the sidebar section ———
+
+    /**
+     * The recent hook calls, one terse line each. A slot claim must return a
+     * real element: a bare string is an orphan text node and the host's tree
+     * walk treats that as a crash. The element runtime comes from the host
+     * itself, so nothing is vendored.
+     */
+    async function startSidebar(): Promise<void> {
+      if (sidebarStarted) return
+      sidebarStarted = true
+      if (typeof ctx.ui?.slot !== "function" || typeof ctx.storage?.memory !== "function") return
+      let jsx: (type: string, props?: Record<string, unknown>) => unknown
+      try {
+        const runtime: any = await import("@opentui/solid/jsx-runtime")
+        jsx = runtime.jsx
+      } catch (error) {
+        trace("sidebar:no-runtime", { error: String(error?.message ?? error) })
+        return
+      }
+      const [store, update] = ctx.storage.memory("jev-sidebar", { initial: { lines: [] as string[] } })
+      const draw = () => {
+        const lines: string[] = store?.lines ?? []
+        if (!lines.length) return null
+        return jsx("box", {
+          children: [jsx("text", { children: "Jev" }), ...lines.map((line) => jsx("text", { children: line }))],
+        })
+      }
+      ctx.ui.slot({ append: "sidebar.content", render: draw })
+      // The lines ride the same poll the toasts use: the log the server writes
+      // is the only channel between the two processes.
+      refreshSidebar = () => {
+        const state = loadState()
+        if (!state.sidebar) {
+          update((draft: any) => {
+            draft.lines = []
+          })
+          return
+        }
+        const rows = readLog(60).reverse().filter((row: any) => HOOK_SHORT[row?.hook])
+        const lines: string[] = []
+        for (const row of rows.slice(0, state.sidebarCount * 2)) {
+          const line = sidebarLine(row)
+          if (!line) continue
+          lines.push(line)
+          if (lines.length >= state.sidebarCount) break
+          if (state.sidebarSubject && row?.subject) {
+            lines.push(`  ${String(row.subject).replace(/\s+/g, " ").trim().slice(0, 24)}`)
+          }
+        }
+        update((draft: any) => {
+          draft.lines = lines
+        })
+      }
+    }
+
+    void startSidebar()
 
     ctx.ui?.slot?.({
       append: "app",
