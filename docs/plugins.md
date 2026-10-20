@@ -52,14 +52,14 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   injects nothing. Subagent sessions are skipped.
 - **`hook_tool_risk`** (off by default): every tool call the host checks for
   permission, inside `hook_tool_risk.actions`, is sent to Jev, which answers
-  one of four things — `accept` (the call runs, and the prompt never appears),
-  `propagate` (the user is asked), `deny` (the call is blocked and the agent
+  one of four things — `allow` (the call runs, and the prompt never appears),
+  `ask` (the user is asked), `deny` (the call is blocked and the agent
   reads the reason), `alert` (the call is blocked, the session is interrupted,
   and the user is notified). A weak answer changes nothing. A repeated call
   reuses the first verdict.
 - **`hook_tool_standard`** (off by default): the rules file. Every rule that
   matches the call is scored in one call, and a rule over its threshold is
-  violated: `block` denies the call, `propagate` asks the user. The file is
+  violated: `block` denies the call, `ask` asks the user. The file is
   YAML (and YAML reads JSON, so a `.json` file works too), a rule may quote a
   file with `{file:<path>}`, and a rule may override the global action and
   threshold. A file that cannot be parsed changes nothing and says so in the
@@ -74,7 +74,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   you re-enable it. Below it: `hook_skill_pick`, `hook_tool_risk`,
   `hook_tool_standard`.
 - **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
-  `yoloPropagate` branch, and the approval lifetime. Each feature carries its
+  `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
   own numbers; there are no global thresholds.
 - **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
   one through once. The grant is spent by the server, so the approved call

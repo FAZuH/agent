@@ -105,10 +105,13 @@ answers, and the host's own effect is changed to match:
 
 | Answer | Effect | What else happens |
 | --- | --- | --- |
-| `accept` | `allow` | the prompt never appears, even when the host wanted to ask |
-| `propagate` | `ask` | the user gets the ordinary prompt |
+| `allow` | `allow` | the prompt never appears, even when the host wanted to ask |
+| `ask` | `ask` | the user gets the ordinary prompt |
 | `deny` | `deny` | the agent reads the reason as the tool error |
 | `alert` | `deny` | the session is interrupted and the user is notified |
+
+The answers are the host's own permission words, so the verdict, the effect
+and the toast filter all speak one language.
 
 The hook sits in the host's permission evaluation, so a configured `deny`
 never reaches it: the host's own block stands, and this hook only speaks
@@ -122,7 +125,7 @@ command that runs ten times costs one call.
 **`hook_tool_standard`** (off by default): the rules file. Every rule that
 matches the call is scored — one question per rule, one call for all of them —
 and a rule scoring at or above its threshold is violated. A violated `block`
-rule denies the call; a violated `propagate` rule asks the user. Every rule
+rule denies the call; a violated `ask` rule asks the user. Every rule
 keeps its score, violated or not: a score never removes a row.
 
 The rules file is YAML, and YAML reads JSON, so one loader takes both. A
@@ -162,8 +165,8 @@ cannot be read skips its rule: a missing reference must never block a call.
 A rule file that cannot be parsed is loud in `/jev-log` and changes nothing.
 
 **Auto-accept mode.** The client answers its own permission requests in that
-mode, so an `ask` never reaches a human. `propagate` therefore has two
-meanings, and `yoloPropagate` (a global setting) picks one:
+mode, so an `ask` never reaches a human. An `ask` therefore has two
+meanings, and `yoloAsk` (a global setting) picks one:
 
 - `block-notify` (default): the call is blocked, recorded, and the user is
   told which command lets it through. The agent is told to wait.
@@ -255,10 +258,10 @@ endpoint path have no portable default.
 | `think` | `false` | toggle in `/jev-settings` |
 | `enabled` | `true` | `/jev-features` |
 | `toast` | `false` | toggle in `/jev-settings`; master switch for the per-call TUI toasts |
-| `yoloPropagate` | `block-notify` | what a `propagate` verdict does while the client auto-accepts: `block-notify` or `no-op` |
+| `yoloAsk` | `block-notify` | what an `ask` verdict does while the client auto-accepts: `block-notify` or `no-op` |
 | `sidebar` | `true` | the sidebar section with the recent hook calls |
 | `sidebarCount` | `5` | how many recent calls the sidebar shows (1-20) |
-| `sidebarSubject` | `false` | whether each sidebar line also carries a clipped subject |
+| `sidebarSubject` | `true` | whether each sidebar line also carries a clipped subject |
 | `approveTtl` | `600` | seconds a blocked call stays approvable; `0` keeps it forever |
 | `logMax` | `500` | `/jev-settings`; call-log line cap, pruned to the tail |
 
@@ -285,9 +288,10 @@ load, so tuned thresholds survive the upgrade.
 | `hook_tool_risk` | `cache` | `true` | reuse the verdict for the same call in the same session |
 | `hook_tool_risk` | `alertWebhook` | `""` | POST the alert to a Discord webhook; empty turns it off. The TUI toast is the other channel |
 | `hook_tool_risk` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
+| `hook_tool_risk` | `undecided` | `allow` | what a verdict the model was not confident about means: `allow` (the call runs) or `ask` (the user decides) |
 | `hook_tool_risk` | `toastOutcomes` | `deny,alert` | what a call has to end in for this feature to announce it: `allow`, `ask`, `deny`, `alert`, or `all` |
 | `hook_tool_standard` | `rulesFile` | `~/.config/fazuh-agent/jev-rules.yaml` | the rules file. YAML, and YAML reads JSON, so a `.json` file works too |
-| `hook_tool_standard` | `defaultEffect` | `block` | what a violated rule does: `block` or `propagate` |
+| `hook_tool_standard` | `defaultEffect` | `block` | what a violated rule does: `block` or `ask` |
 | `hook_tool_standard` | `defaultThreshold` | `0.7` | the bar a rule score must reach |
 | `hook_tool_standard` | `minProbability` | `0.7` | the confidence floor; a rule never fires below it |
 | `hook_tool_standard` | `timeout` | `5000` | ms before the call gives up; the rules then change nothing. `0` waits for the provider, unbounded |
@@ -382,19 +386,26 @@ documented non-closing API does not exist.
 ## The sidebar section
 
 The plugin adds a `Jev` section to the TUI sidebar: the recent hook calls,
-one terse line each — the hook, the verdict and the confidence.
+one terse line each.
 
 ```
-Jev
-risk accept 0.77
-risk deny 0.87
-pick commit 0.88
+▼ Jev
+risk allow ls skills/ocv2/ocv2…
+risk deny rm -rf ./build
+rules block secrets/.env
+pick commit review the plugin
 ```
 
-A row that decided nothing (a cached verdict, a rule that could not be read)
-is not shown: the section is a history of decisions, not of the plugin's
-inner life. `sidebarCount` caps the lines, `sidebarSubject` adds the subject
-on a second line, and `sidebar` turns the section off.
+The line is the hook, the verdict, and the call it judged. The whole line
+is clipped to what the sidebar has room for, so the prefix decides how much
+of the call is left, and the action prefix the subject already carries is
+left off. A row that decided nothing (a cached verdict, a rule that could
+not be read) is not shown: the section is a history of decisions, not of
+the plugin's inner life. `sidebarCount` caps the lines, `sidebarSubject`
+drops the call, and `sidebar` turns the section off.
+
+The header folds like the host's own sections: the arrow is a click, and
+the fold state is remembered.
 
 A slot claim must return a real element. A bare string is an orphan text
 node, and the host's tree walk treats that as a crash. The element runtime
