@@ -71,7 +71,7 @@ drift), `review-agent` (two-axis review).
 `gate`, `scratch`, `worktree`.
 
 **OpenCode v2**: `ocv2-api`, `ocv2-compact`, `ocv2-models`, `ocv2-sessions`,
-`ocv2-move`, `ocv2-plugins`, `ocv2-pluginhealth`, `ocv2-unfuck`.
+`ocv2-plugins`, `ocv2-pluginhealth`, `ocv2-unfuck`.
 
 ### External skills (`~/.agents/skills`)
 

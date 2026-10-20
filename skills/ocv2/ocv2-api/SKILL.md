@@ -97,7 +97,6 @@ list into python. Instead:
 ## Related
 
 - @ocv2-sessions: full fork→switch→verify→talk→wait flow
-- @ocv2-move: `POST /api/session/{id}/move` for changing project directory
 - @ocv2-pluginhealth: `GET /api/plugin` diagnosis
 - @notes: durable notes for OpenCode v2 quirks, tool behavior, and host-specific guidance
 
