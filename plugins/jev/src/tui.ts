@@ -28,12 +28,56 @@
  */
 
 import { appendFileSync } from "node:fs"
-import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastsOn, writeKey, type JevState } from "./state.ts"
+import { grant, readApprovals, type Approval } from "./approve.ts"
+import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
 
 /** One tail per TUI process: a second slot render must not add a second timer. */
 let tailStarted = false
+
+/**
+ * What each setting means, and what it takes. The panel reads these instead
+ * of switching on the key, so a new field needs one line here and nothing in
+ * the panel code.
+ */
+const FIELD_HELP: Record<string, string> = {
+  timeout: "Milliseconds before the call gives up. 0 waits for the provider, unbounded. Fail-open: the call keeps the host's own effect.",
+  minProbability: "The probability a verdict or a rule score must reach. 0 to 1.",
+  minMargin: "The gap to the runner-up a verdict must clear. 0 to 1.",
+  maxCandidates: "Most skills to offer Jev. The provider's choice limit is 255.",
+  maxPicks: "Most skills the advisory names. -1 names every qualifier.",
+  alsoAbove: "Runners-up at or above this probability join the winner. 0 to 1.",
+  optimizeModel: "providerID/modelID for the optimizer, e.g. 9router/free. Empty uses the host's model.",
+  actions: "Permission actions this feature examines, comma separated. Tool names work too: write and patch mean edit, bash means shell. * means every action.",
+  cache: "Reuse a verdict for the same call in the same session.",
+  alertWebhook: "POST the alert to a Discord webhook. Empty turns it off.",
+  rulesFile: "The rules file. YAML, and YAML reads JSON, so a .json file works too.",
+  defaultEffect: "What a violated rule does: block or propagate.",
+  defaultThreshold: "The bar a rule score must reach. 0 to 1.",
+  fileMaxChars: "Characters a {file:...} reference may add to a rule.",
+  toastOutcomes: "What a call has to end in for this feature to announce it: allow, ask, deny, alert, or all. A skip is never announced.",
+}
+
+/** The range a numeric setting takes. Anything unlisted is a whole number. */
+const FIELD_MIN: Record<string, number> = {
+  minProbability: 0,
+  minMargin: 0,
+  alsoAbove: 0,
+  defaultThreshold: 0,
+  maxCandidates: 1,
+  maxPicks: -1,
+  timeout: 0,
+  fileMaxChars: 0,
+}
+
+/** The top of a 0-1 setting. Unlisted means no top. */
+const FIELD_MAX: Record<string, number> = {
+  minProbability: 1,
+  minMargin: 1,
+  alsoAbove: 1,
+  defaultThreshold: 1,
+}
 
 function summary(): string {
   const s = loadState()
@@ -393,15 +437,15 @@ export default {
                 return row(
                   `${feature}.${key}`,
                   `${feature}.${key}`,
-                  String(current) || "(host model)",
+                  String(current) || "(empty)",
                   () =>
                     ask(render, {
                       title: `${feature}.${key}`,
-                      description: "providerID/modelID for the optimizer, e.g. 9router/free. Empty uses the host's model.",
+                      description: FIELD_HELP[key] ?? "A text setting.",
                       value: String(current),
                       onConfirm: (v: string) => {
                         const text = v.trim()
-                        if (text && !text.includes("/")) {
+                        if (key === "optimizeModel" && text && !text.includes("/")) {
                           toast("Needs providerID/modelID, e.g. 9router/free.", "error")
                           return
                         }
@@ -418,26 +462,13 @@ export default {
                 () =>
                   ask(render, {
                     title: `${feature}.${key}`,
-                    description:
-                      key === "timeout"
-                        ? "Milliseconds before the Jev call gives up. Fail-open: nothing injected, nothing blocked."
-                        : key === "maxCandidates"
-                          ? "Most skills to offer Jev. The provider's choice limit is 255."
-                          : key === "maxPicks"
-                            ? "Most skills the advisory names. -1 names every qualifier."
-                            : key === "alsoAbove"
-                              ? "Runners-up at or above this probability join the winner. 0 to 1."
-                              : key === "gateProbability"
-                                ? "Blocks a call at or above this. Only when confident. 0 to 1."
-                                : "A choice below this is reported as low confidence. 0 to 1.",
+                    description: FIELD_HELP[key] ?? "A number.",
                     value: String(current),
                     onConfirm: (v: string) =>
                       setFeatureConfig(
                         feature,
                         key,
-                        key === "timeout" || key === "maxCandidates" || key === "maxPicks"
-                          ? clampCount(v, typeof current === "number" ? current : Number(fields[key]), key === "maxPicks")
-                          : clamp01(v, typeof current === "number" ? current : Number(fields[key])),
+                        clampNumber(v, typeof current === "number" ? current : Number(fields[key]), key),
                       ),
                   }),
                 feature,
@@ -467,6 +498,34 @@ export default {
             toast(next ? "Toasts on. Each Jev call is announced in the TUI." : "Toasts off.")
             render()
           }, "Plugin"),
+          // What a "propagate" verdict does while the client auto-accepts. The
+          // client answers its own permission requests in that mode, so an
+          // ask never reaches a human.
+          row("yolo", "YOLO propagate", s.yoloPropagate === "no-op" ? "no-op" : "block-notify", () => {
+            const next = s.yoloPropagate === "no-op" ? "block-notify" : "no-op"
+            saveState({ yoloPropagate: next })
+            toast(
+              next === "no-op"
+                ? "Propagate does nothing while the client auto-accepts."
+                : "Propagate blocks the call and asks you while the client auto-accepts.",
+            )
+            render()
+          }, "Plugin"),
+          row("approvettl", "Approval TTL", `${s.approveTtl}s`, () =>
+            ask(render, {
+              title: "Approval TTL",
+              description: "Seconds a blocked call stays approvable. 0 keeps it forever.",
+              value: String(s.approveTtl),
+              onConfirm: (v: string) => {
+                const n = Number(String(v).trim())
+                if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+                  toast(`Not a whole number of seconds — still ${s.approveTtl}.`, "error")
+                  return
+                }
+                saveState({ approveTtl: n })
+              },
+            }),
+          "Plugin"),
           row("features", "Features", `${FEATURES.filter((f) => featureOn(f.key)).length} of ${FEATURES.length} on`, () => openFeatures(), "Plugin"),
           row("status", "Status", `${money.calls} calls · $${money.usd.toFixed(6)}`, () => toast(summary()), "Plugin"),
           row("log", "Recent calls", "", () => toast(recentCalls()), "Plugin"),
@@ -476,29 +535,82 @@ export default {
     }
 
     /**
-     * An unparseable or out-of-range number keeps the old value rather than
-     * writing a NaN (which JSON turns into null, silently unsetting the value).
+     * A number outside its range keeps the old value rather than writing a
+     * NaN (which JSON turns into null, silently unsetting the value). The
+     * range comes from the field tables, so a new setting needs no code here.
      */
-    function clamp01(raw: string, current: number): number {
+    function clampNumber(raw: string, current: number, key: string): number {
       const n = Number(String(raw).trim())
-      if (!Number.isFinite(n) || n < 0 || n > 1) {
-        toast(`Not a number between 0 and 1 — still ${current}.`, "error")
-        return current
-      }
-      return n
-    }
-
-    /** Counts that admit -1 as "no limit" (maxPicks). */
-    function clampCount(raw: string, current: number, allowUncapped: boolean): number {
-      const n = Number(String(raw).trim())
-      if (!Number.isFinite(n) || !Number.isInteger(n) || n < (allowUncapped ? -1 : 1) || (allowUncapped && n === 0)) {
-        toast(allowUncapped ? `Not -1 or a positive integer — still ${current}.` : `Not a positive integer — still ${current}.`, "error")
+      const min = FIELD_MIN[key] ?? 0
+      const max = FIELD_MAX[key]
+      const whole = max === undefined
+      const bad = !Number.isFinite(n) || n < min || (max !== undefined && n > max) || (whole && !Number.isInteger(n))
+      if (bad) {
+        toast(`Not ${whole ? "a whole number" : `a number between ${min} and ${max}`} — still ${current}.`, "error")
         return current
       }
       return n
     }
 
     // ——— registration (must happen inside a rendered component) ———
+
+    /** The session the user is looking at. */
+    function currentSessionID(): string {
+      const route = ctx.ui.router?.current?.()
+      return route?.type === "session" ? String(route.sessionID ?? "") : ""
+    }
+
+    /**
+     * The blocked calls waiting for the user, in this session. The server
+     * writes them; this is the list the picker offers.
+     */
+    function pendingApprovals(): Approval[] {
+      const sessionID = currentSessionID()
+      if (!sessionID) return []
+      return readApprovals(loadState().approveTtl).filter((a) => a.sessionID === sessionID)
+    }
+
+    /**
+     * Approve one blocked call. The grant lets the next matching call through
+     * once, and the server spends it there.
+     */
+    async function approve(prefix: string): Promise<void> {
+      const pending = pendingApprovals()
+      if (!pending.length) {
+        toast("Nothing is waiting for approval.")
+        return
+      }
+      const query = prefix.trim().toLowerCase()
+      const matches = pending.filter((a) => !query || a.token.includes(query) || a.subject.toLowerCase().includes(query))
+      if (!matches.length) {
+        toast(`No blocked call matches "${prefix.trim()}".`)
+        return
+      }
+      const chosen = matches.length === 1 ? matches[0] : await pick(matches)
+      if (!chosen) return
+      grant(chosen.token, currentSessionID())
+      toast(`Approved ${chosen.token}. The next matching call in this session is allowed once.`)
+    }
+
+    /** The picker: the host's own searchable list of what is blocked. */
+    async function pick(matches: Approval[]): Promise<Approval | undefined> {
+      const token = await ctx.ui.dialog.select({
+        title: "Approve a blocked call",
+        options: matches.map((a) => ({
+          title: `${a.token}  ${a.subject.split("\n")[0].slice(0, 80)}`,
+          value: a.token,
+          description: a.reason,
+        })),
+        search: (query: string, options: any[]) =>
+          options.filter(
+            (o: any) =>
+              o.title.toLowerCase().includes(query.toLowerCase()) ||
+              (o.description ?? "").toLowerCase().includes(query.toLowerCase()),
+          ),
+      })
+      if (!token) return undefined
+      return matches.find((a) => a.token === token)
+    }
 
     function recentCalls(): string {
       const rows = readLog(12)
@@ -535,6 +647,7 @@ export default {
         after = next
         for (const row of fresh) {
           if (!toastsOn(row.hook)) continue
+          if (!toastOutcomeAllowed(row)) continue
           const line = toastLine(row)
           if (line) toast(line.message, line.variant, line.title)
         }
@@ -555,6 +668,21 @@ export default {
             { id: "jev.status", title: "Jev status", group: "jev", palette: true, slash: { name: "jev-status" }, run: () => guard("jev-status", () => toast(summary())) },
             { id: "jev.key", title: "Set Jev API key", group: "jev", palette: true, slash: { name: "jev-key" }, run: () => guard("jev-key", () => void setKey()) },
             { id: "jev.log", title: "Jev recent calls", group: "jev", palette: true, slash: { name: "jev-log" }, run: () => toast(recentCalls()) },
+            {
+              id: "jev.approve",
+              title: "Approve a blocked call",
+              group: "jev",
+              palette: true,
+              slash: { name: "jev-approve", arguments: true },
+              run: (input) =>
+                guard(
+                  "jev-approve",
+                  () =>
+                    void approve(String(input ?? "")).catch((error: any) =>
+                      toast(`Approve failed: ${error?.message ?? error}`, "error"),
+                    ),
+                ),
+            },
           ],
         }))
         return null // layer carrier renders nothing

@@ -195,6 +195,12 @@ function rekey(reply: Record<string, any>, questions: Record<string, JevQuestion
   )
 }
 
+/** A zero timeout means wait for the provider. AbortSignal rejects that, so
+ *  the signal is left off entirely. */
+export function signalFor(timeoutMs: number): AbortSignal | undefined {
+  return timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+}
+
 /** Post one chat request and return the model's reply content. */
 async function postChat(state: JevState, prompt: string, timeoutMs: number): Promise<string> {
   let response: Response
@@ -212,7 +218,7 @@ async function postChat(state: JevState, prompt: string, timeoutMs: number): Pro
         options: { temperature: 0 },
         messages: [{ role: "user", content: prompt }],
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: signalFor(timeoutMs),
     })
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
@@ -428,7 +434,7 @@ export async function ask(
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signalFor(timeoutMs),
       })
     } catch (error) {
       const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")

@@ -17,10 +17,13 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { RISK_TOOLS, blocksCall, firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
-const { answersOf, JevError, normalize, redact } = await import("./jev.ts")
+const { actionsInScope, firstSentence, hashDescription, normalizeAction, optimizeCriteria, optimizerModel, propagateOutcome, renderAdvice, resolveCriteria, rosterHash, stronger, stripCriterionPreamble, verdictOutcome } = await import("./index.ts")
+const { answersOf, JevError, normalize, redact, signalFor } = await import("./jev.ts")
+const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await import("./approve.ts")
+const { expandFileRefs, matchesPattern, parseRules, ruleApplies } = await import("./rules.ts")
+type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastsOn } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, migrateLegacyLayout, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -327,27 +330,116 @@ describe("multi-pick advice", () => {
   })
 })
 
-describe("risk gate", () => {
-  const at = 0.7
-
-  test("blocks a confident answer over the threshold", () => {
-    expect(blocksCall({ confident: true, probability: 0.96 }, at)).toBe(true)
+describe("tool action scope", () => {
+  test("tool names normalize to the action the host sends", () => {
+    // The host sends a permission action, not a tool name: `bash` is the
+    // older shell tool, `write` and `patch` are edits.
+    expect(normalizeAction("bash")).toBe("shell")
+    expect(normalizeAction("write")).toBe("edit")
+    expect(normalizeAction("patch")).toBe("edit")
+    expect(normalizeAction("shell")).toBe("shell")
+    expect(normalizeAction("READ")).toBe("read")
   })
 
-  test("a high probability the plugin calls low confidence never blocks", () => {
-    // The whole point: requirement 3 says low confidence proceeds. A noul at
-    // 0.79 is not confident, so it must not stop the agent even though it is
-    // above the threshold.
-    expect(blocksCall({ confident: false, probability: 0.79 }, at)).toBe(false)
-    expect(blocksCall({ confident: false, probability: 0.99 }, at)).toBe(false)
+  test("only the configured actions are examined", () => {
+    rmSync(join(scratch, "jev-state.json"), { force: true })
+    expect(actionsInScope("hook_tool_risk", "shell")).toBe(true)
+    expect(actionsInScope("hook_tool_risk", "edit")).toBe(true)
+    // A read is not judged, so the hook never spends on one.
+    expect(actionsInScope("hook_tool_risk", "read")).toBe(false)
+    expect(actionsInScope("hook_tool_risk", "webfetch")).toBe(false)
   })
 
-  test("a confident answer below the threshold is allowed", () => {
-    expect(blocksCall({ confident: true, probability: 0.4 }, at)).toBe(false)
+  test("a tool name in the setting means the same action", () => {
+    setFeatureConfig("hook_tool_risk", "actions", "write,bash")
+    expect(actionsInScope("hook_tool_risk", "edit")).toBe(true)
+    expect(actionsInScope("hook_tool_risk", "shell")).toBe(true)
+    expect(actionsInScope("hook_tool_risk", "read")).toBe(false)
+    setFeatureConfig("hook_tool_risk", "actions", "shell,edit")
   })
 
-  test("a missing probability does not block", () => {
-    expect(blocksCall({ confident: true }, at)).toBe(false)
+  test("an empty filter examines nothing", () => {
+    setFeatureConfig("hook_tool_risk", "actions", "")
+    expect(actionsInScope("hook_tool_risk", "shell")).toBe(false)
+    setFeatureConfig("hook_tool_risk", "actions", "shell,edit")
+  })
+})
+
+describe("verdict outcomes", () => {
+  const info = {
+    sessionID: "ses_x",
+    action: "shell",
+    resources: ["rm -rf ./build"],
+    subject: {},
+    text: "shell: rm -rf ./build",
+    dir: scratch,
+  }
+
+  test("accept allows the call, even one the host wanted to ask about", () => {
+    expect(verdictOutcome("accept", 0.9, info)?.effect).toBe("allow")
+  })
+
+  test("deny blocks with a reason the agent reads", () => {
+    const out = verdictOutcome("deny", 0.87, info)!
+    expect(out.effect).toBe("deny")
+    expect(out.message).toContain("P=0.87")
+    expect(out.alert).toBeUndefined()
+  })
+
+  test("alert blocks and stops the agent", () => {
+    const out = verdictOutcome("alert", 0.91, info)!
+    expect(out.effect).toBe("deny")
+    expect(out.alert).toBe(true)
+  })
+
+  test("the stronger outcome wins, and an alert beats a plain deny", () => {
+    expect(stronger({ effect: "ask" }, { effect: "allow" })?.effect).toBe("ask")
+    expect(stronger({ effect: "deny" }, { effect: "ask" })?.effect).toBe("deny")
+    expect(stronger({ effect: "deny", alert: true }, { effect: "deny" })?.alert).toBe(true)
+    expect(stronger(null, { effect: "deny" })?.effect).toBe("deny")
+    expect(stronger({ effect: "deny" }, null)?.effect).toBe("deny")
+  })
+})
+
+describe("propagate in auto-accept mode", () => {
+  const info = {
+    sessionID: "ses_prop",
+    action: "shell",
+    resources: ["rm -rf ./build"],
+    subject: {},
+    text: "shell: rm -rf ./build",
+    dir: scratch,
+  }
+
+  afterEach(() => {
+    delete process.env[CONFIG_PATH_ENV]
+    resetAutoAcceptCache()
+  })
+
+  const clientMode = (mode: string) => {
+    const file = join(scratch, "cli.json")
+    writeFileSync(file, `{"session":{"permissions":"${mode}"}}`)
+    process.env[CONFIG_PATH_ENV] = file
+    resetAutoAcceptCache()
+  }
+
+  test("while the client prompts, propagate is an ordinary ask", () => {
+    clientMode("prompt")
+    const out = propagateOutcome(info, "why")
+    expect(out.effect).toBe("ask")
+    expect(out.token).toBeUndefined()
+  })
+
+  test("while the client auto-accepts, propagate blocks and records the call", () => {
+    // The client answers its own permission requests in that mode, so an ask
+    // would never reach a human: the call is blocked and recorded instead.
+    clientMode("autoaccept")
+    const out = propagateOutcome(info, "why")
+    expect(out.effect).toBe("deny")
+    expect(out.token).toMatch(/^[0-9a-f]{6}$/)
+    expect(out.message).toContain(`/jev-approve ${out.token}`)
+    const pending = readApprovals(600)
+    expect(pending.map((a) => a.token)).toContain(out.token)
   })
 })
 
@@ -355,17 +447,23 @@ describe("feature switches", () => {
   test("every feature is present after an old state file with no features key", () => {
     const migrated = featureMap({})
     expect(Object.keys(migrated).sort()).toEqual(FEATURES.map((f) => f.key).sort())
-    // Both hooks are opt-in.
-    expect(migrated.hook_risk).toBe(false)
+    // Every hook is opt-in.
     expect(migrated.hook_skill_pick).toBe(false)
+    expect(migrated.hook_tool_risk).toBe(false)
+    expect(migrated.hook_tool_standard).toBe(false)
   })
 
   test("a pre-features state file keeps its gate as the risk hook", () => {
-    expect(featureMap(undefined, true).hook_risk).toBe(true)
-    expect(featureMap(undefined, false).hook_risk).toBe(false)
-    expect(featureMap(undefined).hook_risk).toBe(false)
+    expect(featureMap(undefined, true).hook_tool_risk).toBe(true)
+    expect(featureMap(undefined, false).hook_tool_risk).toBe(false)
+    expect(featureMap(undefined).hook_tool_risk).toBe(false)
     // An explicit features map wins over the legacy key.
-    expect(featureMap({ hook_risk: false }, true).hook_risk).toBe(false)
+    expect(featureMap({ hook_tool_risk: false }, true).hook_tool_risk).toBe(false)
+  })
+
+  test("the old risk hook carries over to the new one", () => {
+    expect(featureMap({ hook_risk: true }).hook_tool_risk).toBe(true)
+    expect(featureMap({ risk_hook: true }).hook_tool_risk).toBe(true)
   })
 
   test("only known keys are honoured, so a typo cannot invent a switch", () => {
@@ -394,10 +492,10 @@ describe("per-feature config", () => {
   })
 
   test("non-numeric and unknown values are dropped", () => {
-    const cfg = featureConfigMap({ hook_skill_pick: { timeout: "fast", bogus: 1 }, hook_risk: "nope" })
+    const cfg = featureConfigMap({ hook_skill_pick: { timeout: "fast", bogus: 1 }, hook_tool_risk: "nope" })
     expect(cfg.hook_skill_pick.timeout).toBe(FEATURE_DEFAULTS.hook_skill_pick.timeout)
     expect("bogus" in cfg.hook_skill_pick).toBe(false)
-    expect(cfg.hook_risk.gateProbability).toBe(FEATURE_DEFAULTS.hook_risk.gateProbability)
+    expect(cfg.hook_tool_risk.timeout).toBe(FEATURE_DEFAULTS.hook_tool_risk.timeout)
   })
 
   test("legacy global thresholds seed the per-feature config", () => {
@@ -405,7 +503,8 @@ describe("per-feature config", () => {
     const s = loadState()
     expect(s.config.hook_skill_pick.minProbability).toBe(0.9)
     expect(s.config.hook_skill_pick.minMargin).toBe(0.2)
-    expect(s.config.hook_risk.gateProbability).toBe(0.6)
+    // The old block bar becomes the new verdict bar.
+    expect(s.config.hook_tool_risk.minProbability).toBe(0.6)
     // The old top-level keys are gone from the loaded state.
     expect((s as any).minProbability).toBeUndefined()
   })
@@ -415,14 +514,28 @@ describe("per-feature config", () => {
       join(scratch, "jev-state.json"),
       JSON.stringify({
         features: { pick_skill: true, risk_hook: true },
-        config: { pick_skill: { timeout: 777 }, risk_hook: { gateProbability: 0.9 } },
+        config: { pick_skill: { timeout: 777 }, risk_hook: { timeout: 999, gateProbability: 0.9, minProbability: 0.95 } },
       }),
     )
     const s = loadState()
     expect(s.features.hook_skill_pick).toBe(true)
-    expect(s.features.hook_risk).toBe(true)
+    expect(s.features.hook_tool_risk).toBe(true)
     expect(s.config.hook_skill_pick.timeout).toBe(777)
-    expect(s.config.hook_risk.gateProbability).toBe(0.9)
+    // The timeout carries over. The probability floors do not: the old hook
+    // judged one binary question, the new one judges a four-way verdict, so
+    // the same number would mean something else.
+    expect(s.config.hook_tool_risk.timeout).toBe(999)
+    expect(s.config.hook_tool_risk.minProbability).toBe(FEATURE_DEFAULTS.hook_tool_risk.minProbability)
+  })
+
+  test("the YOLO branch and the approval lifetime are global settings", () => {
+    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ yoloPropagate: "no-op", approveTtl: 30 }))
+    const s = loadState()
+    expect(s.yoloPropagate).toBe("no-op")
+    expect(s.approveTtl).toBe(30)
+    // Anything else is the safe default.
+    writeFileSync(join(scratch, "jev-state.json"), JSON.stringify({ yoloPropagate: "nonsense" }))
+    expect(loadState().yoloPropagate).toBe("block-notify")
   })
 
   test("logMax reads from state with a floor", () => {
@@ -480,10 +593,10 @@ describe("master switch", () => {
     for (const f of FEATURES) expect(featureOn(f.key)).toBe(false)
     // The stored settings are untouched, so turning it back on restores them.
     expect(featureStored("hook_skill_pick")).toBe(true)
-    expect(featureStored("hook_risk")).toBe(false)
+    expect(featureStored("hook_tool_risk")).toBe(false)
     setEnabled(true)
     expect(featureOn("hook_skill_pick")).toBe(true)
-    expect(featureOn("hook_risk")).toBe(false)
+    expect(featureOn("hook_tool_risk")).toBe(false)
   })
 
   test("a feature switched off stays off when the plugin comes back", () => {
@@ -495,18 +608,109 @@ describe("master switch", () => {
   })
 })
 
-describe("risk hook tool filter", () => {
-  test("the shell tool is judged under both of its names", () => {
-    // v2.0.28 sends `shell`; older hosts send `bash`. Missing either one means
-    // commands run unjudged while writes still keep the hook looking alive.
-    expect(RISK_TOOLS).toContain("shell")
-    expect(RISK_TOOLS).toContain("bash")
+describe("rules file", () => {
+  test("YAML and JSON both load, because YAML reads JSON", () => {
+    const yaml = parseRules('rules:\n  - id: a\n    text: does a thing\n')
+    expect(yaml).toHaveLength(1)
+    expect(yaml[0].id).toBe("a")
+    const json = parseRules('{"rules":[{"id":"a","text":"does a thing"}]}')
+    expect(json[0].id).toBe("a")
   })
 
-  test("reads are not judged", () => {
-    expect(RISK_TOOLS).not.toContain("read")
-    expect(RISK_TOOLS).not.toContain("grep")
-    expect(RISK_TOOLS).not.toContain("webfetch")
+  test("a bare list is a rule list too", () => {
+    expect(parseRules('- id: a\n  text: t\n')).toHaveLength(1)
+  })
+
+  test("a typo in a rule is loud, not silent", () => {
+    expect(() => parseRules('rules:\n  - id: a\n    text: t\n    treshold: 0.5\n')).toThrow(/unknown field/)
+    expect(() => parseRules('rules:\n  - id: a\n')).toThrow(/no text/)
+    expect(() => parseRules('rules:\n  - text: t\n')).toThrow(/no id/)
+    expect(() => parseRules('rules:\n  - id: a\n    text: t\n    threshold: 2\n')).toThrow(/probability/)
+    expect(() => parseRules('rules:\n  - id: a\n    text: t\n    effect: maybe\n')).toThrow(/effect/)
+    expect(() => parseRules('rules:\n  - id: a\n    text: t\n    match: { acton: shell }\n')).toThrow(/unknown match field/)
+  })
+
+  test("two rules cannot share an id", () => {
+    expect(() => parseRules('rules:\n  - id: a\n    text: t\n  - id: a\n    text: u\n')).toThrow(/duplicate/)
+  })
+
+  test("the match is a whole-value wildcard", () => {
+    expect(matchesPattern("curl *", "curl http://x")).toBe(true)
+    // A pattern ending in " *" also matches the bare value.
+    expect(matchesPattern("curl *", "curl")).toBe(true)
+    expect(matchesPattern("curl *", "wget http://x")).toBe(false)
+    expect(matchesPattern("*.env", "secrets/.env")).toBe(true)
+    expect(matchesPattern("*.env", "secrets/.env.local")).toBe(false)
+    expect(matchesPattern("?s", "ls")).toBe(true)
+    expect(matchesPattern("?s", "lls")).toBe(false)
+  })
+
+  test("a rule applies to its action and any of its resources", () => {
+    const rule: Rule = { id: "a", match: { action: "shell", resource: "curl *" }, text: "t" }
+    expect(ruleApplies(rule, "shell", ["curl http://x"])).toBe(true)
+    expect(ruleApplies(rule, "shell", ["ls"])).toBe(false)
+    expect(ruleApplies(rule, "edit", ["curl http://x"])).toBe(false)
+    const any: Rule = { id: "b", match: {}, text: "t" }
+    expect(ruleApplies(any, "read", ["anything"])).toBe(true)
+  })
+
+  test("a {file:...} reference becomes the file's contents", () => {
+    writeFileSync(join(scratch, "policy.md"), "no secrets in the logs")
+    const out = expandFileRefs("the rule is in {file:policy.md}", scratch, 8000)
+    expect(out.text).toContain("no secrets in the logs")
+    expect(out.missing).toEqual([])
+  })
+
+  test("a file that cannot be read is reported, so its rule is skipped", () => {
+    const out = expandFileRefs("see {file:nope.md}", scratch, 8000)
+    expect(out.missing).toEqual(["nope.md"])
+  })
+
+  test("the injected contents are capped", () => {
+    writeFileSync(join(scratch, "big.md"), "x".repeat(500))
+    const out = expandFileRefs("{file:big.md}", scratch, 100)
+    expect(out.text.length).toBeLessThan(200)
+  })
+})
+
+describe("approve flow", () => {
+  test("the token is the identity of the call", () => {
+    const a = callToken("ses_x", "shell", ["ls", "pwd"])
+    // The order of the resources does not change the call.
+    expect(a).toBe(callToken("ses_x", "shell", ["pwd", "ls"]))
+    expect(a).not.toBe(callToken("ses_y", "shell", ["ls", "pwd"]))
+    expect(a).not.toBe(callToken("ses_x", "edit", ["ls", "pwd"]))
+    expect(a).toMatch(/^[0-9a-f]{6}$/)
+  })
+
+  test("a grant lets one call through and is then gone", () => {
+    grant("abc123", "ses_x")
+    expect(consumeGrant("abc123")).toBe(true)
+    expect(consumeGrant("abc123")).toBe(false)
+  })
+
+  test("a blocked call is recorded", () => {
+    recordApproval(
+      { token: "aaa111", sessionID: "ses_x", action: "shell", resources: ["rm -rf /"], subject: "shell: rm -rf /", reason: "why", ts: new Date().toISOString() },
+      600,
+    )
+    expect(readApprovals(600).map((a) => a.token)).toContain("aaa111")
+  })
+
+  test("a blocked call past its lifetime is gone", () => {
+    recordApproval(
+      {
+        token: "bbb222",
+        sessionID: "ses_x",
+        action: "shell",
+        resources: [],
+        subject: "",
+        reason: "",
+        ts: new Date(Date.now() - 3_600_000).toISOString(),
+      },
+      600,
+    )
+    expect(readApprovals(600).map((a) => a.token)).not.toContain("bbb222")
   })
 })
 
@@ -580,23 +784,23 @@ describe("call toasts", () => {
   test("a decision, a skip, and a failure each render under a hook title", () => {
     expect(
       toastLine({
-        hook: "hook_risk",
-        decisions: [{ id: "risky", kind: "noul", value: true, probability: 0.87, confident: true }],
+        hook: "hook_tool_risk",
+        decisions: [{ id: "verdict", kind: "choice", value: "deny", probability: 0.87, confident: true }],
         subject: "shell command: rm -rf ./build",
         inputTokens: 120,
       }),
     ).toEqual({
-      title: "jev (hook_risk)",
-      message: "* risky (0.87)\n* shell command: rm -rf ./build\n* 120tok",
+      title: "hook_tool_risk: deny (0.87)",
+      message: "* shell command: rm -rf ./build\n* 120tok",
       variant: "info",
     })
     expect(toastLine({ hook: "hook_skill_pick", skipped: "low confidence: margin 0.05" })).toEqual({
-      title: "jev (hook_skill_pick)",
+      title: "hook_skill_pick",
       message: "* low confidence: margin 0.05",
       variant: "info",
     })
-    expect(toastLine({ hook: "hook_risk", error: "Jev HTTP 401" })).toEqual({
-      title: "jev (hook_risk)",
+    expect(toastLine({ hook: "hook_tool_risk", error: "Jev HTTP 401" })).toEqual({
+      title: "hook_tool_risk",
       message: "* Jev HTTP 401",
       variant: "error",
     })
@@ -604,9 +808,42 @@ describe("call toasts", () => {
     expect(toastLine({ decisions: [] })).toBeNull()
   })
 
-  test("a not-risky answer says so, with the number the gate compared", () => {
-    const line = toastLine({ hook: "hook_risk", decisions: [{ id: "risky", kind: "noul", value: false, probability: 0.05, confident: true }] })!
-    expect(line.message).toBe("* not risky (0.05)")
+  test("an explicit verdict names the toast", () => {
+    const line = toastLine({ hook: "hook_tool_risk", verdict: "accept", confidence: 0.99 })!
+    expect(line.title).toBe("hook_tool_risk: accept (0.99)")
+  })
+
+  test("a blocked call shows what to type to let it through", () => {
+    const line = toastLine({
+      hook: "hook_tool_risk",
+      verdict: "deny",
+      confidence: 0.87,
+      blocked: "denied (P=0.87)",
+      token: "a3f9c1",
+      subject: "shell: rm -rf ./build",
+    })!
+    expect(line.title).toBe("hook_tool_risk: deny (0.87)")
+    expect(line.message).toBe("* blocked: denied (P=0.87)\n* approve: /jev-approve a3f9c1\n* shell: rm -rf ./build")
+    expect(line.variant).toBe("error")
+  })
+
+  test("only the rules that fired are listed", () => {
+    const line = toastLine({
+      hook: "hook_tool_standard",
+      verdict: "block",
+      confidence: 0.93,
+      rules: [
+        { id: "no-rm", probability: 0.93, violated: true },
+        { id: "no-curl", probability: 0.04, violated: false },
+      ],
+    })!
+    expect(line.title).toBe("hook_tool_standard: block (0.93)")
+    expect(line.message).toBe("* no-rm=yes (0.93)")
+  })
+
+  test("a rule score reads as yes or no, with the rule's name", () => {
+    const line = toastLine({ hook: "hook_tool_standard", decisions: [{ id: "no-exfil", kind: "noul", value: true, probability: 0.87, confident: true }] })!
+    expect(line.title).toBe("hook_tool_standard: no-exfil=yes (0.87)")
   })
 
   test("a long tool call is clipped onto one line", () => {
@@ -639,24 +876,50 @@ describe("call toasts", () => {
 
   test("a low-confidence answer is marked in the line", () => {
     const line = toastLine({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit", confident: false }] })!
-    expect(line.message).toBe('* pick="commit" (low)')
+    expect(line.title).toBe("hook_skill_pick: commit (low)")
   })
 
   test("the global switch, then the feature's own, gates a toast", () => {
     rmSync(join(scratch, "jev-state.json"), { force: true })
-    // Both features default to toasting; the global switch is off by default.
+    // Every feature defaults to toasting; the global switch is off by default.
     expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast === true)).toBe(true)
-    expect(toastsOn("hook_risk")).toBe(false)
+    expect(toastsOn("hook_tool_risk")).toBe(false)
     saveState({ toast: true })
-    expect(toastsOn("hook_risk")).toBe(true)
-    setFeatureConfig("hook_risk", "toast", false)
-    expect(toastsOn("hook_risk")).toBe(false)
+    expect(toastsOn("hook_tool_risk")).toBe(true)
+    setFeatureConfig("hook_tool_risk", "toast", false)
+    expect(toastsOn("hook_tool_risk")).toBe(false)
     // The other feature keeps its own value.
     expect(toastsOn("hook_skill_pick")).toBe(true)
     // An entry naming no known feature never toasts.
     expect(toastsOn("not_a_feature")).toBe(false)
     saveState({ toast: false })
-    setFeatureConfig("hook_risk", "toast", true)  })
+    setFeatureConfig("hook_tool_risk", "toast", true)  })
+})
+
+describe("toast outcomes", () => {
+  test("a routine call stays quiet and a blocked one does not", () => {
+    rmSync(join(scratch, "jev-state.json"), { force: true })
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "deny" })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "alert" })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "ask" })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_standard", outcome: "deny" })).toBe(true)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_standard", outcome: "allow" })).toBe(false)
+  })
+
+  test("the list is the feature's own setting", () => {
+    setFeatureConfig("hook_tool_risk", "toastOutcomes", "all")
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(true)
+    setFeatureConfig("hook_tool_risk", "toastOutcomes", "deny,alert")
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", outcome: "allow" })).toBe(false)
+  })
+
+  test("a skip is never announced: nothing was decided, so there is nothing to say", () => {
+    expect(toastOutcomeAllowed({ hook: "hook_skill_pick", skipped: "low confidence: margin 0.05" })).toBe(false)
+    expect(toastOutcomeAllowed({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBe(false)
+    // A call that was decided announces, and a feature with no list always does.
+    expect(toastOutcomeAllowed({ hook: "hook_skill_pick", decisions: [{ id: "pick", value: "commit" }] })).toBe(true)
+  })
 })
 
 describe("optimizer model choice", () => {
