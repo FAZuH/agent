@@ -105,7 +105,7 @@ function summary(): string {
         Object.entries(cfg)
           .map(([k, v]) => `${k}=${k === "alertWebhook" ? maskUrl(String(v)) : v}`)
           .join(" ") || "(defaults)"
-      return `config.${f.key.padEnd(9)} ${rendered}`
+      return `config.${f.label.padEnd(14)} ${rendered}`
     }),
     `spend      ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
     `logMax     ${s.logMax} lines`,
@@ -116,6 +116,9 @@ export default {
   id: "fazuh.jev-tui",
 
   setup: async (ctx: any) => {
+    /** The feature a setting belongs to, in words rather than in its key. */
+    const featureLabel = (key: string) => FEATURES.find((f) => f.key === key)?.label ?? key
+
     /**
      * A TUI failure used to be silent: the command ran, threw, and nothing
      * appeared. So every panel entry point reports what it saw and what broke,
@@ -433,12 +436,12 @@ export default {
               const current = s.config[feature]?.[key] ?? fields[key]
               if (typeof fields[key] === "boolean") {
                 return row(
-                  `${feature}.${key}`,
-                  `${feature}.${key}`,
+                  key,
+                  key,
                   current ? "on" : "off",
                   () => {
                     setFeatureConfig(feature, key, !(current === true))
-                    toast(`${feature}.${key} ${!(current === true) ? "on" : "off"}`)
+                    toast(`${featureLabel(feature)}: ${key} ${!(current === true) ? "on" : "off"}`)
                     render()
                   },
                   FEATURES.find((f) => f.key === feature)?.label ?? feature,
@@ -454,7 +457,7 @@ export default {
                   () => {
                     const next = current === choice[0] ? choice[1] : choice[0]
                     setFeatureConfig(feature, key, next)
-                    toast(`${feature}.${key} ${next}`)
+                    toast(`${featureLabel(feature)}: ${key} ${next}`)
                     render()
                   },
                   feature,
@@ -467,7 +470,7 @@ export default {
                   key === "alertWebhook" ? maskUrl(String(current)) || "(empty)" : String(current) || "(empty)",
                   () =>
                     ask(render, {
-                      title: `${feature}.${key}`,
+                      title: `${featureLabel(feature)}: ${key}`,
                       description: FIELD_HELP[key] ?? "A text setting.",
                       value: String(current),
                       onConfirm: (v: string) => {
@@ -488,7 +491,7 @@ export default {
                 String(current),
                 () =>
                   ask(render, {
-                    title: `${feature}.${key}`,
+                    title: `${featureLabel(feature)}: ${key}`,
                     description: FIELD_HELP[key] ?? "A number.",
                     value: String(current),
                     onConfirm: (v: string) =>
