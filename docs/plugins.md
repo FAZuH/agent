@@ -75,8 +75,9 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   own numbers; there are no global thresholds.
 - **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
   one through once. The grant is spent by the server, so the approved call
-  costs no model call and no tokens. TUI only: the picker needs a dialog, and
-  one name has one owner.
+  costs no model call and no tokens. The picker is not filtered by the
+  session on screen, because a blocked call often ran in a subagent session.
+  TUI only: the picker needs a dialog, and one name has one owner.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
   live in `skillCriteria` in `~/.local/share/fazuh-agent/jev-data.json`, keyed

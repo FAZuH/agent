@@ -179,14 +179,30 @@ the loop.
 hex characters, the identity of the call, so the same retry is recognized and
 a modified command is a different call. The user approves it with
 `/jev-approve` (TUI): the command lists what is blocked, the selection grants
-the token, and the next matching call in that session runs once, with no model
-call and no tokens spent. A grant allows one call, not a policy, and a
-blocked call stops being approvable after `approveTtl` seconds.
+the token, and the next matching call runs once, with no model call and no
+tokens spent. A grant allows one call, not a policy, and a blocked call stops
+being approvable after `approveTtl` seconds.
+
+The picker is not filtered by the session on screen: a blocked call often ran
+in a subagent session that the window never shows, and the grant is keyed to
+the call's identity anyway, so approving it from anywhere spends it right.
 
 The approve picker lives in the TUI because it needs a dialog, and one name
 has one owner: there is no server-side `/jev-approve`. A headless session has
 no picker, so the deny message and the log name the token and the grant file
 it goes in.
+
+**The alert.** An `alert` verdict blocks the call, stops the session, and
+tells the user twice: the TUI toast, and a webhook when
+`hook_tool_risk.alertWebhook` names one. The webhook carries the call in a
+code block, because one long line of shell is unreadable:
+
+```
+# Jev Alert (hook_tool_risk)
+```
+```
+shell: ssh host 'opencode2 api post ...'
+```
 
 Both hooks are wired to fire on prompt admission (`session.hook("prompt")`)
 and context build (`session.hook("context")`). The prompt hook is the least
@@ -460,7 +476,7 @@ into these on first load after the upgrade.
 
 | Path | What |
 | --- | --- |
-| `~/.config/fazuh-agent/jev-state.json` | every setting (syncable), 0600 |
+| `~/.config/fazuh-agent/data/jev-state.json` | every setting (machine-local), 0600 |
 | `~/.local/share/fazuh-agent/jev-data.json` | `skillCriteria` cache + `rosterHash` (local), 0600 |
 | `~/.local/state/fazuh-agent/jev-calls.jsonl` | one line per call: payload, answers, cost (local); capped at `logMax` lines, pruned to the tail |
 | `~/.local/state/fazuh-agent/jev-approvals.json` | the blocked calls waiting for a human, one entry per token (local, written by the server) |
