@@ -23,12 +23,19 @@ const STATE_HOME =
   process.env.JEV_STATE_HOME ?? process.env.JEV_DATA_DIR ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "fazuh-agent")
 const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(CONFIG_DIR, "secrets")
 
-/** Syncable settings. Moved up from data/ so the whole dir syncs cleanly. */
-export const STATE_FILE = join(CONFIG_DIR, "jev-state.json")
+/**
+ * Syncable settings live in data/ on purpose: the state is machine-local (an
+ * endpoint, a key path), and the config root is what syncs between machines.
+ */
+export const STATE_FILE = join(CONFIG_DIR, "data", "jev-state.json")
 /** Local optimizer cache: skillCriteria plus the rosterHash it was built from. */
 export const DATA_FILE = join(DATA_HOME, "jev-data.json")
 /** Local call history. */
 export const LOG_FILE = join(STATE_HOME, "jev-calls.jsonl")
+/** Blocked calls waiting for a human. Written by the server, read by the TUI. */
+export const APPROVALS_FILE = join(STATE_HOME, "jev-approvals.json")
+/** Approved tokens. Written by the TUI, read and consumed by the server. */
+export const GRANTS_FILE = join(STATE_HOME, "jev-grants.json")
 /** TUI diagnostics. */
 export const TUI_LOG_FILE = join(STATE_HOME, "jev-tui.log")
 /** Default key location, overridable so another provider can use another file. */
@@ -46,9 +53,33 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
-  { key: "hook_skill_pick", label: "Skill picker hook", what: "Asks Jev which skill fits each prompt and advises it in context" },
-  { key: "hook_risk", label: "Risk hook", what: "Asks Jev whether each bash/edit/write is irreversible or leaks a secret" },
+  { key: "hook_skill_pick", label: "Skill picker", what: "Asks Jev which skill fits each prompt and advises it in context" },
+  { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: allow, ask, deny, or alert" },
+  { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
 ]
+
+/**
+ * Feature keys that used to exist, oldest first. A state file written before a
+ * rename carries the old spelling, and reading only the new key would silently
+ * flip a configured hook off — including the one that can stop a tool call.
+ */
+export const LEGACY_FEATURE_KEYS: Record<string, string[]> = {
+  hook_skill_pick: ["pick_skill"],
+  hook_tool_risk: ["hook_risk", "risk_hook"],
+  hook_tool_standard: [],
+}
+
+/**
+ * Per-feature settings that survive a rename. Only fields whose meaning did
+ * not change are carried: `hook_risk` judged one binary question, the two
+ * tool hooks judge a four-way verdict and a rule set, so its probability
+ * floors mean something different now and are re-based instead of copied.
+ */
+export const LEGACY_CONFIG_CARRY: Record<string, string[]> = {
+  hook_skill_pick: ["timeout", "minProbability", "minMargin", "maxCandidates", "maxPicks", "alsoAbove", "autoOptimize", "optimizeModel", "toast"],
+  hook_tool_risk: ["timeout", "toast"],
+  hook_tool_standard: [],
+}
 
 /**
  * Per-feature settings. Each feature carries its own numbers because they
@@ -69,7 +100,16 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // model for the optimizer's generate.text call; empty means the host model.
   // toast is per feature; the global switch still has to be on.
   hook_skill_pick: { timeout: 5000, minProbability: 0.75, minMargin: 0.2, maxCandidates: 150, maxPicks: -1, alsoAbove: 0.25, autoOptimize: true, optimizeModel: "", toast: true },
-  hook_risk: { gateProbability: 0.7, minProbability: 0.8, timeout: 5000, toast: true },
+  // The tool hooks judge a permission check, not a tool call: the host sends
+  // the action, the resources, and whatever the tool put in the metadata.
+  // minProbability is the floor for the verdict's own label (four labels split
+  // the probability mass, so 0.75 would almost never clear it) and minMargin
+  // the gap to the runner-up. timeout 0 means wait for the provider, unbounded.
+  hook_tool_risk: { timeout: 3000, minProbability: 0.6, minMargin: 0.2, actions: "shell,edit", cache: true, alertWebhook: "", undecided: "allow", toast: true, toastOutcomes: "deny,alert" },
+  // The rules file is YAML, and YAML reads JSON, so one loader takes both.
+  // defaultEffect and defaultThreshold are the global bar; a rule overrides
+  // either. actions is the coarse gate: nothing outside it is examined.
+  hook_tool_standard: { rulesFile: "~/.config/fazuh-agent/jev-rules.yaml", defaultEffect: "block", defaultThreshold: 0.7, minProbability: 0.7, timeout: 5000, actions: "shell,edit", fileMaxChars: 8000, toast: true, toastOutcomes: "deny" },
 }
 
 export interface JevState {
@@ -101,6 +141,21 @@ export interface JevState {
    * so this does nothing on a host with no TUI module (the desktop app).
    */
   toast: boolean
+  /** What an "ask" verdict does while the client auto-accepts. The
+   *  client answers its own permission requests in that mode, so an "ask"
+   *  never reaches a human: "block-notify" denies the call and asks the user
+   *  out of band, "no-op" sets the effect to "ask" and lets the client answer
+   *  it. Shared by both tool hooks, so it lives here and not in one feature.
+   */
+  yoloAsk: "block-notify" | "no-op"
+  /** Seconds a blocked call stays approvable. */
+  approveTtl: number
+  /** The sidebar section with the recent hook calls. */
+  sidebar: boolean
+  /** How many recent calls the sidebar shows. */
+  sidebarCount: number
+  /** Whether each sidebar line also carries a clipped subject. */
+  sidebarSubject: boolean
   /** Feature switches, keyed from FEATURES. Absent means on. */
   features: Record<string, boolean>
   /**
@@ -130,7 +185,12 @@ export const DEFAULTS: JevState = {
   think: false,
   enabled: true,
   toast: false,
-  features: { hook_skill_pick: false, hook_risk: false },
+  yoloAsk: "block-notify",
+  approveTtl: 600,
+  sidebar: true,
+  sidebarCount: 5,
+  sidebarSubject: true,
+  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
 }
@@ -162,16 +222,34 @@ const num = (raw: unknown, fallback: number): number =>
  * stops a typo in the JSON from inventing a switch.
  */
 export function featureMap(raw: unknown, legacyGate?: unknown): Record<string, boolean> {
-  // `gate` was the risk hook before it became a feature, and `pick_skill`/
-  // `risk_hook` were renamed to `hook_skill_pick`/`hook_risk`. An unmigrated
-  // file still carries the old spellings, and reading only the new keys would
-  // silently flip configured hooks off — including the one that can stop a
-  // tool call.
+  // `gate` was the risk hook before it became a feature, and the tool hooks
+  // were renamed after it. An unmigrated file still carries the old
+  // spellings, and reading only the new keys would silently flip configured
+  // hooks off — including the ones that can stop a tool call.
   const stored = (raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {}) as Record<string, unknown>
-  if (typeof legacyGate === "boolean") stored.hook_risk ??= legacyGate
-  stored.hook_skill_pick ??= stored.pick_skill
-  stored.hook_risk ??= stored.risk_hook
+  if (typeof legacyGate === "boolean") stored.hook_tool_risk ??= legacyGate
+  for (const feature of FEATURES) {
+    for (const old of LEGACY_FEATURE_KEYS[feature.key] ?? []) stored[feature.key] ??= stored[old]
+  }
   return Object.fromEntries(FEATURES.map((f) => [f.key, stored[f.key] ?? DEFAULTS.features[f.key] ?? true]))
+}
+
+/**
+ * The stored config for one feature: the current key first, then the legacy
+ * spellings. A legacy object is filtered to the fields whose meaning did not
+ * change, so a renamed feature does not inherit thresholds that now measure
+ * something else.
+ */
+function legacyConfig(feature: string, stored: Record<string, unknown>): Record<string, unknown> {
+  const own = stored[feature]
+  if (own && typeof own === "object") return own as Record<string, unknown>
+  const carry = LEGACY_CONFIG_CARRY[feature] ?? []
+  for (const old of LEGACY_FEATURE_KEYS[feature] ?? []) {
+    const candidate = stored[old]
+    if (!candidate || typeof candidate !== "object") continue
+    return Object.fromEntries(Object.entries(candidate as Record<string, unknown>).filter(([k]) => carry.includes(k)))
+  }
+  return {}
 }
 
 /**
@@ -184,11 +262,7 @@ export function featureConfigMap(raw: unknown): Record<string, Record<string, Co
   return Object.fromEntries(
     FEATURES.map((f) => {
       const defaults = FEATURE_DEFAULTS[f.key] ?? {}
-      // The pre-rename keys live under the old names in an unmigrated file.
-      const oldKey = f.key === "hook_skill_pick" ? "pick_skill" : f.key === "hook_risk" ? "risk_hook" : f.key
-      const own = ((stored[f.key] ?? stored[oldKey]) && typeof (stored[f.key] ?? stored[oldKey]) === "object"
-        ? (stored[f.key] ?? stored[oldKey])
-        : {}) as Record<string, unknown>
+      const own = legacyConfig(f.key, stored)
       return [
         f.key,
         Object.fromEntries(
@@ -253,26 +327,28 @@ export function loadState(): JevState {
   // Migration: the global minProbability/minMargin/gateProbability seeded the
   // per-feature config, so an unmigrated file keeps its tuned thresholds
   // instead of snapping back to defaults on the first load after upgrade.
+  // gateProbability was the bar for acting on a risk answer, which is what
+  // hook_tool_risk.minProbability is now; the old confidence floor has no
+  // counterpart, because a four-way verdict is gated by a margin instead.
   const legacy: Record<string, Record<string, number>> = {
     hook_skill_pick: {
       minProbability: num(raw.minProbability, FEATURE_DEFAULTS.hook_skill_pick.minProbability),
       minMargin: num(raw.minMargin, FEATURE_DEFAULTS.hook_skill_pick.minMargin),
     },
-    hook_risk: {
-      gateProbability: num(raw.gateProbability, FEATURE_DEFAULTS.hook_risk.gateProbability),
-      minProbability: num(raw.minProbability, FEATURE_DEFAULTS.hook_risk.minProbability),
+    hook_tool_risk: {
+      minProbability: num(raw.gateProbability, FEATURE_DEFAULTS.hook_tool_risk.minProbability),
     },
   }
   const storedConfig = raw.config && typeof raw.config === "object" ? raw.config : {}
   // Deep-merge per feature: a stored partial config (say, only timeout) must
   // not wipe the legacy threshold seeds for the same feature. A file written
-  // before the rename carries the config under the old feature keys.
+  // before the rename carries the config under the old feature keys, and only
+  // the fields whose meaning survived the rename are carried over.
   const merged: Record<string, Record<string, number>> = {}
   for (const f of FEATURES) {
     const fromLegacy = legacy[f.key] ?? {}
-    const oldKey = f.key === "hook_skill_pick" ? "pick_skill" : f.key === "hook_risk" ? "risk_hook" : f.key
-    const fromStored = (storedConfig as Record<string, unknown>)[f.key] ?? (storedConfig as Record<string, unknown>)[oldKey]
-    merged[f.key] = { ...fromLegacy, ...(fromStored && typeof fromStored === "object" ? fromStored : {}) }
+    const fromStored = legacyConfig(f.key, storedConfig as Record<string, unknown>)
+    merged[f.key] = { ...fromLegacy, ...fromStored }
   }
   return {
     endpoint: str(raw.endpoint, DEFAULTS.endpoint),
@@ -283,6 +359,12 @@ export function loadState(): JevState {
     think: raw.think === true,
     enabled: raw.enabled !== false,
     toast: raw.toast === true,
+    // The old spelling carries over: an ask is an ask whatever the field is called.
+    yoloAsk: (raw.yoloAsk ?? raw.yoloPropagate) === "no-op" ? "no-op" : "block-notify",
+    approveTtl: Math.max(0, Math.round(num(raw.approveTtl, DEFAULTS.approveTtl))),
+    sidebar: raw.sidebar !== false,
+    sidebarCount: Math.min(20, Math.max(1, Math.round(num(raw.sidebarCount, DEFAULTS.sidebarCount)))),
+    sidebarSubject: raw.sidebarSubject !== false,
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
@@ -426,30 +508,184 @@ function clip(text: string, max: number): string {
 function describe(d: any): string {
   const pct = typeof d?.probability === "number" ? ` (${d.probability.toFixed(2)})` : ""
   const low = d?.confident ? "" : " (low)"
-  if (d?.kind === "noul") return `${d.value ? "risky" : "not risky"}${pct}${low}`
+  // A noul is a yes or no about a named rule, so the id carries the meaning.
+  if (d?.kind === "noul") return `${d?.id}=${d.value ? "yes" : "no"}${pct}${low}`
   return `${d?.id}=${JSON.stringify(d?.value)}${pct}${low}`
 }
 
 /**
- * The toast for a logged call: a `jev (<hook>)` title over one bullet per fact.
- * A title plus bullets instead of one crowded line, so the hook, the verdict,
- * and the cost each get their own row instead of being flattened into a
- * sentence. Null when the entry names no hook, so it cannot be attributed.
+ * The headline of a toast: the feature, the verdict, and how sure it is.
+ * A call that logged no explicit verdict takes the first decision's answer,
+ * so every toast reads the same way.
+ */
+function headline(row: any): { label: string; probability?: number; low?: boolean; fromDecision: boolean } {
+  const verdict = typeof row?.verdict === "string" ? row.verdict : ""
+  if (verdict) {
+    const probability = typeof row?.confidence === "number" ? row.confidence : undefined
+    return { label: verdict, probability, fromDecision: false }
+  }
+  const first = Array.isArray(row?.decisions) ? row.decisions[0] : undefined
+  if (!first) return { label: "", fromDecision: false }
+  const label =
+    first.kind === "noul"
+      ? `${first.id}=${first.value ? "yes" : "no"}`
+      : typeof first.value === "string"
+        ? first.value
+        : String(first.value ?? "")
+  return {
+    label,
+    probability: typeof first.probability === "number" ? first.probability : undefined,
+    low: first.confident === false,
+    fromDecision: true,
+  }
+}
+
+/**
+ * The toast for a logged call: a `jev (<hook>)` title over one bullet per
+ * fact — the verdict with the probability the gate compared, the tool
+ * call it judged, and the tokens it cost:
+ *
+ * ```
+ * jev (hook_risk)
+ *
+ * * not risky (0.05)
+ * * shell command: rm -rf ./build
+ * * 120tok
+ * ```
  */
 export function toastLine(row: any): { title: string; message: string; variant: "info" | "error" } | null {
   const hook = typeof row?.hook === "string" ? row.hook : ""
   if (!hook) return null
-  const title = `jev (${hook})`
+  const { label, probability, low, fromDecision } = headline(row)
+  const title = label
+    ? `${hook}: ${label}${probability === undefined ? "" : ` (${probability.toFixed(2)})`}${low ? " (low)" : ""}`
+    : hook
   const bullets: string[] = []
 
   if (row.error) return { title, message: `* ${clip(String(row.error), 200)}`, variant: "error" }
   if (row.skipped) return { title, message: `* ${clip(String(row.skipped), 200)}`, variant: "info" }
 
-  for (const d of Array.isArray(row.decisions) ? row.decisions : []) bullets.push(describe(d))
+  // A blocked call says what to do rather than the arithmetic: the user has
+  // to know what stopped and how to let it through.
+  if (row.blocked) {
+    bullets.push(`blocked: ${clip(String(row.blocked), 160)}`)
+    if (row.token) bullets.push(`approve: /jev-approve ${row.token}`)
+    if (row.subject) bullets.push(clip(String(row.subject), TOOL_CLIP))
+    return { title, message: bullets.map((b) => `* ${b}`).join("\n"), variant: "error" }
+  }
+
+  const decisions = Array.isArray(row.decisions) ? row.decisions : []
+  // The rules that fired, not every rule that was scored.
+  const rules = Array.isArray(row.rules) ? row.rules : []
+  if (rules.length) {
+    for (const r of rules.filter((rule: any) => rule?.violated)) {
+      bullets.push(`${r.id}=yes (${Number(r.probability).toFixed(2)})`)
+    }
+  } else {
+    // The decision that became the headline is not repeated.
+    for (const d of decisions) {
+      if (fromDecision ? d === decisions[0] : typeof d?.value === "string" && d.value === label) continue
+      bullets.push(describe(d))
+    }
+  }
   if (row.subject) bullets.push(clip(String(row.subject), TOOL_CLIP))
   if (row.inputTokens) bullets.push(`${row.inputTokens}tok`)
-  if (!bullets.length) return { title, message: "* no answer recorded", variant: "info" }
+  if (!bullets.length) return { title, message: "* no detail recorded", variant: "info" }
   return { title, message: bullets.map((b) => `* ${b}`).join("\n"), variant: "info" }
+}
+
+/**
+ * Whether a logged call is worth announcing.
+ *
+ * The feature's own list of outcomes decides: a routine answer stays quiet, a
+ * blocked one does not. The list holds what happened to the call — `allow`,
+ * `ask`, `deny`, `alert` — and `all` announces everything.
+ *
+ * Two entries never announce: a skip (nothing was decided, so there is
+ * nothing to say) and a feature with no list of its own.
+ */
+export function toastOutcomeAllowed(row: any): boolean {
+  // Nothing was decided, so there is nothing to say.
+  if (row?.skipped && !row?.verdict && !(Array.isArray(row?.decisions) && row.decisions.length)) return false
+  // The plugin did not act on it, so it is not a decision worth announcing.
+  if (!rowActed(row)) return false
+  const hook = typeof row?.hook === "string" ? row.hook : ""
+  const feature = FEATURES.find((f) => f.key === hook)
+  if (!feature) return true
+  const raw = featureConfig(feature.key).toastOutcomes
+  // A feature with no list of its own always announces.
+  if (typeof raw !== "string") return true
+  const list = raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+  if (list.includes("all")) return true
+  const outcome = typeof row?.outcome === "string" ? row.outcome.toLowerCase() : ""
+  if (!outcome) return true
+  return list.includes(outcome)
+}
+
+/**
+ * A webhook URL is a credential. Show the host and the tail, never the whole
+ * thing: a settings screen gets pasted into screenshots.
+ */
+export function maskUrl(url: string): string {
+  const text = String(url ?? "").trim()
+  if (!text) return ""
+  try {
+    const parsed = new URL(text)
+    const tail = parsed.pathname.split("/").filter(Boolean).at(-1) ?? ""
+    return `${parsed.host}/…/${tail.slice(0, 6)}`
+  } catch {
+    return text.slice(0, 12) + "…"
+  }
+}
+
+/**
+ * Whether the plugin acted on this call. Its own verdict counts, and so does
+ * an answer it was confident enough to use: the skill picker injects advice
+ * only when it is sure, so a doubtful pick is not a decision and is not
+ * shown. An error is always worth showing.
+ */
+export function rowActed(row: any): boolean {
+  if (row?.error) return true
+  // The hook says whether it acted on the call.
+  if (typeof row?.acted === "boolean") return row.acted
+  const decision = Array.isArray(row?.decisions) ? row.decisions[0] : undefined
+  return decision?.confident === true
+}
+
+/** The short hook names the sidebar uses; the full ones are too wide. */
+export const HOOK_SHORT: Record<string, string> = {
+  hook_skill_pick: "pick",
+  hook_tool_risk: "risk",
+  hook_tool_standard: "rules",
+}
+
+/** One sidebar line: the hook, the verdict, the confidence. Terse on purpose. */
+/** The whole sidebar line, prefix included: the sidebar is this wide. */
+const SIDEBAR_TOTAL = 36
+
+export function sidebarLine(row: any): string | null {
+  const short = HOOK_SHORT[String(row?.hook ?? "")] ?? String(row?.hook ?? "?")
+  if (row?.error) return `${short} err`
+  // A call the plugin did not act on is not a decision.
+  if (!rowActed(row)) return null
+  const { label } = headline(row)
+  // A skip decided nothing, so it says nothing here either.
+  if (!label) return null
+  const prefix = `${short} ${label} `
+  return `${prefix}${sidebarDetail(row, SIDEBAR_TOTAL - prefix.length)}`.trimEnd()
+}
+
+/**
+ * The call itself, in the space the line has: the subject without the action
+ * prefix it already carries ("shell: rm -rf ./build" -> "rm -rf ./build").
+ */
+function sidebarDetail(row: any, budget: number): string {
+  const subject = String(row?.subject ?? "").replace(/\s+/g, " ").trim()
+  // clip adds the ellipsis on top of the budget, so it gets one less.
+  return clip(subject.replace(/^[a-z_]+:\s*/, ""), Math.max(3, budget - 1))
 }
 
 export function setFeature(key: string, on: boolean): boolean {
@@ -462,9 +698,26 @@ export function setFeature(key: string, on: boolean): boolean {
 
 export function saveState(patch: Partial<JevState>): JevState {
   const next = { ...loadState(), ...patch }
-  mkdirSync(CONFIG_DIR, { recursive: true })
+  mkdirSync(dirnameOf(STATE_FILE), { recursive: true })
   writeFileSync(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
   return next
+}
+
+/**
+ * One-shot move of the state file from the config root into data/: the state
+ * is machine-local (an endpoint, a key path) and the config root is what
+ * syncs. The old file stays where it is as the rollback path.
+ */
+export function migrateStatePath(oldPath = join(CONFIG_DIR, "jev-state.json"), newPath = STATE_FILE): "skipped" | "migrated" {
+  if (oldPath === newPath || !existsSync(oldPath) || existsSync(newPath)) return "skipped"
+  try {
+    const raw = readFileSync(oldPath, "utf8")
+    mkdirSync(dirnameOf(newPath), { recursive: true })
+    writeFileSync(newPath, raw, "utf8")
+    return "migrated"
+  } catch {
+    return "skipped"
+  }
 }
 
 /** Where the key came from, for status output. The value is never returned. */
@@ -616,4 +869,5 @@ if (
   !process.env.JEV_STATE_HOME
 ) {
   migrateLegacyLayout()
+  migrateStatePath()
 }

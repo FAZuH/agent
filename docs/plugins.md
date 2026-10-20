@@ -28,13 +28,13 @@ directory.
 Bounded decisions from [Jev](https://typesafe.ai), TypeSafe's System One decision
 model, over any provider exposing a `/systemone` endpoint. Jev answers typed
 questions (`choice`, `noul`, `score`) with probabilities. Hooks only, no tools:
-the plugin's power is automatic. Both hooks are advisory by default and fail
-open — a Jev outage never blocks work, except the opt-in risk gate.
+the plugin's power is automatic. Every hook fails open — a Jev outage never
+blocks work — and the two tool hooks are off until you turn them on.
 
 The provider is a setting, not an assumption: the wire model id and the endpoint
 path are provider-specific and neither has a portable default. `/jev-settings`
 edits the endpoint, model, key source, and the per-feature config;
-`/jev-features` flips the two feature switches. Both stay open (arrows move,
+`/jev-features` flips the three feature switches. Both stay open (arrows move,
 enter changes one value, esc closes), so they read like OpenCode's own settings
 panel. They are TUI commands, since the desktop app loads no TUI module.
 `/jev-model <id>`, `/jev-endpoint <url>` do the same as text and work in any
@@ -50,19 +50,37 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   call per prompt (cached across the agentic loop's turns), awaited with a
   configurable timeout (default 2000ms); a timeout or low-confidence answer
   injects nothing. Subagent sessions are skipped.
-- **`hook_risk`** (off by default): every `bash`/`edit`/`write`/`apply_patch`
-  call is sent to Jev and logged; a call blocks only when the answer is both
-  **confident** and at or above `hook_risk.gateProbability`, so a Jev failure,
-  a low-confidence answer, or a weak one proceeds.
+- **`hook_tool_risk`** (off by default): every tool call the host checks for
+  permission, inside `hook_tool_risk.actions`, is sent to Jev, which answers
+  one of four things — `allow` (the call runs, and the prompt never appears),
+  `ask` (the user is asked), `deny` (the call is blocked and the agent
+  reads the reason), `alert` (the call is blocked, the session is interrupted,
+  and the user is notified). A weak answer changes nothing. A repeated call
+  reuses the first verdict.
+- **`hook_tool_standard`** (off by default): the rules file. Every rule that
+  matches the call is scored in one call, and a rule over its threshold is
+  violated: `block` denies the call, `ask` asks the user. The file is
+  YAML (and YAML reads JSON, so a `.json` file works too), a rule may quote a
+  file with `{file:<path>}`, and a rule may override the global action and
+  threshold. A file that cannot be parsed changes nothing and says so in the
+  log.
+- **Sidebar section**: the plugin adds a `Jev` section to the TUI sidebar with
+  the recent hook calls, one terse line each. `sidebar`, `sidebarCount` and
+  `sidebarSubject` in `/jev-settings` control it.
 - **`/jev-features`**: the panel. **Plugin** at the top is the master switch:
-  on or off, and it does not touch the two below it. Off means no hook runs and
-  nothing is sent, so nothing is spent, while the two keep their values, so you
-  can configure with the plugin disabled and get your setup back when you
-  re-enable it. Below it: `hook_skill_pick`, `hook_risk`.
-- **`/jev-settings`**: endpoint, model, key, and per-feature config rows
-  (`hook_skill_pick.timeout/minProbability/minMargin/maxCandidates`,
-  `hook_risk.gateProbability/minProbability`). Each feature carries its own
-  numbers; there are no global thresholds.
+  on or off, and it does not touch the three below it. Off means no hook runs
+  and nothing is sent, so nothing is spent, while the three keep their values,
+  so you can configure with the plugin disabled and get your setup back when
+  you re-enable it. Below it: `hook_skill_pick`, `hook_tool_risk`,
+  `hook_tool_standard`.
+- **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
+  `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
+  own numbers; there are no global thresholds.
+- **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
+  one through once. The grant is spent by the server, so the approved call
+  costs no model call and no tokens. The picker is not filtered by the
+  session on screen, because a blocked call often ran in a subagent session.
+  TUI only: the picker needs a dialog, and one name has one owner.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
   live in `skillCriteria` in `~/.local/share/fazuh-agent/jev-data.json`, keyed
