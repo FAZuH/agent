@@ -103,6 +103,9 @@ and system prompt. Tell the subagent it is continuing,
 reference its last report, and ask for a delta rather than a full re-report, so
 your own context stays lean too.
 
+A fork starts a fresh session, so it pays the learning again. **Fork when the
+role changes; resume when it does not.**
+
 A long-resumed child can come back as `Subagent completed without a text
 response`. **Check the tree before believing it**: `git diff --stat` against the
 base commit. A child that changed files is alive and its report was lost;
