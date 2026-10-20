@@ -5,11 +5,11 @@ description: Run the agent self-improvement loop over the Hindsight friction sto
 
 # Friction sweep
 
-A feedback loop where the agent learns from its own friction: capture
-problems while working, then convert them into improvements to skills, agent
-definitions, tooling, and process. Proposals arrive here from @session-retro
-or direct capture during work (the @global-instruction friction contract);
-this skill curates and applies them.
+A feedback loop where the agent learns from its own friction: capture problems
+while working, then convert them into improvements to skills, agent
+definitions, tooling, and process. Proposals arrive from @session-retro or
+direct capture (the @global-instruction friction contract); this skill curates
+and applies them.
 
 One store: Hindsight, tag-filtered (`type:friction`, `status:open`). A single
 bank serves every project and node; entries carry `machine:`/`project:` tags
@@ -24,8 +24,8 @@ instead of living in per-repo files.
 - **Scope tag** (required for sweep candidates): `scope:skill`,
   `scope:agent-def`, `scope:tool`, `scope:process`, `scope:new-skill`. Repo
   friction gets `project:<repo>` instead and is fixed in normal work, not here.
-- **Quality bar:** the text must carry a proposal seed, not just a complaint:
-  what was tried, what got in the way, what would fix it.
+- **Quality bar:** the entry carries a proposal seed, not a bare complaint
+  (@session-retro §2).
 
 ## The loop
 
@@ -41,8 +41,8 @@ Run top to bottom when invoked. Do not skip the user gates.
    Check the target is user-owned before drafting: skills in
    `~/Projects/agent/` (source) or `~/.config/opencode/skills/`
    (personal-global); agent defs in `~/.config/opencode/agents/*.md`.
-   External skills under `~/.agents/skills/` are install targets: NEVER
-   edit them; file upstream issues instead.
+   External skills under `~/.agents/skills/` are install targets: NEVER edit
+   them; file upstream issues instead.
 
    Present the proposal in three grouped sections before any gate:
    **Content edits** (one table: target → change → cuts closed),
@@ -64,18 +64,18 @@ Run top to bottom when invoked. Do not skip the user gates.
    branches against the body and run `skill-doctor`. Trigger accuracy is a
    manual judgment unless the user supplies a dedicated evaluation tool. Body
    and content edits need no formal evidence unless the user asks.
-5. **Graduate big trials**: an idea needing real-world trial (new
-   workflow, structural skill change) becomes a `.scratch/<date>_<slug>/`
-   session ticket instead of a direct edit; adopt or reject from the Outcome
-   block afterwards. For non-repo friction the session lives under
+5. **Graduate big trials**: an idea needing real-world trial (new workflow,
+   structural skill change) becomes a `.scratch/<date>_<slug>/` session
+   ticket instead of a direct edit; adopt or reject from the Outcome block
+   afterwards. For non-repo friction the session lives under
    `~/.local/share/fazuh-agent/.scratch/<date>_<slug>/`.
 6. **Close the loop**: for each applied or rejected proposal, `retain` the
    entry again with the same `document_id`, same content, and a
    `status:resolved` tag (`update_mode: "upsert"`), appending the outcome to
    the content (`adopted: <what landed>` / `rejected: <why>`). Rejections
    must record the reason.
-7. **Validate**: load the @skill-doctor skill and run it over every
-   affected skill root; require a clean report (no broken links, stale refs,
+7. **Validate**: load the @skill-doctor skill and run it over every affected
+   skill root; require a clean report (no broken links, stale refs,
    collisions, drift) before reporting done.
 
 ## Rules

@@ -5,32 +5,28 @@ description: Finish a worktree session and clean up the git worktree. Runs the e
 
 # Worktree close
 
-Run the end-of-session finish workflow, then remove the worktree and its branch.
-Keeps untracked items (`.scratch/`) on the main project dir.
+Run the end-of-session finish workflow, then remove the worktree and its
+branch. Untracked items (`.scratch/`) stay on the main project dir.
 
-> **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Safety rules* section
-> at the bottom.
+> **Load @following-procedures skill first.** It owns procedure narration,
+> deviation logging, post-run report. Always follow the rules in the
+> *Safety rules* section at the bottom.
 
 ## When to use
 
-The user wants to wrap up and clean up a worktree session. Triggers: "close the worktree", "finish and clean up the worktree", "merge and remove the worktree", "done with this worktree". Pairs with @worktree-new.
+The user wants to wrap up and clean up a worktree session. Extra trigger:
+"done with this worktree".
 
 ## Workflow
 
 ### 1. Run the session finish workflow
 
-Load the @finish skill and follow it exactly. It owns the wrap-up:
-relevant docs, the commit-proposal gate, archiving
-a completed `.scratch/` workspace, the summary, next steps. Never
+Load the @finish skill and follow it exactly; it owns the wrap-up. Never
 restate or duplicate its steps here.
 
-Skip the steps a merge already satisfied. From
-@pr-to-close the PR is already merged, so the docs scour
-and the commit proposal are no-ops: re-running them invites
-"updating" docs for merged work. What is left is the archive and
-the summary.
+Skip the steps a merge already satisfied. From @pr-to-close the PR is already
+merged, so the docs scour and the commit proposal are no-ops: re-running them
+invites "updating" docs for merged work. Left: the archive and the summary.
 
 ### 2. Clean up the worktree
 
@@ -46,6 +42,8 @@ untracked main-tree items survived.
 
 ## Safety rules
 
-- Never remove a worktree that has uncommitted work or an unmerged branch unless the user explicitly confirms it's safe to discard.
+- Never remove a worktree that has uncommitted work or an unmerged branch
+  unless the user explicitly confirms it's safe to discard.
 - Never delete the main tree or its untracked files.
-- Always run `git worktree remove`/`git branch -D` from the **main** tree, not from inside the worktree being removed.
+- Always run `git worktree remove`/`git branch -D` from the **main** tree, not
+  from inside the worktree being removed.

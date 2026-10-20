@@ -5,23 +5,24 @@ description: Finish work in a git worktree by following the @finish and @pr-crea
 
 # Worktree finish
 
-Finish a worktree's pull request safely. Coordinates PR creation or
-readiness with conflict resolution; never silently changes behavior.
+Finish a worktree's pull request safely: coordinates PR creation or readiness
+with conflict resolution, never silently changes behavior.
 
-> **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Safety rules* section
-> at the bottom.
+> **Load @following-procedures skill first.** It owns procedure narration,
+> deviation logging, post-run report. Always follow the rules in the
+> *Safety rules* section at the bottom.
 
 ## Workflow
 
 ### 1. Run the session finish workflow
 
-Read and follow the @finish skill first. Keep its proposed commit groups for the orchestrator.
+Read and follow the @finish skill first. Keep its proposed commit groups for
+the orchestrator.
 
 ### 2. Load the PR workflow
 
-Read and follow the @pr-creator skill before creating, updating, or pushing the PR. Treat its branch-safety, template, checks, and push rules as authoritative.
+Read and follow the @pr-creator skill before creating, updating, or pushing the
+PR. Its branch-safety, template, checks, and push rules are authoritative.
 
 ### 3. Identify the worktree and PR
 
@@ -34,15 +35,14 @@ gh pr view --json number,url,state,baseRefName,headRefName,mergeable,mergeStateS
 ```
 
 If no PR exists, complete the applicable @pr-creator steps first. If the
-current directory is the main tree rather than the feature worktree, locate the
-feature worktree from `git worktree list` and run worktree commands there.
+current directory is the main tree rather than the feature worktree, locate
+the feature worktree from `git worktree list` and run worktree commands there.
 
 ### 4. Check mergeability
 
 Inspect the PR's mergeability and compare the feature branch with its current
-base branch. Refresh the base branch first when the repo's normal
-workflow permits it. Use the repo's standard PR or CI checks per
-@pr-creator.
+base branch. Refresh the base branch first when the repo's normal workflow
+permits it. Use the repo's standard PR or CI checks per @pr-creator.
 
 Treat these as conflict signals:
 
@@ -54,9 +54,9 @@ Treat these as conflict signals:
 ### 5. Resolve only simple conflicts
 
 When conflicts are limited, mechanical, and behavior-preserving, resolve them
-in the worktree. Examples: importing both independent additions,
-keeping compatible formatting changes, choosing the version that matches
-the already-agreed implementation without changing its behavior.
+in the worktree. Examples: importing both independent additions, keeping
+compatible formatting changes, choosing the version matching the already-agreed
+implementation without changing its behavior.
 
 After each resolution:
 
@@ -76,15 +76,15 @@ semantics, or where the correct side cannot be established from the existing
 code, tests, issue, or PR description, is the user's call, not yours.
 (Vocabulary: the @gate skill.)
 
-Explain the conflicting choices, likely behavior or compatibility impact,
-and files involved. Never commit, push, or discard either choice until the
-user answers.
+Explain the conflicting choices, likely behavior or compatibility impact, and
+the files involved. Never commit, push, or discard either choice until the user
+answers.
 
 ### 7. Finish the worktree
 
-When the PR is conflict-free and checks pass, report the PR URL, branch, checks,
-and whether the worktree is safe to remove. If the user wants it removed, follow
-the @worktree skill's "Finishing / cleanup" section.
+When the PR is conflict-free and checks pass, report the PR URL, branch,
+checks, and whether the worktree is safe to remove. If the user wants it
+removed, follow the @worktree skill's "Finishing / cleanup" section.
 
 ## Dependency graph
 
@@ -98,6 +98,10 @@ the @worktree skill's "Finishing / cleanup" section.
 
 ## Safety rules
 
-- Decide the deploy source before the first commit. When an unmerged branch is what the live deploy runs, land the fix on that branch and merge once; fixing the base branch instead forces a cherry-pick, and the merge then carries the same patch twice (duplicate commits, a pre-push reset).
+- Decide the deploy source before the first commit. When an unmerged branch is
+  what the live deploy runs, land the fix on that branch and merge once;
+  fixing the base branch instead forces a cherry-pick, and the merge then
+  carries the same patch twice (duplicate commits, a pre-push reset).
 - Never push the default branch; follow @pr-creator branch-safety rules.
-- Never claim a PR is ready until mergeability and relevant checks have been verified after the final push.
+- Never claim a PR is ready until mergeability and relevant checks have been
+  verified after the final push.

@@ -7,7 +7,7 @@
 
 ## When to use
 
-The work decomposes into two or more units that touch different files, and no
+The work decomposes into two or more units touching different files, and no
 unit needs another unit's result to start.
 
 ## State machine
@@ -49,8 +49,7 @@ START (work decomposes into N independent units)
 scopes intersect are not parallel lanes: serialise them.
 
 **2. A file several lanes need is a chain, not a fan-out.** Give it a total
-order. The order is a DAG with no cycles, and the last link waits on a link
-that still exists. A link waiting on a superseded link has no gate that can
+order, with no cycles. A link waiting on a superseded link has no gate that can
 open: the lane holding it either waits forever or proceeds on a guess.
 
 **3. A shared file's gate has two conditions.** The predecessor's deliverable
@@ -60,42 +59,28 @@ immediately before the write**: a lane that waited may have been overtaken
 while it waited.
 
 **4. A tool that restores source writes.** A mutation gate that restores the
-file from a pristine lands on whatever is in the tree when it runs, so it is a
-write. Run it when the binding holds.
+file from a pristine lands on whatever is in the tree when it runs. Run it when
+the binding holds.
 
 ## A lane keeps one session
 
-A lane keeps one session for its whole life: the next ticket in the same lane
-resumes that session, which already holds the codebase map, the lane's
-conventions, and the lane's earlier measurements. **A lane's session is the
-cheapest warm context available**: a fresh spawn re-learns the codebase and
-re-reads the task from zero.
-
-Resume a lane's session when the next task continues the same unit of work, or
-follows up on that lane's own report. **A long-resumed child can come back as
-`Subagent completed without a text response`: check the tree against the base
-commit before believing it.** A child that changed files is alive and its
-report was lost; resume it with a delta brief. Confirm a session id against
-the API before concluding it is gone; a stale id in a note reads as a dead
-session. Spawn fresh when the id no longer resolves, or when the work is
-unrelated.
-
-**On a resume, re-POST the model.** A session that died on a provider or
-free-tier error resumes cleanly on a different model; one carrying the failing
-model dies again. A cold spawn omits the model field; a resume re-states it.
+A lane keeps one session for its whole life: the next ticket in the lane
+resumes it, and it already holds the codebase map, the lane's conventions and
+its earlier measurements. **A lane's session is the cheapest warm context
+available**: a fresh spawn re-learns the codebase and re-reads the task from
+zero. @orchestrate owns the resume rules.
 
 ## Lanes in different trees
 
-When lanes land in different copies of the tree, reconcile by common prefix:
-take the shared prefix, then each side's remainder, in that order. **A blind
-overwrite drops the other side's work.** Report any file whose versions
-disagree on more than half their content as a conflict and leave it for a
-human. Append-only logs merge by concatenation, and the tree points at which
-log is the record.
+Reconcile by common prefix: take the shared prefix, then each side's
+remainder, in that order. **A blind overwrite drops the other side's work.**
+Report a file whose versions disagree on more than half their content as a
+conflict and leave it for a human. Append-only logs merge by concatenation,
+and the tree points at which log is the record.
 
 ## Reviews beside writers
 
-A read-only review of a lane's output runs after that lane lands. A review of
+A read-only review of a lane's output runs after that lane lands; a review of
 finished work runs beside the remaining lanes. Several small tickets can
 share one reviewer: one review, one verdict and one fix list per ticket, each
 independent of the others.

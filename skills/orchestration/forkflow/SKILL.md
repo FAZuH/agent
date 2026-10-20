@@ -4,18 +4,21 @@ description: >-
   Run warm per-ticket delegation with OpenCode v2 session forks: probe fork
   capabilities, fork a completed session at a boundary, switch the child
   agent before its first prompt, send a focused task prompt, poll its outcome,
-  and read the result. Fall back to a fresh subagent when fork support is not
-  available. Use for orchestrated research-to-implementation or review/test
-  handoffs; do not use as a replacement for @task-context or @setup-dev-docs.
+  and read the result. Fall back to a fresh subagent when fork support is
+  unavailable. Use for orchestrated research-to-implementation or review/test
+  handoffs; not a replacement for @task-context or @setup-dev-docs.
 ---
 
 # forkflow
 
-Warm-delegation layer for orchestration. Uses the current ticket's session history as an accelerator. The durable contract stays the spec and, when one exists, the @task-context packet.
+Warm-delegation layer for orchestration: uses the current ticket's session
+history as an accelerator. The durable contract stays the spec and, when one
+exists, the @task-context packet.
 
 ## One-shot
 
-`scripts/oc-delegate.sh` runs the whole delegation procedure in one call: fork → switch agent → first prompt → wait → print the reply:
+`scripts/oc-delegate.sh` runs the whole delegation procedure in one call: fork
+→ switch agent → first prompt → wait → print the reply:
 
 ```sh
 scripts/oc-delegate.sh ses_SOURCE --agent implement \
@@ -24,8 +27,8 @@ scripts/oc-delegate.sh ses_SOURCE --agent implement \
 
 `--through`/`--before` (explicit boundary), `--agent`, and
 `--prompt`/`--prompt-file` are required; `--model` and `--timeout` optional.
-Exit 0 only on child success. Reuses the @ocv2-sessions
-scripts. The manual steps below are fallback and reference.
+Exit 0 only on child success. Reuses the @ocv2-sessions scripts. The manual
+steps below are fallback and reference.
 
 For a plain Q&A fork that keeps the parent's agent and model (no switch),
 `scripts/oc-ask.sh` is the one-shot, fork at the latest message → prompt →
@@ -46,8 +49,8 @@ For every child:
 fork → switch agent → verify → first prompt
 ```
 
-Switching after the child ran a turn changes session metadata and
-message tags but does not reliably replace the model's system prompt.
+Switching after the child ran a turn changes session metadata and message
+tags but does not reliably replace the model's system prompt.
 
 ## Preconditions
 
@@ -75,8 +78,8 @@ role-specific task brief. Never make the ticket depend on fork support.
 1. Resolve the source session and the boundary message.
 2. `POST /api/session/{source}/fork` with an explicit `through` or `before`
    boundary. Save the returned child session ID.
-3. `POST /api/session/{child}/agent` with the target subagent name. Do this
-   before any prompt is sent to the child.
+3. `POST /api/session/{child}/agent` with the target subagent name, before any
+   prompt reaches the child.
 4. Verify `GET /api/session/{child}` reports the target agent.
 5. Send exactly one first prompt with the run mode and the focused role
    brief. If a task packet exists, pass only its role projection and path;
@@ -96,29 +99,29 @@ research report
       └→ fork + switch review + first prompt
 ```
 
-Verification stays with the implement session. If review finds a fix, resume or
-fork an implement child with the new explicit boundary; do not switch the agent
-of a child that already ran a turn.
+Verification stays with the implement session. If review finds a fix, resume
+or fork an implement child with the new explicit boundary; do not switch the
+agent of a child that already ran a turn.
 
 ## Unattended fleets
 
 The default loop is foreground: fork → prompt → poll → report. Unattended
-fleets (overnight batches) also need the dispatch ledger, per-generation completion
-markers, and stall detection; @long-horizon owns those
+fleets (overnight batches) also need the dispatch ledger, per-generation
+completion markers, and stall detection; @long-horizon owns those
 requirements and the wake loop, since they are liveness concerns rather than
 fork mechanics.
 
 Poll recipe for long runs: `GET /api/session/{child}` `.data.outcome` (null
 = busy). Message lists are newest-first and mix agent voices, so filter to
-`agent != orchestrator`, iterate from index 0, and save large message JSON to a
-file before parsing.
+`agent != orchestrator`, iterate from index 0, and save large message JSON to
+a file before parsing.
 
 ## Ledger and fallback
 
 Record child IDs, source boundary IDs, target agents, outcomes, and fallback
 decisions in the active session's existing session record. `forkflow` creates
-no second ticket-context or architecture-memory file. On fallback,
-record the failed probe and continue with ordinary delegation.
+no second ticket-context or architecture-memory file. On fallback, record the
+failed probe and continue with ordinary delegation.
 
 Raw API mechanics live in @ocv2-sessions; this skill owns the orchestration
 policy and ordering constraints.

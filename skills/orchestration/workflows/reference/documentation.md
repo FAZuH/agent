@@ -2,8 +2,8 @@
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Gates* section at
-> the bottom.
+> fixed post-run report. Always follow the rules in the *Gates* section at the
+> bottom.
 
 ## When to use
 
@@ -31,10 +31,7 @@ START (docs / decision request)
 
 ## Dependency graph
 
-- step1
-- step2
-- step3
-- step4 -> step3
+- DELEGATE, GLOSSARY and ADR are independent; LOG depends on ADR
 
 ## Gates
 

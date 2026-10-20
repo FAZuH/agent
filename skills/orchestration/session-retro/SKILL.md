@@ -5,35 +5,33 @@ description: End-of-session retrospective where the agent proposes improvements 
 
 # Session retro
 
-Look back at the finished session and convert it into filed proposals
-for your own skills, agent
-definitions, tooling, and process. Proposals only; application
-belongs to @friction-sweep.
+Look back at the finished session and convert it into filed proposals for your
+own skills, agent definitions, tooling, and process. Proposals only;
+application belongs to @friction-sweep.
 
-Always follow the rules in the *Rules* section at the bottom.
+Follow the *Rules* section below.
 
 ## 1. Mine the session and its config
 
-Walk back through the conversation, then the config it ran under, and
-look for five things:
+Walk back through the conversation, then the config it ran under, and look for
+five things:
 
-1. **Friction hit**: tool fights, dead ends, permission denials,
-   silent workarounds, retries that should not have been needed.
-2. **Repeated corrections**: instructions the user gave
-   twice; conventions re-explained; wrong assumptions made.
-3. **Skill/workflow gaps**: missing guidance, wrong skill routed, stale
-   docs, a procedure step that did not survive contact with reality.
-4. **Gold-standard wins**: something unusually good, worth
-   encoding as standing practice.
+1. **Friction hit**: tool fights, dead ends, permission denials, silent
+   workarounds, retries that should not have been needed.
+2. **Repeated corrections**: instructions the user gave twice; conventions
+   re-explained; wrong assumptions made.
+3. **Skill/workflow gaps**: missing guidance, wrong skill routed, stale docs,
+   a procedure step that did not survive contact with reality.
+4. **Gold-standard wins**: something unusually good, worth encoding as
+   standing practice.
 5. **New-skill candidate**: improvised multi-step workflow (3+ steps) worth
-   extracting as a new skill. High bar, do not force: reusable
-   across sessions/repos, not covered by any existing skill in
-   `available_skills`, with transcript evidence (what was done, trigger
-   phrases, inputs/outputs). None meets the bar: state `No new-skill
-   candidate.` and move on. That is a valid outcome.
+   extracting as a new skill. High bar, do not force: reusable across
+   sessions/repos, not covered by any existing skill in `available_skills`,
+   with transcript evidence (what was done, trigger phrases, inputs/outputs).
+   None qualifies: state `No new-skill candidate.` and move on. That is a
+   valid outcome.
 
-Mine both config levels, so a finding lands on the surface that can actually
-hold it:
+Mine both config levels, so a finding lands on the surface that can hold it:
 
 - **Global**: `~/.config/opencode/{skills,agents,plugins}`, `opencode.json`.
 - **Repo-local**: the repository's own agent configuration: `AGENTS.md` /
@@ -47,8 +45,8 @@ missing one is the cheapest proposal you can file.
 
 ## 2. Propose (do not file yet)
 
-For each finding, **draft** one entry but do not `retain` yet. One entry =
-one `retain` with the @global-instruction friction tags:
+For each finding, **draft** one entry but do not `retain` yet: one entry = one
+`retain` with the @global-instruction friction tags:
 
 - Content: `<friction observed > proposed fix>`, one or two sentences.
 - `document_id: "friction-<short-slug>"` (stable; the resolve handle).
@@ -56,7 +54,6 @@ one `retain` with the @global-instruction friction tags:
   `machine:<hostname>`; scope tag by fix location:
   `scope:skill|agent-def|tool|process|new-skill` when the fix outlives one
   repo, `project:<repo>` when it lands in this repo only.
-
 - The text must carry a proposal seed: what was tried, what got in the way,
   what would fix it. A bare complaint fails the bar.
 - For `scope:new-skill` candidates the text must carry: working name,
@@ -71,11 +68,11 @@ one `retain` with the @global-instruction friction tags:
 
 ## 3. Gate, ask before filing
 
-**GATE friction-file (normal → retain all drafted proposals):** filing a
-friction entry to Hindsight requires user approval (filing is cheap and reversible;
-*applying* what was filed is a separate, still-gated decision owned by
-@friction-sweep). (Vocabulary: the @gate skill.) Do not file immediately. Present the drafts and gate with
-the user:
+**GATE friction-file (normal → retain all drafted proposals):** filing to
+Hindsight requires user approval (filing is cheap and reversible; *applying*
+what was filed is a separate, still-gated decision owned by @friction-sweep).
+(Vocabulary: the @gate skill.) Do not file immediately. Present the drafts
+and gate with the user:
 
 1. Render a compact **proposal** table (nothing filed yet):
 
@@ -120,17 +117,20 @@ Then report a compact **filed** table:
 - Mark which entries look immediately actionable versus needing thought.
 - When the user later says "apply friction <N>" or "fix <N>", map N back to
   that row's `document_id` before touching the store.
-- If nothing was approved, state "No friction entries filed, proposals remain as discussion only."
+- If nothing was approved, state "No friction entries filed, proposals remain
+  as discussion only."
 
 ## Rules
 
-- Filing requires the step-3 user approval (GATE friction-file, a `normal` gate that skips only in auto mode; vocabulary: @gate). Never auto-create a new skill here: a `scope:new-skill` candidate needs a separate skill-authoring session with `writing-for-agents`.
-- Never edit skills, agent definitions, or config from this skill. Applying an approved proposal belongs to @friction-sweep.
+- Filing requires the step-3 user approval (GATE friction-file, a `normal`
+  gate that skips only in auto mode; vocabulary: @gate). Never auto-create a
+  new skill here: a `scope:new-skill` candidate needs a separate
+  skill-authoring session with `writing-for-agents`.
+- Never edit skills, agent definitions, or config here (@self-improve Rules).
 - One store, one bank: every entry carries the friction tags; scope decides
   what the sweep does with it, not where it lives.
-- In a restricted/read-only agent (e.g. Plan mode): keep the deviation log
-  in working notes, defer filing to a write-capable mode, and state the
-  deferral in the report.
+- Restricted/read-only agent: keep the deviation log in working notes, defer
+  filing to a write-capable mode (@self-improve Rules).
 
 ## Dependency graph
 

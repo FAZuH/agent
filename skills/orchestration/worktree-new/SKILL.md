@@ -5,18 +5,18 @@ description: Start working on a task in a new git worktree branch, keeping untra
 
 # Worktree new
 
-Start a task inside a fresh git worktree so the main tree
-stays clean. Tracked work (code and commits) happens in the worktree;
-untracked project state stays on the main tree.
+Start a task in a fresh git worktree so the main tree stays clean. Tracked work
+(code, commits) happens in the worktree; untracked project state stays on the
+main tree.
 
-> **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Safety rules* section
-> at the bottom.
+> **Load @following-procedures skill first.** It owns procedure narration,
+> deviation logging, post-run report. Always follow the rules in the
+> *Safety rules* section at the bottom.
 
 ## When to use
 
-The user wants to begin work on a feature or task in an isolated git worktree. Triggers: "start a new worktree", "work on X in a worktree", "create a branch for this", "spin up a worktree for the feature".
+The user wants to begin work on a feature or task in an isolated git worktree.
+Extra trigger: "create a branch for this".
 
 ## Workflow
 
@@ -24,11 +24,15 @@ The user wants to begin work on a feature or task in an isolated git worktree. T
    branch-name convention, the sibling worktree location, and the
    `git worktree add` invocation.
 
-2. **Identify the task.** Use the user's stated task/feature description as the goal. If none was given, ask what they want to work on before creating the worktree.
+2. **Identify the task.** Use the user's stated task/feature description as the
+   goal. If none was given, ask what they want to work on before creating the
+   worktree.
 
-3. **Work inside the worktree path.** Use `workdir` for bash/pty commands. Tracked work (code and commits) happens there.
+3. **Work inside the worktree path.** Use `workdir` for bash/pty commands.
+   Tracked work (code and commits) happens there.
 
-4. **Report when done.** Task complete: report what changed and note the user can invoke @worktree-close to finish and clean up.
+4. **Report when done.** Report what changed; note the user can invoke
+   @worktree-close to finish and clean up.
 
 ## Dependency graph
 
@@ -39,6 +43,9 @@ The user wants to begin work on a feature or task in an isolated git worktree. T
 
 ## Safety rules
 
-- Always create the worktree from the **main** tree, not from inside another worktree.
-- Never create or edit untracked main-tree items (`.scratch/`) inside the worktree.
-- Don't run `git worktree remove` or `git branch -D` while work is in progress; that belongs to @worktree-close.
+- Always create the worktree from the **main** tree, not from inside another
+  worktree.
+- Never create or edit untracked main-tree items (`.scratch/`) inside the
+  worktree.
+- Don't run `git worktree remove` or `git branch -D` while work is in progress;
+  that belongs to @worktree-close.

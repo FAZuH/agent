@@ -13,44 +13,42 @@ description: >-
 
 # Long-horizon runs
 
-Keep work moving for hours while the orchestrator idles, the network
-drops, or the service restarts. The session is the weak link: an idle LLM
-session does not keep running, and goal auto-continue is untrustworthy for
-long runs. Move liveness **outside** the session.
+Keep work moving for hours while the orchestrator idles, the network drops, or
+the service restarts. An idle LLM session does not keep running, and goal
+auto-continue is untrustworthy for long runs. Move liveness **outside** the
+session.
 
-> **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report.
+> **Load @following-procedures skill first.** It owns procedure narration,
+> deviation logging, post-run report.
 
-Always follow the rules in the *Rules* section at the bottom.
+Follow the *Rules* section below.
 
 ## The rig: four pieces
 
 1. **Resume-safe workers.** Every long job writes a progress file
-   (step/candidate-level) and a sentinel on terminal state:
-   `*_EXHAUSTED.txt` (space done) or `*_FOUND.txt` (hit). Restart = re-run;
-   the worker skips what the progress file records. Launch detached:
-   `setsid nohup <worker> >> run.log 2>&1 < /dev/null & disown`: in-session
-   background calls get reaped, and bgrun units die with the service.
-2. **Supervisor** (`scripts/supervisor.sh`). A dumb loop: health-gate
-   (N-of-M pings), restart dead workers, skip exhausted tracks, stop on a
-   FOUND sentinel, exit when all tracks are done. Logs every spawn with its
-   PID so a double-spawn is forensically decidable.
+   (step/candidate-level) and a sentinel on terminal state: `*_EXHAUSTED.txt`
+   (space done) or `*_FOUND.txt` (hit). Restart = re-run; the worker skips what
+   the progress file records. Launch detached: `setsid nohup <worker> >>
+   run.log 2>&1 < /dev/null & disown`: in-session background calls get reaped,
+   bgrun units die with the service.
+2. **Supervisor** (`scripts/supervisor.sh`). A dumb loop: health-gate (N-of-M
+   pings), restart dead workers, skip exhausted tracks, stop on a FOUND
+   sentinel, exit when all tracks are done. Logs every spawn with its PID so a
+   double-spawn is forensically decidable.
 3. **Heartbeat** (`scripts/heartbeat.sh`). External watchdog that wakes the
-   orchestrator with `POST /api/session/<id>/prompt` (steer delivery =
-   queued until idle) on: child outcome transitions, child stalls, sentinel
-   file events, rig-unit death, and a keep-alive timer. State dir + `STOP`
-   marker; keep-alives are suppressed while a previous wake is still pending
-   (queued wakes arrive as a burst).
+   orchestrator with `POST /api/session/<id>/prompt` (steer delivery = queued
+   until idle) on: child outcome transitions, child stalls, sentinel file
+   events, rig-unit death, and a keep-alive timer. State dir + `STOP` marker;
+   keep-alives are suppressed while a previous wake is still pending (queued
+   wakes arrive as a burst).
 4. **Watcher** (`scripts/found_watcher.sh`). Sentinel → Discord. Reads the
    webhook from a secrets file at runtime; never prints it.
 
 ## Procedure
 
-1. **Decide state and sentinels.** Pick the state dir
-   (`/tmp/opencode/<name>/`), the workspace, the sentinel names, and the
-   worker progress-file format. Done when: you can name the exact file each
-   event writes.
+1. **Decide state and sentinels.** Pick the state dir (`/tmp/opencode/<name>/`),
+   the workspace, the sentinel names, and the worker progress-file format.
+   Done when: you can name the exact file each event writes.
 2. **Write the workers.** Progress file + sentinels + resume-on-restart.
    Done when: `kill` then re-run resumes without repeating work. Test it.
 3. **Start the supervisor detached.** Done when: its log shows one
@@ -60,13 +58,12 @@ Always follow the rules in the *Rules* section at the bottom.
    orchestrator acts on it.
 5. **Compose wake prompts self-contained.** Wake reason + standing rules
    re-injected + "act on the reason, update the session record, end your
-   turn". The session may read each wake with fresh context after
-   compaction. Done when: the wake prompt alone produces correct
-   behavior.
+   turn". The session may read each wake with fresh context after compaction.
+   Done when: the wake prompt alone produces correct behavior.
 6. **Stand down in order.** Supervisor first (it would resurrect workers),
-   then workers (kill by explicit PID), then heartbeat
-   (`touch <state>/STOP`). Progress files stay for a future resume. Done
-   when: `pgrep` finds no rig process and `bgrun list` shows no rig unit.
+   then workers (kill by explicit PID), then heartbeat (`touch <state>/STOP`).
+   Progress files stay for a future resume. Done when: `pgrep` finds no rig
+   process and `bgrun list` shows no rig unit.
 7. **Re-arm after a restart.** bgrun units and setsid children may die with
    the service. Check `pgrep` + the unit list; restart supervisor, then
    heartbeat. The state dir survives, so markers and `children.txt` do not
@@ -75,13 +72,12 @@ Always follow the rules in the *Rules* section at the bottom.
 ## Fleet children
 
 Forked children (see @forkflow) plug into the heartbeat through
-`children.txt`, one line per child (sessionID, agent, dispatch epoch, state):
-a heartbeat or a recovering orchestrator must re-read the ledger
-without context. Key completion markers by dispatch generation, or
-delete them on re-dispatch: a stale `.done` suppresses a
-re-dispatched child's finish-wake. Stall means no new child message for
-~45 min; re-notify hourly, because `outcome` alone cannot tell a slow child
-from a dead one.
+`children.txt`, one line per child (sessionID, agent, dispatch epoch, state): a
+heartbeat or a recovering orchestrator must re-read the ledger without context.
+Key completion markers by dispatch generation, or delete them on re-dispatch: a
+stale `.done` suppresses a re-dispatched child's finish-wake. Stall means no new
+child message for ~45 min; re-notify hourly, because `outcome` alone cannot tell
+a slow child from a dead one.
 
 ## Rules
 

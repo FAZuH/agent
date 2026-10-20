@@ -2,22 +2,25 @@
 
 Use when a subagent spawn returns aborted ("Tool execution interrupted",
 "Endpoint is unavailable") or the server restarts mid-flight. Never re-spawn
-blindly: check the transient signatures below first. One retry there;
-the wreckage procedure only if the retry fails too.
+blindly: check the transient signatures below first. One retry there; the
+wreckage procedure only if the retry fails too.
 
 ## Transient signatures (retry the dispatch once, then classify)
 
-- `Agent not found: <name>` right after a server restart while the agent
-  file exists on disk (`~/.config/opencode/agents/<name>.md`) → registry not
+- `Agent not found: <name>` right after a server restart while the agent file
+  exists on disk (`~/.config/opencode/agents/<name>.md`) → registry not
   reloaded yet; retry the spawn once before calling it a routing error.
 - Dispatch dies with `context deadline exceeded` or
-  `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → transient provider hop; retry
-  the dispatch once.
+  `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → transient provider hop; retry the
+  dispatch once.
 - Any DNS-signed failure (`ENOTFOUND <litellm-host>`) → the litellm router
   lives behind tailscale; check tailscale is up before anything else.
-- A child reports completion with no text and `git status` shows no work from
-  its brief: spawn the same brief once in a fresh session. Do not resume the
-  silent session. A second silent completion is not transient.
+- A child reports completion with no text: **check the tree first**. Work
+  landed means the session is alive and only its report was lost → resume it
+  with a delta brief (@orchestrate). No work landed means it is idle or gone →
+  confirm the session id against the API before declaring it dead, then resume
+  it if it resolves, else spawn the same brief once in a fresh session. A
+  second silent completion is not transient.
 - NOT transient: litellm `BadRequest` deserialize on a large prompt (shrink
   the prompt), and a resumed session carrying images into a text-only model
   (use a vision model or a fresh session).
@@ -25,13 +28,13 @@ the wreckage procedure only if the retry fails too.
 ## Procedure
 
 1. **Assess landed state before respawning.** Killed agents leave work on
-   disk. Check: `git status --short`, the repo's fast compile/check
-   equivalent, and any `.scratch` artifacts the agent was working from.
+   disk. Check: `git status --short`, the repo's fast compile/check equivalent,
+   and any `.scratch` artifacts the agent was working from.
 2. **Classify the wreckage:**
    - *Nothing landed* → re-send the original brief unchanged.
    - *Partial* → send a resume-brief (template below).
-   - *Looks complete but no report* → run the acceptance gates yourself;
-     if green, mark the ticket done from evidence.
+   - *Looks complete but no report* → run the acceptance gates yourself; if
+     green, mark the ticket done from evidence.
 3. **Resume-brief template**: the replacement spawn must start with:
    - "You are CONTINUING an interrupted job. Do NOT start over."
    - What the previous agent already did (from git status + checks).
@@ -41,11 +44,12 @@ the wreckage procedure only if the retry fails too.
    - Gates + concise-report requirements, same as the original brief.
 4. **Two consecutive kills without progress** → stop re-spawning and report.
    Direct execution is the user's call, never a default.
-5. **Log it:** one deviation-log line per kill + recovery path; infra
-   errors also get retained to the Hindsight friction store.
+5. **Log it:** one deviation-log line per kill + recovery path; infra errors
+   also get retained to the Hindsight friction store.
 
 ## Rules
 
-- Disk state outranks the transcript: never assume a fresh spawn means a clean slate.
-- Prefer resuming the same unit over restarting it; prefer smaller units
-  when infra is flaky, so kills lose less.
+- Disk state outranks the transcript: never assume a fresh spawn means a clean
+  slate.
+- Prefer resuming the same unit over restarting it; prefer smaller units when
+  infra is flaky, so kills lose less.

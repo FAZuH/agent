@@ -2,10 +2,10 @@
 name: task-context
 description: >-
   Create and maintain the per-ticket context packet at
-  .scratch/<date>_<task>/context-packet.md, objective, base commit,
-  relevant files and symbols, architecture boundaries, invariants,
-  decisions, acceptance criteria, verification commands, known failures,
-  and role-specific projections for implement, review, and research-discovery.
+  .scratch/<date>_<task>/context-packet.md: objective, base commit, relevant
+  files and symbols, architecture boundaries, invariants, decisions,
+  acceptance criteria, verification commands, known failures, and
+  role-specific projections for implement, review, and research-discovery.
   Use when non-trivial ticket work moves from research/design to
   delegation, when a public API, module boundary, or design decision
   changes (refresh), and when resuming after compaction or an interrupted
@@ -14,11 +14,11 @@ description: >-
 
 # task-context
 
-The **context packet** is one compact file per ticket: `.scratch/<YYYY-MM-DD>_<task>/context-packet.md`, the current
-distilled view: what to build, where, what must stay true, how
-to verify, and what each worker needs. Workers receive a
-role-specific projection; raw research transcripts never enter
-delegation prompts.
+The **context packet** is one compact file per ticket,
+`.scratch/<YYYY-MM-DD>_<task>/context-packet.md`: the distilled view of what
+to build, where, what must stay true, how to verify, and what each worker
+needs. Workers get a role-specific projection; raw research transcripts never
+enter delegation prompts.
 
 > **Load the @scratch skill first.** It owns the `.scratch/` layout and slug
 > format. The packet lives in the active workspace; when none exists for the
@@ -30,14 +30,13 @@ delegation prompts.
   decisions, deviations, gates. The packet is a derived, disposable view,
   rebuildable from the spec plus the code at any time. @session owns that
   lifecycle and the checkpoints; this skill owns only the packet.
-- Durable knowledge goes home, never into the packet: stable
-  workflow → `docs/dev/` (@setup-dev-docs), vocabulary → `CONTEXT.md`,
-  decisions → `docs/adr/`.
+- Durable knowledge goes home, never into the packet: stable workflow →
+  `docs/dev/` (@setup-dev-docs), vocabulary → `CONTEXT.md`, decisions →
+  `docs/adr/`.
 - The packet is not a second architecture memory. When @scratch-finish
   archives the workspace, the packet goes with it.
 - Execution-mode neutral: workers are fresh subagent spawns today; a
-  session-fork flow could consume the same packet unchanged. Nothing here
-  depends on fork mechanics.
+  session-fork flow could consume the same packet unchanged.
 
 ## Packet template
 
@@ -92,27 +91,25 @@ Spec: `.scratch/<slug>/spec.md`, task truth lives there.
 
 ## Lifecycle
 
-1. **Create**: after research/design synthesis, before the first
-   delegation. Distill the findings into the fields; the findings file keeps
-   the detail. Done when: every field is filled or marked `(none)` /
-   `(deferred: <owner>)`.
-2. **Refresh**: on trigger: a public API, module boundary,
-   design decision, acceptance criterion, or verification command changed;
-   the base commit moved (commit, rebase, merge); or `git status --short`
-   shows files outside Relevant. Edit the changed fields
-   and bump the Freshness line. A full rewrite means the design changed: log it in the spec first.
+1. **Create**: after research/design synthesis, before the first delegation.
+   Distill the findings into the fields; the findings file keeps the detail.
+   Done when every field is filled or marked `(none)` / `(deferred: <owner>)`.
+2. **Refresh**: on trigger: a public API, module boundary, design decision,
+   acceptance criterion, or verification command changed; the base commit moved
+   (commit, rebase, merge); or `git status --short` shows files outside
+   Relevant. Edit the changed fields and bump the Freshness line. A full
+   rewrite means the design changed: log it in the spec first.
 3. **Changed-file rule**: after every implement/verify round, compare
    `git status --short` and `git diff --stat <base>..HEAD` against Relevant
-   files & symbols. A new or removed file joins the list with its symbols,
-   or it signals a scope change: update the packet and the spec's deviation
-   log together.
-4. **Check before delegating**: compare the Freshness line's base commit
-   and verification date against the current tree. Stale → refresh first;
-   never send a stale projection.
-5. **Recover**: after compaction, a fork, or an interrupted spawn, rebuild
-   the next projection from the packet plus the code. Chat memory is not an
-   input. (Spec and checkpoint recovery live in @session and
-   @prepare-compact.)
+   files & symbols. A new or removed file joins the list with its symbols, or
+   it signals a scope change: update the packet and the spec's deviation log
+   together.
+4. **Check before delegating**: compare the Freshness line's base commit and
+   verification date against the current tree. Stale → refresh first; never
+   send a stale projection.
+5. **Recover**: after compaction, a fork, or an interrupted spawn, rebuild the
+   next projection from the packet plus the code. Chat memory is not an input.
+   (Spec and checkpoint recovery live in @session and @prepare-compact.)
 
 ## Role projections
 
@@ -125,16 +122,15 @@ worker reads the full packet only when it needs more.
 | `review` | Base commit (diff scope), decisions, invariants, acceptance criteria, out of scope |
 | `research-discovery` / you | Open questions, boundaries, decisions |
 
-Raw research transcripts stay in their findings file (`docs/research/`); the
-packet carries the distilled facts, and prompts carry the projection.
+Raw research transcripts stay in their findings file (`docs/research/`).
 
 ### Fleet dispatches
 
-When dispatching N>1 children from one packet, pre-render one projection
-file per child into the workspace (`projections/<role>.md`) and pass the
-file path in each dispatch prompt instead of pasting inline.
-Hand-maintained inline briefs drift apart across children; files stay
-comparable and diffable, and a re-dispatch reuses the file unchanged.
+When dispatching N>1 children from one packet, pre-render one projection file
+per child into the workspace (`projections/<role>.md`) and pass the file path
+in each dispatch prompt instead of pasting inline. Inline briefs drift apart
+across children; files stay comparable and diffable, and a re-dispatch reuses
+the file unchanged.
 
 ## Completion criteria
 
@@ -143,5 +139,3 @@ comparable and diffable, and a re-dispatch reuses the file unchanged.
 - The Freshness line names a base commit and a verification date that match
   the working tree.
 - Each delegation carried its projection, no raw transcripts in prompts.
-- Durable facts found along the way went to `docs/dev/`, `CONTEXT.md`, or
-  `docs/adr/`; the packet holds task-scoped facts only.

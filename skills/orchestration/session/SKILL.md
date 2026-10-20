@@ -1,41 +1,41 @@
 ---
 name: session
 description: >-
-  Manage a feature's session workspace under .scratch/, the plan/spec doc,
+  Manage a feature's session workspace under .scratch/: the plan/spec doc,
   tickets, deviation log, log sections, and pre-compaction checkpoints. Use
-  when starting a multi-step task and writing an initial plan, resuming
-  after a session fork or compaction, persisting state before compaction,
-  logging deviations, or drafting a spec and splitting it into tickets. The
-  session doc is the single source of truth that keeps work consistent
-  across sessions. The `.scratch/` layout, slug format, and lifecycle live
-  in the @scratch skill; the checkpoint and log-section templates live here.
+  when starting a multi-step task and writing an initial plan, resuming after
+  a session fork or compaction, persisting state before compaction, logging
+  deviations, or drafting a spec and splitting it into tickets. The `.scratch/`
+  layout, slug format, and
+  lifecycle live in the @scratch skill; the checkpoint and log-section
+  templates live here.
 ---
 
 # session
 
-Every non-trivial feature gets a `.scratch/` workspace. The spec doc
-inside it is the single source of truth.
+Every non-trivial feature gets a `.scratch/` workspace. The spec doc inside it
+is the single source of truth.
 
-> **Load the @following-procedures skill first.** It defines how you run this
-> skill's numbered procedures: point-and-call narration, live deviation
-> logging, and a post-run report. The `## Interrupted procedures` section it
-> defines lives in this workspace's `spec.md`.
-
-> **Load the @scratch skill first.** It owns the workspace layout, slug
-> format, and lifecycle. This skill owns what goes *inside* the workspace.
+> **Load @following-procedures skill first.** It owns procedure narration,
+> deviation logging, post-run report. The `## Interrupted procedures` section
+> it defines lives in this workspace's `spec.md`.
+>
+> **Load @scratch skill first.** It owns the workspace layout, slug format, and
+> lifecycle. This skill owns what goes *inside* the workspace.
 
 ## Read the workspace first
 
-- **Session start / resume:** read `.scratch/*_*/spec.md` first; it restores where the work stands and what was decided.
-- **After compaction or fork:** re-read the spec and `checkpoint.md`; they are the canonical summary.
+- **Session start / resume:** read `.scratch/*_*/spec.md` first; it restores
+  where the work stands and what was decided.
+- **After compaction or fork:** re-read the spec and `checkpoint.md`; they are
+  the canonical summary.
 - **Mid-task:** check the deviation log for what already changed.
 
 ## Writing a plan / spec
 
-Study the codebase first (pages, modules, routes, conventions) so the
-plan matches the repo. Keep the doc
-self-contained: a fresh or compacted session must resume
-from the doc plus the code.
+Study the codebase first (pages, modules, routes, conventions) so the plan
+matches the repo. Keep the doc self-contained: a fresh or compacted session
+must resume from the doc plus the code.
 
 Template (`.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`):
 
@@ -67,14 +67,14 @@ How to verify (tests, lint, build); which subagents to delegate to
 
 Append entries to this log with a shell append (`cat >> spec.md <<'EOF' …`),
 or an edit that anchors on the file's final line and ADDS after it. Never
-anchor on a duplicated phrase mid-file: replace-edits on
-recurring log text silently overwrite an existing entry.
+anchor on a duplicated phrase mid-file: replace-edits on recurring log text
+silently overwrite an existing entry.
 
 ## Log sections
 
-Two more sections sit alongside the deviation log in the same `spec.md`. Each
-owning skill below states its entry format; this skill owns where the sections
-go and the empty placeholder above.
+Two more sections sit alongside the deviation log in the same `spec.md`. This
+skill owns where they go and the empty placeholder; each owning skill states
+its entry format.
 
 - `## Gate log`, approval-gate decisions and run-mode switches. The @gate
   skill owns the entry format; never fold these into the deviation log.
@@ -92,9 +92,9 @@ go and the empty placeholder above.
 
 `.scratch/` doubles as the local issue tracker. Follow the conventions from
 [`setup-matt-pocock-skills/issue-tracker-local.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md).
-The mattpocock skills use
-`<feature-slug>` as the directory name; on this machine the slug is always
-date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
+The mattpocock skills use `<feature-slug>` as the directory name; on this
+machine the slug is always date-prefixed, so hand them
+`<YYYY-MM-DD>_<feature-slug>`:
 
 - **Spec**: [@to-spec](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md) publishes `.scratch/<YYYY-MM-DD>_<feature-slug>/spec.md`.
 - **Tickets**: [@to-tickets](https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md) splits the spec into one file per ticket at
@@ -106,16 +106,18 @@ date-prefixed, so hand them `<YYYY-MM-DD>_<feature-slug>`:
   `.scratch/<YYYY-MM-DD>_<effort>/issues/` for files that are open, unblocked,
   and unclaimed; first by number wins.
 
-When marking a ticket resolved, replace `Status:` with `resolved (<date>)`
-and append an **Outcome** paragraph: what landed, key judgment calls,
-pointer to spec deviation-log entries, flagged follow-ups. Sessions
-recovering from forks or killed subagents rely on these Outcome blocks more
-than on chat history.
+When marking a ticket resolved, replace `Status:` with `resolved (<date>)` and
+append an **Outcome** paragraph: what landed, key judgment calls, pointer to
+spec deviation-log entries, flagged follow-ups. Sessions recovering from forks
+or killed subagents rely on these Outcome blocks more than on chat history.
 
 ## Logging deviations
 
 As work diverges from the plan, log it immediately in the deviation log and
-update the affected section in place. The doc always reflects reality.
+update the affected section in place, so the doc reflects reality and not just
+records that reality changed. Log every change to a decision, file layout,
+design, or scope. Date every entry and include enough context to be
+self-explanatory.
 
 ```markdown
 ## Deviation log
@@ -124,27 +126,12 @@ update the affected section in place. The doc always reflects reality.
   theory table; updated "Known rates" section.
 ```
 
-Rules:
-
-- Log every change to a decision, file layout, design, or scope.
-- Update the affected section too, the doc reflects reality, it doesn't just
-  record that reality changed.
-- Date every entry and include enough context to be self-explanatory.
 
 ## Persisting context before compaction
 
-When the session is about to be compacted (context-watch warning, explicit
-request), persist a resume checkpoint so a fresh session can pick up. Assume
-the conversation history is about to be deleted.
-
-1. **Snapshot state**: capture: objective, done, in progress, blocked,
-   deviations.
-2. **Update `spec.md`**: refresh Objective / Decisions & constraints /
-   File layout / Design / Execution to match reality; append dated entries to
-   the Deviation log.
-3. **Write `.scratch/<YYYY-MM-DD>_<feature-slug>/checkpoint.md`** with this
-   exact template (the @prepare-compact skill points here, so a repo that
-   compacts without a `.scratch/` workspace can copy it into `RESUME.md`):
+@prepare-compact owns the procedure. The template below is written to
+`.scratch/<YYYY-MM-DD>_<feature-slug>/checkpoint.md`; a repo that compacts
+without a `.scratch/` workspace can copy it into `RESUME.md`.
 
 ```markdown
 # Resume checkpoint: <feature>
@@ -178,5 +165,5 @@ re-create the goal from the checkpoint, then continue from the next step.
 
 ## Completing a feature
 
-The @scratch-finish skill owns the completion checklist and the archive steps.
-Follow it. Do not archive until the work ships and every item is done.
+@scratch-finish owns the completion checklist and archive steps. Follow it. Do
+not archive until the work ships and every item is done.
