@@ -406,6 +406,16 @@ skill pick, whose advice never reached the agent, and an unsure verdict that
 let the call through. `sidebarCount` caps the lines, `sidebarSubject`
 drops the call, and `sidebar` turns the section off.
 
+A provider failure is the one thing the section does show, because a silent
+section cannot tell "nothing happened" from "every call failed":
+
+```
+risk err 429
+```
+
+The kind is the HTTP status, or `timeout`/`down`. The same failure twice in
+a row is one line, so a provider that is down does not fill the section.
+
 The header folds like the host's own sections: the arrow is a click, and
 the fold state is remembered.
 

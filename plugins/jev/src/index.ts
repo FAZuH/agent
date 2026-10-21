@@ -921,7 +921,7 @@ export default {
             const advice = await routePrompt(text, await skillRoster(ctx, ROSTER_ROOTS), ctx, sessionID)
             routeCache.set(sessionID, { prompt: text, advice, ts: Date.now() })
           } catch (error) {
-            logCall({ hook: "hook_skill_pick", skipped: error instanceof JevError ? error.message : String(error) })
+            logCall({ hook: "hook_skill_pick", error: error instanceof JevError ? error.message : String(error) })
           }
         })
         promptHookLive = true
@@ -956,7 +956,7 @@ export default {
             event.system.push({ type: "text", text: entry.advice })
           }
         } catch (error) {
-          logCall({ hook: "hook_skill_pick", skipped: error instanceof JevError ? error.message : String(error) })
+          logCall({ hook: "hook_skill_pick", error: error instanceof JevError ? error.message : String(error) })
         }
       })
     }
@@ -975,9 +975,12 @@ export default {
           await evaluatePermission(ctx, event)
         } catch (error) {
           // Fail open: a Jev problem must never be the thing that stops the agent.
+          // It is still an error, not a skip: a skip means the plugin decided
+          // nothing, and a failure logged as a skip left the sidebar empty
+          // while the provider failed on every call.
           logCall({
             hook: "hook_tool_risk",
-            skipped: error instanceof JevError ? error.message : String(error),
+            error: error instanceof JevError ? error.message : String(error),
           })
         }
       })

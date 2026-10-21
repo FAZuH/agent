@@ -666,9 +666,26 @@ export const HOOK_SHORT: Record<string, string> = {
 /** The whole sidebar line, prefix included: the sidebar is this wide. */
 const SIDEBAR_TOTAL = 36
 
+/**
+ * The kind of a provider failure, in a few characters: the status code, or
+ * the shape of the failure. A dead provider fails on every call and the
+ * message changes every time (the quota's reset countdown moves), so the kind
+ * is what tells two failures apart.
+ */
+function errorKind(error: unknown): string {
+  const text = String(error ?? "")
+  const status = text.match(/Jev HTTP (\d+)/)
+  if (status) return status[1]
+  if (/timed out/i.test(text)) return "timeout"
+  if (/unreachable/i.test(text)) return "down"
+  return "?"
+}
+
 export function sidebarLine(row: any): string | null {
   const short = HOOK_SHORT[String(row?.hook ?? "")] ?? String(row?.hook ?? "?")
-  if (row?.error) return `${short} err`
+  // A failure is shown: a provider that is down makes every call fail, and a
+  // silent sidebar cannot tell that from "nothing happened".
+  if (row?.error) return `${short} err ${errorKind(row.error)}`
   // A call the plugin did not act on is not a decision.
   if (!rowActed(row)) return null
   const { label } = headline(row)
@@ -676,6 +693,26 @@ export function sidebarLine(row: any): string | null {
   if (!label) return null
   const prefix = `${short} ${label} `
   return `${prefix}${sidebarDetail(row, SIDEBAR_TOTAL - prefix.length)}`.trimEnd()
+}
+
+/**
+ * The sidebar lines for the log rows, newest first. A row the sidebar does
+ * not show is left out, and the same line twice in a row is one line: a
+ * provider that fails on every call would otherwise fill the sidebar with
+ * the same failure.
+ */
+export function sidebarLines(rows: any[], count: number): string[] {
+  const lines: string[] = []
+  let last = ""
+  for (const row of rows) {
+    if (!HOOK_SHORT[String(row?.hook ?? "")]) continue
+    const line = sidebarLine(row)
+    if (!line || line === last) continue
+    last = line
+    lines.push(line)
+    if (lines.length >= count) break
+  }
+  return lines
 }
 
 /**
