@@ -308,7 +308,7 @@ pdfinfo:pacman -S poppler:pdf-write
 rga:pacman -S ripgrep-all:pdf-read
 uv:pacman -S uv:pdf-read
 clamscan:pacman -S clamav:malware-check, omarchy-plugin-install
-bun:pacman -S bun-bin:ocv2-pluginhealth, the jev plugin
+bun:pacman -S bun-bin:opencode-guideline, the jev plugin
 jegrep::the jev plugin's semantic grep
 PACKAGES
 }
