@@ -144,15 +144,16 @@ handwriting,latex,math,obsidian,ocr,summarize,translate}`.
 ### CLIs
 
 `bgrun` (background jobs), `octask` (schedules),
-`opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `jegrep` (semantic
-grep, needs the jev shim), `imagescan`, `pdf-build`, `skill-graph`,
-`mail-digest`/`phone-digest` (opt-in digests), `himalaya-gen-config`.
+`opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `imagescan`,
+`pdf-build`, `skill-graph`, `mail-digest`/`phone-digest` (opt-in digests),
+`himalaya-gen-config`.
 
 Optional tools each degrade one skill, never the install: `ffmpeg`
 (ffmpeg-skill), `mmdc` (mermaid/visualize/pdf-write), `pandoc`/`pdflatex`/
 `xelatex` (pdf-write), `pdftotext`/`pdftoppm`/`pdfinfo` (pdf-read/write),
 `rga` (pdf-read), `uv` (pdf-read), `clamscan` (malware-check), `bun` (jev,
-pluginhealth), `rsvg-convert` (visualize), `gh` (every PR/issue skill),
+pluginhealth), `jegrep` (jev semantic grep, not installed by default),
+`rsvg-convert` (visualize), `gh` (every PR/issue skill),
 `jq` (ocv2, forkflow).
 
 ## Search outward
