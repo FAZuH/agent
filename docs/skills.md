@@ -19,19 +19,13 @@ the category directory never reaches the installed name.
 - ⭐ **[orchestrate](../skills/orchestration/orchestrate/SKILL.md)**: Manage tasks, delegation, permissions, run mode, and subagent session reuse.
 - ⭐ **[workflows](../skills/orchestration/workflows/SKILL.md)**: Select the concrete workflow and subagent route for a task.
 - **[forkflow](../skills/orchestration/forkflow/SKILL.md)**: Warm per-ticket delegation with OpenCode v2 forks.
-- **[session](../skills/orchestration/session/SKILL.md)**: Manage the feature session workspace, spec, tickets, deviations, and checkpoints.
-- **[task-context](../skills/orchestration/task-context/SKILL.md)**: Create per-ticket context packets for workers.
-- **[prepare-compact](../skills/orchestration/prepare-compact/SKILL.md)**: Persist session state before context compaction.
+- **[session](../skills/orchestration/session/SKILL.md)**: Manage the feature session workspace, spec, tickets, deviations, context packet, and compaction checkpoint.
 - ⭐ **[finish](../skills/orchestration/finish/SKILL.md)**: End a session, archive its workspace, summarize, and route closeout.
-- **[self-improve](../skills/orchestration/self-improve/SKILL.md)**: Run the gated retrospective and skill-system improvement check.
-- **[session-retro](../skills/orchestration/session-retro/SKILL.md)**: Propose self-improvement lessons after a session.
-- **[friction-sweep](../skills/orchestration/friction-sweep/SKILL.md)**: Sweep open Hindsight friction entries into applied improvements.
+- **[self-improve](../skills/orchestration/self-improve/SKILL.md)**: Run the gated retrospective, then sweep the approved improvement backlog.
 - **[long-horizon](../skills/orchestration/long-horizon/SKILL.md)**: Keep long-running agent work alive with supervisors and heartbeats.
 - **[offload](../skills/orchestration/offload/SKILL.md)**: Move builds, checks, and agent batches to remote machines.
 - **[scratch-finish](../skills/orchestration/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace.
-- **[worktree-new](../skills/orchestration/worktree-new/SKILL.md)**: Start isolated work in a new git worktree.
-- **[worktree-finish](../skills/orchestration/worktree-finish/SKILL.md)**: Prepare a worktree branch and its pull request for merge.
-- **[worktree-close](../skills/orchestration/worktree-close/SKILL.md)**: Finish a worktree session and remove the worktree and branch.
+- **[worktree](../skills/orchestration/worktree/SKILL.md)**: Isolate work on a branch, then finish or close its worktree.
 - **[pr-to-close](../skills/orchestration/pr-to-close/SKILL.md)**: Take a finished worktree branch through PR creation, merge, and cleanup.
 
 ## Workflow
@@ -93,7 +87,6 @@ These skills are loaded only when another skill or agent references them.
 - **[prompt-user](../skills/shared/prompt-user/SKILL.md)**: The shape of the bottom-of-message prompts: 🏁 procedures with steps, ❓ questions with a recommended answer.
 - **[gate](../skills/shared/gate/SKILL.md)**: Define approval gates, run modes, and the `GATE` tag format.
 - **[scratch](../skills/shared/scratch/SKILL.md)**: Define the `.scratch/` workspace lifecycle and layout.
-- **[worktree](../skills/shared/worktree/SKILL.md)**: Define safe git worktree creation and cleanup mechanics.
 
 ## OpenCode v2
 
