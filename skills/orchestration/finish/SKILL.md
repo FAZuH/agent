@@ -29,11 +29,11 @@ Nothing needs a change: say so and skip.
 
 Anything noticed during the session that was never filed goes to Hindsight now,
 per the friction contract in @global-instruction and the entry format in
-@session-retro. Nothing carries past this step unfiled, and it is not a bug
+@self-improve. Nothing carries past this step unfiled, and it is not a bug
 tracker: one or two sentences each.
 
 The `/finish` invocation is the approval to file: retain these directly, with
-no further gate. GATE `friction-file` in @session-retro covers only a
+no further gate. GATE `friction-file` in @self-improve covers only a
 standalone retro, where no `/finish` preceded it.
 
 ## 3. Commit changes

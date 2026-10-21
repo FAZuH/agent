@@ -5,7 +5,7 @@ description: >-
   checklist, append an Outcome section, move the spec to `.scratch/complete/`,
   mark tickets resolved, delete the stale checkpoint. Load when a workspace's
   work has finished, or from any skill that completes one
-  (finish, session, worktree-close). The `.scratch/` layout and slug format
+  (finish, session, worktree). The `.scratch/` layout and slug format
   live in the @scratch skill.
 ---
 

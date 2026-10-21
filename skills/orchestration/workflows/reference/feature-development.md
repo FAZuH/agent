@@ -59,7 +59,7 @@ When @forkflow is available, the handoff is `research report → fork → switch
 implement → first prompt`. The implement session owns verification; review
 forks from its report as a separate read-only child. Forks share the working
 directory, so parallel writers need separate worktrees. Broader forkflow +
-setup-dev-docs + task-context orchestration waits until exercised on a real
+setup-dev-docs + session orchestration waits until exercised on a real
 ticket.
 
 ## Gates

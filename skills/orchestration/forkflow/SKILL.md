@@ -6,14 +6,14 @@ description: >-
   agent before its first prompt, send a focused task prompt, poll its outcome,
   and read the result. Fall back to a fresh subagent when fork support is
   unavailable. Use for orchestrated research-to-implementation or review/test
-  handoffs; not a replacement for @task-context or @setup-dev-docs.
+  handoffs; not a replacement for @session or @setup-dev-docs.
 ---
 
 # forkflow
 
 Warm-delegation layer for orchestration: uses the current ticket's session
 history as an accelerator. The durable contract stays the spec and, when one
-exists, the @task-context packet.
+exists, the context packet in @session.
 
 ## One-shot
 

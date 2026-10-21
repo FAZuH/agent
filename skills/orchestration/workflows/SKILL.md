@@ -25,7 +25,7 @@ named workflow.
 | Run test/lint/typecheck suites | `implement` | Verification-only mode; concise analysis, no edits |
 | Review a diff/branch/PR | `review` | Standards + Spec axes; read-only |
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
-| Finish a session (docs + archive + summary) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated @session-retro + @skill-doctor, offers @friction-sweep, never auto-runs it); only when the user explicitly asks |
+| Finish a session (docs + archive + summary) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated retro + @skill-doctor, offers the sweep, never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `implement` | Server-only mode; owns PTY lifecycle |
 | Preliminary codebase discovery | `research-discovery` | Starts immediately, no approval gate; returns `file:line` pointers |
 | Deep research (cited findings file) | @deep-research → `research-discovery` | Narrow question against primary sources; writes ONE cited findings `.md`, returns path |
@@ -35,8 +35,8 @@ named workflow.
 | Diagnose a hard bug | @diagnosing-bugs | Use yourself |
 | Oversized effort | @wayfinder | Use yourself |
 | Cross-session context | @handoff | Use yourself |
-| Persist plans / log deviations / pre-compaction checkpoints | @session | Use yourself |
-| Create/refresh the per-ticket context packet | @task-context | Use yourself after research/design; pass role projections to workers |
+| Persist plans / log deviations / context packet / pre-compaction checkpoint | @session | Use yourself |
+| Isolate work on a branch, then finish or close its worktree | @worktree | Use yourself |
 | Bootstrap/audit/update `docs/dev/` | @setup-dev-docs | Use yourself on an explicit user request only |
 | Plan commit grouping + propose messages (no commit) | @commit | Use yourself; restate groups to the user for approval, then commit yourself |
 | Gated self-improvement check (retro + doctor, offers sweep) | @self-improve | Use yourself |
@@ -72,10 +72,10 @@ subagent.
 
 ## Ticket context and durable docs
 
-- Non-trivial ticket work: after research/design synthesis, run @task-context
-  before the first delegation, then pass each worker its role projection and
-  the packet path, never raw research transcripts. The packet is derived; the
-  spec stays the source of truth.
+- Non-trivial ticket work: after research/design synthesis, build the context
+  packet in @session before the first delegation, then pass each worker its
+  role projection and the packet path, never raw research transcripts. The
+  packet is derived; the spec stays the source of truth.
 - `docs/dev/` changes only through @setup-dev-docs, on explicit user request;
   ordinary feature work writes task context instead.
 

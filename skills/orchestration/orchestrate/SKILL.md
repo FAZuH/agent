@@ -134,9 +134,9 @@ command that granted it. @gate owns the vocabulary.
 ## Task tracking
 
 Task state lives in the `.scratch/` workspace, not in your head: @session owns
-the spec doc (source of truth), the deviation log and pre-compaction
-checkpoints; @task-context owns the per-ticket context packet, and each
-worker gets its role-specific projection, never raw research transcripts. Do
+the spec doc (source of truth), the deviation log, the per-ticket context
+packet and the pre-compaction checkpoint; each worker gets its role-specific
+projection, never raw research transcripts. Do
 not build a second tracking file.
 
 ## Final rules

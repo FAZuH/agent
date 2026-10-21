@@ -1,6 +1,6 @@
 ---
 name: pr-to-close
-description: "Full end-to-end close of a worktree feature: create a PR (pr-creator), watch its CI and merge when green (pr-watchmerge), then close the worktree (worktree-close). Use when the user wants a finished worktree branch taken all the way to merged and cleaned up in one go, e.g. 'create a PR then close the worktree' or 'ship this worktree and clean up'."
+description: "Full end-to-end close of a worktree feature: create a PR (pr-creator), watch its CI and merge when green (pr-watchmerge), then close the worktree (@worktree). Use when the user wants a finished worktree branch taken all the way to merged and cleaned up in one go, e.g. 'create a PR then close the worktree' or 'ship this worktree and clean up'."
 ---
 
 # PR to close
@@ -31,7 +31,7 @@ once merged.
 ### 3. Close the worktree
 
 The branch is now merged, so it is already gone remotely. Follow the
-@worktree-close skill: it runs the finish workflow (skipping the steps this
+@worktree skill: it runs the finish workflow (skipping the steps this
 merge already satisfied), then removes the local worktree and branch and
 verifies the untracked main-tree items survived.
 

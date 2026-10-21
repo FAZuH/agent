@@ -53,7 +53,7 @@ Each candidate fact goes to exactly one home:
 | Stable repository workflow: build, test, release, conventions | `docs/dev/` |
 | Domain vocabulary and term definitions | `CONTEXT.md` (@domain-modeling owns it) |
 | Architecture decisions with rationale | `docs/adr/` |
-| Current ticket facts: objective, status, deviations | `.scratch/` (@session, @task-context) |
+| Current ticket facts: objective, status, deviations | `.scratch/` (@session) |
 | External research findings | `docs/research/` |
 | Generated navigation or index data | disposable task context, never a durable doc |
 

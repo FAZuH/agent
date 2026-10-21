@@ -76,5 +76,5 @@ every project and node.
   (measured 2026-10-13); tags ride on every result, so filter client-side.
 - Resolved: `retain` again with the same `document_id` and a `status:resolved`
   tag (`update_mode: "upsert"`). Never a duplicate.
-- File in the moment, keep working. Friction, not a bug tracker. @friction-sweep
+- File in the moment, keep working. Friction, not a bug tracker. @self-improve
   acts on open entries; repo code friction gets fixed in normal work.

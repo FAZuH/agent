@@ -4,7 +4,7 @@ description: >-
   Compact an OpenCode v2 session. Trigger compaction and wait for the
   summary. Use when the user asks to compact a session (the current one or a
   fork), a context-watch warning fires on a session you manage, or the
-  prepare-compact gate auto-resolves. Covers POST /api/session/{id}/compact,
+  @session compaction gate auto-resolves. Covers POST /api/session/{id}/compact,
   polling the compaction message, and what compaction does and does not do to
   history.
 ---
@@ -68,5 +68,5 @@ opencode2 api get /api/session/ses_XXXXXXXX/message/msg_XXXXXXXX
   messages before triggering a manual one.
 - The summarization call registers no session `cost`/`tokens` on the
   deployed build. Do not expect it there.
-- Session work matters: run @prepare-compact
-  first so state survives in the session doc and checkpoint.
+- Session work matters: run @session (persisting before compaction) first so
+  state survives in the session doc and checkpoint.

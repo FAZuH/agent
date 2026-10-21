@@ -39,11 +39,10 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 
 **Orchestration** — control, delegate, track, finish agent work:
 `orchestrate`, `workflows` (routing table and procedures), `forkflow` (warm
-session forks), `session` (spec and checkpoints in `.scratch/`), `task-context`
-(context packets), `prepare-compact`, `finish`, `scratch-finish`, `self-improve`,
-`session-retro`, `friction-sweep`, `long-horizon` (overnight runs),
-`offload` (remote machines), `worktree-new`, `worktree-finish`,
-`worktree-close`, `pr-to-close`.
+session forks), `session` (spec, context packet, checkpoints in `.scratch/`),
+`finish`, `scratch-finish`, `self-improve` (retro and sweep), `long-horizon`
+(overnight runs), `offload` (remote machines), `worktree` (branch work),
+`pr-to-close`.
 
 **Workflow** — repeatable procedures:
 `branch-flow` (main/release lines), `commit` (grouping and messages),
@@ -68,7 +67,7 @@ drift), `review-agent` (two-axis review).
 
 **Shared** — loaded only when referenced: `global-instruction`,
 `post-task`, `prompt-user`, `presenting-latex`, `following-procedures`,
-`gate`, `scratch`, `worktree`.
+`gate`, `scratch`.
 
 **OpenCode v2**: `ocv2-api`, `ocv2-compact`, `ocv2-models`, `ocv2-sessions`,
 `ocv2-plugins`, `ocv2-pluginhealth`, `ocv2-unfuck`.
