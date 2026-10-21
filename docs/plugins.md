@@ -104,11 +104,20 @@ as ctrl+b, with the parent's model. Its id is in the reply for follow-up.
 ## aside (`fazuh.aside`)
 
 `/aside <question>` forks the current session at its latest state, asks the
-question in the fork, and switches the view to the fork (like `/fork`).
-The fork keeps full history and stays open for follow-ups, unlike `/btw`
-which answers once in place. In the TUI the switch is automatic; on hosts
-with no TUI module (desktop, API, mini) use `/aside-fork`, which forks and
-asks but leaves the view alone — the fork id is in the reply.
+question in the fork, and reports back to the session that asked. The fork
+keeps full history and stays open for follow-ups, unlike `/btw` which answers
+once in place. In the TUI the view moves to the fork; on hosts with no TUI
+module (desktop, API, mini) the fork id is in the reply. One name, one
+owner: the server plugin owns the command, so it works on every host.
+
+The session that asked hears about the fork twice: once when the fork starts,
+and once when the fork has nothing left to do — no chat in flight, no
+subagent running, no shell open, no queued prompt. The second notice carries
+the fork's answer.
+
+- **`/aside <question>`**: fork, ask, and report back to this session on both
+  the fork and its finish.
+- **`/aside-silent <question>`**: fork and ask, with no report back.
 
 ## ralph (`fazuh.ralph`)
 
