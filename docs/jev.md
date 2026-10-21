@@ -373,6 +373,12 @@ any list the provider exposes.
 | `/jev-optimize-skills` | either | optimize all stale skill criteria now; `<id>` refreshes one |
 | `/jev-log` | either | recent calls: what was sent, what came back, what it cost |
 
+A slash name has one owner. The TUI panel commands and the text commands never
+share a name: a name with two owners is listed twice in the slash list, and the
+server's command shadows the TUI's anyway. So `/jev-log` and `/jev-status` are
+the text route, and the TUI's quick look at the same two things sits in the
+command palette without a slash name.
+
 `/jev-features` has a **Plugin** row at the top. It is the master switch: on or
 off, and it does not change the two below it. Off means no hook runs and nothing
 is sent. The two keep their values, so you can configure with the plugin

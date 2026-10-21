@@ -786,9 +786,14 @@ export default {
           commands: [
             { id: "jev.settings", title: "Settings", group: "jev", palette: true, slash: { name: "jev-settings" }, run: () => guard("jev-settings", () => void openSettings()) },
             { id: "jev.features", title: "Features", group: "jev", palette: true, slash: { name: "jev-features" }, run: () => guard("jev-features", () => void openFeatures()) },
-            { id: "jev.status", title: "Status", group: "jev", palette: true, slash: { name: "jev-status" }, run: () => guard("jev-status", () => toast(summary())) },
+            // No slash name on the two the server also owns. A name with two
+            // owners is listed twice in the slash list, and the server's
+            // command shadows this one anyway: the text route prints the same
+            // thing into the transcript, and it is the route that works
+            // without a TUI. The palette entry stays for the quick look.
+            { id: "jev.status", title: "Status", group: "jev", palette: true, run: () => guard("jev-status", () => toast(summary())) },
             { id: "jev.key", title: "Set API key", group: "jev", palette: true, slash: { name: "jev-key" }, run: () => guard("jev-key", () => void setKey()) },
-            { id: "jev.log", title: "Recent calls", group: "jev", palette: true, slash: { name: "jev-log" }, run: () => toast(recentCalls()) },
+            { id: "jev.log", title: "Recent calls", group: "jev", palette: true, run: () => toast(recentCalls()) },
             {
               id: "jev.approve",
               title: "Approve a blocked call",
