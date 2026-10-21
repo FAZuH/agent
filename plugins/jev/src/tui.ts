@@ -29,7 +29,7 @@
 
 import { appendFileSync } from "node:fs"
 import { grant, readApprovals, type Approval } from "./approve.ts"
-import { FEATURES, FEATURE_DEFAULTS, HOOK_SHORT, TUI_LOG_FILE, maskUrl, sidebarLine, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
+import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, maskUrl, sidebarLines, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "./state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
 
@@ -706,49 +706,6 @@ export default {
       }, 2000)
     }
 
-    function recentCalls(): string {
-      const rows = readLog(12)
-      if (rows.length === 0) return "No calls logged yet."
-      return rows
-        .map((r) => {
-          if (r.skipped || r.error) {
-            const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
-            return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
-          }
-          const answers = (r.decisions ?? []).map((d: any) => `${d.id}=${JSON.stringify(d.value)}`).join(" ")
-          return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens ?? 0}tok`
-        })
-        .join("\n")
-    }
-
-    /**
-     * The toast tail. Jev calls happen in the server process and this module is
-     * the only place a toast can be drawn, so the log the server already writes
-     * is the whole channel between them: poll its tail rather than invent a
-     * second file. The interval is the price of the process boundary.
-     *
-     * ponytail: a fixed 2s poll and a 200-line window. Move to a real event
-     * bridge if the TUI plugin ever gets one.
-     */
-    function startToasts(): void {
-      if (tailStarted) return
-      tailStarted = true
-      // Today's newest entry is the floor, so an already-full log never
-      // replays its history into the TUI on startup.
-      let after = readLog(1)[0]?.ts ?? ""
-      setInterval(() => {
-        const { fresh, after: next } = newSince(readLog(200), after)
-        after = next
-        for (const row of fresh) {
-          if (!toastsOn(row.hook)) continue
-          if (!toastOutcomeAllowed(row)) continue
-          const line = toastLine(row)
-          if (line) toast(line.message, line.variant, line.title)
-        }
-        refreshSidebar()
-      }, 2000)
-    }
-
     // ——— the sidebar section ———
 
     /**
@@ -809,14 +766,7 @@ export default {
           return
         }
         // readLog is newest first already.
-        const rows = readLog(60).filter((row: any) => HOOK_SHORT[row?.hook])
-        const lines: string[] = []
-        for (const row of rows.slice(0, state.sidebarCount * 2)) {
-          const line = sidebarLine(row)
-          if (!line) continue
-          lines.push(line)
-          if (lines.length >= state.sidebarCount) break
-        }
+        const lines = sidebarLines(readLog(60), state.sidebarCount)
         update((draft: any) => {
           draft.lines = lines
         })

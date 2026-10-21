@@ -25,7 +25,7 @@ type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
 const clearState = () => rmSync(STATE_FILE, { force: true })
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, toastLine, toastOutcomeAllowed, toastsOn } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, sidebarLines, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -939,7 +939,7 @@ describe("sidebar line", () => {
 
   test("a row that decided nothing says nothing", () => {
     expect(sidebarLine({ hook: "hook_tool_risk", skipped: "cached verdict" })).toBeNull()
-    expect(sidebarLine({ hook: "hook_tool_risk", error: "Jev HTTP 401" })).toBe("risk err")
+    expect(sidebarLine({ hook: "hook_tool_risk", error: "Jev HTTP 401" })).toBe("risk err 401")
   })
 
   test("a pick the model was not sure about is not shown", () => {
@@ -955,6 +955,28 @@ describe("sidebar line", () => {
     // The risk hook lets an unsure call through: that is no decision.
     expect(sidebarLine({ hook: "hook_tool_risk", verdict: "allow", confidence: 0.4, outcome: "allow", acted: false })).toBeNull()
     expect(sidebarLine({ hook: "hook_tool_risk", verdict: "allow", confidence: 0.9, outcome: "allow", acted: true })).toBe("risk allow")
+  })
+
+  test("a provider that fails on every call shows one line, not twenty", () => {
+    const rows = [
+      { hook: "hook_tool_risk", error: "Jev HTTP 429: quota (reset after 4m 10s)" },
+      { hook: "hook_tool_risk", error: "Jev HTTP 429: quota (reset after 3m 54s)" },
+      { hook: "hook_tool_risk", error: "Jev HTTP 429: quota (reset after 3m 33s)" },
+    ]
+    // The reset countdown moves, so the message differs every time; the kind
+    // is what tells the failures apart.
+    expect(sidebarLines(rows, 5)).toEqual(["risk err 429"])
+  })
+
+  test("the sidebar keeps the newest lines and drops what it does not show", () => {
+    const rows = [
+      { hook: "hook_tool_risk", verdict: "deny", acted: true, subject: "shell: rm -rf ./build" },
+      { hook: "hook_tool_risk", skipped: "cached verdict" },
+      { hook: "hook_tool_standard", verdict: "block", acted: true, subject: "edit: secrets/.env" },
+      { hook: "unknown_hook", verdict: "allow", acted: true, subject: "x" },
+    ]
+    expect(sidebarLines(rows, 5)).toEqual(["risk deny rm -rf ./build", "rules block secrets/.env"])
+    expect(sidebarLines(rows, 1)).toEqual(["risk deny rm -rf ./build"])
   })
 })
 
