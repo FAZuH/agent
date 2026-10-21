@@ -236,7 +236,8 @@ flowchart LR
 - **visualize**, **show-me**, **mermaid-skill**: one correct visual when a picture carries the idea.
 - **learn**: the multi-session teaching workflow, with quizzes and durable lesson records.
 - **handoff**, **wait-what**: compact the session for another agent, or re-pitch the last answer.
-- **opencode-guideline**: the OpenCode v2 operations: API, compaction, models, sessions, plugin authoring, plugin loading.
+- **opencode-guideline**: the OpenCode v2 operations: API, models, sessions, plugin authoring, plugin loading.
+- **ocv2-compact**: compact a v2 session and wait for its summary.
 
 ## Common workflows
 

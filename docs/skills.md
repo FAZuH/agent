@@ -90,7 +90,8 @@ These skills are loaded only when another skill or agent references them.
 
 ## OpenCode v2
 
-- **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, compaction, models, plugin authoring, plugin loading health, and session forking.
+- **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, models, plugin authoring, plugin loading health, and session forking.
+- **[ocv2-compact](../skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session and wait for its summary.
 
 Run `./sync.sh list` to see the deployed skills, and
 [agent-map](../skills/meta/agent-map/SKILL.md) for what is installed and how to
