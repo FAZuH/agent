@@ -90,13 +90,7 @@ These skills are loaded only when another skill or agent references them.
 
 ## OpenCode v2
 
-- **[ocv2-api](../skills/ocv2/ocv2-api/SKILL.md)**: Use `opencode2 api` to call the v2 HTTP API.
-- **[ocv2-compact](../skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session and wait for its summary.
-- **[ocv2-models](../skills/ocv2/ocv2-models/SKILL.md)**: Pick a free model when the session account is dry, with `AGENTS.md` as the override point.
-- **[ocv2-sessions](../skills/ocv2/ocv2-sessions/SKILL.md)**: Fork and control OpenCode v2 sessions.
-- **[ocv2-plugins](../skills/ocv2/ocv2-plugins/SKILL.md)**: Write v2 plugins: the measured contract, tools, hooks, commands, the TUI surface, and verification.
-- **[ocv2-pluginhealth](../skills/ocv2/ocv2-pluginhealth/SKILL.md)**: Inspect plugin loading: what loaded, why it failed, whether `setup()` ran, and what hot-reloads.
-- **[ocv2-unfuck](../skills/ocv2/ocv2-unfuck/SKILL.md)**: Verify top-level tool availability before claiming restricted mode.
+- **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, compaction, models, plugin authoring, plugin loading health, and session forking.
 
 Run `./sync.sh list` to see the deployed skills, and
 [agent-map](../skills/meta/agent-map/SKILL.md) for what is installed and how to
