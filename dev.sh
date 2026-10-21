@@ -111,7 +111,7 @@ cmd_demo() {
     local wrapper_dir="/tmp/tomo-demo-bin"
     mkdir -p "$wrapper_dir"
     cat > "$wrapper_dir/tomo" << SCRIPT
-#!/bin/bash
+#!/usr/bin/env bash
 exec "$SCRIPT_DIR/scripts/target/release/tomo" --config-path /tmp/tomo-demo "\$@"
 SCRIPT
     chmod +x "$wrapper_dir/tomo"

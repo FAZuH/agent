@@ -13,9 +13,9 @@ format:
 <type>(<scope>): <subject>
 ```
 
-- `type`: the type of change (see below)
-- `scope`: optional; the part of the codebase you changed
-- `subject`: a short description of the change
+- `type` — the type of change (see below)
+- `scope` — optional; the part of the codebase you changed
+- `subject` — a short description of the change
 
 The type decides the changelog section. The scope shows in the entry. The
 subject becomes the entry text.
@@ -76,10 +76,10 @@ Each project chooses how its CHANGELOG.md is maintained. Create a
 `.github/changelog-mode` file in the project repo. The file holds one word:
 `auto` or `manual`. A missing file means `auto`.
 
-**auto** (default): the release workflow regenerates CHANGELOG.md from the
+**auto** (default) — the release workflow regenerates CHANGELOG.md from the
 commits and commits it to the release branch.
 
-**manual**: the release workflow does NOT generate CHANGELOG.md. On
+**manual** — the release workflow does NOT generate CHANGELOG.md. On
 release, the CI renames the topmost `## [Unreleased]` section to
 `## <version> (<date>)` and commits the change. The GitHub release body and
 the Discord embed read the renamed section. Version bumping and tag creation
@@ -104,7 +104,7 @@ auto-detection. Add the sections in the PR description or in a comment on
 the PR. The bot uses the latest maintainer comment that contains the
 sections.
 
-### `## Bump`: manual version bumps
+### `## Bump` — manual version bumps
 
 ```
 ## Bump
@@ -116,7 +116,7 @@ Each line sets one member's bump type. The format is
 `<name>: <major|minor|patch>`. The section overrides the automatic
 per-member detection in the preview.
 
-### `## Override Changelog`: full changelog replacement
+### `## Override Changelog` — full changelog replacement
 
 ```
 ## Override Changelog
