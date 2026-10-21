@@ -5,9 +5,9 @@ description: Move the pinned versions in install.sh and uninstall.sh forward. Us
 
 # Update pins
 
-`install.sh` pins what it fetches: the `skills` and `rea-agents` npm packages
-by version, bgrun and ffmpeg-skill by commit. This skill moves a
-pin to a new upstream version. It never moves one silently.
+`install.sh` pins what it fetches: the `skills`, `rea-agents`, and
+`opencode-chat-room` npm packages by version, bgrun and ffmpeg-skill by commit.
+This skill moves a pin to a new upstream version. It never moves one silently.
 
 ## The pins
 
@@ -15,10 +15,11 @@ pin to a new upstream version. It never moves one silently.
 |-----|------|----------|-------------------------|
 | `SKILLS_CLI_VERSION` | `install.sh`, `uninstall.sh` | npm `skills` | `npm view skills version` |
 | `REA_AGENTS_VERSION` | `install.sh`, `uninstall.sh` | npm `rea-agents` | `npm view rea-agents version` |
+| `CHAT_ROOM_VERSION` | `install.sh`, `uninstall.sh` | npm `@alexsun-top/opencode-chat-room` | `npm view @alexsun-top/opencode-chat-room version` |
 | `BGRUN_REV` | `install.sh` | `github.com/FAZuH/bgrun` | `git ls-remote https://github.com/FAZuH/bgrun HEAD` |
 | `FFMPEG_SKILL_REV` | `install.sh` | `github.com/kajisho5/ffmpeg-skill` | `git ls-remote https://github.com/kajisho5/ffmpeg-skill HEAD` |
 
-`SKILLS_CLI_VERSION` and `REA_AGENTS_VERSION` are each set in **two** files.
+`SKILLS_CLI_VERSION`, `REA_AGENTS_VERSION`, and `CHAT_ROOM_VERSION` are each set in **two** files.
 Move both copies of a pin in one edit, or `uninstall.sh` keeps removing with a
 version that never wrote the files.
 
