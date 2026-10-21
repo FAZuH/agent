@@ -416,14 +416,13 @@ running in OpenCode; the report in step 8 ends the procedure.
 
 Detect the OpenCode harness first:
 
-- **OpenCode v2**: the environment block carries
-  `Current conversation session ID: ses_…`. Compact with @opencode-guideline
-  (`references/compact.md`): from that skill's directory run
-  `scripts/oc-compact.sh ses_… --timeout 0`, then end the turn.
+- The environment block carries
+  `Current conversation session ID: ses_…`. Compact with @ocv2-compact: from
+  that skill's directory run `scripts/oc-compact.sh ses_… --timeout 0`, then end
+  the turn.
   The compaction is a steer: it queues behind the current turn and runs once
   the session goes idle. Never wait synchronously inside the turn; it always
   times out.
-- **OpenCode v1**: the `compact_context` tool is available. Call it.
 
 When the gate fires (interactive mode), ask with the @gate mechanics: what
 was persisted and where (step 8), that compaction replaces the conversation

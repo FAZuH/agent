@@ -5,7 +5,7 @@ Load this when writing or changing OpenCode v2 plugins: the real plugin contract
 # Writing OpenCode v2 plugins
 
 Measured on a live v2 host, not read from docs. **The published plugin docs
-and the shipped type definitions both describe a v1 shape that does not exist
+and the shipped type definitions both describe a shape that does not exist
 at runtime.** Where the two disagree, this document is right and the types are
 wrong; where unsettled, it says so.
 
@@ -57,7 +57,7 @@ export default {
 - `execute` returns **`{ content: string }`**. Returning a bare string throws
   `s is not an Object` at the harness *while the tool call still succeeds*, so
   the model sees a result and you see an error. Read your log, not the
-  error. The most common v1 habit half-working here.
+  error. The most common habit, half-working here.
 - Call context (`tctx`) is separate from plugin context. `ctx` arrives
   at `setup`; `tctx` arrives per call.
 

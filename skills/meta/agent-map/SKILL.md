@@ -69,8 +69,8 @@ drift), `review-agent` (two-axis review).
 `post-task`, `prompt-user`, `presenting-latex`, `following-procedures`,
 `gate`, `scratch`.
 
-**OpenCode v2**: `opencode-guideline` (the HTTP API, compaction, models,
-sessions, plugin authoring, plugin loading).
+**OpenCode v2**: `opencode-guideline` (the HTTP API, models, sessions, plugin
+authoring, plugin loading), `ocv2-compact` (compact a session).
 
 ### External skills (`~/.agents/skills`)
 
