@@ -70,10 +70,12 @@ export default {
       return sid
     }
 
+    // The notices ride as normal steer prompts, like the question the fork
+    // gets: a synthetic message never shows up in the TUI's pending list.
     async function notifyFinished(state: AsideState): Promise<void> {
       const answer = state.lastText.trim() || "The fork finished without a text answer."
       try {
-        await ctx.session.synthetic({
+        await ctx.session.prompt({
           sessionID: state.parentID,
           text: finishedNotice(state.forkID, state.parentID, answer),
         })
@@ -96,7 +98,7 @@ export default {
         await mark(parentID, { status: "failed", parentID, error: reason })
         if (notify) {
           try {
-            await ctx.session.synthetic({ sessionID: parentID, text: failedNotice(parentID, reason) })
+            await ctx.session.prompt({ sessionID: parentID, text: failedNotice(parentID, reason) })
           } catch (failure) {
             console.error(`[aside] failure notice failed: ${message(failure)}`)
           }
@@ -107,7 +109,7 @@ export default {
       await mark(forkID, { status: "forked", parentID, sessionID: forkID, question })
       await ctx.session.prompt({ sessionID: forkID, text: askText(question, parentID) })
       if (notify) {
-        await ctx.session.synthetic({
+        await ctx.session.prompt({
           sessionID: parentID,
           text: forkedNotice(forkID, parentID, question),
         })
