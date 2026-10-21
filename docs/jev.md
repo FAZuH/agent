@@ -516,6 +516,12 @@ bun plugins/jev/src/shim.ts
 JEGREP_ENDPOINT_URL=http://127.0.0.1:8756/ jegrep "which agent handles mail" --endpoint local
 ```
 
+`install.sh` does not install `jegrep`. Install it yourself:
+
+```bash
+cargo install --git https://github.com/can1357/jegrep --rev c84f4561c081c9bcef494384d69c6e55012ca0da --locked
+```
+
 It reads endpoint, model, and key from the same state file as the plugin, so
 repointing the plugin moves the shim with it. It is started by hand; nothing
 supervises it.

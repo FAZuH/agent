@@ -89,9 +89,11 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   Skipped-hook lines read `<feature> [on <tool>] skipped: <reason>`; a regular
   call lists its decisions and token count.
 
-Semantic grep is upstream [jegrep](https://github.com/can1357/jegrep), installed
-by `install.sh -b` and pointed at the loopback shim in `src/shim.ts`, which
-injects the bearer token jegrep's `--endpoint local` deliberately omits.
+Semantic grep is upstream [jegrep](https://github.com/can1357/jegrep), pointed
+at the loopback shim in `src/shim.ts`, which injects the bearer token jegrep's
+`--endpoint local` deliberately omits. `install.sh` does not install it;
+install it yourself if you want that use case (see
+[jev.md](jev.md#the-jegrep-shim)).
 
 ## dispatch (`fazuh.dispatch`)
 
