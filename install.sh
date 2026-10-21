@@ -18,14 +18,15 @@ DIGEST_MAIL=0
 DIGEST_PHONE=0
 TMP_DIR=""
 
-# Pinned versions of everything this script fetches: the skills and rea-agents
-# npm packages by version, and the git checkouts by commit. Move a
-# pin with the update-pins skill; it checks the remote and reports the diff
-# before editing.
+# Pinned versions of everything this script fetches: the skills, rea-agents,
+# and opencode-chat-room npm packages by version, and the git checkouts by
+# commit. Move a pin with the update-pins skill; it checks the remote and
+# reports the diff before editing.
 SKILLS_CLI_VERSION="1.7.0"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
 REA_AGENTS_VERSION="6.4.0"
+CHAT_ROOM_VERSION="0.2.2"
 
 GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
 GLOBAL_INSTRUCTION_SKILL="skills/shared/global-instruction/SKILL.md"
@@ -260,6 +261,20 @@ install_rea() {
   info "registered REA with OpenCode (rea-agents $REA_AGENTS_VERSION)"
 }
 
+# The chat-room plugin gives every session a `room` tool: the worker channel
+# @orchestrate documents. `opencode plugin add` treats a differently spelled
+# specifier as a different package, so an unversioned entry from an earlier
+# run would load twice and the second copy fails with a duplicate plugin ID.
+# Drop that spelling first.
+install_chat_room() {
+  opencode plugin remove "@alexsun-top/opencode-chat-room" >/dev/null 2>&1 || true
+  if opencode plugin add "@alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION" >/dev/null; then
+    info "installed the chat-room plugin (@alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION)"
+  else
+    info "note: the chat-room plugin did not install — run: opencode plugin add @alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION"
+  fi
+}
+
 # Every check in one place, so `--check` and the install can never disagree.
 # Format: name:package hint:skill that uses it. Blank hint = ships with the OS
 # or the base install.
@@ -375,6 +390,13 @@ checklist() {
     fi
   done < <(installed_items)
 
+  if opencode plugin list 2>/dev/null | grep -q 'chat-room'; then
+    printf '  [ok]      %-16s %s\n' "chat-room" "the worker-channel plugin"
+  else
+    printf '  [MISSING] %-16s %s\n' "chat-room" "opencode plugin add @alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION"
+    missing=1
+  fi
+
   if ((missing == 0)); then
     printf '\nAll required items are present.\n'
   else
@@ -464,6 +486,9 @@ fi
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g
 ensure_global_instruction_ref
+
+step "Installing the chat-room plugin"
+install_chat_room
 
 if ((BONUS == 1)); then
   step "Installing bonus skills"
