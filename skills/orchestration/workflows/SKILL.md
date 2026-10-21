@@ -27,6 +27,7 @@ named workflow.
 | Write ADRs / docs / changelogs | `document` | Docs-only; simple-english |
 | Finish a session (docs + archive + summary) | `finish` | Uses the @finish skill; delegates commit planning to @commit (proposes grouped messages, which you restate to the user for approval and then commit yourself) and self-improvement to @self-improve (gated retro + @skill-doctor, offers the sweep, never auto-runs it); only when the user explicitly asks |
 | Start/monitor dev servers | `implement` | Server-only mode; owns PTY lifecycle |
+| Open channel to a running worker | Use yourself | `room` tool; @orchestrate "Worker channel" — a background worker answers in the room, not in a report |
 | Preliminary codebase discovery | `research-discovery` | Starts immediately, no approval gate; returns `file:line` pointers |
 | Deep research (cited findings file) | @deep-research → `research-discovery` | Narrow question against primary sources; writes ONE cited findings `.md`, returns path |
 | Broad web research synthesis | `research-synthesis` | Returns a focused, cited brief in chat |
