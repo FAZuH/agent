@@ -146,7 +146,7 @@ does not appear or a plugin is not loaded.
 
 ## Docs
 
-- [Skills](docs/skills.md): all 68 skills, one line each
+- [Skills](docs/skills.md): all 57 skills, one line each
 - [Skill Guide](docs/skill-guide.md): which skills to load at each phase of a change
 - [Agents](docs/agents.md): all 17 agent definitions, by role
 - [Plugins](docs/plugins.md): the OpenCode plugins, plus the command definitions in `commands/`
