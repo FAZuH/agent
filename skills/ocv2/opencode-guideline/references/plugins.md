@@ -1,13 +1,5 @@
----
-name: ocv2-plugins
-description: >-
-  Write and change OpenCode v2 plugins: the real plugin contract, custom tools,
-  hooks, commands, the TUI surface, and how to verify any of it works. Use when
-  adding a plugin under `plugins/`, adding a tool, an `execute.before` hook, or
-  a slash command, building a TUI panel or dialog, wiring settings, or when a
-  tool returns the wrong shape, a hook does not fire, a command is shadowed or
-  duplicated, a dialog does not open or closes on selection, or the plugin
-  types and the runtime disagree.
+Load this when writing or changing OpenCode v2 plugins: the real plugin contract, custom tools, hooks, commands, the TUI surface, and how to verify any of it works. Use when adding a plugin under `plugins/`, adding a tool, an `execute.before` hook, or a slash command, building a TUI panel or dialog, wiring settings, or when a tool returns the wrong shape, a hook does not fire, a command is shadowed or duplicated, a dialog does not open or closes on selection, or the plugin types and the runtime disagree.
+
 ---
 
 # Writing OpenCode v2 plugins
@@ -36,7 +28,7 @@ plugins/<name>/
 `sync.sh` discovers `plugins/*` and copies the directory to
 `~/.config/opencode/plugins/`. A repository edit is not live until
 `./sync.sh push -g`. Hot-reload makes restart rarely the fix:
-`ocv2-pluginhealth` covers loading.
+`references/pluginhealth.md` covers loading.
 
 **A local dir plugin gets no `node_modules`.** No `solid-js`, no
 `@opentui/solid`, no `createComponent`, and therefore no JSX. This single
@@ -190,7 +182,7 @@ opencode2 api get /api/command    # which commands actually registered
 
 Then **drive a real call** through the HTTP API against a free model and read
 the output. Schema-valid is not correct; only a real call shows the decision.
-Pick a free model per `ocv2-models`.
+Pick a free model per `references/models.md`.
 
 A stub `ctx` is a genuine testing tool and it caught several real bugs here:
 it exercises `setup`, tool `execute`, hook dispatch, command registration, and
@@ -215,7 +207,4 @@ dialog lifecycle without a TUI. It cannot check pixels, and any
 
 ## Memory
 
-OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
-`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
-a new finding after it live-verifies. If the hindsight tools are absent,
-continue without memory.
+The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.

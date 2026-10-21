@@ -27,7 +27,7 @@ scripts/oc-delegate.sh ses_SOURCE --agent implement \
 
 `--through`/`--before` (explicit boundary), `--agent`, and
 `--prompt`/`--prompt-file` are required; `--model` and `--timeout` optional.
-Exit 0 only on child success. Reuses the @ocv2-sessions scripts. The manual
+Exit 0 only on child success. Reuses the @opencode-guideline scripts. The manual
 steps below are fallback and reference.
 
 For a plain Q&A fork that keeps the parent's agent and model (no switch),
@@ -123,5 +123,6 @@ decisions in the active session's existing session record. `forkflow` creates
 no second ticket-context or architecture-memory file. On fallback, record the
 failed probe and continue with ordinary delegation.
 
-Raw API mechanics live in @ocv2-sessions; this skill owns the orchestration
+Raw API mechanics live in @opencode-guideline (`references/sessions.md`); this
+skill owns the orchestration
 policy and ordering constraints.

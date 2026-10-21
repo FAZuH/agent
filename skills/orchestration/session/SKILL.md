@@ -417,9 +417,9 @@ running in OpenCode; the report in step 8 ends the procedure.
 Detect the OpenCode harness first:
 
 - **OpenCode v2**: the environment block carries
-  `Current conversation session ID: ses_…`. Compact with the @ocv2-compact
-  skill: from that skill's directory run `scripts/oc-compact.sh ses_… --timeout 0`,
-  then end the turn.
+  `Current conversation session ID: ses_…`. Compact with @opencode-guideline
+  (`references/compact.md`): from that skill's directory run
+  `scripts/oc-compact.sh ses_… --timeout 0`, then end the turn.
   The compaction is a steer: it queues behind the current turn and runs once
   the session goes idle. Never wait synchronously inside the turn; it always
   times out.

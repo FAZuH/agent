@@ -1,6 +1,6 @@
 # Decision plugins
 
-The [`ocv2-plugins`](SKILL.md) branch for a plugin that **calls something
+The [`plugins`](plugins.md) branch for a plugin that **calls something
 external**, **holds settings**, or **can stop the host**. Contract, TUI,
 verification live in the main file; this is the extra discipline this kind
 needs.

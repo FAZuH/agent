@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # oc-delegate.sh: one-shot warm delegation, fork → switch agent → prompt → wait.
-# Implements the @forkflow handoff in a single call. Reuses the ocv2-sessions
+# Implements the @forkflow handoff in a single call. Reuses the opencode-guideline
 # scripts (resolved in both the repo layout and the flattened deploy layout).
 # Only the child's reply text goes to stdout; everything else goes to stderr.
 # Message-list GETs go through a tempfile: piped `opencode2 api` output cuts
@@ -56,10 +56,10 @@ command -v jq >/dev/null || die "jq not on PATH"
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SESS=""
-for cand in "$HERE/../../../ocv2/ocv2-sessions/scripts" "$HERE/../../ocv2-sessions/scripts"; do
+for cand in "$HERE/../../../ocv2/opencode-guideline/scripts" "$HERE/../../opencode-guideline/scripts"; do
   if [[ -x "$cand/oc-fork.sh" ]]; then SESS="$cand"; break; fi
 done
-[[ -n "$SESS" ]] || die "ocv2-sessions scripts not found, sync the ocv2-sessions skill first"
+[[ -n "$SESS" ]] || die "opencode-guideline scripts not found, sync the opencode-guideline skill first"
 
 CHILD=$("$SESS/oc-fork.sh" "$SOURCE" "--$BOUNDARY" "$BOUNDARY_MSG") || exit 2
 printf 'child: %s\n' "$CHILD" >&2

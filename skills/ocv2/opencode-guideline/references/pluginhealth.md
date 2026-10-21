@@ -1,12 +1,5 @@
----
-name: ocv2-pluginhealth
-description: >-
-  Inspect and debug OpenCode v2 plugin loading, covering what loaded, why a
-  plugin failed, whether its `setup()` actually ran, and what hot-reloads. Use
-  when a plugin is not loading, when a PluginSupervisor / ResolveMessage /
-  SchemaError trace appears, when the user asks "is my plugin loaded" or how to
-  debug the opencode.json "plugins" config, and after any plugin install or
-  config edit.
+Load this when a plugin is not loading, when a PluginSupervisor / ResolveMessage / SchemaError trace appears, when the user asks "is my plugin loaded" or how to debug the opencode.json "plugins" config, and after any plugin install or config edit. Inspect and debug OpenCode v2 plugin loading: what loaded, why a plugin failed, whether its `setup()` actually ran, and what hot-reloads.
+
 ---
 
 # OpenCode v2 plugin inspection
@@ -38,49 +31,19 @@ A bad plugin never blocks others. Scan the whole list, not just the first failur
 ## Auth (when curl-ing instead of the CLI)
 
 `opencode2 api ...` targets the background service and handles auth itself.
-Against a specific server use **basic auth**:
+Against a specific server use **basic auth**: a bearer token returns 401 with
+an empty body, so an empty response means auth or wrong-port, not missing
+data. The full contract is in `references/api.md`:
 
 ```bash
 curl -s -u "opencode:$PASSWORD" http://127.0.0.1:PORT/api/plugin
 ```
 
-The password is printed by `opencode2 serve` at startup ("server password
-..."). Bearer tokens and `x-opencode-password` headers return 401 with an
-empty body, so empty response means auth or wrong-port, not missing data.
-
 ## Gotchas that cause wrong conclusions
 
-1. **Plain serve lists nothing.** `GET /api/plugin` on a standalone
-   `opencode2 serve` process returns `data: []` even when plugins load fine.
-   Only the background service supervisor (`--service`) populates the list.
-   Empty list proves nothing; verify through side effects
-   (see /api/command below).
-2. **The endpoints are global-location-only.** `/api/plugin`, `/api/command`
-   and `/api/agent` always report the *service's* default location
-   (`location.directory` was `/home/<user>` on every call, whatever the cwd).
-   `?location.directory=<project>` and `--param location.directory=<project>`
-   are accepted and IGNORED (byte-identical results, 2026-09-13, v2.0.3). A
-   project's `.opencode/plugins/` entries NEVER appear in `/api/plugin` (0 of
-   91), and project agents are absent from `/api/agent`, so clean
-   "0 failed" says nothing about project plugins. Grep the server log:
-   (`~/.local/share/opencode/log/opencode.log`). Success is
-   `msg="loading plugin" id=<path>`, note the field is **`msg=`** while every
-   other line uses `message=`: `message="failed to load plugin" target=<path>`
-   (with the cause), `message="watcher subscribe" path=<…>/src/index.ts` proves
-   nested files were read, `message="plugin reconciliation started|completed"`
-   brackets each reload. `grep 'message="loading plugin"'` finds nothing, which
-   reads as never loaded.
-   For project agents, `opencode2 debug agents` IS cwd-scoped and lists them.
-3. **Project discovery needs git.** Without a `.git` at/above the working
-   directory, opencode2 resolves to `project: global` and skips
-   project-local config and `.opencode/` dirs silently. Service endpoints
-   report their own location (gotcha 2), so check the *plugin's
-   behaviour* or `opencode2 debug config` from inside the project, not the
-   response's `location.project.directory`.
-4. **Config key is `plugins`.** v1 `plugin` is auto-translated,
-   but new entries use `"plugins": [{ "package": "..." }]` (strings
-   also work). Both keys may coexist.
-5. **Hot-reload scope is the whole plugin dir, nested files included.** On
+Gotchas 1 to 4 (plain serve lists nothing, global-location-only endpoints, project discovery needs git, the plugins config key) live in the umbrella SKILL.md, Shared facts.
+
+1. **Hot-reload scope is the whole plugin dir, nested files included.** On
    v2.0.3 an edit to `plugins/<name>/src/<file>.ts`, not the entry, was live
    after `sync.sh push` with no restart (marker string in the tool's own
    output). Each changed file fires its own `msg="loading plugin"`.
@@ -104,8 +67,8 @@ opencode2 api get /api/command
 
 Commands registered via `ctx.command.transform(commands.update(...))` appear
 by name (draft `update()` is upsert. It creates unknown names).
-Empty `/api/command` on plain serve means nothing (gotcha 1), and it never
-lists a PROJECT plugin's commands (gotcha 2). Reliable proof a
+Empty `/api/command` on plain serve means nothing (shared fact 1), and it never
+lists a PROJECT plugin's commands (shared fact 2). Reliable proof a
 project plugin's `setup()` ran is its own side effect: the tool in
 the session catalog, a file it writes, or a log line it emits. A tool
 missing from the *top-level* tool list proves nothing: with Code Mode
@@ -119,7 +82,7 @@ A loaded, healthy-listed plugin can still fail every call,
 because nothing in `/api/plugin` executes `setup()`. Run the loader probe:
 
 ```bash
-bun ~/.config/opencode/skills/ocv2-pluginhealth/scripts/oc-plugin-load.mjs \
+bun ~/.config/opencode/skills/opencode-guideline/scripts/oc-plugin-load.mjs \
   ~/Projects/agent/plugins                 # or: <repo>/.opencode/plugins my-tool.ts
 ```
 
@@ -152,11 +115,8 @@ comment.
 ## Writing one instead
 
 This skill diagnoses loading. To author one, read
-@ocv2-plugins.
+`references/plugins.md`.
 
 ## Memory
 
-OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
-`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
-a new finding after it live-verifies. If the hindsight tools are absent,
-continue without memory.
+The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.

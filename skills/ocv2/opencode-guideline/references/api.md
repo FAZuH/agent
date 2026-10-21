@@ -1,6 +1,5 @@
----
-name: ocv2-api
-description: Use `opencode2 api` to call the OpenCode v2 HTTP API and where its docs live. Use when the user says "call the API", "opencode2 api", "where are the API docs", "how do I fork/switch model via API", or pastes an OpenAPI path and needs the exact `opencode2 api` invocation and auth/docs gotchas.
+Load this when the user wants the v2 HTTP API: says "call the API", "opencode2 api", "where are the API docs", "how do I fork/switch model via API", or pastes an OpenAPI path and needs the exact `opencode2 api` invocation and auth/docs gotchas.
+
 ---
 
 # opencode2 api & the v2 HTTP API docs
@@ -43,7 +42,7 @@ Exit code `0` is success. `204` endpoints return empty body; `200` returns `{"da
   ```sh
   curl -s https://opencode.ai/v2/openapi.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['paths']['/api/session/{sessionID}/fork'], indent=2))"
   ```
-- **Local discovery:** `opencode2 api get /api/session` etc. are live-probed; `GET /api/plugin` on a plain `opencode2 serve` returns `data: []` even when plugins load (only the service supervisor populates it, see @ocv2-pluginhealth).
+- **Local discovery:** `opencode2 api get /api/session` etc. are live-probed; `GET /api/plugin` on a plain `opencode2 serve` returns `data: []` even when plugins load (only the service supervisor populates it, see `references/pluginhealth.md`).
 
 ## Common session calls (all require `opencode2 api`)
 
@@ -86,23 +85,19 @@ list into python. Instead:
 
 ## Gotchas
 
-1. **Service vs plain serve:** `GET /api/plugin` and `/api/command` are empty on a plain `serve` even when healthy; verify via the service (`opencode2 api …` without `--standalone`).
-2. **Project discovery needs git:** without `.git` at/above CWD, location resolves to `project: global` and project config is skipped silently. These endpoints report the SERVICE's default location regardless of your cwd, and `?location.directory=` / `--param location.directory=` are accepted but IGNORED (v2.0.3, live-verified on `/api/plugin`, `/api/command`, `/api/agent`: byte-identical results). A project's `.opencode/` plugins, commands, and agents never show up here; use the server log or `opencode2 debug agents|config` from inside the project.
-3. **Config key `plugins`:** v1 `plugin` is auto-translated; new entries should use `"plugins"`; both may coexist.
-4. **Boundary forms:** `POST /api/session/{id}/fork` requires `{"boundary":{"type":"through"}}` or `{"type":"before","messageID":"msg_…"}`. `through` without `messageID` is valid (the server fills the last message, live-verified). `before` without `messageID` is `InvalidRequestError`.
-5. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}`: `variant` optional, `id`+`providerID` required.
-6. **No curl-style flags:** `opencode2 api` rejects `-w`/`-o` (`Unrecognized flag`) and has no timeout flag. Redirect the body to a file and parse it (`> out.json`); wrap poll loops in `timeout N opencode2 api …` (a hung child once blocked a poll loop for 15.5 minutes).
-7. **Interactive commands need a subcommand:** bare `opencode` (or its `opencode2` compatibility wrapper) launches the TUI and blocks until timeout. Call the v2 binary with an explicit subcommand such as `api`, `models`, `auth list`, or `run`.
+Gotchas 1 to 3 (service vs plain serve, project discovery and location, the plugins config key) live in the umbrella SKILL.md, Shared facts.
+
+1. **Boundary forms:** `POST /api/session/{id}/fork` requires `{"boundary":{"type":"through"}}` or `{"type":"before","messageID":"msg_…"}`. `through` without `messageID` is valid (the server fills the last message, live-verified). `before` without `messageID` is `InvalidRequestError`.
+2. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}`: `variant` optional, `id`+`providerID` required.
+3. **No curl-style flags:** `opencode2 api` rejects `-w`/`-o` (`Unrecognized flag`) and has no timeout flag. Redirect the body to a file and parse it (`> out.json`); wrap poll loops in `timeout N opencode2 api …` (a hung child once blocked a poll loop for 15.5 minutes).
+4. **Interactive commands need a subcommand:** bare `opencode` (or its `opencode2` compatibility wrapper) launches the TUI and blocks until timeout. Call the v2 binary with an explicit subcommand such as `api`, `models`, `auth list`, or `run`.
 
 ## Related
 
-- @ocv2-sessions: full fork→switch→verify→talk→wait flow
-- @ocv2-pluginhealth: `GET /api/plugin` diagnosis
+- `references/sessions.md`: full fork→switch→verify→talk→wait flow
+- `references/pluginhealth.md`: `GET /api/plugin` diagnosis
 - @notes: durable notes for OpenCode v2 quirks, tool behavior, and host-specific guidance
 
 ## Memory
 
-OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
-`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
-a new finding after it live-verifies. If the hindsight tools are absent,
-continue without memory.
+The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.
