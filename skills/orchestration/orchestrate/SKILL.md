@@ -122,28 +122,11 @@ scopes, the chain for a shared file, the gate, and the merge. One writer per
 file. Each lane keeps one session for its whole life; the next ticket in a
 lane resumes it (Session reuse).
 
-## Worker channel (chat-room)
+## Talking to a running worker
 
-The `chat-room` plugin gives every session a `room` tool — a mailbox for work
-that needs an open channel instead of one-shot briefs: a long build, a sweep, a
-worker that must answer questions mid-task.
-
-1. `room create <topic>` returns a room id. One room per work item.
-2. Each worker joins once, as its first action:
-   `room join <roomId> name:"<worker>"`.
-3. Address a worker by name: `room send <roomId> "@<worker> <text>"`. The named
-   worker wakes and handles it in its own turn; the reply lands in the room.
-4. `room poll <roomId>` returns unread messages only. Poll after any wait.
-
-Delivery rides a ~5s poll. A room message arrives as a `<notification>` user
-message: the worker stays silent unless addressed by name, so put the ask in
-the message ("@worker-1 report the diff, then stop") and take the answer from
-the room. A background worker that outlives your turn answers this way — its
-final report never reaches you.
-
-Needs the plugin (`opencode2 plugin add @alexsun-top/opencode-chat-room`).
-Every session in the service gets the tool, subagents included; an agent whose
-permissions deny custom tools does not.
+@agent-talk: prompt another agent session over the OpenCode v2 API, steer or
+queue the message, and read its answer. Use it when a worker must answer a
+question mid-task, or when its report would otherwise never reach you.
 
 ## Run mode
 
