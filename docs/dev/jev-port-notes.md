@@ -198,7 +198,7 @@ a key as an argument: anything after a slash command lands in the transcript, so
 | --- | --- | --- |
 | 1 | Skill decision | **live**: `jev_pick_skill` over SKILL.md frontmatter |
 | 2 | Digest priority | **deferred**: recurring $ cost against $0 value; [issue #2](https://github.com/FAZuH/agent/issues/2) |
-| 3 | File explorer | **live**: upstream `jegrep` + auth shim, bonus-tier install |
+| 3 | File explorer | **live**: upstream `jegrep` + auth shim, manual install (not in `install.sh`) |
 | 4 | Review | **live**: `jev_review_rank`, sorted not filtered |
 | 5 | Browser use | **live**: `jev_pick_control` over extracted control text |
 | 6 | Tool hooks | **live**: advisory, `risk_hook` off by default, subagent reach tested |

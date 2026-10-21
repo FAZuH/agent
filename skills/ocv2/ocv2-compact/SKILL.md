@@ -1,10 +1,10 @@
 ---
 name: ocv2-compact
 description: >-
-  Compact an OpenCode v2 session. Trigger compaction and wait for the
-  summary. Use when the user asks to compact a session (the current one or a
-  fork), a context-watch warning fires on a session you manage, or the
-  prepare-compact gate auto-resolves. Covers POST /api/session/{id}/compact,
+  Compact an OpenCode v2 session. Trigger compaction and wait for the summary.
+  Use when the user asks to compact a session (the current one or a fork), a
+  context-watch warning fires on a session you manage, or the @session
+  compaction gate auto-resolves. Covers POST /api/session/{id}/compact,
   polling the compaction message, and what compaction does and does not do to
   history.
 ---
@@ -16,13 +16,14 @@ Later turns see that, not full history. History survives: every message stays
 retrievable. Summarization runs on the session's own model (10–60 s typical).
 
 Run `scripts/oc-compact.sh` from this skill's base directory. It triggers,
-polls, reports; all calls go through `opencode2 api` (see @ocv2-api).
+polls, reports; all calls go through `opencode2 api` (see @opencode-guideline,
+`references/api.md`).
 
 ## 1. Resolve the session
 
 Current session: read `Current conversation session ID` (`ses_…`) from the
 environment block. Any other session (a fork you manage, see
-@ocv2-sessions): use its `ses_…` id.
+@opencode-guideline, `references/sessions.md`): use its `ses_…` id.
 
 ## 2. Compact
 
@@ -68,5 +69,5 @@ opencode2 api get /api/session/ses_XXXXXXXX/message/msg_XXXXXXXX
   messages before triggering a manual one.
 - The summarization call registers no session `cost`/`tokens` on the
   deployed build. Do not expect it there.
-- Session work matters: run @prepare-compact
-  first so state survives in the session doc and checkpoint.
+- Session work matters: run @session (persisting before compaction) first so
+  state survives in the session doc and checkpoint.

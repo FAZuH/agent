@@ -1,11 +1,13 @@
 /**
- * /aside in the TUI — fork the current session at its latest state, ask the
- * question there, and switch the view to the fork (like /fork does).
+ * /aside in the TUI — move the view to the fork the server half just made.
  *
- * The server owns fork+prompt; only the TUI can navigate, so the TUI owns
- * the `aside` slash name here and the server exposes the same logic as
- * `aside-fork` for hosts with no TUI module (desktop, API, mini).
+ * The server owns the command, so it works on the hosts that load no TUI
+ * module (desktop, API, mini). This half only reads the mark the server
+ * writes into the fork's session metadata: a fork of the session on screen
+ * means the view opens it, a fork that never started means the TUI says why.
  */
+import { readMarker } from "./aside.ts"
+
 export default {
   id: "fazuh.aside-tui",
 
@@ -16,58 +18,26 @@ export default {
       } catch {}
     }
 
-    async function runAside(question: string): Promise<void> {
-      const text = String(question ?? "").trim()
-      if (!text) {
-        toast("Usage: /aside <question>", "error")
-        return
-      }
+    const dispose = ctx.data?.on?.("session.metadata.updated", (event: any) => {
+      const sessionID = String(event?.data?.sessionID ?? "")
+      const marker = readMarker(event?.data?.metadata)
+      if (!marker || !sessionID) return
       const route = ctx.ui?.router?.current?.()
-      const parentID = route?.type === "session" ? route.sessionID : undefined
-      if (!parentID) {
-        toast("Open a session first — aside forks the current one.", "error")
+      if (route?.type !== "session") return
+      if (marker.parentID !== route.sessionID) return
+      if (marker.status === "failed") {
+        toast(marker.error ?? "the fork never started", "error")
         return
       }
-      try {
-        const forked: any = await ctx.client.session.fork({
-          sessionID: parentID,
-          boundary: { type: "through" },
-        })
-        const sid: string = forked?.id ?? forked?.data?.id
-        if (!sid) {
-          toast("Fork returned no session id.", "error")
-          return
-        }
-        const ask = `This session was forked via /aside from ${parentID} by the user. Do not resume previous task. Prior history is context only. The user only wants you to answer this question, nothing else:\n\n${text}`
-        await ctx.client.session.prompt({ sessionID: sid, text: ask })
-        ctx.ui.router.navigate({ type: "session", sessionID: sid })
-      } catch (error: any) {
-        toast(`aside failed: ${error?.message ?? error}`, "error")
-      }
-    }
-
-    ctx.ui?.slot?.({
-      append: "app",
-      render: () => {
-        ctx.keymap.layer(() => ({
-          mode: "global",
-          priority: 1,
-          enabled: true,
-          commands: [
-            {
-              id: "aside.fork",
-              title: "Fork session and ask (aside)",
-              group: "aside",
-              palette: true,
-              slash: { name: "aside", arguments: true },
-              run: (input?: string) => void runAside(input ?? ""),
-            },
-          ],
-        }))
-        return null
-      },
+      if (marker.sessionID !== sessionID) return
+      ctx.ui.router.navigate({ type: "session", sessionID })
+      toast(`Forked to ${sessionID}`, "info")
     })
 
-    return undefined
+    return () => {
+      try {
+        dispose?.()
+      } catch {}
+    }
   },
 }

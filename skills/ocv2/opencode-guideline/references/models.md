@@ -1,9 +1,8 @@
----
-name: ocv2-models
-description: Pick a free OpenCode v2 model when the session model's provider account is dry (402 Insufficient account funds) or the user asks for one. Use when a turn dies with "Insufficient account funds", the user says "pick a model" or "use a free model", or asks what models opencode2 offers. A `## ocv2-models` section in AGENTS.md is the override point.
+Load this when the session model's provider account is dry (402 Insufficient account funds) or the user asks for a model: a turn dies with "Insufficient account funds", the user says "pick a model" or "use a free model", or asks what models opencode2 offers. A `## ocv2-models` section in AGENTS.md is the override point.
+
 ---
 
-# ocv2-models: free model discovery and switching
+# Free model discovery and switching
 
 ## 1. AGENTS.md preference first
 
@@ -58,7 +57,7 @@ opencode2 api post /api/session/<sid>/model -d '{"model":{"providerID":"litellm"
 opencode2 api get /api/session/<sid> | grep -o '"model":{[^}]*}'
 ```
 
-Or the ocv2-sessions wrapper: `~/.config/opencode/skills/ocv2-sessions/scripts/oc-set.sh <sid> --model litellm/free-pro-vision`.
+Or the session wrapper: `~/.config/opencode/skills/opencode-guideline/scripts/oc-set.sh <sid> --model litellm/free-pro-vision`.
 Headless: `opencode2 run -m litellm/free-pro-vision "..."` (flag format `provider/model#variant`).
 
 ## 5. 402 recovery

@@ -39,11 +39,10 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 
 **Orchestration** — control, delegate, track, finish agent work:
 `orchestrate`, `workflows` (routing table and procedures), `forkflow` (warm
-session forks), `session` (spec and checkpoints in `.scratch/`), `task-context`
-(context packets), `prepare-compact`, `finish`, `scratch-finish`, `self-improve`,
-`session-retro`, `friction-sweep`, `long-horizon` (overnight runs),
-`offload` (remote machines), `worktree-new`, `worktree-finish`,
-`worktree-close`, `pr-to-close`.
+session forks), `session` (spec, context packet, checkpoints in `.scratch/`),
+`finish`, `scratch-finish`, `self-improve` (retro and sweep), `long-horizon`
+(overnight runs), `offload` (remote machines), `worktree` (branch work),
+`pr-to-close`.
 
 **Workflow** — repeatable procedures:
 `branch-flow` (main/release lines), `commit` (grouping and messages),
@@ -68,10 +67,10 @@ drift), `review-agent` (two-axis review).
 
 **Shared** — loaded only when referenced: `global-instruction`,
 `post-task`, `prompt-user`, `presenting-latex`, `following-procedures`,
-`gate`, `scratch`, `worktree`.
+`gate`, `scratch`.
 
-**OpenCode v2**: `ocv2-api`, `ocv2-compact`, `ocv2-models`, `ocv2-sessions`,
-`ocv2-move`, `ocv2-plugins`, `ocv2-pluginhealth`, `ocv2-unfuck`.
+**OpenCode v2**: `opencode-guideline` (the HTTP API, models, sessions, plugin
+authoring, plugin loading), `ocv2-compact` (compact a session).
 
 ### External skills (`~/.agents/skills`)
 
@@ -145,15 +144,16 @@ handwriting,latex,math,obsidian,ocr,summarize,translate}`.
 ### CLIs
 
 `bgrun` (background jobs), `octask` (schedules),
-`opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `jegrep` (semantic
-grep, needs the jev shim), `imagescan`, `pdf-build`, `skill-graph`,
-`mail-digest`/`phone-digest` (opt-in digests), `himalaya-gen-config`.
+`opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `imagescan`,
+`pdf-build`, `skill-graph`, `mail-digest`/`phone-digest` (opt-in digests),
+`himalaya-gen-config`.
 
 Optional tools each degrade one skill, never the install: `ffmpeg`
 (ffmpeg-skill), `mmdc` (mermaid/visualize/pdf-write), `pandoc`/`pdflatex`/
 `xelatex` (pdf-write), `pdftotext`/`pdftoppm`/`pdfinfo` (pdf-read/write),
 `rga` (pdf-read), `uv` (pdf-read), `clamscan` (malware-check), `bun` (jev,
-pluginhealth), `rsvg-convert` (visualize), `gh` (every PR/issue skill),
+pluginhealth), `jegrep` (jev semantic grep, not installed by default),
+`rsvg-convert` (visualize), `gh` (every PR/issue skill),
 `jq` (ocv2, forkflow).
 
 ## Search outward

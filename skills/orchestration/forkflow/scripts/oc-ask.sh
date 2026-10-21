@@ -44,10 +44,10 @@ command -v opencode2 >/dev/null || die "opencode2 not on PATH"
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SESS=""
-for cand in "$HERE/../../../ocv2/ocv2-sessions/scripts" "$HERE/../../ocv2-sessions/scripts"; do
+for cand in "$HERE/../../../ocv2/opencode-guideline/scripts" "$HERE/../../opencode-guideline/scripts"; do
   if [[ -x "$cand/oc-fork.sh" ]]; then SESS="$cand"; break; fi
 done
-[[ -n "$SESS" ]] || die "ocv2-sessions scripts not found, sync the ocv2-sessions skill first"
+[[ -n "$SESS" ]] || die "opencode-guideline scripts not found, sync the opencode-guideline skill first"
 
 CHILD=$("$SESS/oc-fork.sh" "$SOURCE") || exit 2
 printf 'child: %s\n' "$CHILD" >&2

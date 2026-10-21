@@ -86,18 +86,16 @@ Give the work its own branch, workspace, and context.
 ```mermaid
 flowchart LR
   N[Decided ticket] --> S[session opens the workspace]
-  S --> W[worktree-new]
+  S --> W[worktree]
   W --> F[forkflow]
-  F --> C[task-context]
+  F --> C[session context packet]
   C --> B[Build]
 ```
 
-- **session**: the `.scratch/` workspace: spec, tickets, deviations, checkpoints.
+- **session**: the `.scratch/` workspace: spec, tickets, deviations, checkpoints, context packet.
 - **scratch**: the workspace layout and lifecycle those files follow.
-- **worktree**: safe creation and cleanup mechanics.
-- **worktree-new**: an isolated branch in a separate worktree.
+- **worktree**: an isolated branch in a separate worktree, then its finish and cleanup.
 - **forkflow**: a warm fork of a finished session, so the child already has the context.
-- **task-context**: the context packet a worker agent needs before it starts.
 
 ### Build
 
@@ -191,21 +189,19 @@ Commit, document, archive, improve.
 ```mermaid
 flowchart LR
   M[Merged] --> F[finish]
-  F --> A[scratch-finish, worktree-finish]
-  A --> I[self-improve, friction-sweep]
+  F --> A[scratch-finish, worktree finish]
+  A --> I[self-improve]
   I --> N[Next ticket]
 ```
 
 - **finish**: the end-of-session workflow: docs, commit grouping, summary, next steps.
 - **scratch-finish**: archive a finished `.scratch/` workspace.
-- **worktree-finish**, **worktree-close**: prepare the branch for merge, then remove the worktree and the branch.
+- **worktree**: prepare the branch for merge, then remove the worktree and the branch.
 - **commit**, **commit-scopes**: group the commits and use the closed scope vocabulary.
 - **changelog**: the release notes for the next version.
 - **readme**: README structure and house style.
 - **setup-dev-docs**: bootstrap, audit, or refresh `docs/dev/`.
-- **session-retro**: propose lessons from the session that just ended.
-- **self-improve**: the gated retrospective and skill check.
-- **friction-sweep**: apply the approved self-improvement backlog.
+- **self-improve**: propose lessons from the session that just ended, then apply the approved improvement backlog.
 
 ## Any time
 
@@ -217,7 +213,7 @@ up.
 flowchart LR
   A[Any turn] --> O[orchestrate, workflows]
   O --> G[gate]
-  G --> P[prepare-compact]
+  G --> P[session checkpoint]
   P --> H[offload, long-horizon]
 ```
 
@@ -225,7 +221,7 @@ flowchart LR
 - **workflows**: the routing table that turns a task into a workflow and a subagent.
 - **gate**: approval gate classes and the `GATE` tag.
 - **following-procedures**: run a numbered procedure without skipping a step.
-- **prepare-compact**: persist state before the context window runs out.
+- **session**: persists state before the context window runs out (the compaction checkpoint).
 - **offload**: move builds, checks, and agent batches to a remote machine.
 - **long-horizon**: supervisors and heartbeats that keep overnight work alive.
 - **notes**: durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behaviour.
@@ -240,7 +236,8 @@ flowchart LR
 - **visualize**, **show-me**, **mermaid-skill**: one correct visual when a picture carries the idea.
 - **learn**: the multi-session teaching workflow, with quizzes and durable lesson records.
 - **handoff**, **wait-what**: compact the session for another agent, or re-pitch the last answer.
-- **ocv2-api**, **ocv2-compact**, **ocv2-models**, **ocv2-sessions**, **ocv2-move**, **ocv2-pluginhealth**, **ocv2-unfuck**: the OpenCode v2 operations.
+- **opencode-guideline**: the OpenCode v2 operations: API, models, sessions, plugin authoring, plugin loading.
+- **ocv2-compact**: compact a v2 session and wait for its summary.
 
 ## Common workflows
 
@@ -254,8 +251,8 @@ The default path for a feature or a fix that has a ticket.
 
 ```mermaid
 flowchart TD
-  S[session] --> W[worktree-new]
-  W --> X[task-context]
+  S[session] --> W[worktree]
+  W --> X[session context packet]
   X --> B[tdd, implement]
   B --> V[reproducing-ci-locally]
   V --> R[code-review]
@@ -273,14 +270,14 @@ An isolated branch that ends as a merged pull request and leaves nothing behind.
 
 ```mermaid
 flowchart LR
-  W[worktree-new] --> I[implement]
-  I --> F[worktree-finish]
+  W[worktree] --> I[implement]
+  I --> F[worktree finish]
   F --> P[pr-creator]
   P --> M[pr-watchmerge]
-  M --> C[worktree-close]
+  M --> C[worktree close]
 ```
 
-- **worktree-finish** takes the branch from ready to mergeable; **worktree-close** removes the worktree and the branch.
+- **worktree** takes the branch from ready to mergeable, then removes the worktree and the branch.
 - **pr-to-close** runs the whole lifecycle for you when the branch is already done.
 
 ### Changing this repository

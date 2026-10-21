@@ -5,7 +5,7 @@ description: >-
   the directory layout, and the spec → execute → archive lifecycle. Load this
   whenever a `.scratch/` workspace is involved: creating, resuming, or
   completing one, or from any skill that needs the mechanics (session,
-  finish, prepare-compact, worktree). What goes *inside* the workspace lives
+  finish, worktree). What goes *inside* the workspace lives
   in the @session skill; the completion checklist and archive steps live in
   the @scratch-finish skill.
 ---

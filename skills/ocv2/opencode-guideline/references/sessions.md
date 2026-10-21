@@ -1,18 +1,12 @@
----
-name: ocv2-sessions
-description: >-
-  Fork an OpenCode v2 session and control the fork, switching its agent and
-  model, verifying, sending prompts, and polling the outcome. Use when the
-  user says "fork this session", "fork before this message", "switch the
-  model/agent in the fork", or wants to verify a fork change and talk to the
-  new session.
+Load this when the user wants to fork an OpenCode v2 session and control the fork: switching its agent and model, verifying, sending prompts, and polling the outcome. Use when the user says "fork this session", "fork before this message", "switch the model/agent in the fork", or wants to verify a fork change and talk to the new session.
+
 ---
 
 # Fork & control an OpenCode v2 session
 
 Fork copies projected history through or before a boundary into an independent
 child. Then switch its agent/model, verify, talk via the session API. All calls
-go through `opencode2 api` (see @ocv2-api).
+go through `opencode2 api` (see `references/api.md`).
 
 ## Scripts (preferred)
 
@@ -119,7 +113,4 @@ Message ID is the newest `type: assistant` after wait. In `chat` mode, add: `"Ju
 
 ## Memory
 
-OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged
-`topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain`
-a new finding after it live-verifies. If the hindsight tools are absent,
-continue without memory.
+OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged `topic:opencode-v2`. The full contract lives in the umbrella SKILL.md, Shared facts.

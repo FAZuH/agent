@@ -2,8 +2,8 @@
 
 > **Load the @following-procedures skill first.** It defines how you run this
 > numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Gates* section at
-> the bottom.
+> fixed post-run report. Always follow the rules in the *Gates* section at the
+> bottom.
 
 ## When to use
 
@@ -26,22 +26,18 @@ START (bug report)
 
 | # | State | Owner | Action |
 |---|---|---|---|
-| 1 | DIAGNOSE | you | Do not guess. Run the @diagnosing-bugs skill: get a tight feedback loop (one command that already goes red on this bug), then fix with a regression test. |
+| 1 | DIAGNOSE | you | Do not guess. Run @diagnosing-bugs: get a tight feedback loop (one command that already goes red on this bug), then fix with a regression test. |
 | 2 | MAP | `research-discovery` | Only for an unfamiliar codebase: delegate a first pass to map where the failing code lives before diagnosing. |
-| 3 | FIX | `implement` | Delegate the fix to `implement`. |
+| 3 | FIX | `implement` | Delegate the fix. |
 | 4 | TEST | `implement` | Delegate the regression test run in verification-only mode. |
-| 5 | REVIEW / FINISH | `review` / `finish` | Review and commit as in `feature-development.md`. |
+| 5 | REVIEW / FINISH | `review` / `finish` | As in `feature-development.md`. |
 
 ## Dependency graph
 
-- step1
-- step2 -> step1
-- step3 -> step1
-- step4 -> step3
-- step5 -> step4
+- DIAGNOSE gates FIX; MAP informs FIX but does not gate it
 
 ## Gates
 
 - MAP only runs on an unfamiliar codebase.
-- FIX (step3) hangs off DIAGNOSE (step1), never off MAP (step2): a mapping pass informs the fix but does not gate it.
+- FIX hangs off DIAGNOSE, never off MAP.
 - Review and commit follow the feature-development workflow exactly.

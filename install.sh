@@ -18,16 +18,15 @@ DIGEST_MAIL=0
 DIGEST_PHONE=0
 TMP_DIR=""
 
-# Pinned versions of everything this script fetches: the skills and rea-agents
-# npm packages by version, and the git checkouts by commit. Move a
-# pin with the update-pins skill; it checks the remote and reports the diff
-# before editing.
+# Pinned versions of everything this script fetches: the skills, rea-agents,
+# and opencode-chat-room npm packages by version, and the git checkouts by
+# commit. Move a pin with the update-pins skill; it checks the remote and
+# reports the diff before editing.
 SKILLS_CLI_VERSION="1.7.0"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
 REA_AGENTS_VERSION="6.4.0"
-# jegrep v0.1.3. A tag object dereferences to the commit cargo actually builds.
-JEGREP_REV="c84f4561c081c9bcef494384d69c6e55012ca0da"
+CHAT_ROOM_VERSION="0.2.2"
 
 GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
 GLOBAL_INSTRUCTION_SKILL="skills/shared/global-instruction/SKILL.md"
@@ -262,17 +261,18 @@ install_rea() {
   info "registered REA with OpenCode (rea-agents $REA_AGENTS_VERSION)"
 }
 
-# jegrep is the semantic-grep binary the jev plugin shells out to. It reads
-# OPENROUTER_API_KEY or TYPESAFE_API_KEY, neither of which this machine has; the
-# plugin's loopback shim injects the provider key instead, so a missing
-# install only costs use case 3.
-install_jegrep() {
-  if command -v jegrep >/dev/null 2>&1; then
-    info "jegrep already installed"
-    return
+# The chat-room plugin gives every session a `room` tool: the worker channel
+# @orchestrate documents. `opencode plugin add` treats a differently spelled
+# specifier as a different package, so an unversioned entry from an earlier
+# run would load twice and the second copy fails with a duplicate plugin ID.
+# Drop that spelling first.
+install_chat_room() {
+  opencode plugin remove "@alexsun-top/opencode-chat-room" >/dev/null 2>&1 || true
+  if opencode plugin add "@alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION" >/dev/null; then
+    info "installed the chat-room plugin (@alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION)"
+  else
+    info "note: the chat-room plugin did not install — run: opencode plugin add @alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION"
   fi
-  cargo install --git https://github.com/can1357/jegrep --rev "$JEGREP_REV" --locked
-  info "installed jegrep (use it with JEGREP_ENDPOINT_URL pointed at the jev shim)"
 }
 
 # Every check in one place, so `--check` and the install can never disagree.
@@ -308,8 +308,7 @@ pdfinfo:pacman -S poppler:pdf-write
 rga:pacman -S ripgrep-all:pdf-read
 uv:pacman -S uv:pdf-read
 clamscan:pacman -S clamav:malware-check, omarchy-plugin-install
-bun:pacman -S bun-bin:ocv2-pluginhealth, the jev plugin
-jegrep::the jev plugin's semantic grep
+bun:pacman -S bun-bin:opencode-guideline, the jev plugin
 PACKAGES
 }
 
@@ -390,6 +389,13 @@ checklist() {
       missing=1
     fi
   done < <(installed_items)
+
+  if opencode plugin list 2>/dev/null | grep -q 'chat-room'; then
+    printf '  [ok]      %-16s %s\n' "chat-room" "the worker-channel plugin"
+  else
+    printf '  [MISSING] %-16s %s\n' "chat-room" "opencode plugin add @alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION"
+    missing=1
+  fi
 
   if ((missing == 0)); then
     printf '\nAll required items are present.\n'
@@ -481,11 +487,13 @@ step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g
 ensure_global_instruction_ref
 
+step "Installing the chat-room plugin"
+install_chat_room
+
 if ((BONUS == 1)); then
   step "Installing bonus skills"
   install_ffmpeg_skill
   install_rea
-  install_jegrep
   install_skill adithya-s-k/manim_skill
   install_skill https://fframes.studio
   install_skill cloudflare/security-audit-skill --skill security-audit
