@@ -1,5 +1,5 @@
 // fazuh.aside — server half. Forks the current session at its latest state,
-// asks the question there, and tells the session that asked what came back.
+// asks the question there, and lets the fork report back on its own.
 //
 // The plugin ctx exposes no fork, so the fork goes through `opencode2 api`
 // (same shell-out pattern as the viz plugin's session lookup). The fork is
@@ -10,14 +10,9 @@
 // command works on every host, including the ones with no TUI module.
 import {
   ASIDE_KEY,
-  applyEvent,
   askText,
   failedNotice,
-  finished,
-  finishedNotice,
   forkedNotice,
-  newState,
-  type AsideState,
 } from "./aside.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -26,11 +21,6 @@ export default {
   id: "fazuh.aside",
   tui: true,
   setup: async (ctx: any) => {
-    // One entry per live fork. A plugin reload drops them: the fork keeps
-    // running, but nobody is left to report the answer back.
-    const states = new Map<string, AsideState>()
-    const controller = new AbortController()
-
     async function api(method: string, path: string, data?: unknown): Promise<any> {
       const args = ["opencode2", "api", method, path]
       if (data !== undefined) args.push("--data", JSON.stringify(data))
@@ -70,24 +60,10 @@ export default {
       return sid
     }
 
-    // The notices ride as normal steer prompts, like the question the fork
-    // gets: a synthetic message never shows up in the TUI's pending list.
-    async function notifyFinished(state: AsideState): Promise<void> {
-      const answer = state.lastText.trim() || "The fork finished without a text answer."
-      try {
-        await ctx.session.prompt({
-          sessionID: state.parentID,
-          text: finishedNotice(state.forkID, state.parentID, answer),
-        })
-      } catch (error) {
-        console.error(`[aside] finish notice failed: ${message(error)}`)
-      }
-    }
-
     /**
-     * Fork, ask, and (when the caller wants to hear back) watch the fork.
-     * The state is registered before the question is asked: the fork's turn
-     * can start the moment it is prompted.
+     * Fork, ask, and tell the asking session that a fork exists. The answer
+     * comes back on the fork's own initiative: the ask prompt tells it how to
+     * report, so it curates what the asking session gets to read.
      */
     async function startAside(question: string, parentID: string, notify: boolean): Promise<string> {
       let forkID: string
@@ -105,9 +81,8 @@ export default {
         }
         return ""
       }
-      if (notify) states.set(forkID, newState(parentID, forkID))
       await mark(forkID, { status: "forked", parentID, sessionID: forkID, question })
-      await ctx.session.prompt({ sessionID: forkID, text: askText(question, parentID) })
+      await ctx.session.prompt({ sessionID: forkID, text: askText(question, parentID, forkID) })
       if (notify) {
         await ctx.session.prompt({
           sessionID: parentID,
@@ -116,28 +91,6 @@ export default {
       }
       return forkID
     }
-
-    void (async () => {
-      try {
-        const stream = ctx.event?.subscribe?.({ signal: controller.signal })
-        if (!stream) {
-          console.error("[aside] ctx.event.subscribe is unavailable; the finish notice will not come")
-          return
-        }
-        for await (const event of stream) {
-          const type = String(event?.type ?? "")
-          const data = (event?.data ?? {}) as Record<string, unknown>
-          for (const [forkID, state] of states) {
-            if (!applyEvent(state, { type, data })) continue
-            if (!finished(state)) continue
-            states.delete(forkID)
-            await notifyFinished(state)
-          }
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) console.error(`[aside] event stream failed: ${message(error)}`)
-      }
-    })()
 
     await ctx.command.transform((draft: any) => {
       draft.add({
@@ -170,10 +123,5 @@ export default {
         },
       })
     })
-
-    return () => {
-      controller.abort()
-      states.clear()
-    }
   },
 }

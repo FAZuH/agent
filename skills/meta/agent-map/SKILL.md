@@ -38,11 +38,11 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 ### Repo skills (`~/.config/opencode/skills`)
 
 **Orchestration** — control, delegate, track, finish agent work:
-`orchestrate`, `workflows` (routing table and procedures), `forkflow` (warm
-session forks), `session` (spec, context packet, checkpoints in `.scratch/`),
-`finish`, `scratch-finish`, `self-improve` (retro and sweep), `long-horizon`
-(overnight runs), `offload` (remote machines), `worktree` (branch work),
-`pr-to-close`.
+`orchestrate`, `workflows` (routing table and procedures), `agent-talk`
+(message a running agent session), `forkflow` (warm session forks), `session`
+(spec, context packet, checkpoints in `.scratch/`), `finish`, `scratch-finish`,
+`self-improve` (retro and sweep), `long-horizon` (overnight runs), `offload`
+(remote machines), `worktree` (branch work), `pr-to-close`.
 
 **Workflow** — repeatable procedures:
 `branch-flow` (main/release lines), `commit` (grouping and messages),

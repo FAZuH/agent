@@ -110,14 +110,38 @@ once in place. In the TUI the view moves to the fork; on hosts with no TUI
 module (desktop, API, mini) the fork id is in the reply. One name, one
 owner: the server plugin owns the command, so it works on every host.
 
-The session that asked hears about the fork twice: once when the fork starts,
-and once when the fork has nothing left to do — no chat in flight, no
-subagent running, no shell open, no queued prompt. The second notice carries
-the fork's answer.
+The session that asked hears about the fork once, when the fork starts. That
+notice labels the question as the fork's task, so the asking session does not
+read it as its own instructions. The answer comes back on the fork's own
+initiative: the ask prompt tells the fork to post its report to the asking
+session over the API, tagged as `<aside state="completed">`, so the fork
+curates what that session gets to read.
 
-- **`/aside <question>`**: fork, ask, and report back to this session on both
-  the fork and its finish.
-- **`/aside-silent <question>`**: fork and ask, with no report back.
+- **`/aside <question>`**: fork, ask, and tell this session the fork exists.
+- **`/aside-silent <question>`**: fork and ask, with no notice here.
+
+## tell (`fazuh.tell`)
+
+`/tell <session id> <message>` sends the message to a subagent of the session
+that asked. The target has to sit in the caller's own tree: a child, a
+grandchild, or deeper. Anything outside the tree is refused, whether the id
+was picked from the list or typed by hand.
+
+In the TUI, `/tell ` opens a list of the caller's subagents with their titles.
+The typed text filters the list, arrows move, enter puts the session id where
+the id belongs, esc closes. The message is typed after the id. One name, one
+owner: the server owns the command, so the text form works in every host,
+including the ones that load no TUI module.
+
+- **enter**: send, and steer the target, which interrupts a turn in progress.
+- **ctrl+enter**: send queued. The message waits for the target's current turn
+  to finish.
+- **`--queue` / `--steer`**: the same two modes as a flag in the text, for the
+  hosts with no key to press. The flag goes first, so the line reads
+  `/tell --queue <session id> <message>`. Ctrl+enter writes the flag, so both
+  routes read the same line.
+
+A refused target fails the command, and the TUI says why.
 
 ## ralph (`fazuh.ralph`)
 

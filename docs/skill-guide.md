@@ -219,6 +219,7 @@ flowchart LR
 
 - **orchestrate**: the orchestrator role: delegation, permissions, run mode, subagent reuse.
 - **workflows**: the routing table that turns a task into a workflow and a subagent.
+- **agent-talk**: message a running agent session and read its answer.
 - **gate**: approval gate classes and the `GATE` tag.
 - **following-procedures**: run a numbered procedure without skipping a step.
 - **session**: persists state before the context window runs out (the compaction checkpoint).

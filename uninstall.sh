@@ -29,7 +29,6 @@ EXTERNAL_SKILLS=(
 # write. The update-pins skill moves both together.
 SKILLS_CLI_VERSION="1.7.0"
 REA_AGENTS_VERSION="6.4.0"
-CHAT_ROOM_VERSION="0.2.2"
 
 usage() {
   cat <<EOF
@@ -189,23 +188,6 @@ remove_rea() {
   info "removed the REA registration and skill"
 }
 
-# The chat-room plugin is written into OpenCode's own config, outside the
-# sync.sh manifest, so it needs its own removal. Both spellings go: the pinned
-# one this installer wrote, and an unversioned one an earlier run left behind.
-remove_chat_room() {
-  if ((DRY_RUN)); then
-    info "would remove the chat-room plugin (@alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION)"
-    return 0
-  fi
-  local spec
-  for spec in "@alexsun-top/opencode-chat-room@$CHAT_ROOM_VERSION" "@alexsun-top/opencode-chat-room"; do
-    if ! opencode plugin remove "$spec" >/dev/null 2>&1; then
-      info "could not remove $spec; it may remain configured"
-    fi
-  done
-  info "removed the chat-room plugin"
-}
-
 while (($#)); do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
@@ -239,7 +221,6 @@ if ((REMOVE_EMBEDDED_RULES)); then
   remove_global_instruction_ref
 fi
 remove_agent_package
-remove_chat_room
 if ((REMOVE_EXTERNAL_PACKAGES)); then
   remove_external_packages
 fi
