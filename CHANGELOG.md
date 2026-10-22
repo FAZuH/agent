@@ -1,3 +1,18 @@
+## [0.14.1](https://github.com/FAZuH/agent/compare/v0.14.0...v0.14.1) (2026-10-22)
+
+
+### Features
+
+* **agent:** point the orchestrator at agent-talk ([1de855f](https://github.com/FAZuH/agent/commit/1de855f37aa495b39bb93439ac80c462db460c40))
+* **plugin:** add tell plugin for messaging subagent sessions ([ce0c7da](https://github.com/FAZuH/agent/commit/ce0c7daecd5fbdb4bbc1979dc3d3dd67e295184c))
+* **plugin:** add the tell picker and a tested descendant rule ([6d409b5](https://github.com/FAZuH/agent/commit/6d409b5c1c706cc589674ff3adc464c1e30c522c))
+* **skill:** add agent-talk skill ([14f3b50](https://github.com/FAZuH/agent/commit/14f3b50a61956f08371b97be98f3e9299642f8a0))
+
+
+### Bug Fixes
+
+* **plugin:** the fork owns its question and its report ([1c943f0](https://github.com/FAZuH/agent/commit/1c943f0938a1ca7c0adccd68f6cd71923f8f6670))
+
 ## [0.14.0](https://github.com/FAZuH/agent/compare/v0.13.19...v0.14.0) (2026-10-21)
 
 
@@ -46,17 +61,4 @@
 * **plugin:** resolve the optimizer's model instead of sending none ([6a3a7f9](https://github.com/FAZuH/agent/commit/6a3a7f9e8b1e9619e6aae30f345a028b4953cd4e))
 
 ## [0.13.17](https://github.com/FAZuH/agent/compare/v0.13.16...v0.13.17) (2026-10-13)
-
-## [0.13.16](https://github.com/FAZuH/agent/compare/v0.13.15...v0.13.16) (2026-10-13)
-
-
-### Features
-
-* **plugin:** optimizer model override, failure latch, and XDG data split ([1d593a5](https://github.com/FAZuH/agent/commit/1d593a5c05f0a14f6276523ddc5c66dee9276de4))
-* replace the papercuts CLI with Hindsight friction entries ([de37f98](https://github.com/FAZuH/agent/commit/de37f98232277d0a31087187ff447142303c7980))
-
-
-### Bug Fixes
-
-* **plugin:** drop the Pick preamble from optimized criteria ([ff295f8](https://github.com/FAZuH/agent/commit/ff295f8ab90da5562da1fdc2741a0a38307f8be7))
 
