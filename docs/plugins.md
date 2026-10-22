@@ -110,14 +110,15 @@ once in place. In the TUI the view moves to the fork; on hosts with no TUI
 module (desktop, API, mini) the fork id is in the reply. One name, one
 owner: the server plugin owns the command, so it works on every host.
 
-The session that asked hears about the fork twice: once when the fork starts,
-and once when the fork has nothing left to do — no chat in flight, no
-subagent running, no shell open, no queued prompt. The second notice carries
-the fork's answer.
+The session that asked hears about the fork once, when the fork starts. That
+notice labels the question as the fork's task, so the asking session does not
+read it as its own instructions. The answer comes back on the fork's own
+initiative: the ask prompt tells the fork to post its report to the asking
+session over the API, tagged as `<aside state="completed">`, so the fork
+curates what that session gets to read.
 
-- **`/aside <question>`**: fork, ask, and report back to this session on both
-  the fork and its finish.
-- **`/aside-silent <question>`**: fork and ask, with no report back.
+- **`/aside <question>`**: fork, ask, and tell this session the fork exists.
+- **`/aside-silent <question>`**: fork and ask, with no notice here.
 
 ## tell (`fazuh.tell`)
 

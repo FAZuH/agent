@@ -1,18 +1,14 @@
 /**
  * Self-check for the aside rules. No host and no network: the point is that
- * the marker and the finish decision hold up on their own, because those two
- * decide whether the original session hears about the fork, and when.
+ * the marker and the two texts hold up on their own, because those decide
+ * what the asking session hears, and who sends it.
  *
  *   bun test src/aside.test.ts
  */
 
 import { describe, expect, test } from "bun:test"
 
-import { applyEvent, finished, newState, readMarker, type AsideState } from "./aside.ts"
-
-const state = (over: Partial<AsideState> = {}): AsideState => ({ ...newState("ses_parent", "ses_fork"), ...over })
-
-const event = (type: string, data: Record<string, unknown> = {}) => ({ type, data })
+import { askText, forkedNotice, readMarker } from "./aside.ts"
 
 describe("readMarker", () => {
   test("reads a forked marker", () => {
@@ -29,77 +25,24 @@ describe("readMarker", () => {
   })
 })
 
-describe("finished", () => {
-  test("a fork that never ran is not finished", () => {
-    expect(finished(state())).toBe(false)
-  })
-
-  test("the fork's own turn ending finishes it", () => {
-    const s = state()
-    applyEvent(s, event("session.execution.started", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(false)
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(true)
-  })
-
-  test("a running subagent keeps the fork open", () => {
-    const s = state()
-    applyEvent(s, event("session.execution.started", { sessionID: "ses_fork" }))
-    applyEvent(s, event("session.created", { sessionID: "ses_child", parentID: "ses_fork" }))
-    applyEvent(s, event("session.execution.started", { sessionID: "ses_child" }))
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(false)
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_child" }))
-    expect(finished(s)).toBe(true)
-  })
-
-  test("a session outside the fork never blocks it", () => {
-    const s = state()
-    applyEvent(s, event("session.execution.started", { sessionID: "ses_parent" }))
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(true)
-  })
-
-  test("an open shell keeps the fork open", () => {
-    const s = state()
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_fork" }))
-    applyEvent(s, event("session.shell.started", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(false)
-    applyEvent(s, event("session.shell.ended", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(true)
-  })
-
-  test("a queued prompt keeps the fork open", () => {
-    const s = state()
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_fork" }))
-    applyEvent(s, event("session.inbox.enqueued", { sessionID: "ses_fork", inboxID: "msg_1" }))
-    expect(finished(s)).toBe(false)
-    applyEvent(s, event("session.inbox.delivered", { sessionID: "ses_fork", inboxID: "msg_1" }))
-    expect(finished(s)).toBe(true)
-  })
-
-  test("a turn clears the input it consumed", () => {
-    const s = state()
-    applyEvent(s, event("session.inbox.enqueued", { sessionID: "ses_fork", inboxID: "msg_1" }))
-    applyEvent(s, event("session.execution.started", { sessionID: "ses_fork" }))
-    applyEvent(s, event("session.execution.succeeded", { sessionID: "ses_fork" }))
-    expect(finished(s)).toBe(true)
+describe("notices", () => {
+  test("the fork notice hands the question over as the fork's task", () => {
+    const notice = forkedNotice("ses_fork", "ses_parent", "1. do this\n2. do that")
+    expect(notice).toContain("not an instruction for this session")
+    expect(notice).toContain("1. do this")
   })
 })
 
-describe("answer text", () => {
-  test("keeps the last assistant message, block by block", () => {
-    const s = state()
-    applyEvent(s, event("session.text.ended", { sessionID: "ses_fork", assistantMessageID: "msg_1", text: "first" }))
-    applyEvent(s, event("session.text.ended", { sessionID: "ses_fork", assistantMessageID: "msg_1", text: "second" }))
-    expect(s.lastText).toBe("first\nsecond")
-    applyEvent(s, event("session.text.ended", { sessionID: "ses_fork", assistantMessageID: "msg_2", text: "answer" }))
-    expect(s.lastText).toBe("answer")
+describe("ask text", () => {
+  test("tells the fork to report to the asking session over the api", () => {
+    const text = askText("what is up", "ses_parent", "ses_fork")
+    expect(text).toContain("opencode2 api post /api/session/ses_parent/prompt")
+    expect(text).toContain('<aside sessionID="ses_fork" state="completed" parent="ses_parent">')
   })
 
-  test("ignores text from other sessions", () => {
-    const s = state()
-    applyEvent(s, event("session.text.ended", { sessionID: "ses_parent", assistantMessageID: "msg_1", text: "noise" }))
-    expect(s.lastText).toBe("")
+  test("keeps the question as the fork's only task", () => {
+    const text = askText("what is up", "ses_parent", "ses_fork")
+    expect(text).toContain("The user only wants you to answer this question")
+    expect(text).toContain("what is up")
   })
 })
