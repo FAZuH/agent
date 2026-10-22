@@ -1,15 +1,15 @@
 /**
- * Shared rules for the tell plugin.
+ * The rules of the tell plugin, with no host and no network in sight.
  *
  * The command is `/tell <session id> <message>`: the message goes to a
  * subagent of the session that asked, never to an unrelated session. The TUI
  * half (./tui.ts) fills the session id in from a list of subagent titles; the
  * server half (./index.ts) parses what was typed and sends it.
  *
- * The delivery mode rides in the text as a flag: `--queue` waits for the
- * target's current turn to finish, `--steer` (the default) interrupts it. The
- * TUI half writes the flag in before it submits, so the server stays the only
- * sender and hosts without a TUI can type the flag by hand.
+ * The delivery mode comes from the text: a `--queue` or `--steer` flag says
+ * it outright, and the flag the TUI half writes in before it submits is the
+ * same flag a host with no TUI half can type by hand. The mode the host
+ * hands over is only the fallback for a line with no flag.
  */
 
 /** The slash name. One owner: the server plugin registers it. */
@@ -25,18 +25,18 @@ export interface Parsed {
   target: string
   /** The message text. */
   message: string
-  /** The delivery the text asked for. */
-  delivery: Delivery
+  /** The delivery the text asked for, when it said. */
+  delivery?: Delivery
   /** Set when the text is not a usable command. */
   error?: string
 }
 
-const FLAG = /^--(queue|steer)\s+/
+const FLAG = /^--(queue|steer)\b\s*/
 
 /** Split the text after the slash name into a target, a message, and a mode. */
 export function parseTarget(text: string): Parsed {
   let rest = String(text ?? "").trim()
-  let delivery: Delivery = "steer"
+  let delivery: Delivery | undefined
   const flag = FLAG.exec(rest)
   if (flag) {
     delivery = flag[1] as Delivery
@@ -63,7 +63,7 @@ export interface Descendant extends SessionRow {
   depth: number
 }
 
-/** Every session under `rootID`, children first, however deep the tree runs. */
+/** Every session under `rootID`, depth first, however deep the tree runs. */
 export function descendants(rows: SessionRow[], rootID: string): Descendant[] {
   const children = new Map<string, SessionRow[]>()
   for (const row of rows ?? []) {
@@ -74,20 +74,36 @@ export function descendants(rows: SessionRow[], rootID: string): Descendant[] {
   }
   const out: Descendant[] = []
   const seen = new Set([rootID])
-  let level = [rootID]
-  for (let depth = 1; depth <= 8 && level.length; depth++) {
-    const next: string[] = []
-    for (const id of level) {
-      for (const child of children.get(id) ?? []) {
-        if (seen.has(child.id)) continue
-        seen.add(child.id)
-        out.push({ ...child, depth })
-        next.push(child.id)
-      }
+  const walk = (id: string, depth: number) => {
+    for (const child of children.get(id) ?? []) {
+      if (seen.has(child.id)) continue
+      seen.add(child.id)
+      out.push({ ...child, depth })
+      walk(child.id, depth + 1)
     }
-    level = next
   }
+  walk(rootID, 1)
   return out
+}
+
+/** The parent of a session id, or nothing when the session is gone. */
+export type ParentOf = (id: string) => string | undefined | Promise<string | undefined>
+
+/** The walk up the tree stops here, so a cycle cannot loop forever. */
+const MAX_HOPS = 32
+
+/**
+ * True when the target sits under the ancestor: a child, a grandchild, or
+ * deeper. The lookup gives the parent of a session id, and a missing parent
+ * ends the walk.
+ */
+export async function isDescendant(parentOf: ParentOf, ancestorID: string, targetID: string): Promise<boolean> {
+  let id: string | undefined = targetID
+  for (let hops = 0; hops < MAX_HOPS && id; hops++) {
+    if (id === ancestorID) return true
+    id = await parentOf(id)
+  }
+  return false
 }
 
 /** Fold accents so "planeta" matches a search for "planéta". */
@@ -99,45 +115,35 @@ function fold(text: string): string {
 }
 
 /**
- * The rows the picker shows: the subagents that match the query. An empty
- * query shows every subagent.
+ * The rows the picker shows: the subagents that match the query. Every word
+ * of the query has to appear in the title, the agent, or the session id.
  */
 export function filterRows(rows: Descendant[], query: string): Descendant[] {
-  const needle = fold(query).trim()
-  const prefix = String(query ?? "").trim().toLocaleLowerCase()
-  if (!needle && !prefix) return rows
-  return rows.filter(
-    (row) =>
-      fold(row.title ?? "").includes(needle) ||
-      (prefix.length > 0 && row.id.toLocaleLowerCase().startsWith(prefix)),
-  )
-}
-
-export interface Trigger {
-  /** The text typed after the command name. */
-  query: string
+  const words = fold(query).split(/\s+/).filter(Boolean)
+  if (!words.length) return rows
+  return rows.filter((row) => {
+    const haystack = fold(`${row.title ?? ""} ${row.agent ?? ""} ${row.id}`)
+    return words.every((word) => haystack.includes(word))
+  })
 }
 
 /**
- * The composer text that opens the picker: the command and one token, nothing
- * else. The message the user types after the id has a space in it, so the
- * picker closes as soon as they start writing.
+ * The text after the command name, when the text starts with the command.
+ * The picker and the queue keybind both start here.
  */
-export function trigger(text: string): Trigger | undefined {
-  if (!text.startsWith(PREFIX)) return undefined
-  const rest = text.slice(PREFIX.length)
-  if (rest.includes(" ") || rest.includes("\n")) return undefined
-  return { query: rest }
+export function argsOf(text: string): string | undefined {
+  if (!String(text ?? "").startsWith(PREFIX)) return undefined
+  return text.slice(PREFIX.length)
 }
 
-/** The line a queued message needs: the command, a target, and a message. */
-export function messageLine(text: string): { target: string; message: string } | undefined {
-  if (!text.startsWith(PREFIX)) return undefined
-  const rest = text.slice(PREFIX.length).trim()
-  const cut = rest.search(/\s/)
-  if (cut === -1) return undefined
-  const target = rest.slice(0, cut)
-  const message = rest.slice(cut + 1).trim()
-  if (!target || !message) return undefined
-  return { target, message }
+/**
+ * The composer text that opens the picker: the command and one word, nothing
+ * else. A space starts the message, and the picker closes then, so the two
+ * never fight over the same words.
+ */
+export function trigger(text: string): { query: string } | undefined {
+  const args = argsOf(text)
+  if (args === undefined) return undefined
+  if (/[\s]/.test(args)) return undefined
+  return { query: args }
 }
