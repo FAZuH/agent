@@ -119,6 +119,29 @@ the fork's answer.
   the fork and its finish.
 - **`/aside-silent <question>`**: fork and ask, with no report back.
 
+## tell (`fazuh.tell`)
+
+`/tell <session id> <message>` sends the message to a subagent of the session
+that asked. The target has to sit in the caller's own tree: a child, a
+grandchild, or deeper. Anything outside the tree is refused, whether the id
+was picked from the list or typed by hand.
+
+In the TUI, `/tell ` opens a list of the caller's subagents with their titles.
+The typed text filters the list, arrows move, enter puts the session id where
+the id belongs, esc closes. The message is typed after the id. One name, one
+owner: the server owns the command, so the text form works in every host,
+including the ones that load no TUI module.
+
+- **enter**: send, and steer the target, which interrupts a turn in progress.
+- **ctrl+enter**: send queued. The message waits for the target's current turn
+  to finish.
+- **`--queue` / `--steer`**: the same two modes as a flag in the text, for the
+  hosts with no key to press. The flag goes first, so the line reads
+  `/tell --queue <session id> <message>`. Ctrl+enter writes the flag, so both
+  routes read the same line.
+
+A refused target fails the command, and the TUI says why.
+
 ## ralph (`fazuh.ralph`)
 
 The [Ralph Wiggum](https://ghuntley.com/ralph/) loop in the session that started
