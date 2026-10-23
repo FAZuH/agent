@@ -576,7 +576,9 @@ action_push() {
 
   # stale prune: tracked items no longer shipped by the repo — remove only if
   # the target copy is still exactly what we pushed; authored drift is kept.
-  if [[ -f "$MANIFEST" ]]; then
+  # Skipped on top-filtered pushes (-t): a filtered push must not prune other
+  # tops' manifest entries.
+  if [[ -f "$MANIFEST" && ${#TOPS_SEL[@]} -eq 0 ]]; then
     while IFS='|' read -r rel src sha; do
       [[ -n "$rel" ]] || continue
       [[ -e "$REPO/$src" ]] && continue
@@ -748,7 +750,8 @@ bin_push() {
   done < <(enumerate_bin)
 
   # stale prune: tracked scripts no longer shipped — same rule as action_push.
-  if [[ -f "$MANIFEST" ]]; then
+  # Skipped on top-filtered pushes (-t), same reason.
+  if [[ -f "$MANIFEST" && ${#TOPS_SEL[@]} -eq 0 ]]; then
     local rel sha current
     while IFS='|' read -r rel src sha; do
       [[ -n "$rel" ]] || continue
