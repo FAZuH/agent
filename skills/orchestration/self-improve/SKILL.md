@@ -226,10 +226,13 @@ Run top to bottom when invoked. Do not skip the user gates.
    afterwards. For non-repo friction the session lives under
    `~/.local/share/fazuh-agent/.scratch/<date>_<slug>/`.
 6. **Close the loop**: for each applied or rejected proposal, `retain` the
-   entry again with the same `document_id`, same content, and a
-   `status:resolved` tag (`update_mode: "upsert"`), appending the outcome to
-   the content (`adopted: <what landed>` / `rejected: <why>`). Rejections
-   must record the reason.
+   entry again with the same `document_id` and a `status:resolved` tag
+   (`update_mode: "upsert"`). An upsert REPLACES the stored text, never
+   appends. Exact recipe: when the entry predates the current sweep, read
+   `get_document(<id>)` and use its `original_text` verbatim, then
+   `content = <original_text> + " | " + ("adopted: <what landed>" or
+   "rejected: <why>")`. Never send an outcome-only sentence — it erases the
+   proposal detail. Rejections must record the reason.
 7. **Validate**: load the @skill-doctor skill and run it over every affected
    skill root; require a clean report (no broken links, stale refs,
    collisions, drift) before reporting done.

@@ -82,6 +82,11 @@ Resume eagerly: no hop limit. The `context-watch` plugin warns on usage and the
 child's own auto-compaction handles growth, so a long session is not a reason
 to re-spawn.
 
+If a foreground resume aborts (`subagent` tool error mid-call), relaunch the
+same resume with `background: true` — background launch survives; on
+2026-10-22 three foreground resumes aborted in a row where the background
+relaunch of the identical call succeeded.
+
 SPAWN FRESH (omit `sessionID`) only when the task calls for it:
 
 - unrelated work / a different feature where fresh context is cleaner, or

@@ -49,6 +49,10 @@ These are items you must do in specific situations.
   `N matches in 1F:` header or stale text from an earlier command. When the
   output decides the next step, redirect it
   (`<cmd> > /tmp/opencode/<name>.txt`) and read the file.
+- `gh` network calls hang silently on API outages (no error, just no output):
+  wrap every `gh` call that touches the network in `timeout 30`. On RC=124,
+  fall back to a local file for the intended write and retry when the network
+  returns; never burn a long timeout twice.
 - `git commit` with explicit pathspecs. `git commit -m` commits the whole index,
   which may hold staged work from another concern. `git commit -F <file> --
   <path>` fails on an untracked new file (`pathspec did not match any
