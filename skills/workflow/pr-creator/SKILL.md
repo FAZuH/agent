@@ -1,11 +1,9 @@
 ---
 name: pr-creator
-description: >
-  Create a pull request that follows the repository's own template. Use
-  whenever the user asks to create, open, draft, or submit a PR, says "make a
-  PR for this", or wants work-in-progress changes turned into a pull request,
-  even if they do not name the skill. Not for reviewing existing PRs or
-  resolving merge conflicts.
+description: >-
+  Create a pull request that follows the repo's own template. Triggers:
+  create, open, draft, or submit a PR, make a PR for this. Not for reviewing
+  PRs or resolving conflicts.
 license: MIT
 metadata:
   author: FAZuH (adapted from google-gemini/gemini-cli pr-creator)

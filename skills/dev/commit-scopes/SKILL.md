@@ -1,10 +1,9 @@
 ---
 name: commit-scopes
 description: >-
-  Create or update docs/dev/commit-scopes.md, the closed vocabulary for
-  Conventional Commit scopes. Use when the user asks to create commit scopes,
-  define scopes, set up commit-scopes.md, scaffold commit conventions, or
-  mentions commit-scopes.
+  Create or update docs/dev/commit-scopes.md, the closed Conventional Commit
+  scope vocabulary. Triggers: commit scopes, define scopes, scaffold commit
+  conventions.
 ---
 
 # commit-scopes

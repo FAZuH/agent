@@ -1,11 +1,9 @@
 ---
 name: oop
 description: >-
-  Standard OOP and software-architecture vocabulary: principles, smells,
-  patterns, and metrics. Use when you want findings, reviews, or design
-  discussions phrased in standard OOP terms (use oop terms, SRP,
-  encapsulation, dependency inversion, god object, etc.) instead of metaphor
-  vocabulary.
+  Standard OOP and architecture vocabulary: principles, smells, patterns,
+  metrics. Triggers: OOP terms, SRP, encapsulation, dependency inversion, god
+  object, keeping findings free of metaphor.
 ---
 
 # OOP vocabulary

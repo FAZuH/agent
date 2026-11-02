@@ -1,6 +1,9 @@
 ---
 name: skill-doctor
-description: Investigate and fix relations between skills and agent definitions across all skill roots. Builds a deterministic relation graph (loads/routes/documents edges) and detects broken links, stale references to renamed skills, name collisions across roots, and drift between the source repo and installed copies. Use when the user asks to check skill relations or the skill graph, validate skills, or reports broken links, renamed-skill references, collisions, or drift.
+description: >-
+  Check and fix relations between skills and agents across all roots: broken
+  links, renamed-skill references, collisions, source-versus-install drift.
+  Triggers: skill graph, validate skills, skill relations.
 ---
 
 ## Purpose

@@ -1,12 +1,9 @@
 ---
 name: offload
 description: >-
-  Offload builds, checks, or agent batches to a remote machine over ssh when
-  local work would OOM or saturate this machine. Covers environment probe,
-  one-time bootstrap, working-tree sync (push/pull), detached remote check runs
-  via tmux, remote agent batch launches, and result retrieval. Use when the user
-  asks to build/test/compile on a remote host, run checks remotely, offload
-  heavy work, or spawn an agent session on another machine.
+  Run builds, checks, or agent batches on a remote machine over ssh when local
+  work would OOM or saturate. Covers bootstrap, tree sync, detached tmux runs,
+  batch launches, result retrieval. Triggers: build or test remotely, offload.
 ---
 
 # offload

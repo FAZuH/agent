@@ -1,12 +1,10 @@
 ---
 name: improve-architecture-oop
 description: >-
-  Load @oop first for the term lists, then apply these rules for how an
-  architecture finding cites code and which diagram to draw. Load when
-  running improve-codebase-architecture, reading or writing its HTML report,
-  grilling its candidates, or reviewing refactor proposals or module
-  designs: all findings must read in standard object-oriented terms, never
-  metaphor vocabulary.
+  Rules for citing code and picking diagrams in architecture findings, in
+  standard OOP terms; load @oop first. Triggers:
+  improve-codebase-architecture, its HTML report, grilling candidates,
+  refactor proposals.
 ---
 
 # Improve architecture in OOP terms

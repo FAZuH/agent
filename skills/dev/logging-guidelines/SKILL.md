@@ -1,13 +1,10 @@
 ---
 name: logging-guidelines
-description: >
-  Wide events (one canonical log line per unit of work) with high-cardinality
-  context, redaction of PII/secrets, injection-safe field handling, trace
-  correlation, and sampling for cost control. Use when writing or reviewing
-  logging code, designing a logging strategy, replacing scattered
-  console.log/print/println calls with queryable structured events, or checking
-  code for logged secrets, tokens, or PII. Covers Node/TypeScript, Python, and
-  Rust. Not for application error handling or monitoring/alerting config.
+description: >-
+  Wide events: one canonical log line per unit of work, high-cardinality
+  fields, PII and secret redaction, injection-safe values, trace correlation,
+  sampling. Node/TS, Python, Rust. Triggers: logging code, structured logs,
+  leaked secrets.
 license: MIT
 metadata:
   author: boristane (original wide-events pattern), extended by FAZuH

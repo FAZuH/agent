@@ -1,6 +1,9 @@
 ---
 name: prompt-user
-description: The shape of everything the user must read or act on at the bottom of a message - numbered ❓ questions with a recommended answer, and 🏁 procedures with numbered steps, procedures first and one divider between the two kinds. Use whenever a message asks the user anything, needs their sign-off, or hands them steps to run - including the block that closes a post-task report - and whenever the user says "ask me", "what do you need from me", or comments on the ❓/➡️ or 🏁 blocks.
+description: >-
+  The shape of anything the user must read or act on at the bottom of a
+  message: numbered ❓ questions, 🏁 procedures, one divider. Triggers: asking
+  the user, sign-off, steps to run, closing a post-task report.
 ---
 
 # prompt-user

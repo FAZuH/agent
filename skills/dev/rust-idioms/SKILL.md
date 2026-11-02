@@ -1,12 +1,10 @@
 ---
 name: rust-idioms
 description: >-
-  Type-driven design patterns for Rust: newtypes and smart constructors,
-  typestate, capability tokens, extension and sealed traits, RAII guards,
-  error design (thiserror/anyhow, error-as-data, panic policy), and generics
-  vs dyn vs enum dispatch. Use when designing Rust types or an API, or
-  reviewing Rust code, even without saying "idioms". Lead each finding with
-  the most specific @oop term.
+  Type-driven Rust design: newtypes, smart constructors, typestate, capability
+  tokens, extension and sealed traits, RAII, error design, dispatch choice.
+  Triggers: Rust types or API design and review; lead findings with @oop
+  terms.
 ---
 
 # Rust idioms: encode the domain in types

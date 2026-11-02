@@ -1,6 +1,10 @@
 ---
 name: workflows
-description: The task-to-subagent routing table and the concrete workflow procedures for the orchestrator agent, as state machines in `reference/`. Use when acting as orchestrator and about to route a piece of work, or when a task does not obviously fit a named workflow. Delegation rules live in @orchestrate.
+description: >-
+  The task-to-subagent routing table and per-workflow procedures for the
+  orchestrator, as state machines in `reference/`. Triggers: orchestrator
+  routing, a task that fits no named workflow. Delegation rules in
+  @orchestrate.
 ---
 
 # workflows

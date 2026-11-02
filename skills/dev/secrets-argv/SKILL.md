@@ -1,12 +1,9 @@
 ---
 name: secrets-argv
 description: >-
-  Keep secrets out of process argv, which is world-readable via
-  /proc/<pid>/cmdline and ps, and is captured in shell history, audit logs,
-  and tool transcripts. Use when a command, task, or role passes a password,
-  token, or key as a flag value: stage it in a 0600 tempfile, a protected
-  config file, or stdin instead. Covers Ansible, raw shell, and curl. Not
-  for secrets in config, env, or logs (see @logging-guidelines).
+  Keep secrets out of process argv, which /proc, ps, shell history, and audit
+  logs expose. Stage them in a 0600 file, protected config, or stdin.
+  Triggers: password or token passed as a flag. Ansible, shell, curl.
 ---
 
 # secrets-argv

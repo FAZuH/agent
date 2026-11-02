@@ -1,12 +1,9 @@
 ---
 name: readme
 description: >-
-  Standardize a README.md to FAZuH's house style: centered title + tagline + hr +
-  centered outline nav, section ordering of Installation → Preview → Usage at the top and
-  Docs → License at the bottom, and proper placement of user vs developer
-  documentation. Use when the user asks to improve a README, mentions README.md,
-  asks for README structure, or wants the FAZuH readme style. Also use when
-  creating a new repo's README or reviewing an existing one for style compliance.
+  Standardize a README.md to FAZuH's house style: centered title, tagline,
+  nav; Installation, Preview, Usage on top; Docs, License at the bottom.
+  Triggers: README structure, house style, new repo README.
 ---
 
 # readme

@@ -1,6 +1,9 @@
 ---
 name: pr-watchmerge
-description: Watch a pull request's CI checks to completion and merge it as soon as they pass. Use whenever the user says "watch the PR and merge it", "merge once green", "watch CI then merge", "merge after checks pass", or wants a PR merged on success without manual review. Not for PR creation (pr-creator) or review (code-review).
+description: >-
+  Watch a PR's CI checks to completion and merge as soon as they pass.
+  Triggers: watch the PR and merge, merge once green, watch CI then merge. Not
+  PR creation or review.
 ---
 
 # PR watch-and-merge

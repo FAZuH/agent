@@ -1,14 +1,9 @@
 ---
 name: self-improve
 description: >-
-  Run the agent self-improvement loop: mine the session, propose and gate
-  friction entries, validate with skill-doctor, then sweep the backlog and
-  apply approved improvements. Use when the user says "self-improve", "a
-  retro/doctor check", "what is in the improvement backlog", "how did this
-  session go", "what did we learn", "capturing lessons before finishing",
-  "sweep the backlog", "apply the friction entries", "improve your
-  skills/agents", "anything to improve", or wants to act on a filed
-  agent-behavior lesson.
+  Agent self-improvement loop: mine the session, propose and gate friction
+  entries, validate with skill-doctor, sweep and apply the backlog. Triggers:
+  self-improve, retro, how did this session go, what did we learn.
 ---
 
 # Self-improve

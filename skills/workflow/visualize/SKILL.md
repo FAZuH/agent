@@ -1,6 +1,9 @@
 ---
 name: visualize
-description: "Create one correct, minimal visual artifact when a picture materially improves an explanation. Use for structural or spatial ideas in chat, notes, documentation, or lessons: dependency graphs, system flows, sequences, state machines, trees, comparisons, coordinate geometry, number lines, vectors, plots, and physical layouts. Delegates rendering and visual verification to a maker subagent, then returns a usable image."
+description: >-
+  Create one correct, minimal visual when a picture materially helps: graphs,
+  flows, sequences, state machines, trees, comparisons, geometry, plots,
+  layouts. Delegates rendering and visual checking to a maker subagent.
 ---
 
 # Visualize

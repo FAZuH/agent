@@ -1,6 +1,9 @@
 ---
 name: omarchy-plugin-install
-description: Install an Omarchy shell plugin end-to-end from a repo URL, starting with a malware audit delegated to the malware-check subagent, then omarchy plugin add, bar placement, hotkey and script setup, keybind file edit, old-tool removal, and dotfiles sync. Use when the user asks to install, add, or set up an Omarchy plugin.
+description: >-
+  Install an Omarchy shell plugin end to end from a repo URL: malware audit,
+  `omarchy plugin add`, bar placement, hotkey and script, keybinds, dotfiles
+  sync. Triggers: install, add, or set up an Omarchy plugin.
 ---
 
 # omarchy-plugin-install

@@ -1,12 +1,9 @@
 ---
 name: ocv2-compact
 description: >-
-  Compact an OpenCode v2 session. Trigger compaction and wait for the summary.
-  Use when the user asks to compact a session (the current one or a fork), a
-  context-watch warning fires on a session you manage, or the @session
-  compaction gate auto-resolves. Covers POST /api/session/{id}/compact,
-  polling the compaction message, and what compaction does and does not do to
-  history.
+  Compact an OpenCode v2 session and wait for the summary. Covers POST
+  /api/session/{id}/compact, polling, and what compaction keeps. Triggers:
+  compact this session, context-watch warning, compaction gate.
 ---
 
 # Compact an OpenCode v2 session

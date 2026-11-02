@@ -1,6 +1,10 @@
 ---
 name: deep-research
-description: Investigate one external fact against primary sources and record the findings as a single cited Markdown file under `docs/research/`. Use when a decision waits on a library, API, or version fact, or when reading legwork should be delegated to a subagent. The opencode-execution form of the upstream `research` skill; use it whenever you would otherwise use @research.
+description: >-
+  Investigate one external fact against primary sources and write one cited
+  Markdown file under `docs/research/`. Triggers: a decision awaits a library,
+  API, or version fact, or reading legwork should be delegated. Replaces
+  @research.
 ---
 
 Deep research delegated to the `research-discovery` **subagent**. Keep working while it reads; it reports back only the file path.

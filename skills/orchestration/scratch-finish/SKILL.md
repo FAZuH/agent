@@ -1,12 +1,9 @@
 ---
 name: scratch-finish
 description: >-
-  Archive a completed `.scratch/` session workspace: run the completion
-  checklist, append an Outcome section, move the spec to `.scratch/complete/`,
-  mark tickets resolved, delete the stale checkpoint. Load when a workspace's
-  work has finished, or from any skill that completes one
-  (finish, session, worktree). The `.scratch/` layout and slug format
-  live in the @scratch skill.
+  Archive a finished `.scratch/` workspace: completion checklist, Outcome
+  section, spec to `.scratch/complete/`, resolve tickets, drop the checkpoint.
+  Layout lives in @scratch. Triggers: workspace work finished.
 ---
 
 # Archive a completed `.scratch/` workspace

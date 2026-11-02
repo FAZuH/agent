@@ -1,11 +1,9 @@
 ---
 name: design-tradeoffs
 description: >-
-  Compare 3-5 design options on named dimensions, present the comparison as
-  a table, and recommend one with the signal that would change the answer.
-  Use when the user asks about options, tradeoffs, pros/cons, comparing
-  alternatives, deciding between approaches, or weighing architecture,
-  technology, implementation, UI, or API design.
+  Compare 3-5 design options on named dimensions, tabulate them, and recommend
+  one with the signal that would flip the answer. Triggers: options,
+  tradeoffs, pros/cons, deciding between approaches.
 ---
 
 # Design Tradeoffs

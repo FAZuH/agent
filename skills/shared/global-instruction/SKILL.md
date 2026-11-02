@@ -1,6 +1,10 @@
 ---
 name: global-instruction
-description: The common, machine-agnostic operating rules for every session: the skills that must always load, the working habits, shell discipline, and the friction contract. Load this first in every session; the host AGENTS.md names it. Use when the user says "global instructions", when a rule's full text is needed rather than the host one-liner, or in any repo whose AGENTS.md points here.
+description: >-
+  Machine-agnostic rules for every session: mandatory skill loads, working
+  habits, shell discipline, friction contract. Load first in every session.
+  Triggers: global instructions, full rule text, a repo AGENTS.md pointing
+  here.
 ---
 
 # Global Instruction

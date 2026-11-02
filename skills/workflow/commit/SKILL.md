@@ -1,6 +1,9 @@
 ---
 name: commit
-description: Plan commit grouping and propose one conventional commit message per logical group, without committing. Use whenever the user asks to commit, group changes, check what would commit, review staged diffs, or write commit messages, even when they do not name this skill. Proposes the groups and hands them to the orchestrator; never runs git add/commit/push itself.
+description: >-
+  Plan commit grouping and propose one conventional commit message per logical
+  group, without committing. Never runs git add, commit, or push. Triggers:
+  commit, group changes, staged diffs, commit messages.
 ---
 
 # Commit

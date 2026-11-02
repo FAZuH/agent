@@ -1,13 +1,10 @@
 ---
 name: app-paths
 description: >-
-  Resolve per-application directory paths (config, data, cache, state)
-  through one precedence ladder: CLI flag > env var > config file > platform
-  default. Use when writing or reviewing code that locates a config file,
-  stores app data, picks a cache directory, or needs config/env/CLI
-  overrides for a path. Covers the dirs and directories crates, XDG
-  semantics, and injecting paths in tests instead of writing to the real
-  home directory.
+  Resolve per-app config, data, cache, and state paths: CLI flag > env >
+  config > platform default. Covers dirs/directories crates, XDG, and
+  injecting paths in tests. Triggers: config or data paths, cache dirs, path
+  overrides.
 license: MIT
 ---
 

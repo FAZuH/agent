@@ -1,6 +1,10 @@
 ---
 name: setup-dev-docs
-description: Bootstrap, audit, or update the repo's durable developer docs under docs/dev/ (index, development, testing, architecture, operations). Use ONLY when the user explicitly asks to set up or bootstrap docs/dev, audit or check the developer docs for stale content, or update one named docs/dev page. Never during ordinary feature work.
+description: >-
+  Bootstrap, audit, or update the repo's developer docs under docs/dev/
+  (index, development, testing, architecture, operations). Triggers: set up
+  docs/dev, check for stale docs, update one named page. Never during feature
+  work.
 ---
 
 # setup-dev-docs

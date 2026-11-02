@@ -1,6 +1,10 @@
 ---
 name: agent-map
-description: Pick the installed skill, agent, plugin, command, or CLI for a task, and search outside the install when nothing fits. Inventories everything install.sh deploys (all tags plus bonuses). Use when routing a task, deciding what to load, or asking "is there a tool for X".
+description: >-
+  Pick the installed skill, agent, plugin, command, or CLI for a task, and
+  search outside the install when nothing fits. Inventories everything
+  install.sh deploys. Triggers: routing a task, what to load, is there a tool
+  for X.
 ---
 
 # Agent Map

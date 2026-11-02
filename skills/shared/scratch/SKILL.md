@@ -1,13 +1,9 @@
 ---
 name: scratch
 description: >-
-  The `.scratch/` session workspace mechanics: the date-prefixed slug format,
-  the directory layout, and the spec → execute → archive lifecycle. Load this
-  whenever a `.scratch/` workspace is involved: creating, resuming, or
-  completing one, or from any skill that needs the mechanics (session,
-  finish, worktree). What goes *inside* the workspace lives
-  in the @session skill; the completion checklist and archive steps live in
-  the @scratch-finish skill.
+  The `.scratch/` workspace mechanics: date-prefixed slug, directory layout,
+  spec, execute, archive lifecycle. Triggers: creating, resuming, or
+  completing a workspace. Content in @session, closeout in @scratch-finish.
 ---
 
 # scratch

@@ -1,6 +1,9 @@
 ---
 name: scheduled-agent
-description: Schedule an unattended OpenCode agent run on a systemd user timer, and write the restricted deny-all-by-default agent definition it needs. Use when the user asks to run an agent automatically, on a timer, headlessly, or to set up `opencode run` automation. Timer mechanics (the octask CLI, OnCalendar, listing, removal) live in the @scheduled-task skill.
+description: >-
+  Schedule an unattended OpenCode agent run on a systemd user timer, plus the
+  restricted deny-all agent definition it needs. Timer mechanics live in
+  @scheduled-task. Triggers: run an agent automatically, on a timer, headless.
 ---
 
 # scheduled-agent

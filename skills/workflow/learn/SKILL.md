@@ -1,6 +1,9 @@
 ---
 name: learn
-description: Teach the user anything so it actually locks in and is understood, not just memorized. Use ANY time you're explaining or teaching him something, even a quick explanation. Built on two teaching principles he has personally verified over years.
+description: >-
+  Teach the user anything so it locks in and is understood, not memorized.
+  Triggers: any explanation or teaching moment, even a quick one. Built on two
+  teaching principles he has verified over years.
 ---
 
 # Teaching

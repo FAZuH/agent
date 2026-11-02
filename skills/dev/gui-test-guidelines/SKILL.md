@@ -1,14 +1,9 @@
 ---
 name: gui-test-guidelines
 description: >-
-  Write, review, or triage GUI/UI and E2E tests: Playwright, Cypress,
-  Selenium, WebDriver, Appium, Testing Library, page objects, Screenplay,
-  locators, visual regression, a11y (axe-core, WCAG), and native desktop
-  toolkits (Tauri, Dioxus, Iced, egui). Use whenever the user asks about UI
-  tests or E2E tests, and for "testing trophy", "testing pyramid", "testing
-  diamond", or "self-healing selectors". Do NOT write GUI tests blindly:
-  consult these guidelines and reference them. For unit and integration
-  tests load @test-guidelines.
+  Write, review, or triage GUI/E2E tests: Playwright, Cypress, Selenium,
+  Appium, Testing Library, a11y, visual regression, native toolkits. Unit
+  tests: @test-guidelines. Triggers: UI tests, E2E, testing trophy/pyramid.
 ---
 
 # GUI Testing Guidelines
