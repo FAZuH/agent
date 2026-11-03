@@ -29,7 +29,8 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
      `hook_risk` gate on bash/edit/write, plus `/jev-status`, `/jev-model`,
      `/jev-endpoint`, `/jev-log`. No jev tools exist.
    - `/dispatch <task>` — background subagent, same session. `/aside <q>` —
-     fork this session and ask in the fork.
+     fork this session and ask in the fork (`aside_ask`; the fork answers with
+     `aside_report`).
    - `/finish` (end-session workflow), `/gate` (auto/interactive mode),
      `/status-report`, `/imagescan-*` (ten screenshot commands).
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
@@ -138,7 +139,8 @@ instead of silently changing scope.
   hook (gates bash/edit/write, the only blocking path);
   settings in `jev-state.json`, logs in `jev-calls.jsonl`.
 - **dispatch**: `/dispatch` background subagent.
-- **aside**: `/aside` fork-and-ask.
+- **aside**: `/aside` fork-and-ask; agents use `aside_ask`, the fork answers
+  with `aside_report`.
 
 ### Commands
 
