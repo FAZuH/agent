@@ -1,6 +1,9 @@
 ---
 name: external-skills
-description: Install, update, list, or remove upstream-owned (External class) agent skills via the `skills` CLI into `~/.agents/skills`. Use when the user asks to install, add, update, or remove a third-party skill, mentions `npx skills add`, or names a GitHub skill repo to set up.
+description: >-
+  Install, update, list, or remove upstream-owned (External) skills with the
+  `skills` CLI into ~/.agents/skills. Triggers: third-party skill, `npx skills
+  add`, a GitHub skill repo.
 ---
 
 # External Skills

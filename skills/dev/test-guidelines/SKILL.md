@@ -2,13 +2,8 @@
 name: test-guidelines
 description: >-
   Write, review, or critique unit and integration tests: falsifiability,
-  isolation, determinism, AAA structure, the Meszaros doubles taxonomy,
-  mocking rules, anti-patterns, and coverage. Use whenever the user asks
-  about tests, testing strategy, TDD, coverage, assertions, mocks, stubs, or
-  fixtures, and for "flaky tests", "mutation testing", or "property-based
-  testing". Do NOT write tests blindly: consult these guidelines and
-  reference them. For GUI, browser, or native-desktop tests load
-  @gui-test-guidelines.
+  isolation, determinism, AAA, doubles taxonomy, mocking, coverage. Triggers:
+  tests, TDD, flaky, mutation, property-based. GUI: @gui-test-guidelines.
 ---
 
 # Test Writing Guidelines

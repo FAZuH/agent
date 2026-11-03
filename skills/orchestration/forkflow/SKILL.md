@@ -1,12 +1,10 @@
 ---
 name: forkflow
 description: >-
-  Run warm per-ticket delegation with OpenCode v2 session forks: probe fork
-  capabilities, fork a completed session at a boundary, switch the child
-  agent before its first prompt, send a focused task prompt, poll its outcome,
-  and read the result. Fall back to a fresh subagent when fork support is
-  unavailable. Use for orchestrated research-to-implementation or review/test
-  handoffs; not a replacement for @session or @setup-dev-docs.
+  Per-ticket delegation over OpenCode v2 session forks: probe, fork at a
+  boundary, switch agent, send a focused prompt, poll, read. Falls back to a
+  fresh subagent. Triggers: research-to-implementation, review or test
+  handoffs.
 ---
 
 # forkflow

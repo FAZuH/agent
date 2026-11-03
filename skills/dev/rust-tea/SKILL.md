@@ -1,12 +1,9 @@
 ---
 name: rust-tea
 description: >-
-  The Elm Architecture (TEA/MVU) for Rust, renderer-agnostic: Model state,
-  exhaustive Message enums, one pure Update, pure View, declarative Effects,
-  and a Host owning the event loop. Use whenever the user mentions TEA, Elm
-  architecture, MVU, model-message-update-view, state-machine UI, Rust GUI
-  or TUI architecture, iced, ratatui/crossterm, or asks to scaffold, extend,
-  or review a Rust UI app, even without saying "TEA".
+  Elm Architecture (TEA/MVU) for Rust, renderer-agnostic: Model, Message, pure
+  Update, View, Effects, Host. Triggers: TEA, MVU, state-machine UI, iced,
+  ratatui, Rust GUI or TUI.
 ---
 
 # Rust TEA: The Elm Architecture in Rust

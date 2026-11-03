@@ -1,11 +1,9 @@
 ---
 name: terse
 description: >-
-  Keep docs and comments terse: delete any sentence the reader can lose
-  without losing a fact, constraint, decision, number, path, or safety rule.
-  Use when writing or editing docs, skill docs, ADRs, runbooks, or code
-  comments, and when cleaning verbose prose. Never for chat replies (owned
-  by @simple-english).
+  Delete any doc or comment sentence lacking a fact, constraint, number, path,
+  or safety rule. Triggers: writing, editing, or de-slopping docs, ADRs,
+  runbooks, code comments. Not chat (@simple-english).
 ---
 
 # Terse docs and comments

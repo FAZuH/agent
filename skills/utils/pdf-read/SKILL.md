@@ -1,6 +1,9 @@
 ---
 name: pdf-read
-description: Parse and read PDF files, and extract structured data (tables, text, columns) from them. Use when the user asks to read a PDF, pull data out of one, or search a PDF for a keyword. Covers table extraction via pdfplumber, keyword search via ripgrep-all (rga), OCR for scans, and image rendering plus vision for any layout.
+description: >-
+  Parse and read PDFs, extracting structured data (tables, text, columns).
+  Covers pdfplumber tables, ripgrep-all keyword search, OCR for scans, render
+  plus vision. Triggers: read a PDF, pull data from one, search a PDF.
 license: MIT
 ---
 

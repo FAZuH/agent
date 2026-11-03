@@ -1,6 +1,9 @@
 ---
 name: notes
-description: Read and maintain durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behavior. Use when a task depends on prior host knowledge, a digest or automation has standing instructions, a tool has quirks to remember, or a skill points to an OpenCode v2 finding. The note file defines its own update rules.
+description: >-
+  Read and maintain durable notes on tools, CLIs, APIs, scheduled agents, and
+  OpenCode behavior. Triggers: a task needs prior host knowledge, standing
+  instructions, a tool quirk, an OpenCode v2 finding.
 ---
 
 # Notes

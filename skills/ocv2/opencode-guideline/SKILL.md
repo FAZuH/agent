@@ -1,18 +1,10 @@
 ---
 name: opencode-guideline
 description: >-
-  OpenCode v2 operations reference: the HTTP API, models, plugin authoring,
-  plugin loading health, and session forking and control. Use when the user
-  says "call the API", "opencode2 api", "where are the API docs", "how do I
-  fork/switch model via API", pastes an OpenAPI path, "pick a model", "use a
-  free model", "Insufficient account funds", "a plugin is not loading", "a
-  PluginSupervisor / ResolveMessage / SchemaError trace appears", "is my plugin
-  loaded", "add a plugin", "add a tool", "an execute.before hook", "a slash
-  command", "a TUI panel or dialog", "wiring settings", "a tool returns the
-  wrong shape", "a hook does not fire", "a command is shadowed or duplicated",
-  "a dialog does not open", "the plugin types and the runtime disagree", "fork
-  this session", "fork before this message", "switch the model/agent in the
-  fork", or asks what models opencode2 offers.
+  OpenCode v2 operations: HTTP API, models, plugin authoring and load health,
+  session forking and control. Triggers: opencode2 api, API docs, fork a
+  session, pick or switch model, free model, plugin not loading, wrong tool or
+  hook shape, TUI panels, slash commands.
 ---
 
 # opencode-guideline

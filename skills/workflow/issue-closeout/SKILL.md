@@ -1,6 +1,10 @@
 ---
 name: issue-closeout
-description: "Connect merged work back to the issues it resolved: one comment per issue naming the PR, merge SHA, and the commits that addressed it, then close what the work fully resolves. Use after merging a PR, by hand or via pr-watchmerge, and whenever a session's commits resolve tracked issues. Required on non-default merge bases, where GitHub's `Closes #N` auto-close silently fails."
+description: >-
+  Link merged work to the issues it resolved: one comment per issue naming the
+  PR, merge SHA, and commits, then close what is fully resolved. Required on
+  non-default merge bases where `Closes #N` auto-close fails. Triggers: after
+  a merge.
 ---
 
 # Issue closeout

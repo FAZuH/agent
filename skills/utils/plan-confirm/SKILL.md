@@ -1,6 +1,9 @@
 ---
 name: plan-confirm
-description: Present a large confirmation list grouped as accepted / rejected / undecided with one line per item. Use when a plan, audit, or proposal has enough items to need confirming and the user picks which groups proceed.
+description: >-
+  Present a large confirmation list grouped accepted, rejected, undecided, one
+  line per item. Triggers: a plan, audit, or proposal with items the user
+  confirms by group.
 ---
 
 # Plan Confirm

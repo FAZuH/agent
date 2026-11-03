@@ -1,6 +1,9 @@
 ---
 name: review-agent
-description: Review a diff, a single file, or another agent definition along two axes (Standards and Spec), then hand the fixes off. Runs inside the permission-scoped `review` subagent, so the reviewer can read everything and change nothing. Use for "review since X", "review this branch/PR", "review this agent", "review this workflow".
+description: >-
+  Review a diff, file, or agent definition on Standards and Spec, then hand
+  off the fixes. Runs in the read-only `review` subagent. Triggers: review
+  since X, review this branch, PR, agent, or workflow.
 ---
 
 # review-agent

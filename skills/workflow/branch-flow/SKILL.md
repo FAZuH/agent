@@ -1,6 +1,9 @@
 ---
 name: branch-flow
-description: The repository branch flow. Main is the unstable integration line, release is the stable published line, and a [no ci] marker on a merge to main queues work without shipping it. Use when creating a branch, opening a PR, deciding what merges where, cutting a release, or handling a hotfix. Covers the [no ci] gate, the release trigger commit, the merge-commit policy, and why there is no dev branch.
+description: >-
+  The repo branch flow: main is the unstable integration line, release the
+  stable published line, and a [no ci] merge queues work without shipping.
+  Triggers: create a branch, open a PR, what merges where, release, hotfix.
 license: MIT
 ---
 

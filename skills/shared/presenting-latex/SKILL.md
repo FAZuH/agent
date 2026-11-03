@@ -1,6 +1,9 @@
 ---
 name: presenting-latex
-description: Format math so chat and Obsidian render it: inline \(...\), display as multiline $$ on own lines with a blank line before. Use when writing LaTeX, MathJax, equations, or teaching math.
+description: >-
+  Format math for chat and Obsidian: inline \(...\), display as multiline $$
+  on their own lines with a blank line before. Triggers: LaTeX, MathJax,
+  equations, teaching math.
 ---
 
 # presenting-latex

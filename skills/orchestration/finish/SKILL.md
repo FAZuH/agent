@@ -1,6 +1,9 @@
 ---
 name: finish
-description: "End a working session: update the relevant docs, load @commit, archive a completed `.scratch/` workspace, summarize the session, suggest next steps, then load @self-improve. Use when wrapping up a session or when the user asks to finish or commit the session's work. It never runs `git add`/`git commit` itself."
+description: >-
+  End a working session: update docs, load @commit, archive the `.scratch/`
+  workspace, summarize, suggest next steps, load @self-improve. Triggers: wrap
+  up, finish or commit the session. Never runs git add or commit.
 ---
 
 # Finish a session

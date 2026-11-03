@@ -1,13 +1,10 @@
 ---
 name: changelog
 description: >-
-  Create or update the changelog for the next version by comparing the current
-  commit against the latest version, following the repo's own changelog docs.
-  Loads and follows `docs/dev/changelog.md` and other docs under `docs/dev/`.
-  If `docs/dev/changelog.md` does not exist, the repo does NOT support manual
-  changelog creation, so report and stop. Use when the user asks to write or
-  update the changelog, draft release notes, prepare the next version's
-  CHANGELOG.md, or mentions `docs/dev/changelog.md`.
+  Create or update the changelog for the next version from the current commit,
+  following the repo's own `docs/dev/changelog.md`. Without that file the repo
+  has no manual changelog support: report and stop. Triggers: changelog,
+  release notes.
 ---
 
 # Create the next version's changelog

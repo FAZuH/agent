@@ -1,14 +1,10 @@
 ---
 name: long-horizon
 description: >-
-  Keep multi-hour or overnight work moving while the orchestrator session
-  idles: scaffold a resume-safe rig, supervisor that health-gates and
-  restarts workers, external heartbeat that wakes the idle orchestrator via
-  the session API, sentinel files with a Discord watcher, progress-file
-  resume protocol, clean stand-down and re-arm. Use when the user says "run
-  this overnight", "keep going while I sleep", "don't 100% stop, detect
-  progress", asks for a watchdog or keep-alive, or before launching any
-  unattended fleet of forked children or long background jobs.
+  Keep multi-hour or overnight work running while the orchestrator idles:
+  resume-safe rig, health-gated supervisor, external heartbeat, sentinels,
+  progress-file resume, stand-down. Triggers: run overnight, keep going while
+  I sleep, watchdog.
 ---
 
 # Long-horizon runs

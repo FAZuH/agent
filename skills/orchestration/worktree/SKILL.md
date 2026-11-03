@@ -1,15 +1,9 @@
 ---
 name: worktree
 description: >-
-  Work on a feature/branch inside a separate git worktree so the main working
-  tree stays clean: create it, finish the branch, then remove it. Use when the
-  user says "start a new worktree", "work on this in a worktree", "spin up a
-  worktree", "create a worktree", "work on a branch", "start a new isolated
-  task", "finish a worktree", "finish and clean up the worktree", "prepare its
-  PR for merge", "close the worktree", "merge and remove the worktree", or
-  names worktree-new, worktree-close, or worktree-finish. Keeps untracked
-  project files (like .scratch/) on the main project dir so they survive
-  worktree creation and cleanup.
+  Work a feature or branch in a separate git worktree so the main tree stays
+  clean: create, finish, remove. Keeps untracked files like `.scratch/` on the
+  main project. Triggers: start or work on a worktree, close the worktree.
 ---
 
 # Worktree branch work

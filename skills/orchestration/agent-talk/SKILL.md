@@ -1,6 +1,9 @@
 ---
 name: agent-talk
-description: Message another running agent session over the OpenCode v2 API and read its answer. Use when a worker must answer a question mid-task, when a worker's report would otherwise never reach you, or when two agents hand work back and forth.
+description: >-
+  Message another running agent session over the OpenCode v2 API and read its
+  answer. Triggers: a worker must answer mid-task, a report would otherwise
+  never reach you, agents handing work back and forth.
 ---
 
 # agent-talk

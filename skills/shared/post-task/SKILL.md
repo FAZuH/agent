@@ -1,6 +1,10 @@
 ---
 name: post-task
-description: Close a finished task, procedure, or investigation with a fixed report - Completed, Deviations, Hiccups, Failed / skipped, Next, and the open prompts (🏁 procedures, ❓ questions) at the bottom. Use at the end of any multi-step piece of work, whenever a procedure says to report, and whenever the user asks what happened, what broke, or what is left. Not for a mid-task status update, and not for a simple question that a few sentences answer.
+description: >-
+  Close a finished task, procedure, or investigation with the fixed report:
+  Completed, Deviations, Hiccups, Failed/skipped, Next, open prompts.
+  Triggers: end of multi-step work, what happened, what broke. Not a status
+  update.
 ---
 
 # post-task

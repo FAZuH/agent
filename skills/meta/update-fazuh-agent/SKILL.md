@@ -1,6 +1,9 @@
 ---
 name: update-fazuh-agent
-description: Update this OpenCode setup to the latest state of the agent repository, by pulling the checkout and redeploying skills, agents, plugins, and commands to the global config. Use when the user says update the agent, pull the latest, sync my setup, refresh the config, upgrade the skills, or asks whether the installed setup is current.
+description: >-
+  Update this OpenCode setup from the agent repo: pull the checkout, redeploy
+  skills, agents, plugins, commands. Triggers: update the agent, sync my
+  setup, refresh the config, is it current.
 ---
 
 # Update fazuh agent

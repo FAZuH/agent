@@ -108,17 +108,27 @@ question in the fork, and reports back to the session that asked. The fork
 keeps full history and stays open for follow-ups, unlike `/btw` which answers
 once in place. In the TUI the view moves to the fork; on hosts with no TUI
 module (desktop, API, mini) the fork id is in the reply. One name, one
-owner: the server plugin owns the command, so it works on every host.
+owner: the server plugin owns the command and both tools, so they work on
+every host.
 
-The session that asked hears about the fork once, when the fork starts. That
-notice labels the question as the fork's task, so the asking session does not
-read it as its own instructions. The answer comes back on the fork's own
-initiative: the ask prompt tells the fork to post its report to the asking
-session over the API, tagged as `<aside state="completed">`, so the fork
-curates what that session gets to read.
+The question reaches the fork inside `<question>` tags, so the fork can tell
+the user's words from the plugin's own instructions around them. The session
+that asked hears about the fork once, when the fork starts. That notice
+labels the question as the fork's task, so the asking session does not read
+it as its own instructions.
+
+The answer comes back on the fork's own initiative through the `aside_report`
+tool: the fork calls it once the question is answered, and it arrives here
+wrapped in `<aside state="completed">` tags, so the fork curates what that
+session gets to read. `/aside-silent` never asks for a report.
 
 - **`/aside <question>`**: fork, ask, and tell this session the fork exists.
-- **`/aside-silent <question>`**: fork and ask, with no notice here.
+- **`/aside-silent <question>`**: fork and ask, with no notice and no report.
+- **`aside_ask`** (`question`, `silent?`): the same fork from an agent turn,
+  so the agent does not block while the fork works.
+- **`aside_report`** (`text`): send the answer back. Only works inside a fork
+  this plugin made.
+
 
 ## tell (`fazuh.tell`)
 

@@ -1,6 +1,10 @@
 ---
 name: scheduled-task
-description: Manage scheduled tasks on this machine through systemd user timers ONLY (`systemctl --user`), never crontab. Use when the user asks to schedule something, run every X, a cron job, a recurring or background task, a systemd timer, backup/sync automation, or asks what is scheduled and when it next runs. Owns the octask CLI, OnCalendar expressions, and the octask- unit prefix. See @scheduled-agent for unattended agent runs.
+description: >-
+  Manage scheduled tasks with systemd user timers only (`systemctl --user`),
+  never crontab. Owns octask, OnCalendar, and the octask- prefix. Triggers:
+  schedule something, every X, cron, recurring task, what is scheduled.
+  Agents: @scheduled-agent.
 ---
 
 # scheduled-task

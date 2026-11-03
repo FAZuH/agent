@@ -1,14 +1,9 @@
 ---
 name: orchestrate
 description: >-
-  The orchestrator role: manage tasks and delegate to subagents towards a
-  goal. Load when starting or resuming orchestration, when an agent needs its
-  orchestrator role restated mid-session, before every subagent delegation or
-  routing decision, or when the user says "orchestrate", "delegate this",
-  "route this", "act as the orchestrator", or reminds you of your role. Owns
-  the role, permissions, delegation rules, subagent session reuse, and run
-  mode; the task-to-subagent routing table and concrete workflows live in
-  @workflows.
+  The orchestrator role: manage tasks, delegate to subagents, own permissions,
+  subagent session reuse, and run mode. Routing table lives in @workflows.
+  Triggers: orchestrate, delegate this, route this, act as orchestrator.
 ---
 
 # orchestrate
@@ -81,6 +76,11 @@ ticket/increment, a re-run, a re-review, or a follow-up on its own report).
 Resume eagerly: no hop limit. The `context-watch` plugin warns on usage and the
 child's own auto-compaction handles growth, so a long session is not a reason
 to re-spawn.
+
+If a foreground resume aborts (`subagent` tool error mid-call), relaunch the
+same resume with `background: true` — background launch survives; on
+2026-10-22 three foreground resumes aborted in a row where the background
+relaunch of the identical call succeeded.
 
 SPAWN FRESH (omit `sessionID`) only when the task calls for it:
 

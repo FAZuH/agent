@@ -1,12 +1,9 @@
 ---
 name: pdf-write
-description: >
-  Build or assemble a PDF, then prove the result looks right. Authoring: a
-  Markdown paper, report, or assignment write-up through Pandoc and LaTeX, LaTeX
-  math inside Markdown, Mermaid diagrams, or a build that came out wrong.
-  Assembling: images or scans to PDF, merging several PDFs into one submission,
-  making page widths agree across the merged file, or re-merging after one part
-  changed. Use whenever the request ends in a .pdf file.
+description: >-
+  Build or assemble a PDF and prove it renders: Markdown to Pandoc and LaTeX,
+  Mermaid diagrams, images to PDF, merging with matching page widths.
+  Triggers: any request that ends in a .pdf file.
 license: MIT
 ---
 

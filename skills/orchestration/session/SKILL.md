@@ -1,17 +1,9 @@
 ---
 name: session
 description: >-
-  Manage a feature's session workspace under .scratch/: the plan/spec doc,
-  tickets, deviation log, log sections, per-ticket context packet, and
-  pre-compaction checkpoints. Use when starting a multi-step task and writing
-  an initial plan, resuming after a session fork or compaction, persisting
-  state before compaction, logging deviations, drafting a spec and splitting
-  it into tickets, or to create or refresh the per-ticket context packet (the
-  context packet a worker needs), or when the context is getting full and a
-  resume checkpoint must survive a compaction. Not a durable knowledge store:
-  @setup-dev-docs owns docs/dev/. The `.scratch/` layout, slug format, and
-  lifecycle live in the @scratch skill; the checkpoint, log-section, and
-  context-packet templates live here.
+  Manage a feature's `.scratch/` workspace: spec, tickets, deviations log,
+  context packet, pre-compaction checkpoints. Layout in @scratch. Triggers:
+  multi-step plan, resume after fork or compaction, spec split into tickets.
 ---
 
 # session
