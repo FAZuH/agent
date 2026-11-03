@@ -1,3 +1,16 @@
+## [0.14.2](https://github.com/FAZuH/agent/compare/v0.14.1...v0.14.2) (2026-11-03)
+
+
+### Features
+
+* **plugin:** let agents fork with aside and report back by tool ([2618fe6](https://github.com/FAZuH/agent/commit/2618fe64558ff6d0ebe189fc3d1c9affc37a92be))
+
+
+### Bug Fixes
+
+* **skill:** sweep lessons — upsert recipe, gh timeout, background resume ([95f0537](https://github.com/FAZuH/agent/commit/95f0537d1d319732a3a2b5dcf6fa76a0cb6ceb8d))
+* **sync:** skip stale prune on top-filtered pushes (-t) ([d44dc34](https://github.com/FAZuH/agent/commit/d44dc34d1ba180d61923da3301f772da46ceb8fd))
+
 ## [0.14.1](https://github.com/FAZuH/agent/compare/v0.14.0...v0.14.1) (2026-10-22)
 
 
@@ -59,6 +72,4 @@
 
 * **plugin:** judge the shell tool under the name v2 reports ([bf82d2c](https://github.com/FAZuH/agent/commit/bf82d2cafbd1bf33971cd6500d06461a95affd89))
 * **plugin:** resolve the optimizer's model instead of sending none ([6a3a7f9](https://github.com/FAZuH/agent/commit/6a3a7f9e8b1e9619e6aae30f345a028b4953cd4e))
-
-## [0.13.17](https://github.com/FAZuH/agent/compare/v0.13.16...v0.13.17) (2026-10-13)
 
