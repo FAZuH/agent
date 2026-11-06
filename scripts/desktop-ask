@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# desktop-ask — arm one session for screenshots, then send the keybind.
+# The plugin owns capture and framing; this only calls its RPC.
+set -uo pipefail
+
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/desktop-ask"
+TARGET="$STATE_ROOT/target.json"
+APP="DesktopAsk"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  desktop-ask trigger [--region WxH|"X,Y WxH"] [--window] [--steer|--queue] [--ask TEXT] [--no-copy] [--quiet]
+  desktop-ask status
+  desktop-ask off
+  desktop-ask arm --session <id> [--region ...] [--steer] TEXT   (terminal arming)
+
+Arm from the agent (/desktop-ask <instruction>) or the desktop_ask_arm tool.
+The trigger captures the screen and prompts the armed session with the image.
+The answer is copied to the clipboard when the turn ends; --no-copy skips it.
+EOF
+}
+
+notify() { notify-send --app-name="$APP" "$@" 2>/dev/null || true; }
+die() { notify -u critical "desktop-ask" "$*"; printf 'desktop-ask: %s\n' "$*" >&2; exit 1; }
+say() { printf '%s\n' "$*"; }
+
+find_opencode() {
+  if [[ -n "${OPENCODE_BIN:-}" && -x "$OPENCODE_BIN" ]]; then printf '%s\n' "$OPENCODE_BIN"; return 0; fi
+  # The mise shim can spend minutes fetching before it runs; this checkout's
+  # own binary talks to the same service and starts in ~100 ms.
+  if [[ -x "$HOME/.opencode/bin/opencode" ]]; then printf '%s\n' "$HOME/.opencode/bin/opencode"; return 0; fi
+  if command -v opencode >/dev/null 2>&1; then command -v opencode; return 0; fi
+  return 1
+}
+
+OC="${OPENCODE_BIN:-}"
+[[ -n "$OC" ]] || OC="$(find_opencode)" || die "opencode is not installed"
+command -v jq >/dev/null 2>&1 || die "jq is not installed"
+
+# RPC_DIR is the location that owns the plugin instance to call. Trigger and
+# status take it from the target; arm uses the current directory.
+RPC_DIR=""
+rpc() { # <method> <json input>
+  local method="$1" body="${2:-{\}}" dir="$RPC_DIR"
+  local -a args=(api post "/api/rpc/desktop-ask/$method")
+  if [[ -z "$dir" && -f "$TARGET" ]]; then
+    dir="$(jq -r '.directory // empty' "$TARGET" 2>/dev/null)"
+  fi
+  [[ -n "$dir" ]] && args+=(--param "location[directory]=$dir")
+  local payload
+  payload="$(jq -nc --argjson input "$body" '{input:$input}')" || die "invalid request body"
+  args+=(-d "$payload")
+  "$OC" "${args[@]}" 2>&1
+}
+
+rpc_ok() { # <output>
+  [[ "$1" != *"HTTP "* && "$1" != *'"_tag":"RpcError"'* ]]
+}
+
+rpc_error_line() {
+  local first msg
+  first="$(printf '%s\n' "$1" | head -n 1)"
+  msg="$(printf '%s' "$first" | jq -r '.message // empty' 2>/dev/null)"
+  printf '%s\n' "${msg:-$first}"
+}
+
+read_target_field() { # <field>
+  [[ -f "$TARGET" ]] || return 0
+  jq -r --arg field "$1" '.[$field] // empty' "$TARGET" 2>/dev/null
+}
+
+cmd="${1:-status}"
+shift || true
+
+case "$cmd" in
+  trigger)
+    region=""
+    window=false
+    delivery=""
+    ask=""
+    copy=true
+    quiet=0
+
+    while (($#)); do
+      case "$1" in
+        --region) region="${2:-}"; shift 2 ;;
+        --region=*) region="${1#*=}"; shift ;;
+        --window) window=true; shift ;;
+        --steer) delivery="steer"; shift ;;
+        --queue) delivery="queue"; shift ;;
+        --ask) ask="${2:-}"; shift 2 ;;
+        --ask=*) ask="${1#*=}"; shift ;;
+        --no-copy) copy=false; shift ;;
+        -q|--quiet) quiet=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) die "unknown argument: $1" ;;
+      esac
+    done
+
+    [[ -f "$TARGET" ]] || die "no target armed. Run /desktop-ask <instruction> in the session to ask."
+
+    body="$(jq -nc \
+      --arg region "$region" \
+      --argjson window "$window" \
+      --argjson copy "$copy" \
+      --arg delivery "$delivery" \
+      --arg ask "$ask" '
+      {source:"keybind"}
+      + (if $region != "" then {region:$region} else {} end)
+      + (if $window then {window:true} else {} end)
+      + (if $copy then {} else {copy:false} end)
+      + (if $delivery != "" then {delivery:$delivery} else {} end)
+      + (if $ask != "" then {ask:$ask} else {} end)')"
+
+    out="$(rpc trigger "$body")"
+    rpc_ok "$out" || die "trigger failed: $(rpc_error_line "$out")"
+    data="$(printf '%s' "$out" | jq -c '.output // .' 2>/dev/null)"
+    [[ -n "$data" ]] || data="$out"
+    title="$(printf '%s' "$data" | jq -r '.title // .sessionID // "session"' 2>/dev/null)"
+    count="$(printf '%s' "$data" | jq -r '.trigger // "?"' 2>/dev/null)"
+    ((quiet)) || notify "Screenshot sent to $title (trigger $count)."
+    say "$data"
+    ;;
+
+  status)
+    if [[ ! -f "$TARGET" ]]; then
+      say "desktop-ask: no target armed."
+      exit 0
+    fi
+    out="$(rpc status '{}')"
+    if rpc_ok "$out"; then
+      printf '%s' "$out" | jq -r '.output // .' | jq -r '
+        if .armed then
+          "armed: \(.title // .sessionID) (\(.sessionID))",
+          "instruction: \(.instruction)",
+          "capture: \(.region // "full screen")",
+          "delivery: \(.delivery // "queue")",
+          "triggers: \(.triggers // 0)"
+          + (if .lastTriggerAt then "\nlast trigger: \(.lastTriggerAt)" else "" end)
+        else
+          "desktop-ask: no target armed."
+        end'
+    else
+      say "plugin RPC unavailable; reading $TARGET"
+      jq -r '
+        "armed: \(.title // .sessionID) (\(.sessionID))",
+        "instruction: \(.instruction)",
+        "capture: \(.region // "full screen")",
+        "delivery: \(.delivery // "queue")",
+        "triggers: \(.triggers // 0)"' "$TARGET"
+    fi
+    copy_log="$STATE_ROOT/last-copy.json"
+    if [[ -f "$copy_log" ]]; then
+      jq -r 'if .ok then "last copy: \(.chars) chars at \(.at)" else "last copy failed: \(.error) at \(.at)" end' "$copy_log" 2>/dev/null || true
+    fi
+    ;;
+
+  off|disarm)
+    was=0
+    [[ -f "$TARGET" ]] && was=1
+    rpc disarm '{}' >/dev/null 2>&1
+    rm -f "$TARGET"
+    ((was)) && say "desktop-ask disarmed." || say "desktop-ask: nothing armed."
+    ;;
+
+  arm)
+    session=""
+    region=""
+    delivery=""
+    instruction=""
+    while (($#)); do
+      case "$1" in
+        --session) [[ -n "${2:-}" ]] || die "--session needs a value"; session="$2"; shift 2 ;;
+        --region) [[ -n "${2:-}" ]] || die "--region needs a value"; region="$2"; shift 2 ;;
+        --steer) delivery="steer"; shift ;;
+        --queue) delivery="queue"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        --) shift; instruction+="${instruction:+ }$*"; break ;;
+        -*) die "unknown argument: $1" ;;
+        *) instruction+="${instruction:+ }$1"; shift ;;
+      esac
+    done
+    [[ -n "$session" ]] || die "arm needs --session <id>"
+    [[ -n "$instruction" ]] || die "arm needs an instruction"
+    body="$(jq -nc --arg sessionID "$session" --arg instruction "$instruction" \
+      --arg region "$region" --arg delivery "$delivery" '
+      {sessionID:$sessionID, instruction:$instruction}
+      + (if $region != "" then {region:$region} else {} end)
+      + (if $delivery != "" then {delivery:$delivery} else {} end)')"
+    RPC_DIR="$PWD"
+    out="$(rpc arm "$body")"
+    rpc_ok "$out" || die "arm failed: $(rpc_error_line "$out")"
+    printf '%s' "$out" | jq -c '.output // .'
+    ;;
+
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
