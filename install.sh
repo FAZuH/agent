@@ -153,8 +153,8 @@ ensure_global_instruction_ref() { # [check]
   return 0
 }
 
-# mermaid-cli v12 dropped -w/--width for --size, and both pdf-build and the
-# mermaid plugin pass --size, so v11 dies on the first diagram. Soft tier: a
+# mermaid-cli v12 dropped -w/--width for --size, and pdf-build passes --size,
+# so v11 dies on the first diagram. Soft tier: a
 # note, like a missing mmdc, because a skill degrades rather than breaking.
 check_mmdc() {
   local version
@@ -282,8 +282,7 @@ optional_packages() {
   cat <<'PACKAGES'
 ffmpeg:pacman -S ffmpeg:the ffmpeg-skill
 opencode2::the OpenCode v2 API skills
-mmdc:pacman -S mermaid-cli:visualize, pdf-write
-rsvg-convert:pacman -S librsvg:visualize
+mmdc:pacman -S mermaid-cli:pdf-write
 pandoc:pacman -S pandoc-cli:pdf-write
 pdflatex:pacman -S texlive-latex-recommended:pdf-write
 xelatex:pacman -S texlive-xetex:pdf-write
