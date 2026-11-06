@@ -72,8 +72,8 @@ lists a PROJECT plugin's commands (shared fact 2). Reliable proof a
 project plugin's `setup()` ran is its own side effect: the tool in
 the session catalog, a file it writes, or a log line it emits. A tool
 missing from the *top-level* tool list proves nothing: with Code Mode
-active, plugin tools arrive through that catalog (`tools["mermaid-doctor"](…)`),
-and a top-level call answers `No tool named "mermaid-doctor" is currently available`
+active, plugin tools arrive through that catalog (`tools["aside_ask"](…)`),
+and a top-level call answers `No tool named "aside_ask" is currently available`
 while loaded (2026-09-13, v2.0.3).
 
 ## Loading a plugin outside the service

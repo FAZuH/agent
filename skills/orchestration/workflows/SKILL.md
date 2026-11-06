@@ -27,8 +27,6 @@ what it is for. Load one from there when a task needs it.
 | Explore the codebase, investigate | `general` / `explore` |
 | Malicious-code scan | `malware-check` |
 | PII and secret scan | `pii-check` |
-| Mermaid diagram | `mermaid-maker` |
-| Hand-written SVG | `svg-maker` |
 
 ## Workflows at a glance
 
