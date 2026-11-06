@@ -26,7 +26,7 @@
 and never calls `sudo`, so install anything missing first and rerun it.
 
 It also reports the tools a skill calls on some paths only (`mmdc`,
-`rsvg-convert`, `pandoc`, `pdflatex`, `xelatex`, `pdftotext`, `pdftoppm`,
+`pandoc`, `pdflatex`, `xelatex`, `pdftotext`, `pdftoppm`,
 `pdfinfo`, `rga`, `uv`, `clamscan`, `bun`, `opencode2`), with the package that
 provides each. Those are notes, not failures: every skill that uses one has a
 documented fallback, so the install continues.
@@ -146,9 +146,9 @@ does not appear or a plugin is not loaded.
 
 ## Docs
 
-- [Skills](docs/skills.md): all 57 skills, one line each
+- [Skills](docs/skills.md): all 54 skills, one line each
 - [Skill Guide](docs/skill-guide.md): which skills to load at each phase of a change
-- [Agents](docs/agents.md): all 17 agent definitions, by role
+- [Agents](docs/agents.md): all 10 agent definitions, by role
 - [Plugins](docs/plugins.md): the OpenCode plugins, plus the command definitions in `commands/`
 - [Jev](docs/jev.md): the decision-model plugin: what it guarantees, what it costs, how to point it at another provider
 - [Commit and Changelog](docs/dev/commit-changelog.md): how this repository writes commits and changelog entries

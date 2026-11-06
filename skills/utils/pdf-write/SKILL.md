@@ -61,4 +61,4 @@ problem to the user and stop.
 ## Related
 
 - `pdf-read` for extracting text, tables, and figures back out of a PDF.
-- `mermaid-doctor` to validate diagram syntax before compiling.
+- `mmdc` to render and validate diagram syntax before compiling.

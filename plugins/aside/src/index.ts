@@ -1,8 +1,8 @@
 // fazuh.aside — server half. Forks the current session at its latest state,
 // asks the question there, and lets the fork report back on its own.
 //
-// The plugin ctx exposes no fork, so the fork goes through `opencode2 api`
-// (same shell-out pattern as the viz plugin's session lookup). The fork is
+// The plugin ctx exposes no fork, so the fork goes through `opencode2 api`.
+// The fork is
 // marked in its own session metadata; the TUI half (./tui.ts) reads that mark
 // to move the view to the fork, or to say why the fork never started.
 //

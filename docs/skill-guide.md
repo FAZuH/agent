@@ -234,8 +234,7 @@ flowchart LR
 - **simple-english**: plain, layman-readable prose for readers outside the field.
 - **writing-for-agents**: structure for skills, agent definitions, and `AGENTS.md`.
 - **antislop** and **antislop-code**, **-copywriting**, **-human**, **-layoutmobile**, **-ui**: the anti-slop filter for generic AI output.
-- **visualize**, **show-me**, **mermaid-skill**: one correct visual when a picture carries the idea.
-- **learn**: the multi-session teaching workflow, with quizzes and durable lesson records.
+- **show-me**, **mermaid-skill**: one correct visual when a picture carries the idea.
 - **handoff**, **wait-what**: compact the session for another agent, or re-pitch the last answer.
 - **opencode-guideline**: the OpenCode v2 operations: API, models, sessions, plugin authoring, plugin loading.
 - **ocv2-compact**: compact a v2 session and wait for its summary.

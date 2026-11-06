@@ -10,7 +10,6 @@ orchestrator routes work to.
 - ⭐ **[orchestrator](../agents/primary/orchestrator.md)**: routes work to the subagents below and owns delegation and run mode.
 - **[autocommit](../agents/primary/autocommit.md)**: commits pending changes, auto-discovering the repository's commit convention.
 - **[chat](../agents/primary/chat.md)**: exploration and general discussion.
-- **[tutor](../agents/primary/tutor.md)**: the learner-facing agent of the learn workflow: direct answers for lookups, Socratic prompts for concepts.
 
 Digest agents live in `digest/<name>/` and deploy to
 `~/.config/fazuh-agent/digest/<name>/` (not the opencode agents dir), with the
@@ -36,16 +35,9 @@ octask timer or edits the model on the existing one.
 - ⭐ **[research-discovery](../agents/research/research-discovery.md)**: maps repository code to file:line pointers, or writes one cited findings file.
 - **[research-synthesis](../agents/research/research-synthesis.md)**: searches several web sources and returns a cited brief in chat.
 
-## Vision
-
-- **[mermaid-maker](../agents/vision/mermaid-maker.md)**: authors one Mermaid diagram, renders it, and looks at the result.
-- **[svg-maker](../agents/vision/svg-maker.md)**: authors one hand-written SVG for spatial and geometric visuals.
-
 ## Document
 
 - ⭐ **[document](../agents/document/document.md)**: writes ADRs, glossaries, runbooks, README sections, and changelogs. Never touches source code.
 
-The visual workflow routes to `mermaid-maker` and `svg-maker`. The learn
-workflow routes to `tutor` and the lesson-record system. See
-[workflows](../skills/orchestration/workflows/SKILL.md) for the full routing
+See [workflows](../skills/orchestration/workflows/SKILL.md) for the full routing
 table and [skills](skills.md) for the skills these agents load.

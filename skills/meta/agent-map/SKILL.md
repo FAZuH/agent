@@ -23,8 +23,6 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
    system line (`Jev routing: consider loading skill @…`). Weigh it, load the
    skill if it fits, ignore it when your own reading disagrees.
 3. **Check plugins and commands first** — they need no skill load:
-   - Mermaid: `mermaid-compile`, `mermaid-doctor` tools; `write_mermaid`,
-     `edit_mermaid`, `render_mermaid` and the SVG twins for the authoring loop.
    - Jev: the `hook_skill_pick` picker hook (advises a skill per prompt) and the
      `hook_risk` gate on bash/edit/write, plus `/jev-status`, `/jev-model`,
      `/jev-endpoint`, `/jev-log`. No jev tools exist.
@@ -52,8 +50,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 **Workflow** — repeatable procedures:
 `branch-flow` (main/release lines), `commit` (grouping and messages),
 `changelog`, `pr-creator`, `pr-watchmerge`, `issue-closeout`,
-`setup-dev-docs`, `deep-research` (one cited findings file),
-`learn` (multi-session teaching), `visualize` (one verified visual artifact).
+`setup-dev-docs`, `deep-research` (one cited findings file).
 
 **Dev** — engineering guidelines:
 `test-guidelines`, `gui-test-guidelines`, `rust-idioms`, `rust-tea`,
@@ -117,13 +114,12 @@ Upstream-owned; install and update through `@external-skills`, never hand-edit.
 
 ### Agents (subagents)
 
-- **primary**: `orchestrator`, `chat`, `autocommit`, `tutor` — conversation,
-  delegation, unattended commits, teaching.
+- **primary**: `orchestrator`, `chat`, `autocommit` — conversation,
+  delegation, unattended commits.
 - **build**: `implement` — implementation and verification.
 - **review**: `review` (standards+spec), `malware-check`, `pii-check`.
 - **research**: `research-discovery` (codebase pointers),
   `research-synthesis` (web brief).
-- **vision**: `mermaid-maker`, `svg-maker`.
 - **document**: `document` — ADRs, runbooks, README, changelog.
 
 Route with the `subagent` tool or `@orchestrate`; subagents report blockers
@@ -131,9 +127,6 @@ instead of silently changing scope.
 
 ### Plugins
 
-- **mermaid**: compile `.mmd` to PNG/SVG/PDF; validate+render every diagram in
-  a file.
-- **viz**: the write/edit/render authoring loop for Mermaid and SVG.
 - **jev**: automatic Jev decisions — skill-picker hook (advises a skill per
   prompt; criteria optimized once per skill via `/jev-optimize-skills`), risk
   hook (gates bash/edit/write, the only blocking path);
@@ -155,12 +148,11 @@ handwriting,latex,math,obsidian,ocr,summarize,translate}`.
 `himalaya-gen-config`.
 
 Optional tools each degrade one skill, never the install: `ffmpeg`
-(ffmpeg-skill), `mmdc` (mermaid/visualize/pdf-write), `pandoc`/`pdflatex`/
+(ffmpeg-skill), `mmdc` (pdf-write), `pandoc`/`pdflatex`/
 `xelatex` (pdf-write), `pdftotext`/`pdftoppm`/`pdfinfo` (pdf-read/write),
 `rga` (pdf-read), `uv` (pdf-read), `clamscan` (malware-check), `bun` (jev,
 pluginhealth), `jegrep` (jev semantic grep, not installed by default),
-`rsvg-convert` (visualize), `gh` (every PR/issue skill),
-`jq` (ocv2, forkflow).
+`gh` (every PR/issue skill), `jq` (ocv2, forkflow).
 
 ## Search outward
 
