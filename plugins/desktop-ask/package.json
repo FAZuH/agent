@@ -1,0 +1,9 @@
+{
+  "name": "fazuh-desktop-ask",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
+  }
+}
