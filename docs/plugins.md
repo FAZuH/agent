@@ -8,21 +8,6 @@ entry as `<plugin-dir>/tui` and loads nothing otherwise.
 Plugin IDs are `fazuh.<name>`. `sync.sh` copies the plugin directory into the
 OpenCode config.
 
-## mermaid (`fazuh.mermaid`)
-
-Validates and exports Mermaid diagrams.
-
-- **`mermaid-compile`**: compiles a `.mmd` source to PNG, SVG, or PDF with `mmdc` (mermaid-cli) and exports it to `docs/diagrams/` unless you pass another directory.
-- **`mermaid-doctor`**: parses *and* renders every Mermaid block in the given `.html`, `.md`, `.txt`, or `.mmd` files and reports the parser's real errors with file:line locations.
-
-## viz (`fazuh.viz`)
-
-Authoring loops for one visual artifact: `write_mermaid`, `write_svg`,
-`edit_mermaid`, `edit_svg`, `render_mermaid`, and `render_svg` write the source,
-render it to a PNG, then open the PNG so the agent checks the result. Publishing
-goes to `<project>/viz` by default; `/viz-dir [path]` sets another publish
-directory.
-
 ## jev (`fazuh.jev`)
 
 Bounded decisions from [Jev](https://typesafe.ai), TypeSafe's System One decision
@@ -153,33 +138,166 @@ including the ones that load no TUI module.
 
 A refused target fails the command, and the TUI says why.
 
-## ralph (`fazuh.ralph`)
+## tree (`fazuh.tree`)
 
-The [Ralph Wiggum](https://ghuntley.com/ralph/) loop in the session that started
-it: one prompt, fed back to the model until it is done. The prompt never changes;
-the repository does, so each iteration reads the previous one's work and improves
-it. Ported from the upstream plugin (anthropics/claude-code), which drives the
-loop from a Stop hook, and from open-ralph-wiggum, which drives it from an
-external CLI. OpenCode v2 has no Stop hook, so the loop rides session events:
-`session.text.ended` remembers the last thing the model said, `session.idle`
-decides whether to finish, stop, or prompt again.
+Localhost viewer for one session family as a message-level graph: each
+session is a vertical lane, each node a message, like a git history. `/tree`
+opens `http://127.0.0.1:47821/?session=<current session>`.
 
-One loop per session, in memory. A plugin reload stops a running loop instead of
-resurrecting one nobody is watching; `/ralph-status` says so. The completion
-promise is checked before the iteration cap, so a turn that finished the work on
-the last allowed iteration reports `complete` rather than `max`. Three turns with
-no output stop the loop, so an unlimited run cannot ping-pong forever.
+- Lane columns are ordered by session creation. A lane's header carries the
+  session title in its kind colour (slate root, blue subagent, purple fork);
+  below it follow the recent messages, newest at the bottom. The last 120
+  messages of a root, 60 of a fork, and 30 of a subagent render, plus the
+  branch points below; longer gaps collapse into an `… N` ellipsis node.
+- Solid grey flow edges join consecutive messages in a lane. A subagent
+  starts with a dotted blue spawn edge from the parent message nearest its
+  birth; a dashed purple fork edge runs from the boundary message to the
+  fork's header. A stopped, succeeded subagent gets a solid blue merge edge
+  from its last message back into the parent's next message, and the lane is
+  marked `merged`.
+- A busy subagent is live: its newest message pulses (a class toggled every
+  500 ms) and its header tooltip says `live`. A stopped one does not pulse.
+  History past the per-kind cap is dropped, never merged away.
+- Families over 40 lanes group subagents by agent: each agent with at least
+  two lanes collapses into one rounded-rectangle group header
+  (`<agent> × <count>`, plus `live ×<n>` when any member is busy) placed at
+  its earliest member's position, rendering no member messages or edges.
+  Forks, the root, and single-member agents stay as normal lanes. A
+  collapsed group is one node only; member message nodes appear only on
+  expansion. Clicking a group header expands its lanes in place
+  (`?expand=<agent>`, repeatable); clicking it again collapses. Each
+  expanded member's header reads `<agent> · <messages> msg · <cost>`. The
+  header counts read `<total lanes> lanes · <groups> groups · …`.
+- Rendered messages are capped in total at 2000 by default
+  (`options.maxNodes`, `OPENCODE_TREE_MAX`, or `?max=`; `?max=0` disables
+  the cap). Over the budget the oldest message nodes drop, per lane oldest
+  first; headers and branch/merge boundary nodes stay. The payload reports
+  `omittedMessages` and `budgeted: true` in `graph.stats`.
+- The first load opens centred at ~1x on the focused lane's header (the
+  `?session=` lane, its group lane, else the first busy lane) instead of
+  fitting the whole family. Changing the root re-fits only families under
+  40 lanes; larger ones centre the same way.
+- Click any node to open a floating dialog anchored to it (Esc, backdrop,
+  or the close button dismisses it); clicking never navigates directly.
+  The dialog shows the session's title, agent, model, status, cost, token
+  counts, directory, last update (and merged time when applicable), and the
+  last 5 message previews of that lane; message nodes add the clicked
+  message's role, index, and preview. Its `Open in OpenCode` button is the
+  only link to `<web base>/session/<session>`. A group header's dialog
+  shows the group counts, an Expand/Collapse button, and a small
+  `show in OpenCode` link to the earliest member. Hover on a message shows
+  role, `msg <i> of <n>`, a 60-character preview, and relative time; on a
+  header it shows agent, model, outcome, status, cost, token counts,
+  directory, last update, and `merged <rel>` when applicable; a group
+  header shows its member count and live count. Preview text is capped at
+  240 characters per message.
+- Live refresh every 3 s, root selector, Labels Auto/On/Off, zoom and fit.
+  Wheel zoom is eased towards the cursor and wheel speed is raised to 1.5;
+  labels auto-hide above 60 nodes or below 0.75 zoom (group header labels
+  stay visible unless Labels is Off).
+- Link base: `options.webBaseURL` or `OPENCODE_TREE_WEB_BASE`, else the
+  configured service host:port (`~/.config/opencode/service.json`) when it
+  answers within 500 ms, else the live service URL
+  (`~/.local/state/opencode/service.json`), else `http://127.0.0.1:4096`.
+  `?base=` overrides it per page load.
+- Server: `Bun.serve` on `127.0.0.1:47821`; `OPENCODE_TREE_HOST` and
+  `OPENCODE_TREE_PORT` change the binding, and the next port is used when the
+  default is taken. Read-only and unauthenticated: session titles, ids,
+  directories, and message previews are visible to anything that can reach
+  that port, so leave it on loopback.
+- No dependencies. `web/cytoscape.min.js` is vendored (MIT, 3.34.4).
+  Tests: `bun test plugins/tree`.
 
-- **`/ralph-loop <task>`**: starts the loop. `--max-iterations N` (0 = unlimited),
-  `--completion-promise TEXT` (default `COMPLETE`), `--abort-promise TEXT` for a
-  task that turns out to be impossible as written. The task needs no quotes;
-  quote a multi-word promise.
-- **`/cancel-ralph`**: stops the loop in this session and reports the iteration.
-- **`/ralph-status`**: every active loop with its iteration, elapsed time, promises, and task.
+## desktop-control (`fazuh.desktop`)
 
-Server-side toasts are impossible from a plugin, so every decision is appended to
-`~/.local/state/fazuh-agent/ralph-loops.jsonl` and the TUI tail announces starts,
-stops, and errors.
+Screen, window, pointer, and keyboard control for this Wayland/Hyprland
+desktop. It exists because the `computer-use` server drives Linux through
+AT-SPI2 only: on Hyprland the a11y bus carries no real apps (no kitty, Brave,
+Steam, or Wine window) and no `org.a11y.atspi.DeviceEventController` exists, so
+neither its app list nor its input can work here.
+
+Backends, chosen per action:
+
+| Action | Backend | Reaches |
+|---|---|---|
+| screenshots | `grim` | every window, every monitor |
+| windows, focus | `hyprctl` | every window |
+| pointer | `ydotool`, closed loop | every window; needs `ydotoold` |
+| keyboard | `wtype` then XTest | every window |
+
+Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
+`desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
+`desktop_type`, `desktop_key`. Coordinates are absolute desktop pixels, the
+same ones `desktop_screenshot` returns, so a click can be aimed straight off a
+screenshot without conversion.
+
+`desktop_focus` accepts an address from `desktop_windows`, `class:NAME`,
+`title:SUBSTR`, or a bare class/title substring; exact class beats a title
+mention. `desktop_key` takes a keysym or a chord (`Return`, `ctrl+shift+t`,
+`super+1`).
+
+Pointer input needs `ydotool` and a running `ydotoold`; `/dev/uinput` must be
+writable by the user. XTest is not a pointer backend: it moves XWayland's own
+pointer, which the compositor ignores, so a click lands wherever the real
+cursor already was. That is how a click aimed at a tab strip once landed on a
+video in another window.
+
+`ydotoold`'s virtual device advertises `EV_REL` only, so `ydotool mousemove
+--absolute` does not work either — it warps. And the gain is not 1:1: on this
+machine 100 units move 200 layout pixels. So `desktop_move`, `desktop_click`,
+`desktop_drag`, and `desktop_scroll` close the loop against `hyprctl
+cursorpos`, stepping until the pointer is within 2 px, then re-reading to
+confirm the move was not still in flight. A click is only issued after that
+confirmation; if the pointer does not arrive, the call reports where it
+stopped and presses nothing.
+
+Screenshot pixels are not layout pixels: the monitor sits at `332,-68`, so a
+layout point is `screenshot + layoutOrigin()`. That offset is read from
+`hyprctl monitors`, not assumed.
+
+None of this makes a coordinate meaningful. The screen can change between the
+screenshot that suggested a point and the click — an app going fullscreen
+hides the bar — so take a fresh screenshot immediately before clicking and
+check that the thing under the point is still the thing meant.
+
+Wayland window addresses are not X11 window ids, so the plugin tells which
+client is XWayland by matching class and title against the X11 window list
+(`src/xtest.py windows`).
+
+No dependencies beyond the system binaries. Tests: `bun test
+plugins/desktop-control`.
+
+## desktop-ask (`fazuh.desktop-ask`)
+
+Sends a screenshot from a keybind to one armed session and asks the
+instruction that session stored. The target is
+`${XDG_STATE_HOME:-~/.local/state}/opencode/desktop-ask/target.json`, one file
+that every plugin instance and the CLI read, so the last session to arm wins.
+
+Arming is explicit. `/desktop-ask <instruction>` or the `desktop_ask_arm` tool
+makes the current session the target; `/desktop-ask off` or
+`desktop_ask_disarm` clears it. `SUPER + SHIFT + V` runs
+`~/.local/bin/desktop-ask trigger`, which captures with `grim` and prompts the
+target with the image attached.
+
+- Delivery defaults to `queue`; `--steer` interrupts the target mid-turn.
+- Full screen by default; `--window` captures the focused window.
+- `--ask TEXT` overrides the instruction for one trigger.
+- When the turn ends, the answer is copied to the clipboard with `wl-copy`
+  (`xclip`/`xsel` fallback). `--no-copy` skips it for one trigger.
+- The trigger prompt asks for the text to paste inside `<copy>` and `</copy>`
+  so the post-task report stays out of the clipboard; the tags are stripped.
+  A reply without them is copied whole.
+- The copy runs in the plugin after the trigger returns. Its outcome lands in
+  `.../desktop-ask/last-copy.json`, and `desktop-ask status` prints it.
+- RPC: `POST /api/rpc/desktop-ask/{trigger,arm,status,disarm}`, routed with
+  `location[directory]`. Trigger errors: `not_armed`, `no_session`,
+  `capture_failed`, `prompt_failed`, `state_failed`.
+- Shots go to `.../desktop-ask/shots/`; the newest 50 are kept.
+- The prompt fences the user instruction and tells the agent to treat the
+  screenshot as data, not instructions.
+
+Tests: `bun test plugins/desktop-ask`.
 
 ## Commands
 

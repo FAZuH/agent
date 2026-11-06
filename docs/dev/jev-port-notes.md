@@ -21,12 +21,12 @@ the way it is, what was checked with real requests, and what is still unproven.
 | OpenCode | v2.0.20 | `opencode --version` |
 | Plugin SDK | `@opencode-ai/plugin` 0.0.0-beta-17963 | `plugins/package.json` |
 | Plugin load | auto-discovered per `plugins/<name>/` by `sync.sh` | `sync.sh:307` |
-| TUI load | `<plugin-dir>/tui` resolved by the CLI | `plugins/viz/tui.ts:1` |
+| TUI load | `<plugin-dir>/tui` resolved by the CLI | `plugins/jev/tui.ts:1` |
 
 ## The v2 plugin contract (the published docs are wrong)
 
 `https://opencode.ai/docs/plugins` documents a v1 shape. v2.0.20 uses this
-instead, read off `plugins/viz/src/index.ts`:
+instead, read off `plugins/jev/src/index.ts`:
 
 | Concern | v1 (docs) | v2.0.20 (actual) |
 | --- | --- | --- |
