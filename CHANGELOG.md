@@ -1,3 +1,13 @@
+## [0.15.0](https://github.com/FAZuH/agent/compare/v0.14.2...v0.15.0) (2026-11-06)
+
+
+### Features
+
+* **plugin:** add closed-loop desktop control ([1461422](https://github.com/FAZuH/agent/commit/1461422ad737639256ee71140ce3589e4f315f50))
+* **plugin:** add the desktop-ask screenshot bridge ([669656c](https://github.com/FAZuH/agent/commit/669656c6dcb50ab335eeaae21fe6f1f9c5e0f397))
+* **plugin:** add the session tree viewer ([a179c6b](https://github.com/FAZuH/agent/commit/a179c6b124ef9e4ca712ca7e95a526649a6eae7b))
+* **script:** add the desktop-ask trigger helper ([500a659](https://github.com/FAZuH/agent/commit/500a65933e9aa623d2077469bd2d40d4236f8609))
+
 ## [0.14.2](https://github.com/FAZuH/agent/compare/v0.14.1...v0.14.2) (2026-11-03)
 
 
@@ -56,20 +66,4 @@
 ### Bug Fixes
 
 * **skill:** advertise following-procedures with frontmatter ([297ae7d](https://github.com/FAZuH/agent/commit/297ae7da1503cb1f281f2fc9de837c7d01170717))
-
-## [0.13.18](https://github.com/FAZuH/agent/compare/v0.13.17...v0.13.18) (2026-10-15)
-
-
-### Features
-
-* **plugin:** add ralph, the self-referential iteration loop ([88a2d3f](https://github.com/FAZuH/agent/commit/88a2d3f08ec1f04fa1b42697b8899f7bccb5e52c))
-* **plugin:** jev call toasts as a hook title and one bullet per fact ([fbfedef](https://github.com/FAZuH/agent/commit/fbfedef524530d0700d538b644004ac2ba85278c))
-* **plugin:** skip the jev risk check while permissions auto-accept ([a336378](https://github.com/FAZuH/agent/commit/a336378996fb8059e4ed3bad8655a249e30be99e))
-* **plugin:** toast each Jev call, switchable per feature and globally ([e07d875](https://github.com/FAZuH/agent/commit/e07d8751901d17a055700095c6068c486af4b5d6))
-
-
-### Bug Fixes
-
-* **plugin:** judge the shell tool under the name v2 reports ([bf82d2c](https://github.com/FAZuH/agent/commit/bf82d2cafbd1bf33971cd6500d06461a95affd89))
-* **plugin:** resolve the optimizer's model instead of sending none ([6a3a7f9](https://github.com/FAZuH/agent/commit/6a3a7f9e8b1e9619e6aae30f345a028b4953cd4e))
 
