@@ -362,8 +362,11 @@ Each section shows at most five slots: slots needing attention first
 (unread reports, unanswered prompts), then the rest, each group newest first.
 The pickers list every slot. The number beside a section header counts only
 the slots needing attention. `Ctrl+A` in either picker toggles that section
-between all entries and attention-only (default: all). `/reports` and `/prompts` open the same histories by
-picker. The GUI half
+between all entries and attention-only (default: all); inside a history it
+filters the entries to unread reports or unanswered prompts, using the state
+when the key was pressed so reading or dismissing the shown entry does not
+remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
+same histories by picker. The GUI half
 mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
 side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
 bundle: `./dev.sh gui`.

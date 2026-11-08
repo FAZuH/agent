@@ -12,6 +12,7 @@ import { Contract } from "./rpc.ts"
 import {
   ago,
   answersOfForm,
+  attentionOf,
   descriptionOf,
   formFieldsOf,
   formIDOf,
@@ -245,7 +246,38 @@ function History(props: {
   let scroll: any
   const [history, setHistory] = createSignal<Report[]>(props.group.reports)
   const [index, setIndex] = createSignal(props.group.reports.length - 1)
-  const report = () => history()[index()]!
+  // Ctrl+A freezes the entries that needed attention when it was pressed, so
+  // reading one (which marks it read) or dismissing one does not move the
+  // entry out from under the cursor.
+  const [filterIDs, setFilterIDs] = createSignal<string[] | undefined>(undefined)
+  const filtered = () => {
+    const ids = filterIDs()
+    return ids ? history().filter((item) => ids.includes(item.id)) : history()
+  }
+  const report = () => filtered()[Math.min(index(), filtered().length - 1)]!
+  const toggleFilter = () => {
+    const current = report()
+    if (filterIDs()) {
+      setFilterIDs(undefined)
+      const at = history().findIndex((item) => item.id === current.id)
+      setIndex(at >= 0 ? at : history().length - 1)
+      return
+    }
+    const matched = attentionOf(history(), props.kind)
+    if (!matched.length) {
+      props.ctx.ui.toast.show({
+        message:
+          props.kind === "report"
+            ? "No unread reports in this session."
+            : "No unanswered prompts in this session.",
+        variant: "info",
+      })
+      return
+    }
+    const at = matched.findIndex((item) => item.id === current.id)
+    setFilterIDs(matched.map((item) => item.id))
+    setIndex(at >= 0 ? at : matched.length - 1)
+  }
   const maxRows = () => Math.max(12, Math.floor(dimensions().height * 0.55))
   const [scrollable, setScrollable] = createSignal(false)
   const measure = () => {
@@ -268,6 +300,23 @@ function History(props: {
     const current = report()
     if (!current.readAt) props.onRead(current)
   })
+
+  // A dialog is modal, so bind the filter in a layer of its own: the
+  // composer's ctrl+a and the input's "move to line start" stay out of it.
+  props.ctx.keymap.layer(() => ({
+    mode: "modal",
+    priority: 2,
+    enabled: true,
+    commands: [
+      {
+        id: "report.history.filter",
+        title: props.kind === "report" ? "Only unread reports" : "Only unanswered prompts",
+        group: "Dialog",
+        bind: "ctrl+a",
+        run: () => toggleFilter(),
+      },
+    ],
+  }))
 
   useKeyboard((event: any) => {
     if (event.name === "up") {
@@ -315,7 +364,7 @@ function History(props: {
     if (event.name === "right" || event.name === "l") {
       event.preventDefault()
       event.stopPropagation()
-      setIndex((current) => Math.min(history().length - 1, current + 1))
+      setIndex((current) => Math.min(filtered().length - 1, current + 1))
       return
     }
     if (event.name === "c") {
@@ -357,7 +406,8 @@ function History(props: {
   return (
     <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <text fg={theme.text.muted}>
-        {sessionTitle(props.ctx, props.group.sessionID)} · {index() + 1}/{history().length}
+        {sessionTitle(props.ctx, props.group.sessionID)} · {index() + 1}/{filtered().length}
+        {filterIDs() ? (props.kind === "report" ? " · unread" : " · unanswered") : ""}
         {" · "}
         {stampOf(report())}
         {report().rev && report().rev! > 1 ? ` · rev ${report().rev}` : ""}
@@ -380,7 +430,7 @@ function History(props: {
       </scrollbox>
       <Rule ctx={props.ctx} />
       <text fg={theme.text.muted}>
-        <Show when={history().length > 1}>
+        <Show when={filtered().length > 1}>
           <span style={{ fg: theme.text.base }}>history</span>{" "}
           <span style={{ fg: theme.text.muted }}>←/→</span>   {" "}
         </Show>
@@ -388,6 +438,10 @@ function History(props: {
           <span style={{ fg: theme.text.base }}>answer</span> <span style={{ fg: theme.text.muted }}>enter</span>   {" "}
           <span style={{ fg: theme.text.base }}>dismiss</span> <span style={{ fg: theme.text.muted }}>d</span>   {" "}
         </Show>
+        <span style={{ fg: theme.text.base }}>
+          {filterIDs() ? "all" : props.kind === "report" ? "only unread" : "only unanswered"}
+        </span>{" "}
+        <span style={{ fg: theme.text.muted }}>ctrl+a</span>   {" "}
         <span style={{ fg: theme.text.base }}>copy session id</span> <span style={{ fg: theme.text.muted }}>c</span>   {" "}
         <span style={{ fg: theme.text.base }}>close</span> <span style={{ fg: theme.text.muted }}>esc</span>
         <Show when={scrollable()}>
@@ -758,11 +812,7 @@ export default {
       const groups = orderedGroups(ctx, groupsOfKind(reports()[sessionID] ?? [], kind))
       const filtered = kind === "post-task" ? view.unread === true : view.unanswered === true
       const visible = filtered
-        ? groups.filter((group) =>
-            kind === "post-task"
-              ? group.reports.some((report) => !report.readAt)
-              : group.reports.some((report) => needsAnswer(report)),
-          )
+        ? groups.filter((group) => attentionOf(group.reports, kind).length > 0)
         : groups
       if (!visible.length && !filtered) {
         ctx.ui.toast.show({
@@ -771,18 +821,13 @@ export default {
         })
         return
       }
-      const actions = [
+      const label = kind === "post-task" ? "unread" : "unanswered"
+      const bindings = [
         {
           bind: "ctrl+a",
-          title: filtered
-            ? kind === "post-task"
-              ? "all reports"
-              : "all prompts"
-            : kind === "post-task"
-              ? "unread"
-              : "unanswered",
-          selection: "none" as const,
-          onTrigger: () => {
+          title: filtered ? "Show all" : `Only ${label}`,
+          group: "Dialog",
+          run: () => {
             void setView((draft: any) => {
               if (kind === "post-task") draft.unread = draft.unread === false
               else draft.unanswered = draft.unanswered === false
@@ -797,6 +842,7 @@ export default {
       ]
       const picked = await ctx.ui.dialog.select({
         title: kind === "post-task" ? "Reports" : "Prompts",
+        footerHints: [{ title: filtered ? "show all" : `only ${label}`, label: "ctrl+a" }],
         options: visible.map((group) => {
           const latest = group.reports[group.reports.length - 1]!
           return {
@@ -805,7 +851,7 @@ export default {
             value: group.sessionID,
           }
         }),
-        actions,
+        bindings,
       })
       const group = picked ? groups.find((item) => item.sessionID === picked) : undefined
       if (group) {

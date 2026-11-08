@@ -11,6 +11,7 @@ import {
   ago,
   answerText,
   answersOfForm,
+  attentionOf,
   blocksOf,
   descriptionOf,
   dotState,
@@ -198,6 +199,22 @@ describe("needsAnswer", () => {
       needsAnswer({ ...base, kind: "prompt-user", prompts: { questions: [question] }, dismissedAt: 5 }),
     ).toBe(false)
     expect(needsAnswer({ ...base })).toBe(false)
+  })
+})
+
+describe("attentionOf", () => {
+  const question = { title: "pick", body: "" }
+
+  test("reports: only unread ones", () => {
+    const read = { ...base, id: "r2", readAt: 5 }
+    expect(attentionOf([{ ...base }, read], "post-task").map((report) => report.id)).toEqual(["r1"])
+  })
+
+  test("prompts: only ones still waiting for an answer", () => {
+    const waiting = { ...base, id: "p1", kind: "prompt-user" as const, prompts: { questions: [question] } }
+    const answered = { ...waiting, id: "p2", answeredAt: 5 }
+    const dismissed = { ...waiting, id: "p3", dismissedAt: 5 }
+    expect(attentionOf([waiting, answered, dismissed], "prompt-user").map((report) => report.id)).toEqual(["p1"])
   })
 })
 

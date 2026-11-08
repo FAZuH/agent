@@ -305,6 +305,11 @@ export function needsAnswer(report: Report): boolean {
   return (report.prompts?.questions?.length ?? 0) > 0 && !report.answeredAt && !report.dismissedAt
 }
 
+/** The records a section still wants seen: unread reports, unanswered prompts. */
+export function attentionOf(reports: readonly Report[], kind: Report["kind"]): Report[] {
+  return reports.filter((report) => (kind === "post-task" ? !report.readAt : needsAnswer(report)))
+}
+
 /** One report group per session, oldest report first. */
 export interface ReportGroup {
   sessionID: string
