@@ -269,14 +269,29 @@ describe("nextSessionOf", () => {
 })
 
 describe("answerText", () => {
-  test("names the report and each question", () => {
+  test("mirrors the host question card: a titled block, question, answer", () => {
     const text = answerText(
-      { ...base, title: "Pick", prompts: { questions: [{ title: "First?", body: "" }, { title: "Second?", body: "" }] } },
+      {
+        ...base,
+        kind: "prompt-user",
+        description: "Pick",
+        prompts: { questions: [{ title: "First?", body: "" }, { title: "Second?", body: "" }] },
+      },
       { "0": "one", "1": "two" },
     )
-    expect(text).toContain('Answers to "Pick"')
-    expect(text).toContain("1. First?: one")
-    expect(text).toContain("2. Second?: two")
+    expect(text).toBe("# Prompt: Pick\n\nFirst?\none\n\nSecond?\ntwo")
+  })
+
+  test("falls back to the first question when there is no description", () => {
+    const text = answerText(
+      {
+        ...base,
+        kind: "prompt-user",
+        prompts: { questions: [{ title: "First?", body: "" }] },
+      },
+      {},
+    )
+    expect(text).toBe("# Prompt: First?")
   })
 })
 

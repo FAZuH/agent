@@ -367,14 +367,18 @@ export function groupBySession(reports: readonly Report[]): ReportGroup[] {
   }))
 }
 
-/** What the reporting session reads after the user answers the prompts. */
+/**
+ * What the reporting session reads after the user answers the prompts. It
+ * mirrors the host's question card: a titled block, then one question with
+ * its answer under it.
+ */
 export function answerText(report: Report, answers: Record<string, string>): string {
-  const lines = [`Answers to "${report.title}":`]
+  const pairs: string[] = []
   for (const [index, question] of (report.prompts?.questions ?? []).entries()) {
     const answer = answers[String(index)]?.trim()
-    if (answer) lines.push(`${index + 1}. ${question.title}: ${answer}`)
+    if (answer) pairs.push(`${question.title.trim()}\n${answer}`)
   }
-  return lines.join("\n")
+  return [`# Prompt: ${descriptionOf(report)}`, ...pairs].join("\n\n").trimEnd()
 }
 
 /** Our form ids carry the report id behind this prefix; other forms do not. */

@@ -114,7 +114,7 @@ describe("tools", () => {
     expect(result.ok).toBe(true)
     expect(result.delivered).toBe(true)
     expect(deliveries.at(-1)).toBe("steer")
-    expect(prompts.at(-1)).toContain("1. pick one: one")
+    expect(prompts.at(-1)).toBe("# Prompt: Pick one\n\npick one\none")
     const stored = store.readReports("ses_3")[0]!
     expect(stored.answers?.["0"]).toBe("one")
     expect(stored.answeredAt).toBeGreaterThan(0)
@@ -135,7 +135,7 @@ describe("tools", () => {
     })
     expect(result.delivered).toBe(true)
     expect(deliveries.at(-1)).toBe("queue")
-    expect(prompts.at(-1)).toContain("1. queue question: queued")
+    expect(prompts.at(-1)).toBe("# Prompt: Queue it\n\nqueue question\nqueued")
     const stored = store.readReports("ses_queue")[0]!
     expect(stored.answers?.["0"]).toBe("queued")
     expect(stored.answeredAt).toBeGreaterThan(0)

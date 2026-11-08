@@ -356,7 +356,9 @@ sends the answers to the agent. Opening a
 record marks it read (`report.read`); reading never bumps its revision.
 Answering uses **Enter** to steer the answer (interrupt and deliver now) or
 **Ctrl+Enter** to queue it behind the agent's current turn; an empty answer
-takes the question's recommendation. The dialog renders the record
+takes the question's recommendation. The answers reach the agent as a
+`# Prompt: <description>` block with each question and its answer under it,
+like the host's question card. The dialog renders the record
 as Markdown with padding, shows the reporting session's title, its 35-character
 description, and its relative age (the update age when revised), colors keybinds
 apart from their descriptions,
