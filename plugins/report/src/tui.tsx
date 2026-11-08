@@ -112,6 +112,11 @@ function syntaxFor(ctx: any): any {
   return reportSyntax
 }
 
+/** A full-width separator between a dialog's parts. */
+function Rule(props: { ctx: any }) {
+  return <box height={1} width="100%" border={["bottom"]} borderColor={props.ctx.theme.border.base} />
+}
+
 function ReportBody(props: { ctx: any; report: Report }) {
   const theme = props.ctx.theme
   return (
@@ -355,6 +360,7 @@ function History(props: {
         {report().answeredAt ? " · answered" : ""}
         {report().dismissedAt ? " · dismissed" : ""}
       </text>
+      <Rule ctx={props.ctx} />
       <Show when={report().description}>
         <text fg={theme.text.base}>
           <b>{report().description}</b>
@@ -368,6 +374,7 @@ function History(props: {
       >
         <ReportBody ctx={props.ctx} report={report()} />
       </scrollbox>
+      <Rule ctx={props.ctx} />
       <text fg={theme.text.muted}>
         <Show when={history().length > 1}>
           <span style={{ fg: theme.text.base }}>history</span>{" "}
