@@ -799,7 +799,6 @@ export default {
               title: "Only unanswered prompts and unread reports",
               group: "report",
               palette: true,
-              bind: "ctrl+a",
               run: () => {
                 const only = !(view.unread === true && view.unanswered === true)
                 void setView((draft: any) => {
