@@ -411,7 +411,7 @@ function openHistory(
     <History ctx={ctx} group={group} kind={kind} onAnswer={onAnswer} onRead={onRead} onDismiss={onDismiss} />
   ))
   try {
-    ctx.ui.dialog.set({ size: "xlarge" })
+    ctx.ui.dialog.set({ size: "xlarge", centered: true })
   } catch {}
 }
 
