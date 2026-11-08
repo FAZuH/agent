@@ -10,9 +10,12 @@ import { describe, expect, test } from "bun:test"
 import {
   ago,
   answerText,
+  answersOfForm,
   blocksOf,
   descriptionOf,
   dotState,
+  formFieldsOf,
+  formIDOf,
   groupBySession,
   isEmpty,
   markdownOf,
@@ -20,6 +23,7 @@ import {
   promptMarkdown,
   promptsOf,
   reportDotState,
+  reportIDOfForm,
   sectionsOf,
   stampOf,
   titleOf,
@@ -216,6 +220,72 @@ describe("stampOf", () => {
     expect(stampOf({ ...base, at: created, updatedAt: created + 60_000 })).toBe(
       "2026-11-08 07:05 · upd 2026-11-08 07:06",
     )
+  })
+})
+
+describe("form ids", () => {
+  test("a form id carries the report id back and forth", () => {
+    const form = formIDOf("mht2x1-abc123")
+    expect(form.startsWith("frm_")).toBe(true)
+    expect(reportIDOfForm(form)).toBe("mht2x1-abc123")
+  })
+
+  test("another plugin's form is not ours", () => {
+    expect(reportIDOfForm("frm_abc123")).toBeUndefined()
+    expect(reportIDOfForm("frm_report_")).toBeUndefined()
+    expect(reportIDOfForm("")).toBeUndefined()
+  })
+})
+
+describe("formFieldsOf", () => {
+  const report: Report = {
+    ...base,
+    kind: "prompt-user",
+    prompts: {
+      questions: [
+        { title: "Pick one", body: "why", recommendation: "the first" },
+        { title: "", body: "" },
+      ],
+    },
+  }
+
+  test("one string field per question, keyed q0, q1", () => {
+    const fields = formFieldsOf(report)
+    expect(fields.map((field) => field.key)).toEqual(["q0", "q1"])
+    expect(fields.every((field) => field.type === "string" && field.custom === true)).toBe(true)
+  })
+
+  test("the recommendation is the first option and the placeholder", () => {
+    const [field] = formFieldsOf(report)
+    expect(field?.options).toEqual([{ value: "the first", label: "the first (Recommended)" }])
+    expect(field?.placeholder).toBe("the first")
+    expect(field?.description).toBe("why")
+  })
+
+  test("a question without a recommendation stays free text", () => {
+    const fields = formFieldsOf(report)
+    expect(fields[1]?.options).toBeUndefined()
+    expect(fields[1]?.placeholder).toBeUndefined()
+    expect(fields[1]?.title).toBe("Question 2")
+  })
+
+  test("no questions mean no fields", () => {
+    expect(formFieldsOf({ ...base })).toEqual([])
+  })
+})
+
+describe("answersOfForm", () => {
+  test("keys q0, q1 map to the record's question indexes", () => {
+    expect(answersOfForm({ q0: " one ", q1: "two" })).toEqual({ "0": "one", "1": "two" })
+  })
+
+  test("a multiselect joins its choices", () => {
+    expect(answersOfForm({ q0: ["a", "b"] })).toEqual({ "0": "a, b" })
+  })
+
+  test("empty answers and foreign keys are left out", () => {
+    expect(answersOfForm({ q0: "", q1: "  ", key: "x", q2: null })).toEqual({})
+    expect(answersOfForm(undefined)).toEqual({})
   })
 })
 

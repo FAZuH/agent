@@ -34,6 +34,18 @@ export interface Prompts {
   questions?: Question[]
 }
 
+/** One field of a native host form, the inline card the question tool uses. */
+export interface FormField {
+  key: string
+  title: string
+  description?: string
+  type: "string"
+  required?: boolean
+  custom?: boolean
+  placeholder?: string
+  options?: { value: string; label: string }[]
+}
+
 export interface PostTaskSections {
   completed?: string[]
   deviations?: string[]
@@ -325,6 +337,61 @@ export function answerText(report: Report, answers: Record<string, string>): str
     if (answer) lines.push(`${index + 1}. ${question.title}: ${answer}`)
   }
   return lines.join("\n")
+}
+
+/** Our form ids carry the report id behind this prefix; other forms do not. */
+const FORM_PREFIX = "frm_report_"
+
+/** The native form id for one prompt record. */
+export function formIDOf(reportID: string): string {
+  return `${FORM_PREFIX}${reportID}`
+}
+
+/** The report a native form belongs to, or nothing when the form is not ours. */
+export function reportIDOfForm(formID: string): string | undefined {
+  const id = String(formID ?? "")
+  if (!id.startsWith(FORM_PREFIX)) return undefined
+  const reportID = id.slice(FORM_PREFIX.length)
+  return reportID || undefined
+}
+
+/**
+ * The inline form fields for a prompt record: one string field per question,
+ * with the recommendation as the first option and free text still allowed.
+ */
+export function formFieldsOf(report: Report): FormField[] {
+  return (report.prompts?.questions ?? []).map((question, index) => {
+    const recommendation = question.recommendation?.trim()
+    return {
+      key: `q${index}`,
+      title: question.title || `Question ${index + 1}`,
+      ...(question.body ? { description: question.body } : {}),
+      type: "string" as const,
+      custom: true,
+      ...(recommendation
+        ? {
+            placeholder: recommendation,
+            options: [{ value: recommendation, label: `${recommendation} (Recommended)` }],
+          }
+        : {}),
+    }
+  })
+}
+
+/** The record's answers, from a native form's `q0` style answer map. */
+export function answersOfForm(answer: Record<string, unknown> | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(answer ?? {})) {
+    const index = String(key).replace(/^q/, "")
+    if (!/^\d+$/.test(index)) continue
+    const text = Array.isArray(value)
+      ? value.map((item) => String(item)).filter(Boolean).join(", ")
+      : value === undefined || value === null
+        ? ""
+        : String(value).trim()
+    if (text) out[index] = text
+  }
+  return out
 }
 
 /** The first item the list can show, else the first prompt, else a default. */

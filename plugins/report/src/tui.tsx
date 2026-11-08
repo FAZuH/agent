@@ -11,10 +11,14 @@ import { For, Show, createEffect, createSignal } from "solid-js"
 import { Contract } from "./rpc.ts"
 import {
   ago,
+  answersOfForm,
   descriptionOf,
+  formFieldsOf,
+  formIDOf,
   groupsOfKind,
   markdownBodyOf,
   needsAnswer,
+  reportIDOfForm,
   stampOf,
   titleOf,
   type Question,
@@ -620,10 +624,69 @@ export default {
         .catch(() => {})
     }
 
-    // A report or answer written anywhere in the family refetches the view.
-    const off = rpc.events.on("changed", () => {
+    // A report or answer written anywhere in the family refetches the view,
+    // and a fresh prompt record opens as the host's inline form.
+    const off = rpc.events.on("changed", (event: any) => {
       const sessionID = routedID()
       if (sessionID) reload(sessionID)
+      const report = event?.data?.report
+      if (report?.kind === "prompt-user") void showForm(report)
+    })
+
+    /** Prompt records already offered as an inline form, by report id. */
+    const shownForms = new Set<string>()
+    let warnedNoForm = false
+
+    /**
+     * Offer a prompt record as the inline form the question tool uses. The
+     * record is already saved, so the card is only an offer: it can be filled
+     * now, or dismissed with esc to defer it to the Prompts list. The tool
+     * never waits on it, so the agent keeps working.
+     */
+    async function showForm(report: Report) {
+      if (report.kind !== "prompt-user") return
+      if (!report.prompts?.questions?.length) return
+      if (report.answeredAt || report.dismissedAt) return
+      if (shownForms.has(report.id)) return
+      // A read or answer on an old record also emits changed; do not pop a
+      // form for a prompt that was written long before this event.
+      if (Date.now() - report.at > 15_000) return
+      const create = ctx.client?.session?.form?.create
+      if (typeof create !== "function") {
+        if (!warnedNoForm) {
+          warnedNoForm = true
+          console.error("[report] the host has no session.form.create; prompts stay in the sidebar")
+        }
+        return
+      }
+      shownForms.add(report.id)
+      try {
+        await create.call(ctx.client.session.form, {
+          sessionID: report.sessionID,
+          id: formIDOf(report.id),
+          title: descriptionOf(report),
+          metadata: { kind: "report.prompt", reportID: report.id },
+          fields: formFieldsOf(report),
+        })
+      } catch (error: any) {
+        shownForms.delete(report.id)
+        console.error(`[report] could not show the prompt form: ${error?.message ?? error}`)
+      }
+    }
+
+    // The form is a second way into the same answer path. Dismissing it with
+    // esc is the defer action: the record stays unanswered in the list.
+    const offReplied = ctx.data?.on?.("form.replied", (event: any) => {
+      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+      if (!reportID) return
+      const sessionID = String(event?.data?.sessionID ?? "")
+      const answers = answersOfForm(event?.data?.answer)
+      if (!sessionID || !Object.keys(answers).length) return
+      void deliver(sessionID, reportID, answers, "steer")
+    })
+    const offCancelled = ctx.data?.on?.("form.cancelled", (event: any) => {
+      if (!reportIDOfForm(String(event?.data?.id ?? ""))) return
+      ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
     })
 
     async function read(report: Report) {
@@ -643,6 +706,29 @@ export default {
       if (sessionID) reload(sessionID)
     }
 
+    async function deliver(
+      sessionID: string,
+      reportID: string,
+      answers: Record<string, string>,
+      mode: "steer" | "queue",
+    ) {
+      try {
+        const result: any = await rpc.answer({ sessionID, reportID, answers, mode })
+        if (result?.error && !result?.delivered) {
+          ctx.ui.toast.show({ message: `Answers saved, but ${result.error}`, variant: "warning" })
+        } else {
+          ctx.ui.toast.show({
+            message: `Answers ${mode === "queue" ? "queued for" : "steered to"} ${sessionTitle(ctx, sessionID)}.`,
+            variant: "success",
+          })
+        }
+      } catch (error: any) {
+        ctx.ui.toast.show({ message: `Could not save answers: ${error?.message ?? error}`, variant: "error" })
+      }
+      const routed = routedID()
+      if (routed) reload(routed)
+    }
+
     async function answer(report: Report) {
       const questions = report.prompts?.questions ?? []
       if (!questions.length) return
@@ -659,21 +745,7 @@ export default {
         if (result.mode === "queue") mode = "queue"
       }
       if (!Object.keys(answers).length) return
-      try {
-        const result: any = await rpc.answer({ sessionID: report.sessionID, reportID: report.id, answers, mode })
-        if (result?.error && !result?.delivered) {
-          ctx.ui.toast.show({ message: `Answers saved, but ${result.error}`, variant: "warning" })
-        } else {
-          ctx.ui.toast.show({
-            message: `Answers ${mode === "queue" ? "queued for" : "steered to"} ${sessionTitle(ctx, report.sessionID)}.`,
-            variant: "success",
-          })
-        }
-      } catch (error: any) {
-        ctx.ui.toast.show({ message: `Could not save answers: ${error?.message ?? error}`, variant: "error" })
-      }
-      const sessionID = routedID()
-      if (sessionID) reload(sessionID)
+      await deliver(report.sessionID, report.id, answers, mode)
     }
 
     async function openList(kind: Report["kind"]) {
@@ -814,9 +886,11 @@ export default {
     })
 
     return () => {
-      try {
-        off?.()
-      } catch {}
+      for (const stop of [off, offReplied, offCancelled]) {
+        try {
+          stop?.()
+        } catch {}
+      }
     }
   },
 }
