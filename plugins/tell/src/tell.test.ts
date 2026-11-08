@@ -8,9 +8,16 @@
 
 import { describe, expect, test } from "bun:test"
 
-import { argsOf, descendants, filterRows, isDescendant, parseTarget, trigger, type SessionRow } from "./shared.ts"
+import { argsOf, descendants, filterRows, isDescendant, parseTarget, recentFirst, trigger, type SessionRow } from "./shared.ts"
 
 const row = (id: string, parentID?: string, title?: string, agent?: string): SessionRow => ({ id, parentID, title, agent })
+
+const timed = (id: string, updated: number, created = updated): SessionRow => ({
+  id,
+  parentID: "ses_root",
+  title: id,
+  time: { created, updated },
+})
 
 describe("parseTarget", () => {
   test("splits the target from the message", () => {
@@ -72,6 +79,34 @@ describe("descendants", () => {
   test("a cycle does not loop", () => {
     const rows = [row("ses_a", "ses_b"), row("ses_b", "ses_a")]
     expect(descendants(rows, "ses_a").map((r) => r.id)).toEqual(["ses_b"])
+  })
+})
+
+describe("recentFirst", () => {
+  test("the row touched last sits first", () => {
+    const rows = [timed("ses_old", 100), timed("ses_new", 300), timed("ses_mid", 200)]
+    expect(recentFirst(rows).map((r) => r.id)).toEqual(["ses_new", "ses_mid", "ses_old"])
+  })
+
+  test("a row with only a creation time takes its place", () => {
+    const rows = [{ id: "ses_a", parentID: "ses_root", time: { created: 500 } }, { id: "ses_b", parentID: "ses_root", time: { created: 700 } }]
+    expect(recentFirst(rows).map((r) => r.id)).toEqual(["ses_b", "ses_a"])
+  })
+
+  test("a row with no time falls behind the rest", () => {
+    const rows = [row("ses_none"), timed("ses_timed", 100)]
+    expect(recentFirst(rows).map((r) => r.id)).toEqual(["ses_timed", "ses_none"])
+  })
+
+  test("equal times keep the tree order", () => {
+    const rows = [timed("ses_a", 100), timed("ses_b", 100)]
+    expect(recentFirst(rows).map((r) => r.id)).toEqual(["ses_a", "ses_b"])
+  })
+
+  test("the original list is left alone", () => {
+    const rows = [timed("ses_old", 100), timed("ses_new", 300)]
+    recentFirst(rows)
+    expect(rows.map((r) => r.id)).toEqual(["ses_old", "ses_new"])
   })
 })
 
