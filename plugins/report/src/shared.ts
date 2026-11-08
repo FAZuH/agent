@@ -310,6 +310,14 @@ export function attentionOf(reports: readonly Report[], kind: Report["kind"]): R
   return reports.filter((report) => (kind === "post-task" ? !report.readAt : needsAnswer(report)))
 }
 
+/** attentionOf for the TUI's section names, "report" and "prompt". */
+export function attentionForSection(
+  reports: readonly Report[],
+  section: "report" | "prompt",
+): Report[] {
+  return attentionOf(reports, section === "report" ? "post-task" : "prompt-user")
+}
+
 /** One report group per session, oldest report first. */
 export interface ReportGroup {
   sessionID: string

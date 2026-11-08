@@ -12,6 +12,7 @@ import { Contract } from "./rpc.ts"
 import {
   ago,
   answersOfForm,
+  attentionForSection,
   attentionOf,
   descriptionOf,
   formFieldsOf,
@@ -58,11 +59,10 @@ function orderedGroups(ctx: any, groups: ReportGroup[]): ReportGroup[] {
 
 /** Reports: green while any report is unread. Prompts: yellow while any question is unanswered. */
 function dotColor(ctx: any, group: ReportGroup, kind: "report" | "prompt"): string {
+  const waiting = attentionForSection(group.reports, kind).length > 0
   if (kind === "report") {
-    const unread = group.reports.some((report) => !report.readAt)
-    return unread ? ctx.theme.text.feedback.success.base : ctx.theme.text.muted
+    return waiting ? ctx.theme.text.feedback.success.base : ctx.theme.text.muted
   }
-  const waiting = group.reports.some((report) => needsAnswer(report))
   return waiting ? ctx.theme.text.feedback.warning.base : ctx.theme.text.muted
 }
 
@@ -263,7 +263,9 @@ function History(props: {
       setIndex(at >= 0 ? at : history().length - 1)
       return
     }
-    const matched = attentionOf(history(), props.kind)
+    // The section kind ("report"/"prompt") and the record kind
+    // ("post-task"/"prompt-user") are different vocabularies; this maps them.
+    const matched = attentionForSection(history(), props.kind)
     if (!matched.length) {
       props.ctx.ui.toast.show({
         message:
@@ -298,7 +300,15 @@ function History(props: {
 
   createEffect(() => {
     const current = report()
-    if (!current.readAt) props.onRead(current)
+    if (current.readAt) return
+    // Patch the dialog's own copy too. The store is the source of truth, but
+    // the changed event only reloads the sidebar; without this the header and
+    // a later ctrl+a snapshot would still call this record unread.
+    const readAt = Date.now()
+    setHistory((items) =>
+      items.map((item) => (item.id === current.id ? { ...item, readAt } : item)),
+    )
+    props.onRead(current)
   })
 
   // A dialog is modal, so bind the filter in a layer of its own: the
@@ -407,10 +417,15 @@ function History(props: {
     <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <text fg={theme.text.muted}>
         {sessionTitle(props.ctx, props.group.sessionID)} · {index() + 1}/{filtered().length}
-        {filterIDs() ? (props.kind === "report" ? " · unread" : " · unanswered") : ""}
+        {filterIDs()
+          ? props.kind === "report"
+            ? " · showing unread"
+            : " · showing unanswered"
+          : ""}
         {" · "}
         {stampOf(report())}
         {report().rev && report().rev! > 1 ? ` · rev ${report().rev}` : ""}
+        {report().readAt ? " · read" : ""}
         {report().answeredAt ? " · answered" : ""}
         {report().dismissedAt ? " · dismissed" : ""}
       </text>
@@ -582,9 +597,7 @@ function Sidebar(props: {
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>
-    kind === "report"
-      ? group.reports.some((report) => !report.readAt)
-      : group.reports.some((report) => needsAnswer(report))
+    attentionForSection(group.reports, kind).length > 0
   const reportGroups = () => orderedGroups(props.ctx, groupsOfKind(props.list(), "post-task"))
   const promptGroups = () => orderedGroups(props.ctx, groupsOfKind(props.list(), "prompt-user"))
   // At most five slots: attention first, then newest. The picker still lists all.

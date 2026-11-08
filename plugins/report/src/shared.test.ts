@@ -11,6 +11,7 @@ import {
   ago,
   answerText,
   answersOfForm,
+  attentionForSection,
   attentionOf,
   blocksOf,
   descriptionOf,
@@ -215,6 +216,21 @@ describe("attentionOf", () => {
     const answered = { ...waiting, id: "p2", answeredAt: 5 }
     const dismissed = { ...waiting, id: "p3", dismissedAt: 5 }
     expect(attentionOf([waiting, answered, dismissed], "prompt-user").map((report) => report.id)).toEqual(["p1"])
+  })
+})
+
+describe("attentionForSection", () => {
+  const question = { title: "pick", body: "" }
+
+  test("report means post-task records, so unread ones", () => {
+    const read = { ...base, id: "r2", readAt: 5 }
+    expect(attentionForSection([{ ...base }, read], "report").map((report) => report.id)).toEqual(["r1"])
+  })
+
+  test("prompt means prompt-user records still waiting", () => {
+    const waiting = { ...base, id: "p1", kind: "prompt-user" as const, prompts: { questions: [question] } }
+    const answered = { ...waiting, id: "p2", answeredAt: 5 }
+    expect(attentionForSection([waiting, answered], "prompt").map((report) => report.id)).toEqual(["p1"])
   })
 })
 
