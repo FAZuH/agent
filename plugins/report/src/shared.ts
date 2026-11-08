@@ -458,15 +458,12 @@ export function ago(at: number, now = Date.now()): string {
   return `${Math.round(hours / 24)}d`
 }
 
-/** The record's local timestamp, and its update time when it was revised. */
-export function stampOf(report: Report): string {
-  const format = (value: number) => {
-    const date = new Date(value)
-    const pad = (part: number) => String(part).padStart(2, "0")
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-  }
-  const created = format(report.at)
-  return report.updatedAt && report.updatedAt !== report.at ? `${created} · upd ${format(report.updatedAt)}` : created
+/** The record's age, and its update age when it was revised. */
+export function stampOf(report: Report, now = Date.now()): string {
+  const created = ago(report.at, now)
+  return report.updatedAt && report.updatedAt !== report.at
+    ? `${created} · upd ${ago(report.updatedAt, now)}`
+    : created
 }
 
 /** A stable id for one record: time plus a short random suffix. */

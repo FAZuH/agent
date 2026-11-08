@@ -358,7 +358,8 @@ Answering uses **Enter** to steer the answer (interrupt and deliver now) or
 **Ctrl+Enter** to queue it behind the agent's current turn; an empty answer
 takes the question's recommendation. The dialog renders the record
 as Markdown with padding, shows the reporting session's title, its 35-character
-description, and the timestamp, colors keybinds apart from their descriptions,
+description, and its relative age (the update age when revised), colors keybinds
+apart from their descriptions,
 and grows with `↑/↓`, `PgUp/PgDn`, and `Home/End` scrolling up to about half
 the terminal height; the scroll hint appears only when the record overflows.
 Each section shows at most five slots: slots needing attention first

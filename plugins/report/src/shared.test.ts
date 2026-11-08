@@ -281,11 +281,12 @@ describe("answerText", () => {
 })
 
 describe("stampOf", () => {
-  test("local timestamp, plus the update time when revised", () => {
+  test("relative age, plus the update age when revised", () => {
     const created = new Date(2026, 10, 8, 7, 5).getTime()
-    expect(stampOf({ ...base, at: created })).toBe("2026-11-08 07:05")
-    expect(stampOf({ ...base, at: created, updatedAt: created + 60_000 })).toBe(
-      "2026-11-08 07:05 · upd 2026-11-08 07:06",
+    const now = created + 3 * 60 * 60 * 1000
+    expect(stampOf({ ...base, at: created }, now)).toBe("3h")
+    expect(stampOf({ ...base, at: created, updatedAt: created + 2 * 60 * 60 * 1000 }, now)).toBe(
+      "3h · upd 1h",
     )
   })
 })
