@@ -235,8 +235,9 @@ function History(props: {
   const theme = props.ctx.theme
   const dimensions = useTerminalDimensions()
   let scroll: any
+  const [history, setHistory] = createSignal<Report[]>(props.group.reports)
   const [index, setIndex] = createSignal(props.group.reports.length - 1)
-  const report = () => props.group.reports[index()]!
+  const report = () => history()[index()]!
   const maxRows = () => Math.max(12, Math.floor(dimensions().height * 0.55))
   const [scrollable, setScrollable] = createSignal(false)
   const measure = () => {
@@ -306,7 +307,7 @@ function History(props: {
     if (event.name === "right" || event.name === "l") {
       event.preventDefault()
       event.stopPropagation()
-      setIndex((current) => Math.min(props.group.reports.length - 1, current + 1))
+      setIndex((current) => Math.min(history().length - 1, current + 1))
       return
     }
     if (event.name === "c") {
@@ -333,15 +334,22 @@ function History(props: {
     if (event.name === "d" && answerable()) {
       event.preventDefault()
       event.stopPropagation()
-      props.ctx.ui.dialog.clear()
-      props.onDismiss(report())
+      const current = report()
+      const dismissedAt = Date.now()
+      // The dialog stays open, so it shows the dismissal right away instead of
+      // waiting for the sidebar to reopen it from the reloaded records.
+      setHistory((items) =>
+        items.map((item) => (item.id === current.id ? { ...item, dismissedAt } : item)),
+      )
+      props.onDismiss(current)
+      return
     }
   })
 
   return (
     <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <text fg={theme.text.muted}>
-        {sessionTitle(props.ctx, props.group.sessionID)} · {index() + 1}/{props.group.reports.length}
+        {sessionTitle(props.ctx, props.group.sessionID)} · {index() + 1}/{history().length}
         {" · "}
         {stampOf(report())}
         {report().rev && report().rev! > 1 ? ` · rev ${report().rev}` : ""}
@@ -362,7 +370,7 @@ function History(props: {
         <ReportBody ctx={props.ctx} report={report()} />
       </scrollbox>
       <text fg={theme.text.muted}>
-        <Show when={props.group.reports.length > 1}>
+        <Show when={history().length > 1}>
           <span style={{ fg: theme.text.base }}>history</span>{" "}
           <span style={{ fg: theme.text.muted }}>←/→</span>   {" "}
         </Show>
