@@ -85,6 +85,15 @@ install it yourself if you want that use case (see
 `/dispatch <task>` spawns a `general` subagent bound to the current session
 (`parentID`) and returns immediately. The child runs in the background, same
 as ctrl+b, with the parent's model. Its id is in the reply for follow-up.
+The child is marked in its session metadata (`dispatch` key), the only link
+between a parent and its dispatches.
+
+On OpenCode Desktop its `./gui-experimental` half reads those markers. A
+dispatch from the session on screen opens the child's tab in the background
+and toasts with a **View subagent** action, and the composer shows a pill
+with every dispatch of the session, its status, and a click to switch to
+it. Rebuild with `bun run build:gui` (or `./dev.sh gui`); tests:
+`bun test plugins/dispatch`.
 
 ## aside (`fazuh.aside`)
 
@@ -113,6 +122,14 @@ session gets to read. `/aside-silent` never asks for a report.
   so the agent does not block while the fork works.
 - **`aside_report`** (`text`): send the answer back. Only works inside a fork
   this plugin made.
+
+On OpenCode Desktop its `./gui-experimental` half reads the same markers:
+a fork of the session on screen opens its tab (a failure toasts instead),
+a fork's composer shows a back-link pill to the session that asked, a side
+panel lists the forks of the session on screen, and **Ask in a fork**
+(`mod+shift+a`) opens a dialog and forks through the `aside.start` RPC,
+whose contract is `rpc.ts`. Rebuild with `bun run build:gui` (or
+`./dev.sh gui`); tests: `bun test plugins/aside`.
 
 
 ## tell (`fazuh.tell`)
@@ -298,6 +315,58 @@ target with the image attached.
   screenshot as data, not instructions.
 
 Tests: `bun test plugins/desktop-ask`.
+
+## report (`fazuh.report`)
+
+`post_task` and `prompt_user` replace the two skill blocks at the end of a
+reply. The tool stores a record; the reply carries only the answer. The
+skills in `skills/shared/post-task` and `skills/shared/prompt-user` call the
+tools and keep the printed block as a fallback for hosts without the plugin.
+
+- **`post_task`** (`description`, `completed`, `deviations`, `hiccups`,
+  `failed`, `next`): the @post-task report. `description` is required and at
+  most 35 characters; it is the slot label. Decisions go in a separate
+  `prompt_user` call.
+- **`prompt_user`** (`description`, `procedures?`, `questions?`): the
+  @prompt-user block for a standalone ask. `description` is required and at
+  most 35 characters.
+- **`report_update`** (`id?`, the same section fields): patches one record in
+  place, keeping every field the call omits, and bumps its revision. `id`
+  defaults to the session's latest report. Use it to revise a section instead
+  of writing a second report that repeats the first.
+
+Records are one JSON file per session under
+`${XDG_STATE_HOME:-~/.local/state}/fazuh-agent/reports/`, newest last,
+capped at 50; `REPORT_STATE_HOME` overrides the root. The server writes them
+atomically and exposes `report.list({sessionIDs})`, `report.read`,
+`report.answer`, and a `changed` event over RPC. Views pass the routed session's family
+(`data.session.family`), so a subagent's reports appear in the parent's view.
+Forks stay out of the family.
+
+The TUI half (`./tui`) adds two sidebar sections, each a slot per agent
+(the routed session and each subagent that has a record). **Reports** holds
+post-task records, **Prompts** holds prompt-user records. The dot is yellow
+while a record has questions without answers, green while unread, and gray
+once read; an unread slot's name blinks. Clicking a slot opens that agent's
+history for the section: `←`/`→` move through it, and `enter` on an open
+prompt walks the questions and sends the answers to the agent. Opening a
+record marks it read (`report.read`); reading never bumps its revision.
+Answering uses **Enter** to steer the answer (interrupt and deliver now) or
+**Ctrl+Enter** to queue it behind the agent's current turn; an empty answer
+takes the question's recommendation. The dialog renders the record
+as Markdown with padding, shows the reporting session's title, its 35-character
+description, and the timestamp, colors keybinds apart from their descriptions,
+and grows with `↑/↓`, `PgUp/PgDn`, and `Home/End` scrolling up to about half
+the terminal height; the scroll hint appears only when the record overflows.
+Each section shows at most five slots: slots needing attention first
+(unread reports, unanswered prompts), then the rest, each group newest first.
+The pickers list every slot. The number beside a section header counts only
+the slots needing attention. `Ctrl+A` in either picker toggles that section
+between all entries and attention-only (default: all). `/reports` and `/prompts` open the same histories by
+picker. The GUI half
+mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
+side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
+bundle: `./dev.sh gui`.
 
 ## Commands
 
