@@ -62,6 +62,8 @@ export interface Report {
   answers?: Record<string, string>
   /** When the user answered the prompts. */
   answeredAt?: number
+  /** When the user dismissed the prompts without answering them. */
+  dismissedAt?: number
   /** When the user opened this report. */
   readAt?: number
 }
@@ -286,9 +288,9 @@ export function dotState(report: Report | undefined): DotState {
   return report.readAt ? "read" : "unread"
 }
 
-/** The record has questions and no answer yet, whichever kind it is. */
+/** The record has questions and no answer or dismissal yet, whichever kind it is. */
 export function needsAnswer(report: Report): boolean {
-  return (report.prompts?.questions?.length ?? 0) > 0 && !report.answeredAt
+  return (report.prompts?.questions?.length ?? 0) > 0 && !report.answeredAt && !report.dismissedAt
 }
 
 /** One report group per session, oldest report first. */

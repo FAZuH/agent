@@ -230,6 +230,7 @@ function History(props: {
   kind: "report" | "prompt"
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
+  onDismiss: (report: Report) => void
 }) {
   const theme = props.ctx.theme
   const dimensions = useTerminalDimensions()
@@ -327,6 +328,13 @@ function History(props: {
       event.stopPropagation()
       props.ctx.ui.dialog.clear()
       props.onAnswer(report())
+      return
+    }
+    if (event.name === "d" && answerable()) {
+      event.preventDefault()
+      event.stopPropagation()
+      props.ctx.ui.dialog.clear()
+      props.onDismiss(report())
     }
   })
 
@@ -338,6 +346,7 @@ function History(props: {
         {stampOf(report())}
         {report().rev && report().rev! > 1 ? ` · rev ${report().rev}` : ""}
         {report().answeredAt ? " · answered" : ""}
+        {report().dismissedAt ? " · dismissed" : ""}
       </text>
       <Show when={report().description}>
         <text fg={theme.text.base}>
@@ -359,6 +368,7 @@ function History(props: {
         </Show>
         <Show when={answerable()}>
           <span style={{ fg: theme.text.base }}>answer</span> <span style={{ fg: theme.text.muted }}>enter</span>   {" "}
+          <span style={{ fg: theme.text.base }}>dismiss</span> <span style={{ fg: theme.text.muted }}>d</span>   {" "}
         </Show>
         <span style={{ fg: theme.text.base }}>copy session id</span> <span style={{ fg: theme.text.muted }}>c</span>   {" "}
         <span style={{ fg: theme.text.base }}>close</span> <span style={{ fg: theme.text.muted }}>esc</span>
@@ -377,8 +387,11 @@ function openHistory(
   kind: "report" | "prompt",
   onAnswer: (report: Report) => void,
   onRead: (report: Report) => void,
+  onDismiss: (report: Report) => void,
 ) {
-  ctx.ui.dialog.show(() => <History ctx={ctx} group={group} kind={kind} onAnswer={onAnswer} onRead={onRead} />)
+  ctx.ui.dialog.show(() => (
+    <History ctx={ctx} group={group} kind={kind} onAnswer={onAnswer} onRead={onRead} onDismiss={onDismiss} />
+  ))
   try {
     ctx.ui.dialog.set({ size: "xlarge" })
   } catch {}
@@ -390,12 +403,19 @@ function Slot(props: {
   kind: "report" | "prompt"
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
+  onDismiss: (report: Report) => void
 }) {
   const theme = props.ctx.theme
   const latest = () => props.group.reports[props.group.reports.length - 1]!
   const unread = () => props.kind === "report" && reportDotState(latest()) === "unread"
   return (
-    <box flexDirection="column" minWidth={0} onMouseUp={() => openHistory(props.ctx, props.group, props.kind, props.onAnswer, props.onRead)}>
+    <box
+      flexDirection="column"
+      minWidth={0}
+      onMouseUp={() =>
+        openHistory(props.ctx, props.group, props.kind, props.onAnswer, props.onRead, props.onDismiss)
+      }
+    >
       <box flexDirection="row" gap={1} minWidth={0}>
         <text flexShrink={0} style={{ fg: dotColor(props.ctx, props.group, props.kind) }}>
           {"\u2022"}
@@ -435,6 +455,7 @@ function Section(props: {
   toggle: () => void
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
+  onDismiss: (report: Report) => void
 }) {
   const theme = props.ctx.theme
   return (
@@ -461,6 +482,7 @@ function Section(props: {
                 kind={props.kind}
                 onAnswer={props.onAnswer}
                 onRead={props.onRead}
+                onDismiss={props.onDismiss}
               />
             )}
           </For>
@@ -479,6 +501,7 @@ function Sidebar(props: {
   reload: (sessionID: string) => void
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
+  onDismiss: (report: Report) => void
 }) {
   createEffect(() => {
     const sessionID = props.sessionID
@@ -537,6 +560,7 @@ function Sidebar(props: {
           toggle={toggleReports}
           onAnswer={props.onAnswer}
           onRead={props.onRead}
+          onDismiss={props.onDismiss}
         />
         <Section
           ctx={props.ctx}
@@ -550,6 +574,7 @@ function Sidebar(props: {
           toggle={togglePrompts}
           onAnswer={props.onAnswer}
           onRead={props.onRead}
+          onDismiss={props.onDismiss}
         />
       </box>
     </Show>
@@ -588,6 +613,17 @@ export default {
       try {
         await rpc.read({ sessionID: report.sessionID, reportID: report.id })
       } catch {}
+    }
+
+    async function dismiss(report: Report) {
+      try {
+        await rpc.dismiss({ sessionID: report.sessionID, reportID: report.id })
+        ctx.ui.toast.show({ message: `Dismissed: ${descriptionOf(report)}`, variant: "info" })
+      } catch (error: any) {
+        ctx.ui.toast.show({ message: `Could not dismiss: ${error?.message ?? error}`, variant: "error" })
+      }
+      const sessionID = routedID()
+      if (sessionID) reload(sessionID)
     }
 
     async function answer(report: Report) {
@@ -690,6 +726,7 @@ export default {
           kind === "post-task" ? "report" : "prompt",
           (report) => void answer(report),
           (report) => void read(report),
+          (report) => void dismiss(report),
         )
       }
     }
@@ -710,6 +747,7 @@ export default {
           reload={reload}
           onAnswer={(report) => void answer(report)}
           onRead={(report) => void read(report)}
+          onDismiss={(report) => void dismiss(report)}
         />
       ),
     })

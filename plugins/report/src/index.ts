@@ -177,6 +177,20 @@ export default {
             }
             return { ok: true, delivered, ...(error ? { error } : {}) }
           },
+          dismiss: async (input: any) => {
+            const sessionID = String(input?.sessionID ?? "")
+            const reportID = String(input?.reportID ?? "")
+            const updated = updateReport(sessionID, reportID, (current) => ({
+              ...current,
+              dismissedAt: Date.now(),
+            }))
+            if (updated && emit) {
+              void emit({ sessionID, report: updated }).catch((cause) =>
+                console.error(`[report] emit failed: ${message(cause)}`),
+              )
+            }
+            return { ok: Boolean(updated) }
+          },
         })
         emit = (event) => registration.events.emit("changed", event)
       } catch (error) {

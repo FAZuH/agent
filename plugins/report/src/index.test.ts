@@ -141,6 +141,23 @@ describe("tools", () => {
     expect(stored.answeredAt).toBeGreaterThan(0)
   })
 
+  test("dismiss marks the prompts handled without an answer", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const created = await prompt.execute(
+      { description: "Dismiss me", questions: [{ title: "obsolete", body: "already handled" }] },
+      { sessionID: "ses_dismiss" },
+    )
+    const id = String(created.content).match(/([a-z0-9-]+);/)?.[1]
+    const result = await handlers.dismiss({ sessionID: "ses_dismiss", reportID: id })
+    expect(result.ok).toBe(true)
+    const stored = store.readReports("ses_dismiss")[0]!
+    expect(stored.dismissedAt).toBeGreaterThan(0)
+    expect(stored.answeredAt).toBeUndefined()
+    expect(stored.answers).toBeUndefined()
+    expect(prompts.some((text) => text.includes("Dismiss me"))).toBe(false)
+    expect((await handlers.dismiss({ sessionID: "ses_dismiss", reportID: "missing" })).ok).toBe(false)
+  })
+
   test("read marks the report read without bumping rev", async () => {
     const result = await handlers.read({ sessionID: "ses_3", reportID: store.readReports("ses_3")[0]!.id })
     expect(result.ok).toBe(true)

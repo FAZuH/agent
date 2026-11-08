@@ -173,6 +173,13 @@ describe("dotState", () => {
     expect(dotState({ ...base, readAt: 5 })).toBe("read")
     expect(dotState(undefined)).toBe("read")
   })
+
+  test("a dismissed prompt is not waiting for an answer", () => {
+    const question = { title: "pick", body: "" }
+    expect(
+      dotState({ ...base, kind: "prompt-user", prompts: { questions: [question] }, dismissedAt: 5, readAt: 6 }),
+    ).toBe("read")
+  })
 })
 
 describe("needsAnswer", () => {
@@ -182,6 +189,9 @@ describe("needsAnswer", () => {
     expect(needsAnswer({ ...base, kind: "post-task", prompts: { questions: [question] } })).toBe(true)
     expect(
       needsAnswer({ ...base, kind: "prompt-user", prompts: { questions: [question] }, answeredAt: 5 }),
+    ).toBe(false)
+    expect(
+      needsAnswer({ ...base, kind: "prompt-user", prompts: { questions: [question] }, dismissedAt: 5 }),
     ).toBe(false)
     expect(needsAnswer({ ...base })).toBe(false)
   })

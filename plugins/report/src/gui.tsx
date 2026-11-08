@@ -38,6 +38,7 @@ function ReportsView(props: {
   seed: (sessionID: string) => void
   answer: (report: Report) => void
   read: (report: Report) => void
+  dismiss: (report: Report) => void
 }) {
   const ui = props.ctx.ui
   const [active, setActive] = createSignal<{ kind: Kind; sessionID: string }>()
@@ -176,6 +177,7 @@ function ReportsView(props: {
                   {report().kind === "post-task" ? " · report" : " · prompt"} · {stampOf(report())}
                   {report().rev && report().rev! > 1 ? ` · rev ${report().rev}` : ""}
                   {report().answeredAt ? " · answered" : ""}
+                  {report().dismissedAt ? " · dismissed" : ""}
                 </span>
                 <button
                   onClick={() => {
@@ -207,6 +209,9 @@ function ReportsView(props: {
                 <Show when={selected()?.kind === "prompt" && needsAnswer(report())}>
                   <button onClick={() => props.answer(report())} style={navStyle}>
                     Answer
+                  </button>
+                  <button onClick={() => props.dismiss(report())} style={navStyle}>
+                    Dismiss
                   </button>
                 </Show>
               </div>
@@ -267,6 +272,17 @@ export default Plugin.define({
       try {
         await client().rpc(Contract).read({ sessionID: report.sessionID, reportID: report.id })
       } catch {}
+    }
+
+    async function dismiss(report: Report) {
+      try {
+        await client().rpc(Contract).dismiss({ sessionID: report.sessionID, reportID: report.id })
+        ctx.toast.show({ title: "Prompt dismissed", description: report.description ?? report.title })
+      } catch (error) {
+        ctx.toast.show({ title: "Could not dismiss", description: String(error), variant: "error" })
+      }
+      const routed = ctx.sessions.current()
+      if (routed) seed(routed.id)
     }
 
     async function answer(report: Report) {
@@ -351,6 +367,7 @@ export default Plugin.define({
           seed={seed}
           answer={(report) => void answer(report)}
           read={(report) => void read(report)}
+          dismiss={(report) => void dismiss(report)}
         />
       ),
     })
