@@ -787,6 +787,20 @@ export default {
               slash: { name: "prompts" },
               run: () => void openList("prompt-user"),
             },
+            {
+              id: "report.attention",
+              title: "Only unanswered prompts and unread reports",
+              group: "report",
+              palette: true,
+              bind: "ctrl+a",
+              run: () => {
+                const only = !(view.unread === true && view.unanswered === true)
+                void setView((draft: any) => {
+                  draft.unread = only
+                  draft.unanswered = only
+                })
+              },
+            },
           ],
         }))
         return null
