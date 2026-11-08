@@ -21,6 +21,7 @@ import {
   readMarker,
   reportTags,
 } from "./aside.ts"
+import { Contract } from "./rpc.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -113,6 +114,31 @@ export default {
         sessionID: marker.parentID,
         text: `${tags.open}\n${text}\n${tags.close}`,
       })
+    }
+
+    if (typeof ctx.rpc?.register !== "function") {
+      console.error("[aside] ctx.rpc.register is unavailable; the GUI ask dialog cannot be called")
+    } else {
+      try {
+        await ctx.rpc.register(Contract, {
+          start: async (input: any) => {
+            const question = String(input?.question ?? "").trim()
+            if (!question) return { error: "question is empty." }
+            const parentID = String(input?.parentID ?? "")
+            if (!parentID) return { error: "no parent session." }
+            const silent = input?.silent === true
+            try {
+              const forkID = await startAside(question, parentID, silent)
+              if (!forkID) return { error: "could not fork this session." }
+              return { forkID }
+            } catch (error) {
+              return { error: message(error) }
+            }
+          },
+        })
+      } catch (error) {
+        console.error(`[aside] RPC registration failed: ${message(error)}`)
+      }
     }
 
     await ctx.tool.transform((tools: any) => {
