@@ -348,8 +348,11 @@ The TUI half (`./tui`) adds two sidebar sections, each a slot per agent
 post-task records, **Prompts** holds prompt-user records. The dot is yellow
 while a record has questions without answers, green while unread, and gray
 once read; an unread slot's name blinks. Clicking a slot opens that agent's
-history for the section: `←`/`→` move through it, and `enter` on an open
-prompt walks the questions and sends the answers to the agent. Opening a
+history for the section: `←`/`→` move through it, `Ctrl+↑`/`Ctrl+↓`
+switch to the previous/next session in the list the history was opened from
+(wrapping at the ends; with the attention filter on, sessions with nothing
+matching are skipped), and `enter` on an open prompt walks the questions and
+sends the answers to the agent. Opening a
 record marks it read (`report.read`); reading never bumps its revision.
 Answering uses **Enter** to steer the answer (interrupt and deliver now) or
 **Ctrl+Enter** to queue it behind the agent's current turn; an empty answer

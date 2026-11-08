@@ -305,6 +305,12 @@ export function needsAnswer(report: Report): boolean {
   return (report.prompts?.questions?.length ?? 0) > 0 && !report.answeredAt && !report.dismissedAt
 }
 
+/** One report group per session, oldest report first. */
+export interface ReportGroup {
+  sessionID: string
+  reports: Report[]
+}
+
 /** The records a section still wants seen: unread reports, unanswered prompts. */
 export function attentionOf(reports: readonly Report[], kind: Report["kind"]): Report[] {
   return reports.filter((report) => (kind === "post-task" ? !report.readAt : needsAnswer(report)))
@@ -318,10 +324,29 @@ export function attentionForSection(
   return attentionOf(reports, section === "report" ? "post-task" : "prompt-user")
 }
 
-/** One report group per session, oldest report first. */
-export interface ReportGroup {
-  sessionID: string
-  reports: Report[]
+/**
+ * The next session group in a list, wrapping at the ends. With `attention`
+ * set, a group with nothing needing it is skipped. Used by the history's
+ * Ctrl+Up/Down, over the list the history was opened from.
+ */
+export function nextSessionOf(
+  sessions: readonly ReportGroup[],
+  currentID: string,
+  delta: 1 | -1,
+  attention: boolean,
+  section: "report" | "prompt",
+): ReportGroup | undefined {
+  if (sessions.length < 2) return undefined
+  const from = sessions.findIndex((group) => group.sessionID === currentID)
+  if (from < 0) return undefined
+  for (let step = 1; step <= sessions.length; step++) {
+    const at = (((from + delta * step) % sessions.length) + sessions.length) % sessions.length
+    const group = sessions[at]
+    if (!group || group.sessionID === currentID) continue
+    if (attention && attentionForSection(group.reports, section).length === 0) continue
+    return group
+  }
+  return undefined
 }
 
 /** One kind's reports, grouped per session. The sidebar shows the kinds in separate sections. */

@@ -22,6 +22,7 @@ import {
   isEmpty,
   markdownOf,
   needsAnswer,
+  nextSessionOf,
   promptMarkdown,
   promptsOf,
   reportDotState,
@@ -30,6 +31,7 @@ import {
   stampOf,
   titleOf,
   type Report,
+  type ReportGroup,
 } from "./shared.ts"
 
 const base = { id: "r1", kind: "post-task" as const, sessionID: "ses_1", at: 1000, title: "" }
@@ -231,6 +233,38 @@ describe("attentionForSection", () => {
     const waiting = { ...base, id: "p1", kind: "prompt-user" as const, prompts: { questions: [question] } }
     const answered = { ...waiting, id: "p2", answeredAt: 5 }
     expect(attentionForSection([waiting, answered], "prompt").map((report) => report.id)).toEqual(["p1"])
+  })
+})
+
+describe("nextSessionOf", () => {
+  const group = (id: string, reports: Report[]): ReportGroup => ({ sessionID: id, reports })
+  const unread = (id: string): Report => ({ ...base, id, sessionID: id })
+  const read = (id: string): Report => ({ ...unread(id), readAt: 5 })
+  const sessions = [
+    group("a", [unread("r1")]),
+    group("b", [read("r2")]),
+    group("c", [unread("r3")]),
+  ]
+
+  test("down goes to the next group and wraps", () => {
+    expect(nextSessionOf(sessions, "a", 1, false, "report")?.sessionID).toBe("b")
+    expect(nextSessionOf(sessions, "c", 1, false, "report")?.sessionID).toBe("a")
+  })
+
+  test("up goes to the previous group and wraps", () => {
+    expect(nextSessionOf(sessions, "a", -1, false, "report")?.sessionID).toBe("c")
+    expect(nextSessionOf(sessions, "b", -1, false, "report")?.sessionID).toBe("a")
+  })
+
+  test("with attention set, a group with nothing unread is skipped", () => {
+    expect(nextSessionOf(sessions, "a", 1, true, "report")?.sessionID).toBe("c")
+    expect(nextSessionOf(sessions, "c", 1, true, "report")?.sessionID).toBe("a")
+    expect(nextSessionOf(sessions, "a", -1, true, "report")?.sessionID).toBe("c")
+  })
+
+  test("no other group, or an unknown current group, means no move", () => {
+    expect(nextSessionOf([sessions[0]!], "a", 1, false, "report")).toBeUndefined()
+    expect(nextSessionOf(sessions, "gone", 1, false, "report")).toBeUndefined()
   })
 })
 

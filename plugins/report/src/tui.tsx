@@ -20,6 +20,7 @@ import {
   groupsOfKind,
   markdownBodyOf,
   needsAnswer,
+  nextSessionOf,
   reportIDOfForm,
   stampOf,
   titleOf,
@@ -236,6 +237,7 @@ function askAnswer(
 function History(props: {
   ctx: any
   group: ReportGroup
+  sessions: ReportGroup[]
   kind: "report" | "prompt"
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
@@ -244,7 +246,16 @@ function History(props: {
   const theme = props.ctx.theme
   const dimensions = useTerminalDimensions()
   let scroll: any
-  const [history, setHistory] = createSignal<Report[]>(props.group.reports)
+  const [groupID, setGroupID] = createSignal(props.group.sessionID)
+  const group = () =>
+    props.sessions.find((item) => item.sessionID === groupID()) ?? props.group
+  // Reads done in this dialog, so switching sessions and back keeps them.
+  const marks = new Map<string, number>()
+  const withMarks = (reports: readonly Report[]): Report[] =>
+    reports.map((item) =>
+      !item.readAt && marks.has(item.id) ? { ...item, readAt: marks.get(item.id)! } : item,
+    )
+  const [history, setHistory] = createSignal<Report[]>(withMarks(props.group.reports))
   const [index, setIndex] = createSignal(props.group.reports.length - 1)
   // Ctrl+A freezes the entries that needed attention when it was pressed, so
   // reading one (which marks it read) or dismissing one does not move the
@@ -280,6 +291,41 @@ function History(props: {
     setFilterIDs(matched.map((item) => item.id))
     setIndex(at >= 0 ? at : matched.length - 1)
   }
+  // Ctrl+Up/Down walks the sessions the dialog was opened from, wrapping at
+  // the ends. With the attention filter on, sessions with nothing to show are
+  // skipped: the filter keeps its meaning while changing sessions.
+  const switchSession = (delta: 1 | -1) => {
+    const sessions = props.sessions.map((item) => ({ ...item, reports: withMarks(item.reports) }))
+    const target = nextSessionOf(
+      sessions,
+      groupID(),
+      delta,
+      filterIDs() !== undefined,
+      props.kind,
+    )
+    if (!target) {
+      if (props.sessions.length > 1 && filterIDs()) {
+        props.ctx.ui.toast.show({
+          message:
+            props.kind === "report"
+              ? "No other session has unread reports."
+              : "No other session has unanswered prompts.",
+          variant: "info",
+        })
+      }
+      return
+    }
+    setGroupID(target.sessionID)
+    setHistory(target.reports)
+    if (filterIDs()) {
+      const matched = attentionForSection(target.reports, props.kind)
+      setFilterIDs(matched.map((item) => item.id))
+      setIndex(matched.length - 1)
+    } else {
+      setIndex(target.reports.length - 1)
+    }
+    scroll?.scrollTo(0)
+  }
   const maxRows = () => Math.max(12, Math.floor(dimensions().height * 0.55))
   const [scrollable, setScrollable] = createSignal(false)
   const measure = () => {
@@ -305,14 +351,15 @@ function History(props: {
     // the changed event only reloads the sidebar; without this the header and
     // a later ctrl+a snapshot would still call this record unread.
     const readAt = Date.now()
+    marks.set(current.id, readAt)
     setHistory((items) =>
       items.map((item) => (item.id === current.id ? { ...item, readAt } : item)),
     )
     props.onRead(current)
   })
 
-  // A dialog is modal, so bind the filter in a layer of its own: the
-  // composer's ctrl+a and the input's "move to line start" stay out of it.
+  // A dialog is modal, so bind the filter and session keys in a layer of its
+  // own: the composer's ctrl+a and the input's "move to line start" stay out.
   props.ctx.keymap.layer(() => ({
     mode: "modal",
     priority: 2,
@@ -325,17 +372,31 @@ function History(props: {
         bind: "ctrl+a",
         run: () => toggleFilter(),
       },
+      {
+        id: "report.history.session.prev",
+        title: "Previous session",
+        group: "Dialog",
+        bind: "ctrl+up",
+        run: () => switchSession(-1),
+      },
+      {
+        id: "report.history.session.next",
+        title: "Next session",
+        group: "Dialog",
+        bind: "ctrl+down",
+        run: () => switchSession(1),
+      },
     ],
   }))
 
   useKeyboard((event: any) => {
-    if (event.name === "up") {
+    if (event.name === "up" && event.ctrl !== true) {
       event.preventDefault()
       event.stopPropagation()
       scroll?.scrollBy(-1)
       return
     }
-    if (event.name === "down") {
+    if (event.name === "down" && event.ctrl !== true) {
       event.preventDefault()
       event.stopPropagation()
       scroll?.scrollBy(1)
@@ -381,7 +442,7 @@ function History(props: {
       event.preventDefault()
       event.stopPropagation()
       try {
-        const copied = props.ctx.renderer?.copyToClipboardOSC52?.(props.group.sessionID)
+        const copied = props.ctx.renderer?.copyToClipboardOSC52?.(group().sessionID)
         props.ctx.ui.toast.show({
           message: copied ? "Session id copied" : "Could not copy the session id",
           variant: copied ? "success" : "error",
@@ -416,7 +477,7 @@ function History(props: {
   return (
     <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <text fg={theme.text.muted}>
-        {sessionTitle(props.ctx, props.group.sessionID)} · {index() + 1}/{filtered().length}
+        {sessionTitle(props.ctx, group().sessionID)} · {index() + 1}/{filtered().length}
         {filterIDs()
           ? props.kind === "report"
             ? " · showing unread"
@@ -449,6 +510,10 @@ function History(props: {
           <span style={{ fg: theme.text.base }}>history</span>{" "}
           <span style={{ fg: theme.text.muted }}>←/→</span>   {" "}
         </Show>
+        <Show when={props.sessions.length > 1}>
+          <span style={{ fg: theme.text.base }}>sessions</span>{" "}
+          <span style={{ fg: theme.text.muted }}>ctrl+↑/↓</span>   {" "}
+        </Show>
         <Show when={answerable()}>
           <span style={{ fg: theme.text.base }}>answer</span> <span style={{ fg: theme.text.muted }}>enter</span>   {" "}
           <span style={{ fg: theme.text.base }}>dismiss</span> <span style={{ fg: theme.text.muted }}>d</span>   {" "}
@@ -471,13 +536,22 @@ function History(props: {
 function openHistory(
   ctx: any,
   group: ReportGroup,
+  sessions: ReportGroup[],
   kind: "report" | "prompt",
   onAnswer: (report: Report) => void,
   onRead: (report: Report) => void,
   onDismiss: (report: Report) => void,
 ) {
   ctx.ui.dialog.show(() => (
-    <History ctx={ctx} group={group} kind={kind} onAnswer={onAnswer} onRead={onRead} onDismiss={onDismiss} />
+    <History
+      ctx={ctx}
+      group={group}
+      sessions={sessions}
+      kind={kind}
+      onAnswer={onAnswer}
+      onRead={onRead}
+      onDismiss={onDismiss}
+    />
   ))
   try {
     ctx.ui.dialog.set({ size: "xlarge", centered: true })
@@ -488,6 +562,7 @@ function Slot(props: {
   ctx: any
   group: ReportGroup
   kind: "report" | "prompt"
+  onOpen: (group: ReportGroup) => void
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
@@ -500,9 +575,7 @@ function Slot(props: {
     <box
       flexDirection="column"
       minWidth={0}
-      onMouseUp={() =>
-        openHistory(props.ctx, props.group, props.kind, props.onAnswer, props.onRead, props.onDismiss)
-      }
+      onMouseUp={() => props.onOpen(props.group)}
     >
       <box flexDirection="row" gap={1} minWidth={0}>
         <text flexShrink={0} style={{ fg: dotColor(props.ctx, props.group, props.kind) }}>
@@ -541,6 +614,7 @@ function Section(props: {
   groups: ReportGroup[]
   open: boolean
   toggle: () => void
+  onOpen: (group: ReportGroup) => void
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
@@ -568,6 +642,7 @@ function Section(props: {
                 ctx={props.ctx}
                 group={group}
                 kind={props.kind}
+                onOpen={props.onOpen}
                 onAnswer={props.onAnswer}
                 onRead={props.onRead}
                 onDismiss={props.onDismiss}
@@ -600,26 +675,31 @@ function Sidebar(props: {
     attentionForSection(group.reports, kind).length > 0
   const reportGroups = () => orderedGroups(props.ctx, groupsOfKind(props.list(), "post-task"))
   const promptGroups = () => orderedGroups(props.ctx, groupsOfKind(props.list(), "prompt-user"))
-  // At most five slots: attention first, then newest. The picker still lists all.
-  const arrange = (groups: ReportGroup[], kind: "report" | "prompt") =>
+  // At most five slots: attention first, then newest. The picker still lists
+  // all, and the history's ctrl+up/down walks this same order uncapped.
+  const sorted = (groups: ReportGroup[], kind: "report" | "prompt") =>
     groups
       .slice()
       .sort(
         (a, b) =>
           Number(needs(b, kind)) - Number(needs(a, kind)) || latestOf(b).at - latestOf(a).at,
       )
-      .slice(0, 5)
-  const reports = () => {
+  const reportSessions = () => {
     const groups = reportGroups()
-    return arrange(props.view?.unread === true ? groups.filter((group) => needs(group, "report")) : groups, "report")
+    return sorted(
+      props.view?.unread === true ? groups.filter((group) => needs(group, "report")) : groups,
+      "report",
+    )
   }
-  const prompts = () => {
+  const promptSessions = () => {
     const groups = promptGroups()
-    return arrange(
+    return sorted(
       props.view?.unanswered === true ? groups.filter((group) => needs(group, "prompt")) : groups,
       "prompt",
     )
   }
+  const reports = () => reportSessions().slice(0, 5)
+  const prompts = () => promptSessions().slice(0, 5)
   const reportAttention = () => reportGroups().filter((group) => needs(group, "report")).length
   const promptAttention = () => promptGroups().filter((group) => needs(group, "prompt")).length
   const reportsOpen = () => props.view?.open !== false
@@ -646,6 +726,17 @@ function Sidebar(props: {
           groups={reports()}
           open={reportsOpen()}
           toggle={toggleReports}
+          onOpen={(group) =>
+            openHistory(
+              props.ctx,
+              group,
+              reportSessions(),
+              "report",
+              props.onAnswer,
+              props.onRead,
+              props.onDismiss,
+            )
+          }
           onAnswer={props.onAnswer}
           onRead={props.onRead}
           onDismiss={props.onDismiss}
@@ -660,6 +751,17 @@ function Sidebar(props: {
           groups={prompts()}
           open={promptsOpen()}
           toggle={togglePrompts}
+          onOpen={(group) =>
+            openHistory(
+              props.ctx,
+              group,
+              promptSessions(),
+              "prompt",
+              props.onAnswer,
+              props.onRead,
+              props.onDismiss,
+            )
+          }
           onAnswer={props.onAnswer}
           onRead={props.onRead}
           onDismiss={props.onDismiss}
@@ -871,6 +973,7 @@ export default {
         openHistory(
           ctx,
           group,
+          visible,
           kind === "post-task" ? "report" : "prompt",
           (report) => void answer(report),
           (report) => void read(report),
