@@ -12,11 +12,9 @@ import { Contract } from "./rpc.ts"
 import {
   ago,
   descriptionOf,
-  dotState,
   groupsOfKind,
   markdownBodyOf,
   needsAnswer,
-  reportDotState,
   stampOf,
   titleOf,
   type Question,
@@ -53,13 +51,14 @@ function orderedGroups(ctx: any, groups: ReportGroup[]): ReportGroup[] {
   })
 }
 
-/** Reports: green unread, gray read. Prompts: yellow unanswered, gray answered. */
+/** Reports: green while any report is unread. Prompts: yellow while any question is unanswered. */
 function dotColor(ctx: any, group: ReportGroup, kind: "report" | "prompt"): string {
-  const latest = group.reports[group.reports.length - 1]
   if (kind === "report") {
-    return reportDotState(latest) === "unread" ? ctx.theme.text.feedback.success.base : ctx.theme.text.muted
+    const unread = group.reports.some((report) => !report.readAt)
+    return unread ? ctx.theme.text.feedback.success.base : ctx.theme.text.muted
   }
-  return dotState(latest) === "answer" ? ctx.theme.text.feedback.warning.base : ctx.theme.text.muted
+  const waiting = group.reports.some((report) => needsAnswer(report))
+  return waiting ? ctx.theme.text.feedback.warning.base : ctx.theme.text.muted
 }
 
 let reportSyntax: any
@@ -415,7 +414,8 @@ function Slot(props: {
 }) {
   const theme = props.ctx.theme
   const latest = () => props.group.reports[props.group.reports.length - 1]!
-  const unread = () => props.kind === "report" && reportDotState(latest()) === "unread"
+  const unread = () =>
+    props.kind === "report" && props.group.reports.some((report) => !report.readAt)
   return (
     <box
       flexDirection="column"
@@ -517,7 +517,9 @@ function Sidebar(props: {
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>
-    kind === "report" ? !latestOf(group).readAt : needsAnswer(latestOf(group))
+    kind === "report"
+      ? group.reports.some((report) => !report.readAt)
+      : group.reports.some((report) => needsAnswer(report))
   const reportGroups = () => orderedGroups(props.ctx, groupsOfKind(props.list(), "post-task"))
   const promptGroups = () => orderedGroups(props.ctx, groupsOfKind(props.list(), "prompt-user"))
   // At most five slots: attention first, then newest. The picker still lists all.

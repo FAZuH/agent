@@ -4,11 +4,9 @@ import { MenuItem, Panel, Plugin, Style, createKeyed } from "@opencode/plugin/gu
 import { Contract } from "./rpc.ts"
 import {
   ago,
-  dotState,
   groupBySession,
   markdownOf,
   needsAnswer,
-  reportDotState,
   stampOf,
   type Report,
   type ReportGroup,
@@ -80,12 +78,12 @@ function ReportsView(props: {
   }
   const dot = (item: ReportGroup, kind: Kind) => {
     if (kind === "report") {
-      return reportDotState(item.reports[item.reports.length - 1]) === "unread" ? SUCCESS : MUTED
+      return item.reports.some((report) => !report.readAt) ? SUCCESS : MUTED
     }
-    return dotState(item.reports[item.reports.length - 1]) === "answer" ? WARNING : MUTED
+    return item.reports.some((report) => needsAnswer(report)) ? WARNING : MUTED
   }
   const unread = (item: ReportGroup, kind: Kind) =>
-    kind === "report" && reportDotState(item.reports[item.reports.length - 1]) === "unread"
+    kind === "report" && item.reports.some((report) => !report.readAt)
   const isActive = (kind: Kind, item: ReportGroup) =>
     selected()?.kind === kind && selected()?.group.sessionID === item.sessionID
   const select = (kind: Kind, item: ReportGroup) => {
