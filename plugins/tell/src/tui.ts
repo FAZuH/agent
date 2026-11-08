@@ -3,9 +3,9 @@
  *
  * The server half owns the slash name and sends the message. This half only
  * writes text: a composer line that starts with `/tell ` opens a list of the
- * subagents of the session on screen, their titles on the left, and picking
- * one puts its session id where the id belongs. The user types the message
- * after it.
+ * subagents of the session on screen, their titles on the left and the one
+ * touched last at the top, and picking one puts its session id where the id
+ * belongs. The user types the message after it.
  *
  * The list is the caller's own tree, so a subagent of a subagent is in it
  * too, and nothing outside the tree is. The server walks the same tree
@@ -21,7 +21,7 @@
  */
 import { BoxRenderable, ScrollBoxRenderable, TextRenderable, isEditBufferRenderable } from "@opentui/core"
 import { createSignal, onCleanup, onMount } from "solid-js"
-import { PREFIX, argsOf, descendants, filterRows, trigger, type Descendant, type SessionRow } from "./shared.ts"
+import { PREFIX, argsOf, descendants, filterRows, recentFirst, trigger, type Descendant, type SessionRow } from "./shared.ts"
 
 function findEditor(node: any): any {
   if (isEditBufferRenderable(node)) return node
@@ -76,10 +76,11 @@ function mount(ctx: any, prompt: any) {
   const [target, setTarget] = createSignal<any>()
 
   /**
-   * The subagents of the session on screen. The store hands back the family
-   * of the root, so the tree is walked down from the caller to get the
-   * caller's own descendants. The rows are read every time, because a
-   * subagent gets its title once it starts working.
+   * The subagents of the session on screen, newest first. The store hands
+   * back the family of the root, so the tree is walked down from the caller
+   * to get the caller's own descendants, then ordered by when each was last
+   * touched. The rows are read every time, because a subagent gets its title
+   * and its timestamp once it starts working.
    */
   function loadRows(): Descendant[] {
     const ids: string[] = ctx.data?.session?.family?.(prompt.sessionID) ?? []
@@ -89,7 +90,7 @@ function mount(ctx: any, prompt: any) {
       const data = row?.data ?? row
       if (data && typeof data.id === "string") sessions.push(data as SessionRow)
     }
-    return descendants(sessions, prompt.sessionID)
+    return recentFirst(descendants(sessions, prompt.sessionID))
   }
 
   /** The composer text before the cursor, when a tell command is being written. */

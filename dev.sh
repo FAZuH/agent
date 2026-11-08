@@ -2,7 +2,7 @@
 
 # Development helper script
 # Usage: ./dev.sh [command1] [command2] ...
-#   commands: format | lint | test | docs | demo | all | help
+#   commands: format | lint | test | gui | docs | demo | all | help
 #   plus any commands provided by modules (scripts/dev-*.sh, dev/*.sh, dev-*.sh)
 #   Multiple commands can be specified and will execute left to right
 
@@ -74,6 +74,19 @@ cmd_test() {
     scs "Tests completed"
 }
 dev_desc test "Run tests with \"cargo test --manifest-path scripts/Cargo.toml --workspace --all-targets --all-features\""
+
+cmd_gui() {
+    inf "Building GUI plugin bundles..."
+    local built=0
+    for dir in "$SCRIPT_DIR"/plugins/*/; do
+        [[ -f "${dir}vite.config.ts" ]] || continue
+        inf "  ${dir#"$SCRIPT_DIR"/}vite build"
+        (cd "$dir" && bun run build:gui)
+        built=$((built + 1))
+    done
+    scs "GUI bundles built ($built plugins)"
+}
+dev_desc gui "Build every plugin GUI bundle (./dev.sh gui)"
 
 cmd_docs() {
     inf "Compiling Mermaid diagrams..."

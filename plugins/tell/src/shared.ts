@@ -56,6 +56,8 @@ export interface SessionRow {
   parentID?: string
   title?: string
   agent?: string
+  /** When the session was made and last touched, in milliseconds. */
+  time?: { created?: number; updated?: number }
 }
 
 export interface Descendant extends SessionRow {
@@ -84,6 +86,26 @@ export function descendants(rows: SessionRow[], rootID: string): Descendant[] {
   }
   walk(rootID, 1)
   return out
+}
+
+/** A session timestamp in milliseconds, or 0 when the host gave none. */
+function stamp(value: unknown): number {
+  const ms = Number(value)
+  return Number.isFinite(ms) ? ms : 0
+}
+
+/** When the session was last touched, falling back to when it was made. */
+function touched(row: SessionRow): number {
+  return stamp(row.time?.updated) || stamp(row.time?.created)
+}
+
+/**
+ * The rows newest first, so the subagent that worked last sits at the top of
+ * the picker. A row with no timestamp falls behind the rest, and equal
+ * timestamps keep the order the tree walk gave them.
+ */
+export function recentFirst(rows: Descendant[]): Descendant[] {
+  return [...rows].sort((a, b) => touched(b) - touched(a))
 }
 
 /** The parent of a session id, or nothing when the session is gone. */

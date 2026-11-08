@@ -134,6 +134,8 @@ instead of silently changing scope.
 - **dispatch**: `/dispatch` background subagent.
 - **aside**: `/aside` fork-and-ask; agents use `aside_ask`, the fork answers
   with `aside_report`.
+- **report**: `post_task` and `prompt_user` tools; the reports render in the
+  TUI sidebar and the desktop Reports panel, not in the reply.
 
 ### Commands
 
