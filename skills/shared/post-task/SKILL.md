@@ -1,46 +1,94 @@
 ---
 name: post-task
 description: >-
-  Close a finished task, procedure, or investigation with the fixed report:
-  Completed, Deviations, Hiccups, Failed/skipped, Next, open prompts.
-  Triggers: end of multi-step work, what happened, what broke. Not a status
-  update.
+  Close a finished task, procedure, or investigation with one `post_task`
+  tool call: Completed, Deviations, Hiccups, Failed/skipped, Next.
+  The Reports view renders it; the reply stays short. Triggers: end of
+  multi-step work, what happened, what broke. Not a status update.
 ---
 
 # post-task
 
-The last message of a finished piece of work has one fixed shape.
+A finished task ends with one `post_task` tool call. The tool stores the
+report and the Reports view renders it: the sidebar section in the TUI, the
+side panel in the desktop app. The reply carries the answer, not the report.
 
 Plain English throughout: @simple-english owns the reply rules. Answer first,
-then report. If the two repeat each other, the report is the answer.
+then call the tool.
 
 ## When it is mandatory
 
 **Mandatory when you end a task.** Any multi-step job, procedure, migration, or
-investigation ends with this report. No exceptions, and no padding it out when
-the run was clean — an empty section is omitted, but the report itself is not.
+investigation ends with this call. No exceptions, and no padding it out when
+the run was clean: omit empty fields, but make the call.
 
 **Not for:**
 
 - A simple question. If the reply is a few sentences of prose, answer it and stop.
-  No report. No emoji headers. The user asked a question, not for a debrief.
+  No report, no tool call. The user asked a question, not for a debrief.
 - A mid-task update, while the work is still running.
 - A single command that ran fine.
 
 The test: would a reader who missed the whole session need this to know what
-changed and what is left? If yes, report. If the answer already sits in your
-last two paragraphs, skip the report and use @prompt-user if there is anything
-to ask.
+changed and what is left? If yes, call. If the answer already sits in your
+last two paragraphs, skip the report and put anything they must act on in
+`prompt_user`.
 
-## Format
+## Call
 
-End the final message with this block. Keep the section order as shown:
+```json
+{
+  "description": "short slot label, max 35 chars",
+  "completed": ["what shipped, as an artifact"],
+  "deviations": ["what differed from the plan, and why"],
+  "hiccups": [{ "problem": "what broke", "cause": "why it broke", "fix": "what resolved it" }],
+  "failed": ["what failed or was skipped, and why"],
+  "next": ["the concrete follow-up this run leaves open"],
+  "next": ["the concrete follow-up this run leaves open"]
+}
+```
+
+- `description` is required and at most 35 characters: the label the Reports
+  slot shows. Count it; do not let it truncate.
+- Call `post_task` with only the other fields that have content.
+- A later change to one section: call `report_update` with that field and the
+  report id the tool result named. It patches in place; do not write a second
+  report that repeats the unchanged sections.
+- Anything the user must decide or run is a separate `prompt_user` call,
+  after the report. The Prompts section owns it; the report does not.
+- Call it before the final sentence. Do not write the report to disk, to a
+  file, or into the reply.
+
+## What goes in each field
+
+| Field | Contains | Never contains |
+|---|---|---|
+| `description` | a short slot label, max 35 characters | a sentence, a copy of the first item |
+| `completed` | the artifacts: files, commits, deploys, results that a check returned | narration of how you worked, or a feature tour |
+| `deviations` | every entry from the deviation log, with what happened and why | anything you did not log as it happened |
+| `hiccups` | every friction entry: what broke, why, how it was resolved | a fix you did not make |
+| `failed` | each failure, its reason, and each step skipped because of it | a step you silently dropped |
+| `next` | the concrete follow-ups this run leaves open | a generic "let me know" |
+
+## Rules
+
+- The call is the report. Do not print the report, or a copy of it, in the reply.
+- Do not announce that the report was saved; the tool result already says so.
+  Answer the user and stop.
+- Log as you go. A deviation reconstructed at the end is a fabrication.
+- Skip nothing silently. A step that failed or was skipped goes in `failed`,
+  with its reason.
+- A `hiccup`'s `cause` is a cause, not a symptom. "ssh failed" is a symptom;
+  "the node's gitconfig rewrites https to ssh and it has no key" is a cause.
+- Facts, not feelings. A verification that did not run is `not verified`, not
+  `done`.
+
+## Fallback
+
+Only when `post_task` is unavailable (an older host, or a session without the
+plugin), print this block at the end of the reply instead:
 
 ```markdown
-<othermsg>
-
----
-
 ## 📋 Post Task
 
 ### ✅ Completed
@@ -60,38 +108,12 @@ End the final message with this block. Keep the section order as shown:
 ### ➡️ Next
 1. item
 
----
-
 ### Needs your decision
 
 <the prompts, in the @prompt-user shape>
 ```
 
-Omit an empty section entirely: no heading, no `None`. Same for
-`### Needs your decision`: nothing to prompt means nothing after the sections.
-Never pad a section to look thorough, and never merge two sections to save a line.
+Only the printed fallback keeps this block inside the report; with the tools
+available, call `prompt_user` separately.
 
-The report is a final message to the user. It is not session state. Do not
-write it to the session record.
-
-## What goes in each section
-
-| Section | Contains | Never contains |
-|---|---|---|
-| ✅ Completed | the artifacts: files, commits, deploys, results that a check returned | narration of how you worked, or a feature tour |
-| 🔀 Deviations | every entry from the deviation log, with what happened and why | anything you did not log as it happened |
-| 🐛 Hiccups | every friction entry as a row: what broke, why, how it was resolved | a fix you did not make |
-| ❌ Failed / skipped | each failure, its reason, and each step skipped because of it | a step you silently dropped |
-| ➡️ Next | the concrete follow-ups this run leaves open | a generic "let me know" |
-| Needs your decision | the prompts: 🏁 procedures for steps the user runs, ❓ questions for decisions only they make | choices you already made for the user, or a generic ask |
-
-## Rules
-
-- Log as you go. A deviation reconstructed at the end is a fabrication.
-- Skip nothing silently. A step that failed or was skipped goes in
-  ❌ Failed / skipped, with its reason.
-- 🐛 names filed friction and where it went. If it was not filed, say so.
-- A row in 🐛 states a cause, not a symptom. "ssh failed" is a symptom;
-  "the node's gitconfig rewrites https to ssh and it has no key" is a cause.
-- Facts, not feelings. A verification that did not run is `not verified`, not
-  `done`.
+Omit an empty section entirely.
