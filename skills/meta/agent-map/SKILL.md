@@ -136,6 +136,8 @@ instead of silently changing scope.
   with `branch_report`.
 - **report**: `post_task` and `prompt_user` tools; the reports render in the
   TUI sidebar and the desktop Reports panel, not in the reply.
+  `/report-settings` toggles the sidebar and its Reports, Prompts, and
+  Context sections.
 
 ### Commands
 
