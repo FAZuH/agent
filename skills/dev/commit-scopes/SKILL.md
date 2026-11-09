@@ -121,7 +121,7 @@ that genuinely spans several components.
 
 \`\`\`
 feat(skill): add issue-closeout skill
-fix(plugin): aside fork notice fires before the fork starts
+fix(plugin): branch fork notice fires before the fork starts
 docs(script): document project-level sync targets
 feat: restructure repo into skill/agent/plugin/command
 docs: add commit scopes reference
