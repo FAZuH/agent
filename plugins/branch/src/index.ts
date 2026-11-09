@@ -1,4 +1,4 @@
-// fazuh.aside — server half. Forks the current session at its latest state,
+// fazuh.branch — server half. Forks the current session at its latest state,
 // asks the question there, and lets the fork report back on its own.
 //
 // The plugin ctx exposes no fork, so the fork goes through `opencode2 api`.
@@ -6,27 +6,27 @@
 // marked in its own session metadata; the TUI half (./tui.ts) reads that mark
 // to move the view to the fork, or to say why the fork never started.
 //
-// Two tools carry the same feature to the agent itself: aside_ask forks and
-// asks (the silent flag is /aside-silent), and aside_report is how a fork
+// Two tools carry the same feature to the agent itself: branch_ask forks and
+// asks (the silent flag is /branch-silent), and branch_report is how a fork
 // sends its answer back, tagged for the asking session. The report is a tool
 // call, not a hand-built `opencode2 api` command.
 //
-// One name, one owner: the server owns `/aside`, `/aside-silent`, and both
+// One name, one owner: the server owns `/branch`, `/branch-silent`, and both
 // tools, so they work on every host, including the ones with no TUI module.
 import {
-  ASIDE_KEY,
+  BRANCH_KEY,
   askText,
   failedNotice,
   forkedNotice,
   readMarker,
   reportTags,
-} from "./aside.ts"
+} from "./branch.ts"
 import { Contract } from "./rpc.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export default {
-  id: "fazuh.aside",
+  id: "fazuh.branch",
   tui: true,
   setup: async (ctx: any) => {
     async function api(method: string, path: string, data?: unknown): Promise<any> {
@@ -55,7 +55,7 @@ export default {
 
     /** Write the mark. A fork inherits the parent's metadata, so merge, never replace. */
     async function mark(sessionID: string, marker: Record<string, unknown>): Promise<void> {
-      const metadata = { ...(await metadataOf(sessionID)), [ASIDE_KEY]: marker }
+      const metadata = { ...(await metadataOf(sessionID)), [BRANCH_KEY]: marker }
       await ctx.session.update({ sessionID, metadata })
     }
 
@@ -70,10 +70,10 @@ export default {
 
     /**
      * Fork, ask, and (unless silent) tell the asking session that a fork
-     * exists. In report mode the answer comes back through aside_report, so
+     * exists. In report mode the answer comes back through branch_report, so
      * the fork curates what the asking session gets to read.
      */
-    async function startAside(question: string, parentID: string, silent: boolean): Promise<string> {
+    async function startBranch(question: string, parentID: string, silent: boolean): Promise<string> {
       let forkID: string
       try {
         forkID = await forkSession(parentID)
@@ -84,7 +84,7 @@ export default {
           try {
             await ctx.session.prompt({ sessionID: parentID, text: failedNotice(parentID, reason) })
           } catch (failure) {
-            console.error(`[aside] failure notice failed: ${message(failure)}`)
+            console.error(`[branch] failure notice failed: ${message(failure)}`)
           }
         }
         return ""
@@ -107,7 +107,7 @@ export default {
     async function reportToParent(sessionID: string, text: string): Promise<void> {
       const marker = readMarker(await metadataOf(sessionID))
       if (!marker || marker.status !== "forked") {
-        throw new Error("this session was not forked by aside")
+        throw new Error("this session was not forked by branch")
       }
       const tags = reportTags(marker.sessionID ?? sessionID, marker.parentID)
       await ctx.session.prompt({
@@ -117,7 +117,7 @@ export default {
     }
 
     if (typeof ctx.rpc?.register !== "function") {
-      console.error("[aside] ctx.rpc.register is unavailable; the GUI ask dialog cannot be called")
+      console.error("[branch] ctx.rpc.register is unavailable; the GUI ask dialog cannot be called")
     } else {
       try {
         await ctx.rpc.register(Contract, {
@@ -128,7 +128,7 @@ export default {
             if (!parentID) return { error: "no parent session." }
             const silent = input?.silent === true
             try {
-              const forkID = await startAside(question, parentID, silent)
+              const forkID = await startBranch(question, parentID, silent)
               if (!forkID) return { error: "could not fork this session." }
               return { forkID }
             } catch (error) {
@@ -137,15 +137,15 @@ export default {
           },
         })
       } catch (error) {
-        console.error(`[aside] RPC registration failed: ${message(error)}`)
+        console.error(`[branch] RPC registration failed: ${message(error)}`)
       }
     }
 
     await ctx.tool.transform((tools: any) => {
       tools.add({
-        name: "aside_ask",
+        name: "branch_ask",
         description:
-          "Fork this session at its latest state and ask a question in the fork, so this session keeps working. The fork answers on its own and reports back with aside_report. Use for a side question that needs this session's context; set silent to fork with no notice and no report, like /aside-silent.",
+          "Fork this session at its latest state and ask a question in the fork, so this session keeps working. The fork answers on its own and reports back with branch_report. Use for a side question that needs this session's context; set silent to fork with no notice and no report, like /branch-silent.",
         input: {
           type: "object",
           properties: {
@@ -164,26 +164,26 @@ export default {
         },
         execute: async (input: any, tctx: any) => {
           const question = String(input?.question ?? "").trim()
-          if (!question) return { content: "aside_ask failed: question is empty." }
+          if (!question) return { content: "branch_ask failed: question is empty." }
           const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
-          if (!sessionID) return { content: "aside_ask failed: no session." }
+          if (!sessionID) return { content: "branch_ask failed: no session." }
           const silent = input?.silent === true
           try {
-            const forkID = await startAside(question, sessionID, silent)
-            if (!forkID) return { content: "aside_ask failed: could not fork this session." }
+            const forkID = await startBranch(question, sessionID, silent)
+            if (!forkID) return { content: "branch_ask failed: could not fork this session." }
             return {
               content: `Forked to \`${forkID}\` — ${silent ? "continue there." : "the answer comes back here."}`,
             }
           } catch (error) {
-            return { content: `aside_ask failed: ${message(error)}` }
+            return { content: `branch_ask failed: ${message(error)}` }
           }
         },
       })
 
       tools.add({
-        name: "aside_report",
+        name: "branch_report",
         description:
-          "Send the answer back to the session that forked this one with aside_ask, wrapped in the <aside> tags that identify it there. Use only inside an aside fork, once the question is answered.",
+          "Send the answer back to the session that forked this one with branch_ask, wrapped in the <branch> tags that identify it there. Use only inside an branch fork, once the question is answered.",
         input: {
           type: "object",
           properties: {
@@ -194,14 +194,14 @@ export default {
         },
         execute: async (input: any, tctx: any) => {
           const text = String(input?.text ?? "").trim()
-          if (!text) return { content: "aside_report failed: text is empty." }
+          if (!text) return { content: "branch_report failed: text is empty." }
           const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
-          if (!sessionID) return { content: "aside_report failed: no session." }
+          if (!sessionID) return { content: "branch_report failed: no session." }
           try {
             await reportToParent(sessionID, text)
             return { content: "Reported to the session that asked." }
           } catch (error) {
-            return { content: `aside_report failed: ${message(error)}` }
+            return { content: `branch_report failed: ${message(error)}` }
           }
         },
       })
@@ -209,31 +209,31 @@ export default {
 
     await ctx.command.transform((draft: any) => {
       draft.add({
-        name: "aside",
+        name: "branch",
         description:
-          "Fork this session at its latest state, ask something in the fork, and tell this session what came back. Usage: /aside <question>",
+          "Fork this session at its latest state, ask something in the fork, and tell this session what came back. Usage: /branch <question>",
         execute: async (input: any) => {
           const text = String(input?.prompt?.text ?? "").trim()
-          if (!text) return { content: "Usage: /aside <question>" }
+          if (!text) return { content: "Usage: /branch <question>" }
           const parentID: string | undefined = input?.sessionID
-          if (!parentID) return { content: "aside failed: no parent session." }
-          const forkID = await startAside(text, parentID, false)
-          if (!forkID) return { content: "aside failed: could not fork this session." }
+          if (!parentID) return { content: "branch failed: no parent session." }
+          const forkID = await startBranch(text, parentID, false)
+          if (!forkID) return { content: "branch failed: could not fork this session." }
           return { content: `Forked to \`${forkID}\` — the answer comes back here.` }
         },
       })
 
       draft.add({
-        name: "aside-silent",
+        name: "branch-silent",
         description:
-          "Fork this session at its latest state and ask something in the fork, without telling this session. Usage: /aside-silent <question>",
+          "Fork this session at its latest state and ask something in the fork, without telling this session. Usage: /branch-silent <question>",
         execute: async (input: any) => {
           const text = String(input?.prompt?.text ?? "").trim()
-          if (!text) return { content: "Usage: /aside-silent <question>" }
+          if (!text) return { content: "Usage: /branch-silent <question>" }
           const parentID: string | undefined = input?.sessionID
-          if (!parentID) return { content: "aside-silent failed: no parent session." }
-          const forkID = await startAside(text, parentID, true)
-          if (!forkID) return { content: "aside-silent failed: could not fork this session." }
+          if (!parentID) return { content: "branch-silent failed: no parent session." }
+          const forkID = await startBranch(text, parentID, true)
+          if (!forkID) return { content: "branch-silent failed: could not fork this session." }
           return { content: `Forked to \`${forkID}\` — continue there.` }
         },
       })

@@ -3,7 +3,7 @@
  * so a plain JSON-Schema object works without importing the host package that
  * the repo's pinned plugin dependency does not ship.
  */
-export const RPC_ID = "aside"
+export const RPC_ID = "branch"
 
 export const Contract = {
   id: RPC_ID,
