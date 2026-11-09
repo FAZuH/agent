@@ -37,7 +37,9 @@ export interface BranchMarker {
 /** Read the marker out of session metadata. Anything else is not ours. */
 export function readMarker(metadata: unknown): BranchMarker | undefined {
   if (!metadata || typeof metadata !== "object") return undefined
-  const raw = (metadata as Record<string, unknown>)[BRANCH_KEY]
+  const raw =
+    (metadata as Record<string, unknown>)[BRANCH_KEY] ??
+    (metadata as Record<string, unknown>)[LEGACY_KEY]
   if (!raw || typeof raw !== "object") return undefined
   const value = raw as Record<string, unknown>
   if (value.status !== "forked" && value.status !== "failed") return undefined
