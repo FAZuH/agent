@@ -9,7 +9,7 @@
  */
 import { SyntaxStyle, TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { For, Show, createEffect, createSignal } from "solid-js"
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { Contract } from "./rpc.ts"
 import { Contract as WatchContract, type ContextStatus } from "./context-watch.ts"
 import {
@@ -690,7 +690,6 @@ function ContextStatusLine(props: { ctx: any; status: ContextStatus; marginTop?:
         </Show>
       </box>
       <text fg={theme.text.muted} wrapMode="none" truncate>
-        {"  "}
         {contextLine(props.status)}
       </text>
     </box>
@@ -712,10 +711,12 @@ function Sidebar(props: {
 }) {
   createEffect(() => {
     const sessionID = props.sessionID
-    if (sessionID) {
-      props.reload(sessionID)
-      props.refreshContext(sessionID)
-    }
+    if (!sessionID) return
+    props.reload(sessionID)
+    props.refreshContext(sessionID)
+    // The RPC event is the fast path; the poll covers a client that misses it.
+    const timer = setInterval(() => props.refreshContext(sessionID), 5_000)
+    onCleanup(() => clearInterval(timer))
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>

@@ -383,7 +383,9 @@ awaiting an answer. **Context Watch** reads the separate
 `opencode-context-watch` plugin over its `context-watch.status` RPC: the line
 shows the percent, the tokens over the model window, and the active warn band
 (for example `39% · 394k/1M · warn 300k`), with the title yellow over the
-band or while a session compacts. The section stays hidden when
+band or while a session compacts. It asks on session switch, follows the
+plugin's `changed` event, and polls the same call every 5 seconds as a
+fallback. The section stays hidden when
 context-watch is not installed. `/report-settings`
 toggles the whole sidebar and each section (Reports, Prompts, Context Watch);
 the flags persist in the `report-view-v2` view store, and the existing
