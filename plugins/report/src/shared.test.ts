@@ -14,6 +14,8 @@ import {
   attentionForSection,
   attentionOf,
   blocksOf,
+  compactCount,
+  contextLine,
   descriptionOf,
   dotState,
   formFieldsOf,
@@ -378,5 +380,49 @@ describe("ago", () => {
     expect(ago(1000, 1000 + 5 * 60_000)).toBe("5m")
     expect(ago(1000, 1000 + 3 * 3_600_000)).toBe("3h")
     expect(ago(1000, 1000 + 2 * 86_400_000)).toBe("2d")
+  })
+})
+
+describe("compactCount", () => {
+  test("keeps small counts whole and shortens thousands and millions", () => {
+    expect(compactCount(999)).toBe("999")
+    expect(compactCount(394_000)).toBe("394k")
+    expect(compactCount(1_000_000)).toBe("1M")
+    expect(compactCount(1_234_567)).toBe("1.2M")
+  })
+
+  test("rejects a value that cannot be a count", () => {
+    expect(compactCount(Number.NaN)).toBe("?")
+    expect(compactCount(-1)).toBe("?")
+  })
+})
+
+describe("contextLine", () => {
+  const base = { sessionID: "ses_1", warnPercent: 0.77, warnTokens: 300_000, over: false, compacting: false }
+
+  test("usage, then the active band", () => {
+    expect(contextLine({ ...base, tokens: 394_000, window: 1_000_000, percent: 39.4 })).toBe(
+      "39% · 394k/1M · warn 300k",
+    )
+  })
+
+  test("tokens alone when the window is unknown", () => {
+    expect(contextLine({ ...base, warnPercent: 0.8, warnTokens: null, tokens: 90_000 })).toBe(
+      "90k tokens · warn 80%",
+    )
+  })
+
+  test("compacting hides a stale sample", () => {
+    expect(contextLine({ ...base, compacting: true, tokens: 394_000, window: 1_000_000, percent: 39.4 })).toBe(
+      "compacting · warn 300k",
+    )
+  })
+
+  test("a cold session says there is no sample", () => {
+    expect(contextLine({ ...base })).toBe("no sample yet · warn 300k")
+  })
+
+  test("both bands off say so", () => {
+    expect(contextLine({ ...base, warnPercent: null, warnTokens: null, tokens: 10 })).toBe("10 tokens · warn off")
   })
 })

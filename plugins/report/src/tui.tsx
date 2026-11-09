@@ -1,19 +1,23 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Reports in the TUI: two sidebar sections, one slot per agent in each.
- * "Reports" holds post-task records, "Prompts" holds prompt-user records.
- * A slot opens that agent's history; ←/→ move through it, Enter answers an
- * open prompt, and an unread slot blinks. The server owns the records.
+ * Reports in the TUI: two sidebar sections, one slot per agent in each, plus
+ * the context-watch status line. "Reports" holds post-task records, "Prompts"
+ * holds prompt-user records, "Context" reads the separate context-watch
+ * plugin over RPC. A slot opens that agent's history; ←/→ move through it,
+ * Enter answers an open prompt, and an unread slot blinks. The server owns
+ * the records.
  */
 import { SyntaxStyle, TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createEffect, createSignal } from "solid-js"
 import { Contract } from "./rpc.ts"
+import { Contract as WatchContract, type ContextStatus } from "./context-watch.ts"
 import {
   ago,
   answersOfForm,
   attentionForSection,
   attentionOf,
+  contextLine,
   descriptionOf,
   formFieldsOf,
   formIDOf,
@@ -671,6 +675,36 @@ function Section(props: {
   )
 }
 
+/** Context: green under the band, yellow over it or while compacting, muted without a sample. */
+function contextDotColor(ctx: any, status: ContextStatus): string {
+  if (status.compacting || status.over) return ctx.theme.text.feedback.warning.base
+  if (status.tokens === undefined) return ctx.theme.text.muted
+  return ctx.theme.text.feedback.success.base
+}
+
+function ContextStatusLine(props: { ctx: any; status: ContextStatus; marginTop?: number }) {
+  const theme = props.ctx.theme
+  return (
+    <box marginTop={props.marginTop ?? 0}>
+      <box flexDirection="row" gap={1}>
+        <text flexShrink={0} style={{ fg: contextDotColor(props.ctx, props.status) }}>
+          {"\u2022"}
+        </text>
+        <text fg={theme.text.base}>
+          <b>Context</b>
+        </text>
+        <Show when={props.status.over}>
+          <text fg={theme.text.feedback.warning.base}> · over</text>
+        </Show>
+      </box>
+      <text fg={theme.text.muted} wrapMode="none" truncate>
+        {"  "}
+        {contextLine(props.status)}
+      </text>
+    </box>
+  )
+}
+
 function Sidebar(props: {
   ctx: any
   sessionID: string
@@ -678,13 +712,18 @@ function Sidebar(props: {
   setView: any
   list: () => Report[]
   reload: (sessionID: string) => void
+  refreshContext: (sessionID: string) => void
+  context: () => ContextStatus | undefined
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
 }) {
   createEffect(() => {
     const sessionID = props.sessionID
-    if (sessionID) props.reload(sessionID)
+    if (sessionID) {
+      props.reload(sessionID)
+      props.refreshContext(sessionID)
+    }
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>
@@ -730,58 +769,74 @@ function Sidebar(props: {
       draft.prompts = draft.prompts === false
     })
   }
+  const sidebarShown = () => props.view?.sidebar !== false
+  const reportsShown = () => props.view?.showReports !== false
+  const promptsShown = () => props.view?.showPrompts !== false
+  const watch = () => props.context()
+  const contextShown = () => props.view?.showContext !== false && watch() !== undefined
+  const hasContent = () =>
+    (reportsShown() && reports().length > 0) ||
+    (promptsShown() && prompts().length > 0) ||
+    contextShown()
   return (
-    <Show when={reports().length > 0 || prompts().length > 0}>
+    <Show when={sidebarShown() && hasContent()}>
       <box>
-        <Section
-          ctx={props.ctx}
-          title="Reports"
-          kind="report"
-          note={props.view?.unread === true ? "unread" : undefined}
-          attention={reportAttention()}
-          groups={reports()}
-          open={reportsOpen()}
-          toggle={toggleReports}
-          onOpen={(group) =>
-            openHistory(
-              props.ctx,
-              group,
-              reportSessions(),
-              "report",
-              props.onAnswer,
-              props.onRead,
-              props.onDismiss,
-            )
-          }
-          onAnswer={props.onAnswer}
-          onRead={props.onRead}
-          onDismiss={props.onDismiss}
-        />
-        <Section
-          ctx={props.ctx}
-          title="Prompts"
-          kind="prompt"
-          marginTop={1}
-          note={props.view?.unanswered === true ? "unanswered" : undefined}
-          attention={promptAttention()}
-          groups={prompts()}
-          open={promptsOpen()}
-          toggle={togglePrompts}
-          onOpen={(group) =>
-            openHistory(
-              props.ctx,
-              group,
-              promptSessions(),
-              "prompt",
-              props.onAnswer,
-              props.onRead,
-              props.onDismiss,
-            )
-          }
-          onAnswer={props.onAnswer}
-          onRead={props.onRead}
-          onDismiss={props.onDismiss}
-        />
+        <Show when={reportsShown()}>
+          <Section
+            ctx={props.ctx}
+            title="Reports"
+            kind="report"
+            note={props.view?.unread === true ? "unread" : undefined}
+            attention={reportAttention()}
+            groups={reports()}
+            open={reportsOpen()}
+            toggle={toggleReports}
+            onOpen={(group) =>
+              openHistory(
+                props.ctx,
+                group,
+                reportSessions(),
+                "report",
+                props.onAnswer,
+                props.onRead,
+                props.onDismiss,
+              )
+            }
+            onAnswer={props.onAnswer}
+            onRead={props.onRead}
+            onDismiss={props.onDismiss}
+          />
+        </Show>
+        <Show when={promptsShown()}>
+          <Section
+            ctx={props.ctx}
+            title="Prompts"
+            kind="prompt"
+            marginTop={reportsShown() && reports().length > 0 ? 1 : 0}
+            note={props.view?.unanswered === true ? "unanswered" : undefined}
+            attention={promptAttention()}
+            groups={prompts()}
+            open={promptsOpen()}
+            toggle={togglePrompts}
+            onOpen={(group) =>
+              openHistory(
+                props.ctx,
+                group,
+                promptSessions(),
+                "prompt",
+                props.onAnswer,
+                props.onRead,
+                props.onDismiss,
+              )
+            }
+            onAnswer={props.onAnswer}
+            onRead={props.onRead}
+            onDismiss={props.onDismiss}
+          />
+        </Show>
+        <Show when={contextShown()}>
+          <ContextStatusLine ctx={props.ctx} status={watch()!} marginTop={1} />
+        </Show>
       </box>
     </Show>
   )
@@ -794,6 +849,7 @@ export default {
     if (typeof ctx.client?.rpc !== "function") return
     const rpc = ctx.client.rpc(Contract)
     const [reports, setReports] = createSignal<Record<string, Report[]>>({})
+    const [contexts, setContexts] = createSignal<Record<string, ContextStatus | undefined>>({})
 
     const routedID = (): string | undefined => {
       const route = ctx.ui.router.current()
@@ -808,6 +864,39 @@ export default {
         })
         .catch(() => {})
     }
+
+    // Context-watch is a separate plugin. Its RPC is optional: without it the
+    // Context section stays off and the rest of the sidebar is unaffected.
+    const watch = (() => {
+      try {
+        return ctx.client.rpc(WatchContract)
+      } catch {
+        return undefined
+      }
+    })()
+    const refreshContext = (sessionID: string) => {
+      if (!watch) return
+      try {
+        void watch
+          .status({ sessionID })
+          .then((result: any) => {
+            if (result?.ok && result.status) {
+              setContexts((previous) => ({ ...previous, [sessionID]: result.status }))
+            }
+          })
+          .catch(() => {})
+      } catch {}
+    }
+    let offContext: (() => void) | undefined
+    try {
+      offContext = watch?.events.on("changed", (event: any) => {
+        const sessionID = String(event?.data?.sessionID ?? "")
+        const status = event?.data?.status
+        if (sessionID && status) {
+          setContexts((previous) => ({ ...previous, [sessionID]: status }))
+        }
+      })
+    } catch {}
 
     // A report or answer written anywhere in the family refetches the view,
     // and a fresh prompt record opens as the host's inline form.
@@ -1064,8 +1153,47 @@ export default {
       }
     }
 
+    /**
+     * The visibility settings. Each row toggles and reopens the list because
+     * the host's select closes on pick; esc ends the loop.
+     */
+    async function openSettings() {
+      const rows = [
+        { key: "sidebar", title: "Sidebar", note: "master" },
+        { key: "showReports", title: "Reports", note: "section" },
+        { key: "showPrompts", title: "Prompts", note: "section" },
+        { key: "showContext", title: "Context", note: "section" },
+      ] as const
+      for (;;) {
+        const picked = await ctx.ui.dialog
+          .select({
+            title: "Report settings",
+            footerHints: [{ title: "toggle", label: "enter" }],
+            options: rows.map((row) => ({
+              title: row.title,
+              description: `${row.note} · ${view[row.key] !== false ? "shown" : "hidden"}`,
+              value: row.key,
+            })),
+          })
+          .catch(() => undefined)
+        if (!picked) return
+        await setView((draft: any) => {
+          draft[picked] = draft[picked] === false
+        })
+      }
+    }
+
     const [view, setView] = ctx.storage.store("report-view-v2", {
-      initial: { open: true, prompts: true, unanswered: false, unread: false },
+      initial: {
+        open: true,
+        prompts: true,
+        unanswered: false,
+        unread: false,
+        sidebar: true,
+        showReports: true,
+        showPrompts: true,
+        showContext: true,
+      },
     })
 
     ctx.ui.slot({
@@ -1078,6 +1206,8 @@ export default {
           setView={setView}
           list={() => reports()[input.sessionID] ?? []}
           reload={reload}
+          refreshContext={refreshContext}
+          context={() => contexts()[input.sessionID]}
           onAnswer={(report) => void answer(report)}
           onRead={(report) => void read(report)}
           onDismiss={(report) => void dismiss(report)}
@@ -1109,6 +1239,14 @@ export default {
               palette: true,
               slash: { name: "prompts" },
               run: () => void openList("prompt-user"),
+            },
+            {
+              id: "report.settings",
+              title: "Report settings",
+              group: "report",
+              palette: true,
+              slash: { name: "report-settings" },
+              run: () => void openSettings(),
             },
             {
               id: "report.attention",
@@ -1146,7 +1284,7 @@ export default {
     })
 
     return () => {
-      for (const stop of [off, offReplied, offCancelled]) {
+      for (const stop of [off, offReplied, offCancelled, offContext]) {
         try {
           stop?.()
         } catch {}

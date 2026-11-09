@@ -348,7 +348,7 @@ RPC. Views pass the routed session's family
 (`data.session.family`), so a subagent's reports appear in the parent's view.
 Forks stay out of the family.
 
-The TUI half (`./tui`) adds two sidebar sections, each a slot per agent
+The TUI half (`./tui`) adds three sidebar sections, each a slot per agent
 (the routed session and each subagent that has a record). **Reports** holds
 post-task records, **Prompts** holds prompt-user records. The dot is yellow
 while a record has questions without answers, green while unread, and gray
@@ -379,7 +379,15 @@ when the key was pressed so reading or dismissing the shown entry does not
 remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
 same histories by picker; `/read-reports` marks every unread report in the
 session family read, and `/dismiss-prompts` dismisses every prompt still
-awaiting an answer. The GUI half
+awaiting an answer. **Context** reads the separate `opencode-context-watch`
+plugin over its `context-watch.status` RPC: the line shows the percent, the
+tokens over the model window, and the active warn band (for example
+`39% · 394k/1M · warn 300k`), with the dot green under the band, yellow over
+it or while a session compacts, and gray before the first sample. The
+section stays hidden when context-watch is not installed. `/report-settings`
+toggles the whole sidebar and each section (Reports, Prompts, Context); the
+flags persist in the `report-view-v2` view store, and the existing collapse
+states stay separate. The GUI half
 mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
 side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
 bundle: `./dev.sh gui`.
