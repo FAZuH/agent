@@ -5,7 +5,7 @@
  * the desktop GUI can find it: a dispatch stays bound to the session that
  * asked (parentID), and the GUI lists the dispatches of whichever session
  * is on screen and switches the view to them. The marker is the only link
- * between a parent and its dispatches, same as aside's markers are the only
+ * between a parent and its dispatches, same as branch's markers are the only
  * link between a parent and its forks.
  */
 

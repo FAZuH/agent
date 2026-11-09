@@ -204,6 +204,6 @@ describe("trigger", () => {
   })
 
   test("stays closed for another command", () => {
-    expect(trigger("/aside ")).toBeUndefined()
+    expect(trigger("/branch ")).toBeUndefined()
   })
 })
