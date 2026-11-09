@@ -183,7 +183,7 @@ export default {
       tools.add({
         name: "branch_report",
         description:
-          "Send the answer back to the session that forked this one with branch_ask, wrapped in the <branch> tags that identify it there. Use only inside an branch fork, once the question is answered.",
+          "Send the answer back to the session that forked this one with branch_ask, wrapped in the <branch> tags that identify it there. Use only inside a branch fork, once the question is answered.",
         input: {
           type: "object",
           properties: {
