@@ -2,7 +2,7 @@
 /**
  * Reports in the TUI: two sidebar sections, one slot per agent in each, plus
  * the context-watch status line. "Reports" holds post-task records, "Prompts"
- * holds prompt-user records, "Context" reads the separate context-watch
+ * holds prompt-user records, "Context Watch" reads the separate context-watch
  * plugin over RPC. A slot opens that agent's history; ←/→ move through it,
  * Enter answers an open prompt, and an unread slot blinks. The server owns
  * the records.
@@ -675,23 +675,15 @@ function Section(props: {
   )
 }
 
-/** Context: green under the band, yellow over it or while compacting, muted without a sample. */
-function contextDotColor(ctx: any, status: ContextStatus): string {
-  if (status.compacting || status.over) return ctx.theme.text.feedback.warning.base
-  if (status.tokens === undefined) return ctx.theme.text.muted
-  return ctx.theme.text.feedback.success.base
-}
-
+/** Context Watch: the title turns yellow over the band or while compacting. */
 function ContextStatusLine(props: { ctx: any; status: ContextStatus; marginTop?: number }) {
   const theme = props.ctx.theme
+  const over = () => props.status.compacting || props.status.over
   return (
     <box marginTop={props.marginTop ?? 0}>
       <box flexDirection="row" gap={1}>
-        <text flexShrink={0} style={{ fg: contextDotColor(props.ctx, props.status) }}>
-          {"\u2022"}
-        </text>
-        <text fg={theme.text.base}>
-          <b>Context</b>
+        <text fg={over() ? theme.text.feedback.warning.base : theme.text.base}>
+          <b>Context Watch</b>
         </text>
         <Show when={props.status.over}>
           <text fg={theme.text.feedback.warning.base}> · over</text>
@@ -1162,7 +1154,7 @@ export default {
         { key: "sidebar", title: "Sidebar", note: "master" },
         { key: "showReports", title: "Reports", note: "section" },
         { key: "showPrompts", title: "Prompts", note: "section" },
-        { key: "showContext", title: "Context", note: "section" },
+        { key: "showContext", title: "Context Watch", note: "section" },
       ] as const
       for (;;) {
         const picked = await ctx.ui.dialog

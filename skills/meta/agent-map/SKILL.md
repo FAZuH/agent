@@ -137,7 +137,7 @@ instead of silently changing scope.
 - **report**: `post_task` and `prompt_user` tools; the reports render in the
   TUI sidebar and the desktop Reports panel, not in the reply.
   `/report-settings` toggles the sidebar and its Reports, Prompts, and
-  Context sections.
+  Context Watch sections.
 
 ### Commands
 
