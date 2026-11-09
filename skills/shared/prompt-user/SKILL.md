@@ -37,20 +37,25 @@ Two kinds:
 
 - `description` is required and at most 35 characters: the label the Prompts
   slot shows.
+- `block: true` waits for the answer in the same turn and returns it as the
+  tool result. Use it only when the next step depends on the answer. It needs
+  at least one question. Without it the call returns immediately and the
+  answer arrives as a new message.
 - Call `prompt_user` with only the kind you have. Empty fields are omitted.
 - Inside a finished task, call `prompt_user` right after `post_task`. The
   report carries no prompts; this section owns them.
 - A simple question whose answer is prose: answer it, and call `prompt_user`
   only for what the user must act on.
 - The user answers in the Reports view; Enter steers the answer, Ctrl+Enter
-  queues it, and an empty answer takes the recommendation. Either way the
-  answer reaches this session. Do not ask which one they picked or repeat the
-  answers in chat.
+  queues it, and an empty answer takes the recommendation. Without `block`
+  the answer arrives as a new message; with `block` it returns as the tool
+  result in the same turn and steer/queue does not apply. Do not ask which
+  one they picked or repeat the answers in chat.
 
 ## Rules
 
-- The call is the block. Do not repeat the prompts in the reply, and do not
-  announce that they were saved.
+- Without `block`, the call ends your turn for that ask. Do not repeat the
+  prompts in the reply, and do not announce that they were saved.
 - One pointed item per entry. A one-word question gets no block, just ask.
 - Procedures first, questions last, in the order they appear in the view.
 - Numbering runs across the call (`P1`, `P2`, `Q1`, `Q2`); the view numbers

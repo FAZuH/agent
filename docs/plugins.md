@@ -327,9 +327,13 @@ tools and keep the printed block as a fallback for hosts without the plugin.
   `failed`, `next`): the @post-task report. `description` is required and at
   most 35 characters; it is the slot label. Decisions go in a separate
   `prompt_user` call.
-- **`prompt_user`** (`description`, `procedures?`, `questions?`): the
-  @prompt-user block for a standalone ask. `description` is required and at
-  most 35 characters.
+- **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`):
+  the @prompt-user block for a standalone ask. `description` is required and
+  at most 35 characters. `block: true` waits for the answer in the same turn
+  and returns it as the tool result; it needs at least one question. A
+  dismissed blocking prompt returns as dismissed, and a deferred one returns
+  as deferred and stays unanswered. Without `block` the call returns
+  immediately and the answer arrives as a new message.
 - **`report_update`** (`id?`, the same section fields): patches one record in
   place, keeping every field the call omits, and bumps its revision. `id`
   defaults to the session's latest report. Use it to revise a section instead
@@ -339,7 +343,8 @@ Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/fazuh-agent/reports/`, newest last,
 capped at 50; `REPORT_STATE_HOME` overrides the root. The server writes them
 atomically and exposes `report.list({sessionIDs})`, `report.read`,
-`report.answer`, and a `changed` event over RPC. Views pass the routed session's family
+`report.answer`, `report.dismiss`, `report.defer`, and a `changed` event over
+RPC. Views pass the routed session's family
 (`data.session.family`), so a subagent's reports appear in the parent's view.
 Forks stay out of the family.
 

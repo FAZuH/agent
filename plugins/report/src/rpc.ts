@@ -92,6 +92,23 @@ export const Contract = {
         additionalProperties: false,
       },
     },
+    defer: {
+      input: {
+        type: "object",
+        properties: {
+          sessionID: { type: "string" },
+          reportID: { type: "string" },
+        },
+        required: ["sessionID", "reportID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" } },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
   },
   events: {
     changed: {

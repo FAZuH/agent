@@ -242,6 +242,7 @@ function History(props: {
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
+  onDefer: (report: Report) => void
 }) {
   const theme = props.ctx.theme
   const dimensions = useTerminalDimensions()
@@ -390,6 +391,12 @@ function History(props: {
   }))
 
   useKeyboard((event: any) => {
+    if (event.name === "escape") {
+      // Closing an unanswered prompt releases a blocked prompt_user call;
+      // the record stays in the list for a later answer.
+      if (answerable()) props.onDefer(report())
+      return
+    }
     if (event.name === "up" && event.ctrl !== true) {
       event.preventDefault()
       event.stopPropagation()
@@ -542,6 +549,14 @@ function openHistory(
   onRead: (report: Report) => void,
   onDismiss: (report: Report) => void,
 ) {
+  const onDefer = (report: Report) => {
+    try {
+      void ctx.client
+        .rpc(Contract)
+        .defer({ sessionID: report.sessionID, reportID: report.id })
+        .catch(() => {})
+    } catch {}
+  }
   ctx.ui.dialog.show(() => (
     <History
       ctx={ctx}
@@ -551,6 +566,7 @@ function openHistory(
       onAnswer={onAnswer}
       onRead={onRead}
       onDismiss={onDismiss}
+      onDefer={onDefer}
     />
   ))
   try {
@@ -809,8 +825,8 @@ export default {
     /**
      * Offer a prompt record as the inline form the question tool uses. The
      * record is already saved, so the card is only an offer: it can be filled
-     * now, or dismissed with esc to defer it to the Prompts list. The tool
-     * never waits on it, so the agent keeps working.
+     * now, or dismissed with esc to defer it to the Prompts list. A blocking
+     * prompt_user waits for the answer; a normal call keeps the agent working.
      */
     async function showForm(report: Report) {
       if (report.kind !== "prompt-user") return
@@ -854,13 +870,22 @@ export default {
       void deliver(sessionID, reportID, answers, "steer")
     })
     const offCancelled = ctx.data?.on?.("form.cancelled", (event: any) => {
-      if (!reportIDOfForm(String(event?.data?.id ?? ""))) return
+      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+      if (!reportID) return
+      const sessionID = String(event?.data?.sessionID ?? "")
+      if (sessionID) void rpc.defer({ sessionID, reportID }).catch(() => {})
       ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
     })
 
     async function read(report: Report) {
       try {
         await rpc.read({ sessionID: report.sessionID, reportID: report.id })
+      } catch {}
+    }
+
+    async function deferPrompt(report: Report) {
+      try {
+        await rpc.defer({ sessionID: report.sessionID, reportID: report.id })
       } catch {}
     }
 
@@ -909,7 +934,10 @@ export default {
           question,
           answers[String(index)] ?? report.answers?.[String(index)] ?? "",
         )
-        if (!result) return
+        if (!result) {
+          void deferPrompt(report)
+          return
+        }
         answers[String(index)] = result.value
         if (result.mode === "queue") mode = "queue"
       }
