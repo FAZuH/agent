@@ -17,6 +17,11 @@ describe("readMarker", () => {
     expect(marker?.sessionID).toBe("ses_fork")
   })
 
+  test("reads the legacy aside marker", () => {
+    const marker = readMarker({ aside: { status: "forked", parentID: "ses_parent" } })
+    expect(marker?.status).toBe("forked")
+  })
+
   test("rejects foreign metadata", () => {
     expect(readMarker(undefined)).toBeUndefined()
     expect(readMarker({ other: 1 })).toBeUndefined()
