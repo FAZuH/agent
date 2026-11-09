@@ -95,9 +95,9 @@ with every dispatch of the session, its status, and a click to switch to
 it. Rebuild with `bun run build:gui` (or `./dev.sh gui`); tests:
 `bun test plugins/dispatch`.
 
-## aside (`fazuh.aside`)
+## branch (`fazuh.branch`)
 
-`/aside <question>` forks the current session at its latest state, asks the
+`/branch <question>` forks the current session at its latest state, asks the
 question in the fork, and reports back to the session that asked. The fork
 keeps full history and stays open for follow-ups, unlike `/btw` which answers
 once in place. In the TUI the view moves to the fork; on hosts with no TUI
@@ -111,25 +111,25 @@ that asked hears about the fork once, when the fork starts. That notice
 labels the question as the fork's task, so the asking session does not read
 it as its own instructions.
 
-The answer comes back on the fork's own initiative through the `aside_report`
+The answer comes back on the fork's own initiative through the `branch_report`
 tool: the fork calls it once the question is answered, and it arrives here
-wrapped in `<aside state="completed">` tags, so the fork curates what that
-session gets to read. `/aside-silent` never asks for a report.
+wrapped in `<branch state="completed">` tags, so the fork curates what that
+session gets to read. `/branch-silent` never asks for a report.
 
-- **`/aside <question>`**: fork, ask, and tell this session the fork exists.
-- **`/aside-silent <question>`**: fork and ask, with no notice and no report.
-- **`aside_ask`** (`question`, `silent?`): the same fork from an agent turn,
+- **`/branch <question>`**: fork, ask, and tell this session the fork exists.
+- **`/branch-silent <question>`**: fork and ask, with no notice and no report.
+- **`branch_ask`** (`question`, `silent?`): the same fork from an agent turn,
   so the agent does not block while the fork works.
-- **`aside_report`** (`text`): send the answer back. Only works inside a fork
+- **`branch_report`** (`text`): send the answer back. Only works inside a fork
   this plugin made.
 
 On OpenCode Desktop its `./gui-experimental` half reads the same markers:
 a fork of the session on screen opens its tab (a failure toasts instead),
 a fork's composer shows a back-link pill to the session that asked, a side
 panel lists the forks of the session on screen, and **Ask in a fork**
-(`mod+shift+a`) opens a dialog and forks through the `aside.start` RPC,
+(`mod+shift+a`) opens a dialog and forks through the `branch.start` RPC,
 whose contract is `rpc.ts`. Rebuild with `bun run build:gui` (or
-`./dev.sh gui`); tests: `bun test plugins/aside`.
+`./dev.sh gui`); tests: `bun test plugins/branch`.
 
 
 ## tell (`fazuh.tell`)
