@@ -18,7 +18,7 @@ describe("gui bundle", () => {
     const bundle = join(root, "dist/gui-experimental.cjs")
     expect(existsSync(bundle)).toBe(true)
     const built = statSync(bundle).mtimeMs
-    for (const source of ["src/gui.tsx", "src/aside.ts", "src/rpc.ts"]) {
+    for (const source of ["src/gui.tsx", "src/branch.ts", "src/rpc.ts"]) {
       expect(built >= statSync(join(root, source)).mtimeMs).toBe(true)
     }
   })

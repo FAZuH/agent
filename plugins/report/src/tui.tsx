@@ -1,19 +1,23 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Reports in the TUI: two sidebar sections, one slot per agent in each.
- * "Reports" holds post-task records, "Prompts" holds prompt-user records.
- * A slot opens that agent's history; ←/→ move through it, Enter answers an
- * open prompt, and an unread slot blinks. The server owns the records.
+ * Reports in the TUI: two sidebar sections, one slot per agent in each, plus
+ * the context-watch status line. "Reports" holds post-task records, "Prompts"
+ * holds prompt-user records, "Context Watch" reads the separate context-watch
+ * plugin over RPC. A slot opens that agent's history; ←/→ move through it,
+ * Enter answers an open prompt, and an unread slot blinks. The server owns
+ * the records.
  */
 import { SyntaxStyle, TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { For, Show, createEffect, createSignal } from "solid-js"
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { Contract } from "./rpc.ts"
+import { Contract as WatchContract, type ContextStatus } from "./context-watch.ts"
 import {
   ago,
   answersOfForm,
   attentionForSection,
   attentionOf,
+  contextLine,
   descriptionOf,
   formFieldsOf,
   formIDOf,
@@ -242,6 +246,7 @@ function History(props: {
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
+  onDefer: (report: Report) => void
 }) {
   const theme = props.ctx.theme
   const dimensions = useTerminalDimensions()
@@ -390,6 +395,12 @@ function History(props: {
   }))
 
   useKeyboard((event: any) => {
+    if (event.name === "escape") {
+      // Closing an unanswered prompt releases a blocked prompt_user call;
+      // the record stays in the list for a later answer.
+      if (answerable()) props.onDefer(report())
+      return
+    }
     if (event.name === "up" && event.ctrl !== true) {
       event.preventDefault()
       event.stopPropagation()
@@ -542,6 +553,14 @@ function openHistory(
   onRead: (report: Report) => void,
   onDismiss: (report: Report) => void,
 ) {
+  const onDefer = (report: Report) => {
+    try {
+      void ctx.client
+        .rpc(Contract)
+        .defer({ sessionID: report.sessionID, reportID: report.id })
+        .catch(() => {})
+    } catch {}
+  }
   ctx.ui.dialog.show(() => (
     <History
       ctx={ctx}
@@ -551,6 +570,7 @@ function openHistory(
       onAnswer={onAnswer}
       onRead={onRead}
       onDismiss={onDismiss}
+      onDefer={onDefer}
     />
   ))
   try {
@@ -655,6 +675,27 @@ function Section(props: {
   )
 }
 
+/** Context Watch: the title turns yellow over the band or while compacting. */
+function ContextStatusLine(props: { ctx: any; status: ContextStatus; marginTop?: number }) {
+  const theme = props.ctx.theme
+  const over = () => props.status.compacting || props.status.over
+  return (
+    <box marginTop={props.marginTop ?? 0}>
+      <box flexDirection="row" gap={1}>
+        <text fg={over() ? theme.text.feedback.warning.base : theme.text.base}>
+          <b>Context Watch</b>
+        </text>
+        <Show when={props.status.over}>
+          <text fg={theme.text.feedback.warning.base}> · over</text>
+        </Show>
+      </box>
+      <text fg={theme.text.muted} wrapMode="none" truncate>
+        {contextLine(props.status)}
+      </text>
+    </box>
+  )
+}
+
 function Sidebar(props: {
   ctx: any
   sessionID: string
@@ -662,13 +703,20 @@ function Sidebar(props: {
   setView: any
   list: () => Report[]
   reload: (sessionID: string) => void
+  refreshContext: (sessionID: string) => void
+  context: () => ContextStatus | undefined
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
 }) {
   createEffect(() => {
     const sessionID = props.sessionID
-    if (sessionID) props.reload(sessionID)
+    if (!sessionID) return
+    props.reload(sessionID)
+    props.refreshContext(sessionID)
+    // The RPC event is the fast path; the poll covers a client that misses it.
+    const timer = setInterval(() => props.refreshContext(sessionID), 5_000)
+    onCleanup(() => clearInterval(timer))
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>
@@ -714,58 +762,74 @@ function Sidebar(props: {
       draft.prompts = draft.prompts === false
     })
   }
+  const sidebarShown = () => props.view?.sidebar !== false
+  const reportsShown = () => props.view?.showReports !== false
+  const promptsShown = () => props.view?.showPrompts !== false
+  const watch = () => props.context()
+  const contextShown = () => props.view?.showContext !== false && watch() !== undefined
+  const hasContent = () =>
+    (reportsShown() && reports().length > 0) ||
+    (promptsShown() && prompts().length > 0) ||
+    contextShown()
   return (
-    <Show when={reports().length > 0 || prompts().length > 0}>
+    <Show when={sidebarShown() && hasContent()}>
       <box>
-        <Section
-          ctx={props.ctx}
-          title="Reports"
-          kind="report"
-          note={props.view?.unread === true ? "unread" : undefined}
-          attention={reportAttention()}
-          groups={reports()}
-          open={reportsOpen()}
-          toggle={toggleReports}
-          onOpen={(group) =>
-            openHistory(
-              props.ctx,
-              group,
-              reportSessions(),
-              "report",
-              props.onAnswer,
-              props.onRead,
-              props.onDismiss,
-            )
-          }
-          onAnswer={props.onAnswer}
-          onRead={props.onRead}
-          onDismiss={props.onDismiss}
-        />
-        <Section
-          ctx={props.ctx}
-          title="Prompts"
-          kind="prompt"
-          marginTop={1}
-          note={props.view?.unanswered === true ? "unanswered" : undefined}
-          attention={promptAttention()}
-          groups={prompts()}
-          open={promptsOpen()}
-          toggle={togglePrompts}
-          onOpen={(group) =>
-            openHistory(
-              props.ctx,
-              group,
-              promptSessions(),
-              "prompt",
-              props.onAnswer,
-              props.onRead,
-              props.onDismiss,
-            )
-          }
-          onAnswer={props.onAnswer}
-          onRead={props.onRead}
-          onDismiss={props.onDismiss}
-        />
+        <Show when={reportsShown()}>
+          <Section
+            ctx={props.ctx}
+            title="Reports"
+            kind="report"
+            note={props.view?.unread === true ? "unread" : undefined}
+            attention={reportAttention()}
+            groups={reports()}
+            open={reportsOpen()}
+            toggle={toggleReports}
+            onOpen={(group) =>
+              openHistory(
+                props.ctx,
+                group,
+                reportSessions(),
+                "report",
+                props.onAnswer,
+                props.onRead,
+                props.onDismiss,
+              )
+            }
+            onAnswer={props.onAnswer}
+            onRead={props.onRead}
+            onDismiss={props.onDismiss}
+          />
+        </Show>
+        <Show when={promptsShown()}>
+          <Section
+            ctx={props.ctx}
+            title="Prompts"
+            kind="prompt"
+            marginTop={reportsShown() && reports().length > 0 ? 1 : 0}
+            note={props.view?.unanswered === true ? "unanswered" : undefined}
+            attention={promptAttention()}
+            groups={prompts()}
+            open={promptsOpen()}
+            toggle={togglePrompts}
+            onOpen={(group) =>
+              openHistory(
+                props.ctx,
+                group,
+                promptSessions(),
+                "prompt",
+                props.onAnswer,
+                props.onRead,
+                props.onDismiss,
+              )
+            }
+            onAnswer={props.onAnswer}
+            onRead={props.onRead}
+            onDismiss={props.onDismiss}
+          />
+        </Show>
+        <Show when={contextShown()}>
+          <ContextStatusLine ctx={props.ctx} status={watch()!} marginTop={1} />
+        </Show>
       </box>
     </Show>
   )
@@ -778,6 +842,7 @@ export default {
     if (typeof ctx.client?.rpc !== "function") return
     const rpc = ctx.client.rpc(Contract)
     const [reports, setReports] = createSignal<Record<string, Report[]>>({})
+    const [contexts, setContexts] = createSignal<Record<string, ContextStatus | undefined>>({})
 
     const routedID = (): string | undefined => {
       const route = ctx.ui.router.current()
@@ -792,6 +857,39 @@ export default {
         })
         .catch(() => {})
     }
+
+    // Context-watch is a separate plugin. Its RPC is optional: without it the
+    // Context section stays off and the rest of the sidebar is unaffected.
+    const watch = (() => {
+      try {
+        return ctx.client.rpc(WatchContract)
+      } catch {
+        return undefined
+      }
+    })()
+    const refreshContext = (sessionID: string) => {
+      if (!watch) return
+      try {
+        void watch
+          .status({ sessionID })
+          .then((result: any) => {
+            if (result?.ok && result.status) {
+              setContexts((previous) => ({ ...previous, [sessionID]: result.status }))
+            }
+          })
+          .catch(() => {})
+      } catch {}
+    }
+    let offContext: (() => void) | undefined
+    try {
+      offContext = watch?.events.on("changed", (event: any) => {
+        const sessionID = String(event?.data?.sessionID ?? "")
+        const status = event?.data?.status
+        if (sessionID && status) {
+          setContexts((previous) => ({ ...previous, [sessionID]: status }))
+        }
+      })
+    } catch {}
 
     // A report or answer written anywhere in the family refetches the view,
     // and a fresh prompt record opens as the host's inline form.
@@ -809,8 +907,8 @@ export default {
     /**
      * Offer a prompt record as the inline form the question tool uses. The
      * record is already saved, so the card is only an offer: it can be filled
-     * now, or dismissed with esc to defer it to the Prompts list. The tool
-     * never waits on it, so the agent keeps working.
+     * now, or dismissed with esc to defer it to the Prompts list. A blocking
+     * prompt_user waits for the answer; a normal call keeps the agent working.
      */
     async function showForm(report: Report) {
       if (report.kind !== "prompt-user") return
@@ -854,13 +952,22 @@ export default {
       void deliver(sessionID, reportID, answers, "steer")
     })
     const offCancelled = ctx.data?.on?.("form.cancelled", (event: any) => {
-      if (!reportIDOfForm(String(event?.data?.id ?? ""))) return
+      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+      if (!reportID) return
+      const sessionID = String(event?.data?.sessionID ?? "")
+      if (sessionID) void rpc.defer({ sessionID, reportID }).catch(() => {})
       ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
     })
 
     async function read(report: Report) {
       try {
         await rpc.read({ sessionID: report.sessionID, reportID: report.id })
+      } catch {}
+    }
+
+    async function deferPrompt(report: Report) {
+      try {
+        await rpc.defer({ sessionID: report.sessionID, reportID: report.id })
       } catch {}
     }
 
@@ -909,12 +1016,69 @@ export default {
           question,
           answers[String(index)] ?? report.answers?.[String(index)] ?? "",
         )
-        if (!result) return
+        if (!result) {
+          void deferPrompt(report)
+          return
+        }
         answers[String(index)] = result.value
         if (result.mode === "queue") mode = "queue"
       }
       if (!Object.keys(answers).length) return
       await deliver(report.sessionID, report.id, answers, mode)
+    }
+
+    /**
+     * Clear one section's attention for the routed session's family: every
+     * unread post-task record, or every prompt record still awaiting an
+     * answer. Answered and already-dismissed prompts need no second pass.
+     */
+    async function markAll(kind: Report["kind"]) {
+      const sessionID = routedID()
+      if (!sessionID) {
+        ctx.ui.toast.show({ message: "Open a session first.", variant: "info" })
+        return
+      }
+      let records: Report[] = []
+      try {
+        const result: any = await rpc.list({ sessionIDs: familyOf(ctx, sessionID) })
+        records = Array.isArray(result?.reports) ? result.reports : []
+      } catch (error: any) {
+        ctx.ui.toast.show({
+          message: `Could not load ${kind === "post-task" ? "reports" : "prompts"}: ${error?.message ?? error}`,
+          variant: "error",
+        })
+        return
+      }
+      const targets =
+        kind === "post-task"
+          ? records.filter((item) => item.kind === "post-task" && !item.readAt)
+          : records.filter((item) => item.kind === "prompt-user" && needsAnswer(item))
+      if (!targets.length) {
+        ctx.ui.toast.show({
+          message: kind === "post-task" ? "No unread reports." : "No prompts to dismiss.",
+          variant: "info",
+        })
+        return
+      }
+      let done = 0
+      for (const report of targets) {
+        try {
+          if (kind === "post-task") {
+            await rpc.read({ sessionID: report.sessionID, reportID: report.id })
+          } else {
+            await rpc.dismiss({ sessionID: report.sessionID, reportID: report.id })
+          }
+          done++
+        } catch {}
+      }
+      ctx.ui.toast.show({
+        message:
+          kind === "post-task"
+            ? `Marked ${done} report${done === 1 ? "" : "s"} read.`
+            : `Dismissed ${done} prompt${done === 1 ? "" : "s"}.`,
+        variant: done === targets.length ? "success" : "warning",
+      })
+      reload(sessionID)
     }
 
     async function openList(kind: Report["kind"]) {
@@ -982,8 +1146,47 @@ export default {
       }
     }
 
+    /**
+     * The visibility settings. Each row toggles and reopens the list because
+     * the host's select closes on pick; esc ends the loop.
+     */
+    async function openSettings() {
+      const rows = [
+        { key: "sidebar", title: "Sidebar", note: "master" },
+        { key: "showReports", title: "Reports", note: "section" },
+        { key: "showPrompts", title: "Prompts", note: "section" },
+        { key: "showContext", title: "Context Watch", note: "section" },
+      ] as const
+      for (;;) {
+        const picked = await ctx.ui.dialog
+          .select({
+            title: "Report settings",
+            footerHints: [{ title: "toggle", label: "enter" }],
+            options: rows.map((row) => ({
+              title: row.title,
+              description: `${row.note} · ${view[row.key] !== false ? "shown" : "hidden"}`,
+              value: row.key,
+            })),
+          })
+          .catch(() => undefined)
+        if (!picked) return
+        await setView((draft: any) => {
+          draft[picked] = draft[picked] === false
+        })
+      }
+    }
+
     const [view, setView] = ctx.storage.store("report-view-v2", {
-      initial: { open: true, prompts: true, unanswered: false, unread: false },
+      initial: {
+        open: true,
+        prompts: true,
+        unanswered: false,
+        unread: false,
+        sidebar: true,
+        showReports: true,
+        showPrompts: true,
+        showContext: true,
+      },
     })
 
     ctx.ui.slot({
@@ -996,6 +1199,8 @@ export default {
           setView={setView}
           list={() => reports()[input.sessionID] ?? []}
           reload={reload}
+          refreshContext={refreshContext}
+          context={() => contexts()[input.sessionID]}
           onAnswer={(report) => void answer(report)}
           onRead={(report) => void read(report)}
           onDismiss={(report) => void dismiss(report)}
@@ -1029,6 +1234,14 @@ export default {
               run: () => void openList("prompt-user"),
             },
             {
+              id: "report.settings",
+              title: "Report settings",
+              group: "report",
+              palette: true,
+              slash: { name: "report-settings" },
+              run: () => void openSettings(),
+            },
+            {
               id: "report.attention",
               title: "Only unanswered prompts and unread reports",
               group: "report",
@@ -1041,6 +1254,22 @@ export default {
                 })
               },
             },
+            {
+              id: "report.read.all",
+              title: "Mark all reports read",
+              group: "report",
+              palette: true,
+              slash: { name: "read-reports" },
+              run: () => void markAll("post-task"),
+            },
+            {
+              id: "report.dismiss.all",
+              title: "Dismiss all prompts",
+              group: "report",
+              palette: true,
+              slash: { name: "dismiss-prompts" },
+              run: () => void markAll("prompt-user"),
+            },
           ],
         }))
         return null
@@ -1048,7 +1277,7 @@ export default {
     })
 
     return () => {
-      for (const stop of [off, offReplied, offCancelled]) {
+      for (const stop of [off, offReplied, offCancelled, offContext]) {
         try {
           stop?.()
         } catch {}

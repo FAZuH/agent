@@ -114,7 +114,7 @@ describe("tools", () => {
     expect(result.ok).toBe(true)
     expect(result.delivered).toBe(true)
     expect(deliveries.at(-1)).toBe("steer")
-    expect(prompts.at(-1)).toContain("1. pick one: one")
+    expect(prompts.at(-1)).toBe("# Prompt: Pick one\n\npick one\none")
     const stored = store.readReports("ses_3")[0]!
     expect(stored.answers?.["0"]).toBe("one")
     expect(stored.answeredAt).toBeGreaterThan(0)
@@ -135,7 +135,7 @@ describe("tools", () => {
     })
     expect(result.delivered).toBe(true)
     expect(deliveries.at(-1)).toBe("queue")
-    expect(prompts.at(-1)).toContain("1. queue question: queued")
+    expect(prompts.at(-1)).toBe("# Prompt: Queue it\n\nqueue question\nqueued")
     const stored = store.readReports("ses_queue")[0]!
     expect(stored.answers?.["0"]).toBe("queued")
     expect(stored.answeredAt).toBeGreaterThan(0)
@@ -185,5 +185,83 @@ describe("tools", () => {
     const post = tools.find((tool) => tool.name === "post_task")
     const result = await post.execute({ description: "No session", completed: ["x"] }, {})
     expect(result.content).toContain("no session")
+  })
+
+  test("block waits for the answer and returns it without a second prompt", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const pending = prompt.execute(
+      {
+        description: "Block one",
+        block: true,
+        questions: [{ title: "block q", body: "wait for it" }],
+      },
+      { sessionID: "ses_block" },
+    )
+    const id = store.readReports("ses_block")[0]!.id
+    const before = prompts.length
+    const result = await handlers.answer({
+      sessionID: "ses_block",
+      reportID: id,
+      answers: { "0": "yes" },
+    })
+    expect(result.delivered).toBe(true)
+    const toolResult = await pending
+    expect(toolResult.content).toContain("# Prompt: Block one")
+    expect(toolResult.content).toContain("block q\nyes")
+    expect(prompts.length).toBe(before)
+    const stored = store.readReports("ses_block")[0]!
+    expect(stored.answeredAt).toBeGreaterThan(0)
+    expect(stored.answers?.["0"]).toBe("yes")
+  })
+
+  test("block resolves on dismiss", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const pending = prompt.execute(
+      {
+        description: "Block dismiss",
+        block: true,
+        questions: [{ title: "dismiss q", body: "not now" }],
+      },
+      { sessionID: "ses_block_dismiss" },
+    )
+    const id = store.readReports("ses_block_dismiss")[0]!.id
+    await handlers.dismiss({ sessionID: "ses_block_dismiss", reportID: id })
+    const toolResult = await pending
+    expect(toolResult.content).toContain("dismissed")
+    expect(store.readReports("ses_block_dismiss")[0]?.dismissedAt).toBeGreaterThan(0)
+  })
+
+  test("block resolves on defer and leaves the prompt unanswered", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const pending = prompt.execute(
+      {
+        description: "Block defer",
+        block: true,
+        questions: [{ title: "defer q", body: "later" }],
+      },
+      { sessionID: "ses_block_defer" },
+    )
+    const id = store.readReports("ses_block_defer")[0]!.id
+    const result = await handlers.defer({ sessionID: "ses_block_defer", reportID: id })
+    expect(result.ok).toBe(true)
+    const toolResult = await pending
+    expect(toolResult.content).toContain("deferred")
+    const stored = store.readReports("ses_block_defer")[0]!
+    expect(stored.answeredAt).toBeUndefined()
+    expect(stored.dismissedAt).toBeUndefined()
+  })
+
+  test("block requires at least one question", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const result = await prompt.execute(
+      {
+        description: "Block procedure",
+        block: true,
+        procedures: [{ title: "run", steps: ["one"] }],
+      },
+      { sessionID: "ses_block_procedure" },
+    )
+    expect(result.content).toContain("block requires at least one question")
+    expect(store.readReports("ses_block_procedure")).toHaveLength(0)
   })
 })

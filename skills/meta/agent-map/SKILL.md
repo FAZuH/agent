@@ -26,9 +26,9 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
    - Jev: the `hook_skill_pick` picker hook (advises a skill per prompt) and the
      `hook_risk` gate on bash/edit/write, plus `/jev-status`, `/jev-model`,
      `/jev-endpoint`, `/jev-log`. No jev tools exist.
-   - `/dispatch <task>` — background subagent, same session. `/aside <q>` —
-     fork this session and ask in the fork (`aside_ask`; the fork answers with
-     `aside_report`).
+   - `/dispatch <task>` — background subagent, same session. `/branch <q>` —
+     fork this session and ask in the fork (`branch_ask`; the fork answers with
+     `branch_report`).
    - `/finish` (end-session workflow), `/gate` (auto/interactive mode),
      `/status-report`, `/imagescan-*` (ten screenshot commands).
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
@@ -132,10 +132,12 @@ instead of silently changing scope.
   hook (gates bash/edit/write, the only blocking path);
   settings in `jev-state.json`, logs in `jev-calls.jsonl`.
 - **dispatch**: `/dispatch` background subagent.
-- **aside**: `/aside` fork-and-ask; agents use `aside_ask`, the fork answers
-  with `aside_report`.
+- **branch**: `/branch` fork-and-ask; agents use `branch_ask`, the fork answers
+  with `branch_report`.
 - **report**: `post_task` and `prompt_user` tools; the reports render in the
   TUI sidebar and the desktop Reports panel, not in the reply.
+  `/report-settings` toggles the sidebar and its Reports, Prompts, and
+  Context Watch sections.
 
 ### Commands
 

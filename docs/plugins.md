@@ -95,9 +95,9 @@ with every dispatch of the session, its status, and a click to switch to
 it. Rebuild with `bun run build:gui` (or `./dev.sh gui`); tests:
 `bun test plugins/dispatch`.
 
-## aside (`fazuh.aside`)
+## branch (`fazuh.branch`)
 
-`/aside <question>` forks the current session at its latest state, asks the
+`/branch <question>` forks the current session at its latest state, asks the
 question in the fork, and reports back to the session that asked. The fork
 keeps full history and stays open for follow-ups, unlike `/btw` which answers
 once in place. In the TUI the view moves to the fork; on hosts with no TUI
@@ -111,25 +111,25 @@ that asked hears about the fork once, when the fork starts. That notice
 labels the question as the fork's task, so the asking session does not read
 it as its own instructions.
 
-The answer comes back on the fork's own initiative through the `aside_report`
+The answer comes back on the fork's own initiative through the `branch_report`
 tool: the fork calls it once the question is answered, and it arrives here
-wrapped in `<aside state="completed">` tags, so the fork curates what that
-session gets to read. `/aside-silent` never asks for a report.
+wrapped in `<branch state="completed">` tags, so the fork curates what that
+session gets to read. `/branch-silent` never asks for a report.
 
-- **`/aside <question>`**: fork, ask, and tell this session the fork exists.
-- **`/aside-silent <question>`**: fork and ask, with no notice and no report.
-- **`aside_ask`** (`question`, `silent?`): the same fork from an agent turn,
+- **`/branch <question>`**: fork, ask, and tell this session the fork exists.
+- **`/branch-silent <question>`**: fork and ask, with no notice and no report.
+- **`branch_ask`** (`question`, `silent?`): the same fork from an agent turn,
   so the agent does not block while the fork works.
-- **`aside_report`** (`text`): send the answer back. Only works inside a fork
+- **`branch_report`** (`text`): send the answer back. Only works inside a fork
   this plugin made.
 
 On OpenCode Desktop its `./gui-experimental` half reads the same markers:
 a fork of the session on screen opens its tab (a failure toasts instead),
 a fork's composer shows a back-link pill to the session that asked, a side
 panel lists the forks of the session on screen, and **Ask in a fork**
-(`mod+shift+a`) opens a dialog and forks through the `aside.start` RPC,
+(`mod+shift+a`) opens a dialog and forks through the `branch.start` RPC,
 whose contract is `rpc.ts`. Rebuild with `bun run build:gui` (or
-`./dev.sh gui`); tests: `bun test plugins/aside`.
+`./dev.sh gui`); tests: `bun test plugins/branch`.
 
 
 ## tell (`fazuh.tell`)
@@ -327,9 +327,13 @@ tools and keep the printed block as a fallback for hosts without the plugin.
   `failed`, `next`): the @post-task report. `description` is required and at
   most 35 characters; it is the slot label. Decisions go in a separate
   `prompt_user` call.
-- **`prompt_user`** (`description`, `procedures?`, `questions?`): the
-  @prompt-user block for a standalone ask. `description` is required and at
-  most 35 characters.
+- **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`):
+  the @prompt-user block for a standalone ask. `description` is required and
+  at most 35 characters. `block: true` waits for the answer in the same turn
+  and returns it as the tool result; it needs at least one question. A
+  dismissed blocking prompt returns as dismissed, and a deferred one returns
+  as deferred and stays unanswered. Without `block` the call returns
+  immediately and the answer arrives as a new message.
 - **`report_update`** (`id?`, the same section fields): patches one record in
   place, keeping every field the call omits, and bumps its revision. `id`
   defaults to the session's latest report. Use it to revise a section instead
@@ -339,11 +343,12 @@ Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/fazuh-agent/reports/`, newest last,
 capped at 50; `REPORT_STATE_HOME` overrides the root. The server writes them
 atomically and exposes `report.list({sessionIDs})`, `report.read`,
-`report.answer`, and a `changed` event over RPC. Views pass the routed session's family
+`report.answer`, `report.dismiss`, `report.defer`, and a `changed` event over
+RPC. Views pass the routed session's family
 (`data.session.family`), so a subagent's reports appear in the parent's view.
 Forks stay out of the family.
 
-The TUI half (`./tui`) adds two sidebar sections, each a slot per agent
+The TUI half (`./tui`) adds three sidebar sections, each a slot per agent
 (the routed session and each subagent that has a record). **Reports** holds
 post-task records, **Prompts** holds prompt-user records. The dot is yellow
 while a record has questions without answers, green while unread, and gray
@@ -356,7 +361,9 @@ sends the answers to the agent. Opening a
 record marks it read (`report.read`); reading never bumps its revision.
 Answering uses **Enter** to steer the answer (interrupt and deliver now) or
 **Ctrl+Enter** to queue it behind the agent's current turn; an empty answer
-takes the question's recommendation. The dialog renders the record
+takes the question's recommendation. The answers reach the agent as a
+`# Prompt: <description>` block with each question and its answer under it,
+like the host's question card. The dialog renders the record
 as Markdown with padding, shows the reporting session's title, its 35-character
 description, and its relative age (the update age when revised), colors keybinds
 apart from their descriptions,
@@ -370,7 +377,19 @@ between all entries and attention-only (default: all); inside a history it
 filters the entries to unread reports or unanswered prompts, using the state
 when the key was pressed so reading or dismissing the shown entry does not
 remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
-same histories by picker. The GUI half
+same histories by picker; `/read-reports` marks every unread report in the
+session family read, and `/dismiss-prompts` dismisses every prompt still
+awaiting an answer. **Context Watch** reads the separate
+`opencode-context-watch` plugin over its `context-watch.status` RPC: the line
+shows the percent, the tokens over the model window, and the active warn band
+(for example `39% · 394k/1M · warn 300k`), with the title yellow over the
+band or while a session compacts. It asks on session switch, follows the
+plugin's `changed` event, and polls the same call every 5 seconds as a
+fallback. The section stays hidden when
+context-watch is not installed. `/report-settings`
+toggles the whole sidebar and each section (Reports, Prompts, Context Watch);
+the flags persist in the `report-view-v2` view store, and the existing
+collapse states stay separate. The GUI half
 mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
 side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
 bundle: `./dev.sh gui`.

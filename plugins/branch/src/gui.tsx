@@ -1,12 +1,12 @@
 import { For, onCleanup } from "solid-js"
 import { ComposerPill, Command, createKeyed, Panel, Plugin } from "@opencode/plugin/gui"
-import { readMarker } from "./aside.ts"
+import { readMarker } from "./branch.ts"
 import { Contract } from "./rpc.ts"
 
 /**
- * The desktop half of fazuh.aside.
+ * The desktop half of fazuh.branch.
  *
- * The server still owns `/aside`, `/aside-silent` and both tools, so they work
+ * The server still owns `/branch`, `/branch-silent` and both tools, so they work
  * on every host. This half only reads the same fork markers the TUI reads:
  * a fork of the session on screen opens its tab, a fork that never started
  * says why, and a fork's composer offers the way back to the session that

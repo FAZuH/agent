@@ -9,6 +9,8 @@
  * view, and the reply keeps only the answer.
  */
 
+import type { ContextStatus } from "./context-watch.ts"
+
 export type ReportKind = "post-task" | "prompt-user"
 
 export interface Hiccup {
@@ -367,14 +369,18 @@ export function groupBySession(reports: readonly Report[]): ReportGroup[] {
   }))
 }
 
-/** What the reporting session reads after the user answers the prompts. */
+/**
+ * What the reporting session reads after the user answers the prompts. It
+ * mirrors the host's question card: a titled block, then one question with
+ * its answer under it.
+ */
 export function answerText(report: Report, answers: Record<string, string>): string {
-  const lines = [`Answers to "${report.title}":`]
+  const pairs: string[] = []
   for (const [index, question] of (report.prompts?.questions ?? []).entries()) {
     const answer = answers[String(index)]?.trim()
-    if (answer) lines.push(`${index + 1}. ${question.title}: ${answer}`)
+    if (answer) pairs.push(`${question.title.trim()}\n${answer}`)
   }
-  return lines.join("\n")
+  return [`# Prompt: ${descriptionOf(report)}`, ...pairs].join("\n\n").trimEnd()
 }
 
 /** Our form ids carry the report id behind this prefix; other forms do not. */
@@ -469,4 +475,33 @@ export function stampOf(report: Report, now = Date.now()): string {
 /** A stable id for one record: time plus a short random suffix. */
 export function reportID(now = Date.now()): string {
   return `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** A token count in one short word: 999, 394k, 1M. */
+export function compactCount(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "?"
+  const round = (n: number) => Math.round(n * 10) / 10
+  if (value >= 1_000_000) return `${round(value / 1_000_000)}M`
+  if (value >= 1_000) return `${round(value / 1_000)}k`
+  return String(Math.round(value))
+}
+
+/**
+ * The Context line: usage, then the band that will warn. A missing sample and
+ * a running compaction say so instead of showing a stale percent.
+ */
+export function contextLine(status: ContextStatus): string {
+  const warn =
+    status.warnTokens !== null
+      ? `warn ${compactCount(status.warnTokens)}`
+      : status.warnPercent !== null
+        ? `warn ${Math.round(status.warnPercent * 100)}%`
+        : "warn off"
+  if (status.compacting) return `compacting · ${warn}`
+  if (status.tokens === undefined) return `no sample yet · ${warn}`
+  const usage =
+    status.percent !== undefined && status.window !== undefined
+      ? `${Math.round(status.percent)}% · ${compactCount(status.tokens)}/${compactCount(status.window)}`
+      : `${compactCount(status.tokens)} tokens`
+  return `${usage} · ${warn}`
 }

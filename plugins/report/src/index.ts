@@ -22,6 +22,11 @@ import { appendReport, readMany, readReports, updateReport } from "./store.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+type BlockOutcome =
+  | { type: "answered"; answers: Record<string, string> }
+  | { type: "dismissed" }
+  | { type: "deferred" }
+
 const stringList = { type: "array", items: { type: "string" } } as const
 const descriptionSchema = { type: "string", minLength: 1, maxLength: 35 } as const
 
@@ -94,6 +99,11 @@ const promptUserInput = {
   type: "object",
   properties: {
     description: descriptionSchema,
+    block: {
+      type: "boolean",
+      description:
+        "Wait for the user to answer before returning. Requires at least one question. The tool result carries the answers, or says the user dismissed or deferred the prompt.",
+    },
     ...promptInput.properties,
   },
   required: ["description"],
@@ -113,6 +123,8 @@ export default {
   id: "fazuh.report",
   setup: async (ctx: any) => {
     let emit: ((event: { sessionID: string; report: Report }) => Promise<void>) | undefined
+    /** Prompt records whose prompt_user call is waiting in this server. */
+    const blocked = new Map<string, (outcome: BlockOutcome) => void>()
 
     if (typeof ctx.rpc?.register !== "function") {
       console.error("[report] ctx.rpc.register is unavailable; the views cannot list reports")
@@ -153,6 +165,28 @@ export default {
             }
             const report = readReports(sessionID).find((item) => item.id === reportID)
             if (!report) return { ok: false, delivered: false, error: "report not found" }
+            // A blocking prompt_user is waiting for this answer. The tool
+            // result carries it back to the agent, so sending the usual user
+            // message too would deliver the same answer twice.
+            const waiter = blocked.get(reportID)
+            if (waiter) {
+              blocked.delete(reportID)
+              try {
+                const updated = updateReport(sessionID, reportID, (current) => ({
+                  ...current,
+                  answers: { ...(current.answers ?? {}), ...answers },
+                  answeredAt: Date.now(),
+                }))
+                if (updated && emit) {
+                  void emit({ sessionID, report: updated }).catch((cause) =>
+                    console.error(`[report] emit failed: ${message(cause)}`),
+                  )
+                }
+                return { ok: true, delivered: true }
+              } finally {
+                waiter({ type: "answered", answers })
+              }
+            }
             let delivered = false
             let error: string | undefined
             try {
@@ -180,16 +214,29 @@ export default {
           dismiss: async (input: any) => {
             const sessionID = String(input?.sessionID ?? "")
             const reportID = String(input?.reportID ?? "")
-            const updated = updateReport(sessionID, reportID, (current) => ({
-              ...current,
-              dismissedAt: Date.now(),
-            }))
-            if (updated && emit) {
-              void emit({ sessionID, report: updated }).catch((cause) =>
-                console.error(`[report] emit failed: ${message(cause)}`),
-              )
+            const waiter = blocked.get(reportID)
+            blocked.delete(reportID)
+            try {
+              const updated = updateReport(sessionID, reportID, (current) => ({
+                ...current,
+                dismissedAt: Date.now(),
+              }))
+              if (updated && emit) {
+                void emit({ sessionID, report: updated }).catch((cause) =>
+                  console.error(`[report] emit failed: ${message(cause)}`),
+                )
+              }
+              return { ok: Boolean(updated) }
+            } finally {
+              waiter?.({ type: "dismissed" })
             }
-            return { ok: Boolean(updated) }
+          },
+          defer: async (input: any) => {
+            const reportID = String(input?.reportID ?? "")
+            const waiter = blocked.get(reportID)
+            blocked.delete(reportID)
+            waiter?.({ type: "deferred" })
+            return { ok: true }
           },
         })
         emit = (event) => registration.events.emit("changed", event)
@@ -251,7 +298,7 @@ export default {
       tools.add({
         name: "prompt_user",
         description:
-          "Call this instead of printing the prompt-user block in your reply. It stores the procedures and questions in the session's Reports view, where the user can answer them. `description` is required: the short slot label, at most 35 characters. Do not repeat them in the reply. Use when the user must decide something or run steps, per the @prompt-user skill.",
+          "Call this instead of printing the prompt-user block in your reply. It stores the procedures and questions in the session's Reports view, where the user can answer them. `description` is required: the short slot label, at most 35 characters. Do not repeat them in the reply. Set `block: true` to wait for an answer in this turn; the tool result carries it. Blocking needs at least one question. Use when the user must decide something or run steps, per the @prompt-user skill.",
         input: promptUserInput,
         execute: async (input: any, tctx: any) => {
           const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
@@ -262,9 +309,28 @@ export default {
           }
           const prompts = promptsOf(input)
           if (isEmpty({}, prompts)) return { content: "prompt_user failed: no procedures or questions." }
+          const block = input?.block === true
+          if (block && !(prompts.questions?.length ?? 0)) {
+            return { content: "prompt_user failed: block requires at least one question." }
+          }
           try {
             const report = save(sessionID, "prompt-user", description, {}, prompts)
-            return { content: `Saved as prompts ${report.id}; they are in the Reports view. Do not repeat them here.` }
+            if (!block) {
+              return { content: `Saved as prompts ${report.id}; they are in the Reports view. Do not repeat them here.` }
+            }
+            const outcome = await new Promise<BlockOutcome>((resolve) => {
+              blocked.set(report.id, resolve)
+            })
+            if (outcome.type === "answered") {
+              const latest = readReports(sessionID).find((item) => item.id === report.id) ?? report
+              return { content: answerText(latest, outcome.answers) }
+            }
+            if (outcome.type === "dismissed") {
+              return { content: "The user dismissed the prompt without answering it." }
+            }
+            return {
+              content: "The user deferred the prompt; the answer will arrive as a new message.",
+            }
           } catch (error) {
             return { content: `prompt_user failed: ${message(error)}` }
           }

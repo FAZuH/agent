@@ -283,6 +283,12 @@ export default Plugin.define({
       if (routed) seed(routed.id)
     }
 
+    async function defer(report: Report) {
+      try {
+        await client().rpc(Contract).defer({ sessionID: report.sessionID, reportID: report.id })
+      } catch {}
+    }
+
     async function answer(report: Report) {
       const questions = report.prompts?.questions ?? []
       if (!questions.length) return
@@ -294,10 +300,16 @@ export default Plugin.define({
           placeholder: question.recommendation ?? "Your answer",
           value: answers[String(index)] ?? report.answers?.[String(index)] ?? "",
         })
-        if (value === undefined) return
+        if (value === undefined) {
+          void defer(report)
+          return
+        }
         if (value.trim()) answers[String(index)] = value.trim()
       }
-      if (!Object.keys(answers).length) return
+      if (!Object.keys(answers).length) {
+        void defer(report)
+        return
+      }
       const mode = await ctx.dialogs.select<"steer" | "queue">({
         title: "Send answers",
         options: [
@@ -305,7 +317,10 @@ export default Plugin.define({
           { title: "Queue", description: "Deliver after the agent's current turn", value: "queue" },
         ],
       })
-      if (!mode) return
+      if (!mode) {
+        void defer(report)
+        return
+      }
       try {
         const result: any = await client()
           .rpc(Contract)

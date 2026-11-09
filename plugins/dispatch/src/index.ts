@@ -4,7 +4,7 @@
 //
 // The child is marked in its session metadata, so the desktop GUI can list
 // the dispatches of whatever session is on screen and switch the view to
-// them, the same way aside's fork markers connect a parent to its forks.
+// them, the same way branch's fork markers connect a parent to its forks.
 import { DISPATCH_KEY } from "./shared.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
