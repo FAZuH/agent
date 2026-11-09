@@ -917,6 +917,60 @@ export default {
       await deliver(report.sessionID, report.id, answers, mode)
     }
 
+    /**
+     * Clear one section's attention for the routed session's family: every
+     * unread post-task record, or every prompt record still awaiting an
+     * answer. Answered and already-dismissed prompts need no second pass.
+     */
+    async function markAll(kind: Report["kind"]) {
+      const sessionID = routedID()
+      if (!sessionID) {
+        ctx.ui.toast.show({ message: "Open a session first.", variant: "info" })
+        return
+      }
+      let records: Report[] = []
+      try {
+        const result: any = await rpc.list({ sessionIDs: familyOf(ctx, sessionID) })
+        records = Array.isArray(result?.reports) ? result.reports : []
+      } catch (error: any) {
+        ctx.ui.toast.show({
+          message: `Could not load ${kind === "post-task" ? "reports" : "prompts"}: ${error?.message ?? error}`,
+          variant: "error",
+        })
+        return
+      }
+      const targets =
+        kind === "post-task"
+          ? records.filter((item) => item.kind === "post-task" && !item.readAt)
+          : records.filter((item) => item.kind === "prompt-user" && needsAnswer(item))
+      if (!targets.length) {
+        ctx.ui.toast.show({
+          message: kind === "post-task" ? "No unread reports." : "No prompts to dismiss.",
+          variant: "info",
+        })
+        return
+      }
+      let done = 0
+      for (const report of targets) {
+        try {
+          if (kind === "post-task") {
+            await rpc.read({ sessionID: report.sessionID, reportID: report.id })
+          } else {
+            await rpc.dismiss({ sessionID: report.sessionID, reportID: report.id })
+          }
+          done++
+        } catch {}
+      }
+      ctx.ui.toast.show({
+        message:
+          kind === "post-task"
+            ? `Marked ${done} report${done === 1 ? "" : "s"} read.`
+            : `Dismissed ${done} prompt${done === 1 ? "" : "s"}.`,
+        variant: done === targets.length ? "success" : "warning",
+      })
+      reload(sessionID)
+    }
+
     async function openList(kind: Report["kind"]) {
       const sessionID = routedID()
       if (!sessionID) {
@@ -1040,6 +1094,22 @@ export default {
                   draft.unanswered = only
                 })
               },
+            },
+            {
+              id: "report.read.all",
+              title: "Mark all reports read",
+              group: "report",
+              palette: true,
+              slash: { name: "read-reports" },
+              run: () => void markAll("post-task"),
+            },
+            {
+              id: "report.dismiss.all",
+              title: "Dismiss all prompts",
+              group: "report",
+              palette: true,
+              slash: { name: "dismiss-prompts" },
+              run: () => void markAll("prompt-user"),
             },
           ],
         }))

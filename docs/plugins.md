@@ -372,7 +372,9 @@ between all entries and attention-only (default: all); inside a history it
 filters the entries to unread reports or unanswered prompts, using the state
 when the key was pressed so reading or dismissing the shown entry does not
 remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
-same histories by picker. The GUI half
+same histories by picker; `/read-reports` marks every unread report in the
+session family read, and `/dismiss-prompts` dismisses every prompt still
+awaiting an answer. The GUI half
 mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
 side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
 bundle: `./dev.sh gui`.
