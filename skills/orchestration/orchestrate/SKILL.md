@@ -43,8 +43,9 @@ never improvise a workflow.
 
 - Once a subagent owns a task, do not duplicate its work. Wait for its report
   and act on it.
-- Prefer resuming an existing session for the same unit of work (Session
-  reuse) over spawning cold.
+- Resume before spawning: answer the gate under Session reuse (`sessionID`).
+  For a continuing unit the existing child's id is the default, not the
+  exception.
 - A subagent reports a blocker (a broken dev server, or verification that
   could not start): re-route to `implement` with a server-only or
   verification-only brief; never work around it yourself.
@@ -69,6 +70,21 @@ Every task result returns the child's `sessionID`. Pass it back to resume that
 session instead of spawning cold: it keeps what the child already loaded
 (AGENTS.md, CONTEXT.md, ADRs, plan, codebase map).
 
+### Before any `subagent` call
+
+Answer this in one line, then act:
+
+> Does this task continue an artifact, lane, or review that an existing child
+> already owns?
+
+- **Yes → pass that child's `sessionID`.** Resuming is the default, not the
+  exception.
+- **No → spawn fresh** only for an independent parallel unit, a different
+  artifact, or the single deliberate cold read under *Review continuity*.
+
+If the answer is yes and the id is not to hand, read the registry before
+spawning. Losing the id is a lookup problem, not a reason for a cold start.
+
 RESUME (pass the child's `sessionID`) when the next task is the same agent as a
 session you already spawned AND continues the same unit of work (next
 ticket/increment, a re-run, a re-review, or a follow-up on its own report).
@@ -92,6 +108,17 @@ Keep the same `agent`: the session carries it. Tell the child it is
 continuing, reference its last report, and ask for a delta, not a full
 re-report.
 
+**Review continuity.** Iterative passes over one artifact — critic, review,
+audit — resume one reviewer session, with a delta brief: prior verdict, prior
+blockers, then "which are resolved and what is new". A cold reviewer cannot
+check whether its own earlier instruction was applied; in this workspace a
+fresh pass over one package found a fix applied to two files and missed a
+third, which a resumed reviewer would have checked by construction.
+
+Spawn exactly one fresh reviewer at a milestone — immediately before filing or
+disclosure — because a cold read is the closest approximation of the
+recipient. One cold pass, not one per iteration.
+
 A fork starts a fresh session, so it pays the learning again. **Fork when the
 role changes; resume when it does not.**
 
@@ -109,10 +136,11 @@ free-tier error resumes cleanly on a different model; one carrying the failing
 model dies again. A cold spawn omits the model field; a resume re-states it.
 
 Persist live session ids in the active session doc (via @session): a
-`Subagent sessions` list keyed by lane (`lane-a: implement ses_...`,
-`lane-b: implement ses_...`). Verification and server work use the lane's
-`implement` session. Record each id as it comes back; this survives compaction
-and lets a fresh orchestrator resume the same workers.
+`Subagent sessions` list keyed by **artifact and lane**, not by task title —
+`lane-a: implement ses_...`, `findings/02-verified/06: critic ses_...`.
+Verification and server work use the lane's `implement` session; iterative
+review uses the artifact's reviewer session. Record each id as it comes back;
+this survives compaction and lets a fresh orchestrator resume the same workers.
 
 ## Parallel lanes
 
