@@ -43,6 +43,7 @@ flowchart LR
   R --> D[Decide]
 ```
 
+- **codebase-audit**: a whole-repo sweep for broken, inconsistent, inefficient, or dead material, before deciding what to change.
 - **ask-matt**: which existing skill or flow fits this situation.
 - **agent-map**: what is installed — skills, agents, plugins, commands, CLIs — and how to search outward when nothing fits.
 - **pdf-read**: pull text, tables, or figures out of a spec or a paper.

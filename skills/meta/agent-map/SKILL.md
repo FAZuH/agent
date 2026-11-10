@@ -49,8 +49,9 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 
 **Workflow** — repeatable procedures:
 `branch-flow` (main/release lines), `commit` (grouping and messages),
-`changelog`, `pr-creator`, `pr-watchmerge`, `issue-closeout`,
-`setup-dev-docs`, `deep-research` (one cited findings file).
+`changelog`, `codebase-audit` (whole-repo defect sweep), `pr-creator`,
+`pr-watchmerge`, `issue-closeout`, `setup-dev-docs`,
+`deep-research` (one cited findings file).
 
 **Dev** — engineering guidelines:
 `test-guidelines`, `gui-test-guidelines`, `rust-idioms`, `rust-tea`,

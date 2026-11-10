@@ -33,6 +33,7 @@ the category directory never reaches the installed name.
 
 - **[branch-flow](../skills/workflow/branch-flow/SKILL.md)**: Route work between the unstable `main` and the stable `release`, using the `[no ci]` gate and the release trigger commit.
 - **[changelog](../skills/workflow/changelog/SKILL.md)**: Create or update the changelog for the next version.
+- **[codebase-audit](../skills/workflow/codebase-audit/SKILL.md)**: Sweep a repository for broken, inconsistent, inefficient, or dead material and report findings by severity.
 - **[commit](../skills/workflow/commit/SKILL.md)**: Plan commit grouping and propose conventional commit messages.
 - **[deep-research](../skills/workflow/deep-research/SKILL.md)**: Investigate a narrow external question and capture one cited findings file.
 - **[issue-closeout](../skills/workflow/issue-closeout/SKILL.md)**: Link merged pull requests to resolved issues and close them where needed.
