@@ -244,17 +244,20 @@ Backends, chosen per action:
 
 Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
 `desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
-`desktop_type`, `desktop_key`. Coordinates are image pixels: the same ones
-`desktop_screenshot` returns and `desktop_click` takes, so a click can be aimed
-straight off a full-screen shot. `desktop_screenshot` also takes a `window`
-target (`class:NAME`, `title:SUBSTR`, an address, or a bare substring) and
-captures it by foreign-toplevel handle even while it sits on another workspace;
-a region or window shot reports the offset to add before clicking.
+`desktop_type`, `desktop_key`. `desktop_click` takes screen coordinates, not
+image pixels: a full-screen shot is already screen pixels, and a region or
+window shot reports the origin to add. Capture is independent of workspace,
+focus and stacking. Input is not: the target window must be on the active
+workspace, mapped and uncovered, or the click lands on whatever is on top.
+`desktop_screenshot window` captures by foreign-toplevel handle even on another
+workspace or behind another window, and a partly off-screen window is captured
+only where it exists. `desktop_focus` cannot raise a window that a special
+workspace is covering.
 
-`desktop_focus` accepts an address from `desktop_windows`, `class:NAME`,
-`title:SUBSTR`, or a bare class/title substring; exact class beats a title
-mention. `desktop_key` takes a keysym or a chord (`Return`, `ctrl+shift+t`,
-`super+1`).
+Hyprland has no pointer-button dispatcher. `sendshortcut` accepts `mouse:272`
+and a window target, but its `pass` path puts pointer focus at surface-local
+`(1,1)` before pressing, so it clicks only the window's top-left corner. That
+is not a coordinate click; the visibility requirement stands.
 
 Pointer input needs `ydotool` and a running `ydotoold`; `/dev/uinput` must be
 writable by the user. XTest is not a pointer backend: it moves XWayland's own
