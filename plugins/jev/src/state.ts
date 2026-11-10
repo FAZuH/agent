@@ -11,33 +11,33 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-// Three homes, three syncabilities. Config syncs between machines; data is
-// expensive to rebuild (every entry cost an LLM call) so it stays local;
-// the log is local history. Each has an env override for tests and odd
-// setups. JEV_DATA_DIR is the previous single-dir override and still
-// redirects all three, so existing test setups keep working.
-const CONFIG_DIR = process.env.JEV_CONFIG_DIR ?? process.env.JEV_DATA_DIR ?? join(homedir(), ".config", "fazuh-agent")
-const DATA_HOME =
-  process.env.JEV_DATA_HOME ?? process.env.JEV_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "fazuh-agent")
-const STATE_HOME =
-  process.env.JEV_STATE_HOME ?? process.env.JEV_DATA_DIR ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "fazuh-agent")
-const SECRET_DIR = process.env.JEV_SECRET_DIR ?? join(CONFIG_DIR, "secrets")
+// Two homes. Machine state — settings, the optimizer cache, approvals,
+// grants, and logs — sits together under the host's state root, like the other
+// plugins. The config home only holds secrets and the default rules file. Each
+// home has an env override; the JEV_* names remain as deprecated aliases for
+// the OPENCODE_JEV_* ones, and JEV_DATA_DIR still redirects both.
+const CONFIG_DIR =
+  process.env.OPENCODE_JEV_CONFIG_DIR ?? process.env.JEV_CONFIG_DIR ?? process.env.JEV_DATA_DIR ?? join(homedir(), ".config", "fazuh-agent")
+const LOCAL_HOME =
+  process.env.OPENCODE_JEV_STATE_HOME ??
+  process.env.JEV_STATE_HOME ??
+  process.env.JEV_DATA_HOME ??
+  process.env.JEV_DATA_DIR ??
+  join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "jev")
+const SECRET_DIR = process.env.OPENCODE_JEV_SECRET_DIR ?? process.env.JEV_SECRET_DIR ?? join(CONFIG_DIR, "secrets")
 
-/**
- * Syncable settings live in data/ on purpose: the state is machine-local (an
- * endpoint, a key path), and the config root is what syncs between machines.
- */
-export const STATE_FILE = join(CONFIG_DIR, "data", "jev-state.json")
+/** Machine-local settings, edited by /jev-settings. */
+export const STATE_FILE = join(LOCAL_HOME, "jev-state.json")
 /** Local optimizer cache: skillCriteria plus the rosterHash it was built from. */
-export const DATA_FILE = join(DATA_HOME, "jev-data.json")
+export const DATA_FILE = join(LOCAL_HOME, "jev-data.json")
 /** Local call history. */
-export const LOG_FILE = join(STATE_HOME, "jev-calls.jsonl")
+export const LOG_FILE = join(LOCAL_HOME, "jev-calls.jsonl")
 /** Blocked calls waiting for a human. Written by the server, read by the TUI. */
-export const APPROVALS_FILE = join(STATE_HOME, "jev-approvals.json")
+export const APPROVALS_FILE = join(LOCAL_HOME, "jev-approvals.json")
 /** Approved tokens. Written by the TUI, read and consumed by the server. */
-export const GRANTS_FILE = join(STATE_HOME, "jev-grants.json")
+export const GRANTS_FILE = join(LOCAL_HOME, "jev-grants.json")
 /** TUI diagnostics. */
-export const TUI_LOG_FILE = join(STATE_HOME, "jev-tui.log")
+export const TUI_LOG_FILE = join(LOCAL_HOME, "jev-tui.log")
 /** Default key location, overridable so another provider can use another file. */
 export const DEFAULT_SECRET_FILE = join(SECRET_DIR, "jev_api_key")
 
@@ -854,12 +854,13 @@ export function spend(): { calls: number; tokens: number; usd: number } {
 
 /**
  * One-shot migration from the old single-dir layout:
- *   ~/.config/fazuh-agent/data/jev-state.json  → config + data split
- *   ~/.config/fazuh-agent/data/jev-calls.jsonl → ~/.local/state/fazuh-agent/
+ *   ~/.config/fazuh-agent/data/jev-state.json → settings + cache split
+ *   ~/.config/fazuh-agent/data/jev-calls.jsonl → the local home
  *
  * Runs only when the old file exists and target.state does not, so it fires
  * once and never touches an already-migrated install. The old state file is
- * left in place as the rollback path.
+ * left in place as the rollback path. An existing data file is never
+ * overwritten: the previous split layout already kept the cache there.
  */
 export function migrateLegacyLayout(
   oldDir = join(homedir(), ".config", "fazuh-agent", "data"),
@@ -884,8 +885,8 @@ export function migrateLegacyLayout(
   mkdirSync(dirnameOf(target.state), { recursive: true })
   writeFileSync(target.state, `${JSON.stringify(raw, null, 2)}\n`, "utf8")
   mkdirSync(dirnameOf(target.data), { recursive: true })
-  writeFileSync(target.data, `${JSON.stringify(data, null, 2)}\n`, "utf8")
-  // Move the log to the state dir.
+  if (!existsSync(target.data)) writeFileSync(target.data, `${JSON.stringify(data, null, 2)}\n`, "utf8")
+  // Move the log to the local home.
   if (existsSync(oldLog) && !existsSync(target.log)) {
     mkdirSync(dirnameOf(target.log), { recursive: true })
     writeFileSync(target.log, readFileSync(oldLog, "utf8"), { mode: 0o600 })
@@ -896,15 +897,63 @@ export function migrateLegacyLayout(
   return "migrated"
 }
 
-// Guarded at the call site: with env overrides (tests) the default oldDir
-// still points at the real home while targets redirect to scratch, which
-// would migrate live files into a temp dir.
+/** Move the optimizer cache out of the old XDG data home. */
+export function migrateDataFile(
+  oldPath = join(homedir(), ".local", "share", "fazuh-agent", "jev-data.json"),
+  newPath = DATA_FILE,
+): "skipped" | "migrated" {
+  if (!existsSync(oldPath) || existsSync(newPath)) return "skipped"
+  try {
+    mkdirSync(dirnameOf(newPath), { recursive: true })
+    writeFileSync(newPath, readFileSync(oldPath, "utf8"), "utf8")
+    return "migrated"
+  } catch {
+    return "skipped"
+  }
+}
+
+/** Move the machine-local files out of the old XDG state home. */
+export function migrateLocalState(
+  oldDir = join(homedir(), ".local", "state", "fazuh-agent"),
+  target = { approvals: APPROVALS_FILE, grants: GRANTS_FILE, log: LOG_FILE, tuiLog: TUI_LOG_FILE },
+): "skipped" | "migrated" {
+  const files: Array<[string, string]> = [
+    ["jev-approvals.json", target.approvals],
+    ["jev-grants.json", target.grants],
+    ["jev-calls.jsonl", target.log],
+    ["jev-tui.log", target.tuiLog],
+  ]
+  let moved = false
+  for (const [name, to] of files) {
+    const from = join(oldDir, name)
+    if (!existsSync(from) || existsSync(to)) continue
+    try {
+      mkdirSync(dirnameOf(to), { recursive: true })
+      writeFileSync(to, readFileSync(from, "utf8"), { mode: 0o600 })
+      chmodSync(to, 0o600)
+      moved = true
+    } catch {}
+  }
+  return moved ? "migrated" : "skipped"
+}
+
+// Guarded at the call site: with env overrides (tests) the defaults still
+// point at the real home while targets redirect to scratch, which would
+// migrate live files into a temp dir.
 if (
-  !process.env.JEV_CONFIG_DIR &&
-  !process.env.JEV_DATA_DIR &&
-  !process.env.JEV_DATA_HOME &&
-  !process.env.JEV_STATE_HOME
+  ![
+    "OPENCODE_JEV_STATE_HOME",
+    "OPENCODE_JEV_CONFIG_DIR",
+    "OPENCODE_JEV_SECRET_DIR",
+    "JEV_CONFIG_DIR",
+    "JEV_DATA_DIR",
+    "JEV_DATA_HOME",
+    "JEV_STATE_HOME",
+    "JEV_SECRET_DIR",
+  ].some((name) => process.env[name])
 ) {
+  migrateDataFile()
   migrateLegacyLayout()
   migrateStatePath()
+  migrateLocalState()
 }
