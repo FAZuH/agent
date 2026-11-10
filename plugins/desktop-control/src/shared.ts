@@ -9,6 +9,8 @@
 export interface DeskWindow {
   /** Hyprland address, also the X11 window id when the client is XWayland. */
   address: string
+  /** Foreign-toplevel identifier, the handle grim -T captures by. */
+  stableId: string
   class: string
   title: string
   x: number
@@ -16,6 +18,8 @@ export interface DeskWindow {
   width: number
   height: number
   workspace: string
+  /** Monitor id, used to look up the output scale for captures. */
+  monitor: number
   focused: boolean
   /** True when the client is XWayland, so XTest pointer input reaches it. */
   xwayland: boolean

@@ -9,7 +9,9 @@
  * XTest (XWayland) and wtype (every client).
  *
  * Backends, and what each one reaches:
- *   screenshots  grim            every window, every monitor
+ *   screenshots  grim            every window, every monitor; grim -T captures a
+ *                                toplevel by handle, so a window on another
+ *                                workspace comes back without switching to it
  *   windows      hyprctl         every window, plus focus and geometry
  *   pointer      ydotool         every window, closed-loop against the real
  *                                cursor; XTest cannot target, because it moves
@@ -71,7 +73,7 @@ interface Point {
   y: number
 }
 
-function monitors(): Array<{ x: number; y: number; width: number; height: number }> {
+function monitors(): Array<{ id: number; x: number; y: number; width: number; height: number; scale: number }> {
   const r = run(["hyprctl", "monitors", "-j"])
   if (r.code !== 0) return []
   try {
@@ -210,6 +212,7 @@ function windows(): Windows {
     )
     return {
       address: String(c.address ?? ""),
+      stableId: String(c.stableId ?? ""),
       class: cls,
       title,
       x: Number(c.at?.[0] ?? 0),
@@ -217,6 +220,7 @@ function windows(): Windows {
       width: Number(c.size?.[0] ?? 0),
       height: Number(c.size?.[1] ?? 0),
       workspace: String(c.workspace?.name ?? c.workspace?.id ?? ""),
+      monitor: Number(c.monitor ?? -1),
       focused: Number(c.focusHistoryID ?? -1) === 0,
       xwayland: isX11,
     }
@@ -268,10 +272,14 @@ export default {
       tools.add({
         name: "desktop_screenshot",
         description:
-          "Capture the screen with grim and return the PNG path. Coordinates in later clicks are the same absolute pixels as this image. Region is 'WxH' (from 0,0), 'X,Y WxH', or omitted for the whole layout.",
+          "Capture the screen with grim and return the PNG path. Pass window to capture just that window, even while it sits on another workspace or behind another window. Region is 'WxH' (from 0,0) or 'X,Y WxH'; omit both for the whole layout. Image pixels are layout pixels: desktop_click takes them as-is for the whole screen, and a window capture reports the offset to add.",
         input: {
           type: "object",
           properties: {
+            window: {
+              type: "string",
+              description: "Address from desktop_windows ('0x…'), 'class:NAME', 'title:SUBSTR', or a bare class/title substring.",
+            },
             region: { type: "string", description: "'WxH' or 'X,Y WxH'. Omit for all monitors." },
             path: { type: "string", description: "Where to write the PNG. Defaults under /tmp/opencode/shots." },
           },
@@ -281,8 +289,31 @@ export default {
           try {
             mkdirSync(SHOTS, { recursive: true })
             const target = String(input?.path ?? join(SHOTS, `desktop-${Date.now()}.png`))
-            const cmd = ["grim"]
+            const wanted = String(input?.window ?? "").trim()
             const region = String(input?.region ?? "").trim()
+            if (wanted && region) return ok("failed: give window or region, not both")
+
+            // grim renders at the output scale, so on this 1.25x panel both a
+            // region and a toplevel come back larger than the layout and every
+            // click lands short. Ask for layout-sized pixels instead, whichever
+            // capture path is taken.
+            if (wanted) {
+              const found = windows()
+              if (!found.found) return ok(`failed: ${found.error}`)
+              const win = matchWindow(found.list, wanted)
+              if (!win) return ok(`no window matches ${JSON.stringify(wanted)}`)
+              if (!win.stableId) return ok(`failed: ${win.class} exposes no toplevel handle to capture`)
+              const scale = monitors().find((m) => m.id === win.monitor)?.scale ?? 1
+              const r = run(["grim", "-s", String(1 / scale), "-T", win.stableId, target])
+              if (r.code !== 0) return ok(`grim failed: ${r.err || "unknown error"}`)
+              const origin = layoutOrigin() ?? { x: 0, y: 0 }
+              return ok(
+                `${target}\ncaptured ${win.class} "${win.title}" ${win.width}x${win.height} on ws ${win.workspace}\n` +
+                  `to click at an image pixel add ${win.x - origin.x},${win.y - origin.y}`,
+              )
+            }
+
+            const cmd = ["grim", "-s", "1"]
             if (region) cmd.push("-g", region)
             cmd.push(target)
             const r = run(cmd)

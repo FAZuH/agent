@@ -12,6 +12,7 @@ import { formatWindows, matchWindow, parseChord, type DeskWindow } from "./share
 
 const win = (partial: Partial<DeskWindow>): DeskWindow => ({
   address: "0x1",
+  stableId: "1000",
   class: "kitty",
   title: "fazuh:~",
   x: 0,
@@ -19,6 +20,7 @@ const win = (partial: Partial<DeskWindow>): DeskWindow => ({
   width: 800,
   height: 600,
   workspace: "1",
+  monitor: 0,
   focused: false,
   xwayland: false,
   ...partial,
