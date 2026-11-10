@@ -68,7 +68,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   TUI only: the picker needs a dialog, and one name has one owner.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
-  live in `skillCriteria` in `~/.local/share/fazuh-agent/jev-data.json`, keyed
+  live in `skillCriteria` in `~/.local/state/opencode/jev/jev-data.json`, keyed
   by description hash.
 - **`/jev-log`**: recent calls: what was sent, what came back, what it cost.
   Skipped-hook lines read `<feature> [on <tool>] skipped: <reason>`; a regular
@@ -393,15 +393,9 @@ when the key was pressed so reading or dismissing the shown entry does not
 remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
 same histories by picker; `/read-reports` marks every unread report in the
 session family read, and `/dismiss-prompts` dismisses every prompt still
-awaiting an answer. **Context Watch** reads the separate
-`opencode-context-watch` plugin over its `context-watch.status` RPC: the line
-shows the percent, the tokens over the model window, and the active warn band
-(for example `39% · 394k/1M · warn 300k`), with the title yellow over the
-band or while a session compacts. It asks on session switch, follows the
-plugin's `changed` event, and polls the same call every 5 seconds as a
-fallback. The section stays hidden when
-context-watch is not installed. `/report-settings`
-toggles the whole sidebar and each section (Reports, Prompts, Context Watch);
+awaiting an answer. Context usage is not drawn here: the
+`opencode-context-watch` plugin renders its own sidebar section. `/report-settings`
+toggles the whole sidebar and each section (Reports, Prompts);
 the flags persist in the `report-view-v2` view store, and the existing
 collapse states stay separate. The GUI half
 mirrors the two sections, dots, blink, older/newer, and Answer buttons in a

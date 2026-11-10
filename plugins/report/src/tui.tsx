@@ -1,23 +1,19 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Reports in the TUI: two sidebar sections, one slot per agent in each, plus
- * the context-watch status line. "Reports" holds post-task records, "Prompts"
- * holds prompt-user records, "Context Watch" reads the separate context-watch
- * plugin over RPC. A slot opens that agent's history; ←/→ move through it,
- * Enter answers an open prompt, and an unread slot blinks. The server owns
- * the records.
+ * Reports in the TUI: two sidebar sections, one slot per agent in each.
+ * "Reports" holds post-task records, "Prompts" holds prompt-user records.
+ * A slot opens that agent's history; ←/→ move through it, Enter answers an
+ * open prompt, and an unread slot blinks. The server owns the records.
  */
 import { SyntaxStyle, TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createSignal } from "solid-js"
 import { Contract } from "./rpc.ts"
-import { Contract as WatchContract, type ContextStatus } from "./context-watch.ts"
 import {
   ago,
   answersOfForm,
   attentionForSection,
   attentionOf,
-  contextLine,
   descriptionOf,
   formFieldsOf,
   formIDOf,
@@ -737,27 +733,6 @@ function Section(props: {
   )
 }
 
-/** Context Watch: the title turns yellow over the band or while compacting. */
-function ContextStatusLine(props: { ctx: any; status: ContextStatus; marginTop?: number }) {
-  const theme = props.ctx.theme
-  const over = () => props.status.compacting || props.status.over
-  return (
-    <box marginTop={props.marginTop ?? 0}>
-      <box flexDirection="row" gap={1}>
-        <text fg={over() ? theme.text.feedback.warning.base : theme.text.base}>
-          <b>Context Watch</b>
-        </text>
-        <Show when={props.status.over}>
-          <text fg={theme.text.feedback.warning.base}> · over</text>
-        </Show>
-      </box>
-      <text fg={theme.text.muted} wrapMode="none" truncate>
-        {contextLine(props.status)}
-      </text>
-    </box>
-  )
-}
-
 function Sidebar(props: {
   ctx: any
   sessionID: string
@@ -765,8 +740,6 @@ function Sidebar(props: {
   setView: any
   list: () => Report[]
   reload: (sessionID: string) => void
-  refreshContext: (sessionID: string) => void
-  context: () => ContextStatus | undefined
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
@@ -775,10 +748,6 @@ function Sidebar(props: {
     const sessionID = props.sessionID
     if (!sessionID) return
     props.reload(sessionID)
-    props.refreshContext(sessionID)
-    // The RPC event is the fast path; the poll covers a client that misses it.
-    const timer = setInterval(() => props.refreshContext(sessionID), 5_000)
-    onCleanup(() => clearInterval(timer))
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>
@@ -827,12 +796,8 @@ function Sidebar(props: {
   const sidebarShown = () => props.view?.sidebar !== false
   const reportsShown = () => props.view?.showReports !== false
   const promptsShown = () => props.view?.showPrompts !== false
-  const watch = () => props.context()
-  const contextShown = () => props.view?.showContext !== false && watch() !== undefined
   const hasContent = () =>
-    (reportsShown() && reports().length > 0) ||
-    (promptsShown() && prompts().length > 0) ||
-    contextShown()
+    (reportsShown() && reports().length > 0) || (promptsShown() && prompts().length > 0)
   return (
     <Show when={sidebarShown() && hasContent()}>
       <box>
@@ -889,9 +854,6 @@ function Sidebar(props: {
             onDismiss={props.onDismiss}
           />
         </Show>
-        <Show when={contextShown()}>
-          <ContextStatusLine ctx={props.ctx} status={watch()!} marginTop={1} />
-        </Show>
       </box>
     </Show>
   )
@@ -904,7 +866,6 @@ export default {
     if (typeof ctx.client?.rpc !== "function") return
     const rpc = ctx.client.rpc(Contract)
     const [reports, setReports] = createSignal<Record<string, Report[]>>({})
-    const [contexts, setContexts] = createSignal<Record<string, ContextStatus | undefined>>({})
 
     const routedID = (): string | undefined => {
       const route = ctx.ui.router.current()
@@ -919,39 +880,6 @@ export default {
         })
         .catch(() => {})
     }
-
-    // Context-watch is a separate plugin. Its RPC is optional: without it the
-    // Context section stays off and the rest of the sidebar is unaffected.
-    const watch = (() => {
-      try {
-        return ctx.client.rpc(WatchContract)
-      } catch {
-        return undefined
-      }
-    })()
-    const refreshContext = (sessionID: string) => {
-      if (!watch) return
-      try {
-        void watch
-          .status({ sessionID })
-          .then((result: any) => {
-            if (result?.ok && result.status) {
-              setContexts((previous) => ({ ...previous, [sessionID]: result.status }))
-            }
-          })
-          .catch(() => {})
-      } catch {}
-    }
-    let offContext: (() => void) | undefined
-    try {
-      offContext = watch?.events.on("changed", (event: any) => {
-        const sessionID = String(event?.data?.sessionID ?? "")
-        const status = event?.data?.status
-        if (sessionID && status) {
-          setContexts((previous) => ({ ...previous, [sessionID]: status }))
-        }
-      })
-    } catch {}
 
     // A report or answer written anywhere in the family refetches the view,
     // and a fresh prompt record opens as the host's inline form.
@@ -1217,7 +1145,6 @@ export default {
         { key: "sidebar", title: "Sidebar", note: "master" },
         { key: "showReports", title: "Reports", note: "section" },
         { key: "showPrompts", title: "Prompts", note: "section" },
-        { key: "showContext", title: "Context Watch", note: "section" },
       ] as const
       for (;;) {
         const picked = await ctx.ui.dialog
@@ -1247,7 +1174,6 @@ export default {
         sidebar: true,
         showReports: true,
         showPrompts: true,
-        showContext: true,
       },
     })
 
@@ -1261,8 +1187,6 @@ export default {
           setView={setView}
           list={() => reports()[input.sessionID] ?? []}
           reload={reload}
-          refreshContext={refreshContext}
-          context={() => contexts()[input.sessionID]}
           onAnswer={(report) => void answer(report)}
           onRead={(report) => void read(report)}
           onDismiss={(report) => void dismiss(report)}
