@@ -237,16 +237,19 @@ Backends, chosen per action:
 
 | Action | Backend | Reaches |
 |---|---|---|
-| screenshots | `grim` | every window, every monitor |
+| screenshots | `grim` | every window, every monitor; `-T` captures a toplevel by its handle |
 | windows, focus | `hyprctl` | every window |
 | pointer | `ydotool`, closed loop | every window; needs `ydotoold` |
 | keyboard | `wtype` then XTest | every window |
 
 Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
 `desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
-`desktop_type`, `desktop_key`. Coordinates are absolute desktop pixels, the
-same ones `desktop_screenshot` returns, so a click can be aimed straight off a
-screenshot without conversion.
+`desktop_type`, `desktop_key`. Coordinates are image pixels: the same ones
+`desktop_screenshot` returns and `desktop_click` takes, so a click can be aimed
+straight off a full-screen shot. `desktop_screenshot` also takes a `window`
+target (`class:NAME`, `title:SUBSTR`, an address, or a bare substring) and
+captures it by foreign-toplevel handle even while it sits on another workspace;
+a region or window shot reports the offset to add before clicking.
 
 `desktop_focus` accepts an address from `desktop_windows`, `class:NAME`,
 `title:SUBSTR`, or a bare class/title substring; exact class beats a title
@@ -268,18 +271,20 @@ confirm the move was not still in flight. A click is only issued after that
 confirmation; if the pointer does not arrive, the call reports where it
 stopped and presses nothing.
 
-Screenshot pixels are not layout pixels: the monitor sits at `332,-68`, so a
-layout point is `screenshot + layoutOrigin()`. That offset is read from
-`hyprctl monitors`, not assumed.
+Captures ask grim for layout-scale pixels (`-s`), so an image pixel is the
+coordinate `desktop_click` takes. Hyprland's layout origin is not the image
+origin (this monitor sits at `332,-68`); the plugin adds that offset for grim
+internally and reports it for region and window captures. The caller never adds
+it.
 
 None of this makes a coordinate meaningful. The screen can change between the
 screenshot that suggested a point and the click — an app going fullscreen
 hides the bar — so take a fresh screenshot immediately before clicking and
 check that the thing under the point is still the thing meant.
 
-Wayland window addresses are not X11 window ids, so the plugin tells which
-client is XWayland by matching class and title against the X11 window list
-(`src/xtest.py windows`).
+Hyprland's client list marks XWayland clients directly (`xwayland`), so no
+extra X11 query is needed. `src/xtest.py` is only the keyboard fallback for
+those clients; pointer input always goes through ydotool.
 
 No dependencies beyond the system binaries. Tests: `bun test
 plugins/desktop-control`.
@@ -299,6 +304,9 @@ target with the image attached.
 
 - Delivery defaults to `queue`; `--steer` interrupts the target mid-turn.
 - Full screen by default; `--window` captures the focused window.
+- `--region` takes image pixels, `WxH` or `X,Y WxH`, and is converted to layout
+  coordinates before grim runs. Shots are captured at layout scale, the same
+  pixels desktop-control reports.
 - `--ask TEXT` overrides the instruction for one trigger.
 - When the turn ends, the answer is copied to the clipboard with `wl-copy`
   (`xclip`/`xsel` fallback). `--no-copy` skips it for one trigger.
