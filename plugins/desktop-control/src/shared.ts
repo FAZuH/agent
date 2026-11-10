@@ -21,7 +21,7 @@ export interface DeskWindow {
   /** Monitor id, used to look up the output scale for captures. */
   monitor: number
   focused: boolean
-  /** True when the client is XWayland, so XTest pointer input reaches it. */
+  /** True when the client is XWayland, so keyboard input can fall back to XTest. */
   xwayland: boolean
 }
 
@@ -29,6 +29,46 @@ export interface Windows {
   found: boolean
   error?: string
   list: DeskWindow[]
+}
+
+/** A layout point. */
+export interface Point {
+  x: number
+  y: number
+}
+
+/** A crop in screenshot pixels: (0,0) is the first pixel of the capture. */
+export interface Region {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Read a region spec.
+ *
+ * "WxH" starts at the image origin; "X,Y WxH" starts at that image pixel. Both
+ * are image pixels, the same ones desktop_click takes. Hyprland layout
+ * coordinates are not accepted: the layout origin is not the image origin.
+ */
+export function parseRegion(spec: string): Region | undefined {
+  const raw = spec.trim()
+  if (!raw) return undefined
+
+  const bare = /^(\d+)x(\d+)$/i.exec(raw)
+  if (bare) {
+    const width = Number(bare[1])
+    const height = Number(bare[2])
+    return width > 0 && height > 0 ? { x: 0, y: 0, width, height } : undefined
+  }
+
+  const placed = /^(-?\d+),\s*(-?\d+)\s+(\d+)x(\d+)$/i.exec(raw)
+  if (!placed) return undefined
+  const width = Number(placed[3])
+  const height = Number(placed[4])
+  if (width <= 0 || height <= 0) return undefined
+  return { x: Number(placed[1]), y: Number(placed[2]), width, height }
 }
 
 /**

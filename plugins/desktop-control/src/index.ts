@@ -25,7 +25,7 @@ import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
-import { formatWindows, matchWindow, parseChord, type DeskWindow, type Windows } from "./shared.ts"
+import { formatWindows, matchWindow, parseChord, parseRegion, type DeskWindow, type Point, type Windows } from "./shared.ts"
 
 const XTEST = join(import.meta.dir, "xtest.py")
 const SHOTS = "/tmp/opencode/shots"
@@ -68,11 +68,6 @@ function ydotoolReady(): boolean {
   return have("ydotool") && Boolean(ydotoolSocket())
 }
 
-interface Point {
-  x: number
-  y: number
-}
-
 function monitors(): Array<{ id: number; x: number; y: number; width: number; height: number; scale: number }> {
   const r = run(["hyprctl", "monitors", "-j"])
   if (r.code !== 0) return []
@@ -91,10 +86,13 @@ function monitors(): Array<{ id: number; x: number; y: number; width: number; he
  * a screenshot pixel is a layout point only after this offset is added. Skip
  * it and every click lands short by the monitor offset.
  */
-function layoutOrigin(): Point | undefined {
-  const list = monitors()
+function originOf(list: Array<{ x: number; y: number }>): Point | undefined {
   if (!list.length) return undefined
   return { x: Math.min(...list.map((m) => m.x)), y: Math.min(...list.map((m) => m.y)) }
+}
+
+function layoutOrigin(): Point | undefined {
+  return originOf(monitors())
 }
 
 function cursorPos(): Point | undefined {
@@ -113,7 +111,7 @@ function pause(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
-/** Read the pointer twice, a settle apart, and believe it only if it agrees. */
+/** Read the pointer twice a settle apart and use the second reading, so a move still in flight is not reported as the position. */
 function settledCursorPos(gap = 40): Point | undefined {
   const first = cursorPos()
   pause(gap)
@@ -177,23 +175,6 @@ function movePointer(gx: number, gy: number): { ok: boolean; error?: string; pos
   return { ok: false, error: `pointer stuck at ${pos.x},${pos.y}, wanted ${target.x},${target.y}` }
 }
 
-/**
- * X11 windows, used to tell which Hyprland clients XTest can reach.
- *
- * Hyprland's window address is not the X11 window id on this build, so match
- * on class and title instead. A client that appears in both lists is XWayland.
- */
-function x11Clients(): Array<{ class: string; title: string }> {
-  const r = run(["python3", XTEST, "windows"])
-  if (r.code !== 0) return []
-  try {
-    const list = JSON.parse(r.out) as Array<{ class?: string; title?: string }>
-    return list.map((w) => ({ class: String(w.class ?? "").toLowerCase(), title: String(w.title ?? "") }))
-  } catch {
-    return []
-  }
-}
-
 function windows(): Windows {
   const r = run(["hyprctl", "clients", "-j"])
   if (r.code !== 0) return { found: false, error: r.err || "hyprctl clients failed", list: [] }
@@ -203,13 +184,9 @@ function windows(): Windows {
   } catch {
     return { found: false, error: "hyprctl clients returned no JSON", list: [] }
   }
-  const x11 = x11Clients()
   const list: DeskWindow[] = raw.map((c: any) => {
     const cls = String(c.class ?? "")
     const title = String(c.title ?? "")
-    const isX11 = x11.some(
-      (x) => x.class === cls.toLowerCase() && (x.title === title || !x.title || !title),
-    )
     return {
       address: String(c.address ?? ""),
       stableId: String(c.stableId ?? ""),
@@ -222,7 +199,7 @@ function windows(): Windows {
       workspace: String(c.workspace?.name ?? c.workspace?.id ?? ""),
       monitor: Number(c.monitor ?? -1),
       focused: Number(c.focusHistoryID ?? -1) === 0,
-      xwayland: isX11,
+      xwayland: Boolean(c.xwayland),
     }
   })
   return { found: true, list }
@@ -256,7 +233,7 @@ export default {
       tools.add({
         name: "desktop_windows",
         description:
-          "List every window: address, class, title, size, position, workspace, focus, and whether it is XWayland (pointer input via XTest) or Wayland-native (needs ydotool).",
+          "List every window: address, class, title, size, position, workspace, focus, and whether it is XWayland (keyboard falls back to XTest) or Wayland-native (wtype).",
         input: { type: "object", properties: {}, additionalProperties: false },
         execute: async () => {
           try {
@@ -272,7 +249,7 @@ export default {
       tools.add({
         name: "desktop_screenshot",
         description:
-          "Capture the screen with grim and return the PNG path. Pass window to capture just that window, even while it sits on another workspace or behind another window. Region is 'WxH' (from 0,0) or 'X,Y WxH'; omit both for the whole layout. Image pixels are layout pixels: desktop_click takes them as-is for the whole screen, and a window capture reports the offset to add.",
+          "Capture the screen with grim and return the PNG path. Pass window to capture just that window, even while it sits on another workspace or behind another window. Region is in image pixels: 'WxH' from the image origin, or 'X,Y WxH'. Image pixels are the coordinates desktop_click takes, so a full-screen shot clicks as-is; region and window captures report the offset to add.",
         input: {
           type: "object",
           properties: {
@@ -280,7 +257,7 @@ export default {
               type: "string",
               description: "Address from desktop_windows ('0x…'), 'class:NAME', 'title:SUBSTR', or a bare class/title substring.",
             },
-            region: { type: "string", description: "'WxH' or 'X,Y WxH'. Omit for all monitors." },
+            region: { type: "string", description: "'WxH' from the image origin, or 'X,Y WxH'; image pixels. Omit for all monitors." },
             path: { type: "string", description: "Where to write the PNG. Defaults under /tmp/opencode/shots." },
           },
           additionalProperties: false,
@@ -303,20 +280,29 @@ export default {
               const win = matchWindow(found.list, wanted)
               if (!win) return ok(`no window matches ${JSON.stringify(wanted)}`)
               if (!win.stableId) return ok(`failed: ${win.class} exposes no toplevel handle to capture`)
-              const scale = monitors().find((m) => m.id === win.monitor)?.scale ?? 1
+              const list = monitors()
+              const scale = list.find((m) => m.id === win.monitor)?.scale ?? 1
               const r = run(["grim", "-s", String(1 / scale), "-T", win.stableId, target])
               if (r.code !== 0) return ok(`grim failed: ${r.err || "unknown error"}`)
-              const origin = layoutOrigin() ?? { x: 0, y: 0 }
+              const origin = originOf(list) ?? { x: 0, y: 0 }
               return ok(
                 `${target}\ncaptured ${win.class} "${win.title}" ${win.width}x${win.height} on ws ${win.workspace}\n` +
                   `to click at an image pixel add ${win.x - origin.x},${win.y - origin.y}`,
               )
             }
 
-            const cmd = ["grim", "-s", "1"]
-            if (region) cmd.push("-g", region)
-            cmd.push(target)
-            const r = run(cmd)
+            if (region) {
+              const crop = parseRegion(region)
+              if (!crop) return ok(`failed: region must be 'WxH' or 'X,Y WxH', got ${JSON.stringify(region)}`)
+              const origin = layoutOrigin()
+              if (!origin) return ok("failed: no monitor layout from hyprctl")
+              const geometry = `${origin.x + crop.x},${origin.y + crop.y} ${crop.width}x${crop.height}`
+              const r = run(["grim", "-s", "1", "-g", geometry, target])
+              if (r.code !== 0) return ok(`grim failed: ${r.err || "unknown error"}`)
+              return ok(`${target}\nto click at a region pixel add ${crop.x},${crop.y}`)
+            }
+
+            const r = run(["grim", "-s", "1", target])
             if (r.code !== 0) return ok(`grim failed: ${r.err || "unknown error"}`)
             return ok(target)
           } catch (error) {

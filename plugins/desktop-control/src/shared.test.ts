@@ -8,7 +8,7 @@
 
 import { describe, expect, test } from "bun:test"
 
-import { formatWindows, matchWindow, parseChord, type DeskWindow } from "./shared.ts"
+import { formatWindows, matchWindow, parseChord, parseRegion, type DeskWindow } from "./shared.ts"
 
 const win = (partial: Partial<DeskWindow>): DeskWindow => ({
   address: "0x1",
@@ -85,6 +85,30 @@ describe("parseChord", () => {
 
   test("empty is an error", () => {
     expect(() => parseChord("   ")).toThrow()
+  })
+})
+
+describe("parseRegion", () => {
+  test("bare size starts at the image origin", () => {
+    expect(parseRegion("200x100")).toEqual({ x: 0, y: 0, width: 200, height: 100 })
+  })
+
+  test("positioned size keeps the image pixel", () => {
+    expect(parseRegion("40,30 200x100")).toEqual({ x: 40, y: 30, width: 200, height: 100 })
+  })
+
+  test("spaces around the comma are accepted", () => {
+    expect(parseRegion("40, 30 200x100")).toEqual({ x: 40, y: 30, width: 200, height: 100 })
+  })
+
+  test("layout coordinates are not a third syntax", () => {
+    expect(parseRegion("333,-67 1534x932")).toEqual({ x: 333, y: -67, width: 1534, height: 932 })
+  })
+
+  test("zero size and junk are rejected", () => {
+    expect(parseRegion("0x100")).toBeUndefined()
+    expect(parseRegion("200")).toBeUndefined()
+    expect(parseRegion("200x100+40+30")).toBeUndefined()
   })
 })
 
