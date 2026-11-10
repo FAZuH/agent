@@ -38,12 +38,12 @@ Remove this repository's installed files from the current user account.
 Default:
   - Remove sync-managed skills, agents, plugins, commands, and scripts.
   - Uninstall the local Cargo package 'agent'.
-  - Keep OpenCode, bgrun, external skills, OS packages, and this
+  - Keep OpenCode, bgrun, OptMem, external skills, OS packages, and this
     checkout.
 
 Options:
   --dry-run              Show what would be removed without changing files.
-  --external-packages    Also uninstall bgrun from this installer.
+  --external-packages    Also uninstall bgrun and OptMem from this installer.
   --external-skills      Also remove the external skills installed by install.sh,
                          including the REA registration and skill.
   --embedded-rules       Also remove the rules this installer embedded in
@@ -141,15 +141,17 @@ remove_external_packages() {
   if ! command -v cargo >/dev/null 2>&1; then
     die 'cargo is required for --external-packages'
   fi
-  local name listing
+  local name repo listing
   listing="$(cargo install --list 2>/dev/null || true)"
-  for name in bgrun; do
-    if ! grep -Eq "^$name v[^ ]+ \(https://github\.com/FAZuH/${name}[^)]*\):" <<<"$listing"; then
-      info "$name is not installed from FAZuH/$name; kept"
+  for spec in bgrun:FAZuH/bgrun optmem:FAZuH/optmem-rs optmem-mcp:FAZuH/optmem-rs; do
+    name="${spec%%:*}"
+    repo="${spec#*:}"
+    if ! grep -Eq "^$name v[^ ]+ \(https://github\.com/${repo}[^)]*\):" <<<"$listing"; then
+      info "$name is not installed from $repo; kept"
       continue
     fi
     if ((DRY_RUN)); then
-      info "would uninstall Cargo package $name from FAZuH/$name"
+      info "would uninstall Cargo package $name from $repo"
     else
       cargo uninstall "$name"
     fi
