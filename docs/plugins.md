@@ -348,8 +348,10 @@ tools and keep the printed block as a fallback for hosts without the plugin.
   of writing a second report that repeats the first.
 
 Records are one JSON file per session under
-`${XDG_STATE_HOME:-~/.local/state}/fazuh-agent/reports/`, newest last,
-capped at 50; `REPORT_STATE_HOME` overrides the root. The server writes them
+`${XDG_STATE_HOME:-~/.local/state}/opencode/report/reports/`, newest last,
+capped at 50; `OPENCODE_REPORT_STATE_HOME` overrides the root (the older
+`REPORT_STATE_HOME` still works). Reports move there from the old
+`fazuh-agent/reports/` on the first load. The server writes them
 atomically and exposes `report.list({sessionIDs})`, `report.read`,
 `report.answer`, `report.dismiss`, `report.defer`, and a `changed` event over
 RPC. Views pass the routed session's family
