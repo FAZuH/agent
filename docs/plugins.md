@@ -244,15 +244,15 @@ Backends, chosen per action:
 
 Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
 `desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
-`desktop_type`, `desktop_key`. `desktop_click` takes screen coordinates, not
-image pixels: a full-screen shot is already screen pixels, and a region or
-window shot reports the origin to add. Capture is independent of workspace,
-focus and stacking. Input is not: the target window must be on the active
-workspace, mapped and uncovered, or the click lands on whatever is on top.
-`desktop_screenshot window` captures by foreign-toplevel handle even on another
-workspace or behind another window, and a partly off-screen window is captured
-only where it exists. `desktop_focus` cannot raise a window that a special
-workspace is covering.
+`desktop_type`, `desktop_key`. `desktop_click` takes image pixels, the same
+coordinates `desktop_screenshot` returns. A full-screen shot needs no offset;
+a region or window shot reports the offset to add. Capture is independent of
+workspace, focus and stacking. Input is not: the target window must be on the
+active workspace, mapped and uncovered, or the click lands on whatever is on
+top. `desktop_screenshot window` captures by foreign-toplevel handle even on
+another workspace or behind another window, and a partly off-screen window is
+captured only where it exists. `desktop_focus` cannot raise a window that a
+special workspace is covering.
 
 Hyprland has no pointer-button dispatcher. `sendshortcut` accepts `mouse:272`
 and a window target, but its `pass` path puts pointer focus at surface-local

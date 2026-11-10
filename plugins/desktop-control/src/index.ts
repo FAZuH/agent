@@ -249,7 +249,7 @@ export default {
       tools.add({
         name: "desktop_screenshot",
         description:
-          "Capture the screen with grim and return the PNG path. Pass window to capture just that window, even while it sits on another workspace, behind another window, or unfocused. Capture ignores workspace, focus and stacking; input does not (see desktop_click). A window partly off-screen is captured only where it exists. Region is in image pixels: 'WxH' from the image origin, or 'X,Y WxH'. A full-screen shot is already in screen pixels; region and window captures report the offset to add for desktop_click.",
+          "Capture the screen with grim and return the PNG path. Pass window to capture just that window, even while it sits on another workspace, behind another window, or unfocused. Capture ignores workspace, focus and stacking; input does not (see desktop_click). A window partly off-screen is captured only where it exists. Region is in image pixels: 'WxH' from the image origin, or 'X,Y WxH'. desktop_click takes the same image pixels: a full-screen shot needs no offset, and a region or window capture reports the offset to add.",
         input: {
           type: "object",
           properties: {
@@ -284,9 +284,10 @@ export default {
               const scale = list.find((m) => m.id === win.monitor)?.scale ?? 1
               const r = run(["grim", "-s", String(1 / scale), "-T", win.stableId, target])
               if (r.code !== 0) return ok(`grim failed: ${r.err || "unknown error"}`)
+              const origin = originOf(list) ?? { x: 0, y: 0 }
               return ok(
                 `${target}\ncaptured ${win.class} "${win.title}" ${win.width}x${win.height} on ws ${win.workspace}\n` +
-                  `click at screen = image pixel + window origin: add ${win.x},${win.y} (negative means that edge is off-screen)`,
+                  `click at image pixel + ${win.x - origin.x},${win.y - origin.y} (negative means that edge is off-screen)`,
               )
             }
 
@@ -344,7 +345,7 @@ export default {
       tools.add({
         name: "desktop_click",
         description:
-          "Click at a screen coordinate, not an image pixel: a full-screen shot is already screen pixels, and a region or window shot reports the offset to add. The target window must be on the active workspace, mapped, and not covered; a window on another workspace or behind another receives nothing, and the click lands on whatever is on top. Window capture has no such requirement. The pointer is moved and verified first; nothing is clicked if it cannot be confirmed at the target. Requires ydotool and a running ydotoold.",
+          "Click at an image pixel, the same coordinates desktop_screenshot returns. A full-screen shot needs no offset; a region or window shot reports the offset to add. The target window must be on the active workspace, mapped, and not covered; a window on another workspace or behind another receives nothing, and the click lands on whatever is on top. Window capture has no such requirement. The pointer is moved and verified first; nothing is clicked if it cannot be confirmed at the target. Requires ydotool and a running ydotoold.",
         input: {
           type: "object",
           properties: {
