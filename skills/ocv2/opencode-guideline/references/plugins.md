@@ -207,4 +207,4 @@ dialog lifecycle without a TUI. It cannot check pixels, and any
 
 ## Memory
 
-The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.
+The OptMem memory contract lives in the umbrella SKILL.md, Shared facts.

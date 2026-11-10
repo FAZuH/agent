@@ -113,4 +113,4 @@ Message ID is the newest `type: assistant` after wait. In `chat` mode, add: `"Ju
 
 ## Memory
 
-OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged `topic:opencode-v2`. The full contract lives in the umbrella SKILL.md, Shared facts.
+OpenCode v2 findings live in OptMem. The full contract lives in the umbrella SKILL.md, Shared facts.
