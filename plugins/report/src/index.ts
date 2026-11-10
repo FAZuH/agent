@@ -26,6 +26,22 @@ type BlockOutcome =
   | { type: "answered"; answers: Record<string, string> }
   | { type: "dismissed" }
   | { type: "deferred" }
+  | { type: "aborted" }
+
+/**
+ * Host state that must outlive one plugin setup. The server loads the plugin
+ * per location, so a `prompt_user` call can run in one instance while its
+ * answer RPC lands on another; the waiter would then never resolve and the
+ * session would stay blocked. The same registry also lets whichever instance
+ * registered last emit the `changed` event.
+ */
+interface ReportRuntime {
+  blocked: Map<string, (outcome: BlockOutcome) => void>
+  emit?: (event: { sessionID: string; report: Report }) => Promise<void>
+}
+
+const runtimeKey = Symbol.for("fazuh.report.runtime")
+const runtime: ReportRuntime = ((globalThis as any)[runtimeKey] ??= { blocked: new Map() })
 
 const stringList = { type: "array", items: { type: "string" } } as const
 const descriptionSchema = { type: "string", minLength: 1, maxLength: 35 } as const
@@ -122,10 +138,6 @@ const updateInput = {
 export default {
   id: "fazuh.report",
   setup: async (ctx: any) => {
-    let emit: ((event: { sessionID: string; report: Report }) => Promise<void>) | undefined
-    /** Prompt records whose prompt_user call is waiting in this server. */
-    const blocked = new Map<string, (outcome: BlockOutcome) => void>()
-
     if (typeof ctx.rpc?.register !== "function") {
       console.error("[report] ctx.rpc.register is unavailable; the views cannot list reports")
     } else {
@@ -147,8 +159,8 @@ export default {
               ...current,
               readAt: Date.now(),
             }))
-            if (updated && emit) {
-              void emit({ sessionID, report: updated }).catch((cause) =>
+            if (updated && runtime.emit) {
+              void runtime.emit({ sessionID, report: updated }).catch((cause) =>
                 console.error(`[report] emit failed: ${message(cause)}`),
               )
             }
@@ -168,17 +180,17 @@ export default {
             // A blocking prompt_user is waiting for this answer. The tool
             // result carries it back to the agent, so sending the usual user
             // message too would deliver the same answer twice.
-            const waiter = blocked.get(reportID)
+            const waiter = runtime.blocked.get(reportID)
             if (waiter) {
-              blocked.delete(reportID)
+              runtime.blocked.delete(reportID)
               try {
                 const updated = updateReport(sessionID, reportID, (current) => ({
                   ...current,
                   answers: { ...(current.answers ?? {}), ...answers },
                   answeredAt: Date.now(),
                 }))
-                if (updated && emit) {
-                  void emit({ sessionID, report: updated }).catch((cause) =>
+                if (updated && runtime.emit) {
+                  void runtime.emit({ sessionID, report: updated }).catch((cause) =>
                     console.error(`[report] emit failed: ${message(cause)}`),
                   )
                 }
@@ -204,8 +216,8 @@ export default {
               answers: { ...(current.answers ?? {}), ...answers },
               answeredAt: Date.now(),
             }))
-            if (updated && emit) {
-              void emit({ sessionID, report: updated }).catch((cause) =>
+            if (updated && runtime.emit) {
+              void runtime.emit({ sessionID, report: updated }).catch((cause) =>
                 console.error(`[report] emit failed: ${message(cause)}`),
               )
             }
@@ -214,15 +226,15 @@ export default {
           dismiss: async (input: any) => {
             const sessionID = String(input?.sessionID ?? "")
             const reportID = String(input?.reportID ?? "")
-            const waiter = blocked.get(reportID)
-            blocked.delete(reportID)
+            const waiter = runtime.blocked.get(reportID)
+            runtime.blocked.delete(reportID)
             try {
               const updated = updateReport(sessionID, reportID, (current) => ({
                 ...current,
                 dismissedAt: Date.now(),
               }))
-              if (updated && emit) {
-                void emit({ sessionID, report: updated }).catch((cause) =>
+              if (updated && runtime.emit) {
+                void runtime.emit({ sessionID, report: updated }).catch((cause) =>
                   console.error(`[report] emit failed: ${message(cause)}`),
                 )
               }
@@ -233,13 +245,13 @@ export default {
           },
           defer: async (input: any) => {
             const reportID = String(input?.reportID ?? "")
-            const waiter = blocked.get(reportID)
-            blocked.delete(reportID)
+            const waiter = runtime.blocked.get(reportID)
+            runtime.blocked.delete(reportID)
             waiter?.({ type: "deferred" })
             return { ok: true }
           },
         })
-        emit = (event) => registration.events.emit("changed", event)
+        runtime.emit = (event) => registration.events.emit("changed", event)
       } catch (error) {
         console.error(`[report] RPC registration failed: ${message(error)}`)
       }
@@ -267,7 +279,10 @@ export default {
       }
       report.title = titleOf(report)
       appendReport(report)
-      if (emit) void emit({ sessionID, report }).catch((error) => console.error(`[report] emit failed: ${message(error)}`))
+      if (runtime.emit)
+        void runtime.emit({ sessionID, report }).catch((error) =>
+          console.error(`[report] emit failed: ${message(error)}`),
+        )
       return report
     }
 
@@ -319,7 +334,19 @@ export default {
               return { content: `Saved as prompts ${report.id}; they are in the Reports view. Do not repeat them here.` }
             }
             const outcome = await new Promise<BlockOutcome>((resolve) => {
-              blocked.set(report.id, resolve)
+              runtime.blocked.set(report.id, resolve)
+              // The turn can be interrupted while the prompt waits. Drop the
+              // waiter so a later answer falls back to a normal user message
+              // instead of resolving a tool call that no longer exists.
+              const signal = tctx?.abort
+              if (!signal || typeof signal.addEventListener !== "function") return
+              const onAbort = () => {
+                if (runtime.blocked.get(report.id) !== resolve) return
+                runtime.blocked.delete(report.id)
+                resolve({ type: "aborted" })
+              }
+              if (signal.aborted) onAbort()
+              else signal.addEventListener("abort", onAbort, { once: true })
             })
             if (outcome.type === "answered") {
               const latest = readReports(sessionID).find((item) => item.id === report.id) ?? report
@@ -327,6 +354,11 @@ export default {
             }
             if (outcome.type === "dismissed") {
               return { content: "The user dismissed the prompt without answering it." }
+            }
+            if (outcome.type === "aborted") {
+              return {
+                content: "The prompt was interrupted; the answer will arrive as a new message.",
+              }
             }
             return {
               content: "The user deferred the prompt; the answer will arrive as a new message.",
@@ -377,8 +409,8 @@ export default {
               return next
             })
             if (!updated) return { content: "report_update failed: the report disappeared." }
-            if (emit) {
-              void emit({ sessionID, report: updated }).catch((error) =>
+            if (runtime.emit) {
+              void runtime.emit({ sessionID, report: updated }).catch((error) =>
                 console.error(`[report] emit failed: ${message(error)}`),
               )
             }

@@ -20,6 +20,28 @@ let prompts: string[]
 let deliveries: string[]
 let store: typeof import("./store.ts")
 
+/** One plugin setup, as the host does per location. */
+async function setupHost() {
+  const localTools: any[] = []
+  const localHandlers: Record<string, any> = {}
+  await plugin.setup({
+    tool: { transform: async (fn: any) => fn({ add: (tool: any) => localTools.push(tool) }) },
+    session: {
+      prompt: async (input: any) => {
+        prompts.push(String(input?.text ?? ""))
+        deliveries.push(String(input?.delivery ?? ""))
+      },
+    },
+    rpc: {
+      register: async (_contract: any, registered: Record<string, any>) => {
+        Object.assign(localHandlers, registered)
+        return { events: { emit: async () => {} } }
+      },
+    },
+  })
+  return { tools: localTools, handlers: localHandlers }
+}
+
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "report-plugin-"))
   process.env.REPORT_STATE_HOME = dir
@@ -29,21 +51,9 @@ beforeAll(async () => {
   deliveries = []
   plugin = (await import("./index.ts")).default
   store = await import("./store.ts")
-  await plugin.setup({
-    tool: { transform: async (fn: any) => fn({ add: (tool: any) => tools.push(tool) }) },
-    session: {
-      prompt: async (input: any) => {
-        prompts.push(String(input?.text ?? ""))
-        deliveries.push(String(input?.delivery ?? ""))
-      },
-    },
-    rpc: {
-      register: async (_contract: any, registered: Record<string, any>) => {
-        Object.assign(handlers, registered)
-        return { events: { emit: async () => {} } }
-      },
-    },
-  })
+  const host = await setupHost()
+  tools.push(...host.tools)
+  Object.assign(handlers, host.handlers)
 })
 
 afterAll(() => {
@@ -212,6 +222,59 @@ describe("tools", () => {
     const stored = store.readReports("ses_block")[0]!
     expect(stored.answeredAt).toBeGreaterThan(0)
     expect(stored.answers?.["0"]).toBe("yes")
+  })
+
+  test("a blocking prompt resolves when the answer lands on another instance", async () => {
+    const second = await setupHost()
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const pending = prompt.execute(
+      {
+        description: "Cross instance",
+        block: true,
+        questions: [{ title: "cross q", body: "wait for it" }],
+      },
+      { sessionID: "ses_cross" },
+    )
+    const id = store.readReports("ses_cross")[0]!.id
+    const before = prompts.length
+    const result = await second.handlers.answer({
+      sessionID: "ses_cross",
+      reportID: id,
+      answers: { "0": "yes" },
+    })
+    expect(result.delivered).toBe(true)
+    const toolResult: any = await Promise.race([
+      pending,
+      Bun.sleep(500).then(() => ({ content: "timeout" })),
+    ])
+    expect(toolResult.content).not.toBe("timeout")
+    expect(toolResult.content).toContain("cross q\nyes")
+    expect(prompts.length).toBe(before)
+  })
+
+  test("an interrupted blocking prompt leaves the late answer as a message", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const controller = new AbortController()
+    const pending = prompt.execute(
+      {
+        description: "Interrupted",
+        block: true,
+        questions: [{ title: "stop", body: "x" }],
+      },
+      { sessionID: "ses_abort", abort: controller.signal },
+    )
+    const id = store.readReports("ses_abort")[0]!.id
+    controller.abort()
+    const toolResult = await pending
+    expect(toolResult.content).toContain("interrupted")
+    const before = prompts.length
+    const result = await handlers.answer({
+      sessionID: "ses_abort",
+      reportID: id,
+      answers: { "0": "late" },
+    })
+    expect(result.delivered).toBe(true)
+    expect(prompts.length).toBe(before + 1)
   })
 
   test("block resolves on dismiss", async () => {
