@@ -2,11 +2,13 @@
 name: codebase-audit
 description: >-
   Sweep a whole repository for what is broken, contradictory, inefficient, or
-  no longer needed, and report every finding grouped by severity with path:line
-  evidence. Read-only: fixes are listed, never applied. Restrict the sweep to
-  one section when the user names one. Triggers: audit the codebase, find what
-  is broken, dead code, stale config, what can be deleted, full project sweep.
-  Not a diff review, a security audit, or a one-bug diagnosis.
+  no longer needed, and report every finding with path:line evidence. Confident
+  findings are grouped by severity; findings that need a decision are listed
+  separately for the user. Read-only: fixes are listed, never applied. Restrict
+  the sweep to one section when the user names one. Triggers: audit the
+  codebase, find what is broken, dead code, stale config, what can be deleted,
+  full project sweep. Not a diff review, a security audit, or a one-bug
+  diagnosis.
 ---
 
 # codebase-audit
@@ -96,7 +98,32 @@ contradicts a documented standard in the repo. Edit nothing.
 Done when: every kept finding has a location, evidence, and a stated
 consequence.
 
-## 4. Classify severity
+## 4. Triage: confident or needs your call
+
+Every kept finding goes into exactly one list. The split keeps the report
+honest: an assertion the agent can defend, and a decision that belongs to the
+owner, are not the same thing.
+
+| List | Test |
+|---|---|
+| Confident | The defect is reproduced (failing output, grep proof, two contracts stated side by side) and the fix is local with one right answer. Nothing is left for the user to decide. |
+| Needs your call | The evidence is real but the answer is a decision: intended behaviour is unclear, the fix changes a public surface, stored data, or a documented contract; two valid designs exist; the "dead" verdict depends on external or dynamic users; or the severity is a judgement between two levels. |
+
+Rules:
+
+- Default to Confident only when the fix is obvious and behavior-preserving.
+  When in doubt, move it to Needs your call.
+- A Needs-your-call item states the question, the evidence, and the options with
+  their costs. It does not prescribe a fix.
+- Never use Needs your call to park a finding you did not verify. Unproven
+  findings are dropped in step 3.
+- When the same evidence supports a certain defect and an uncertain fix, list
+  the defect as Confident and the decision separately.
+
+Done when: every kept finding sits in exactly one list, and every discussion
+item carries a question.
+
+## 5. Classify severity
 
 | Level | Test |
 |---|---|
@@ -107,24 +134,33 @@ consequence.
 The failing path sets the level, not how ugly the code is. No failing path, no
 blocker. Within a level, order by blast radius: live paths first.
 
-Done when: every finding takes its level from one of these rows.
+Severity applies to Confident findings. A discussion item may carry a
+provisional level, but it is not counted in the totals.
 
-## 5. Report
+Done when: every confident finding takes its level from one of these rows.
+
+## 6. Report
 
 ```text
 Scope: <path or "whole repo"> @ <sha>
 Checks: <commands and result>
 Excluded: <paths and patterns>
-Findings: <N> (blocker B, major M, minor m)
+Findings: <N> confident (blocker B, major M, minor m), <D> for your call
 
-## Blocker
+## Confident
+
+### Blocker
 - `path:line` defect. Consequence. Smallest fix.
 
-## Major
+### Major
 ...
 
-## Minor
+### Minor
 ...
+
+## Needs your call
+- `path:line` <question>. Evidence. Options: <A and its cost>; <B and its cost>.
+  (provisional: <level>, because <reason>.)
 
 ## Coverage
 Read: <top-level areas>.
@@ -135,14 +171,17 @@ Rules:
 
 - One finding per bullet: location, defect, consequence, smallest fix. No
   severity inflation and no padding.
-- Group by severity. Never merge levels.
+- Group confident findings by severity. Never merge levels.
+- Discussion items are not severity-grouped: order by blast radius, one question
+  per bullet, options with their costs.
 - One root cause with many sites is one finding listing the sites.
-- Nothing found in a class: say so. An empty report is a valid result; never
-  invent a finding to fill a section.
+- Nothing found in a class or list: say so. An empty report is a valid result;
+  never invent a finding to fill a section.
 - Report only. Fixes are listed, not applied. Turn them into tickets or a
   `.scratch/` spec only when asked.
 
-Done when: the report accounts for every kept finding and every swept class.
+Done when: the report accounts for every kept finding in both lists and every
+swept class.
 
 ## Boundaries
 
@@ -159,5 +198,6 @@ Done when: the report accounts for every kept finding and every swept class.
 - 1. baseline
 - 2. sweep -> 1
 - 3. verify -> 2
-- 4. severity -> 3
-- 5. report -> 4
+- 4. triage -> 3
+- 5. severity -> 4
+- 6. report -> 5
