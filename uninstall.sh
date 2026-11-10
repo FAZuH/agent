@@ -19,7 +19,6 @@ EXTERNAL_SKILLS=(
   triage wayfinder wizard
   grill-me grilling handoff to-questionnaire wait-what writing-for-agents
   simple-english
-  hindsight-docs
   bgrun
   antislop antislop-code antislop-copywriting antislop-human antislop-layoutmobile antislop-ui
   ffmpeg-skill
