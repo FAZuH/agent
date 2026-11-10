@@ -369,6 +369,12 @@ description, and its relative age (the update age when revised), colors keybinds
 apart from their descriptions,
 and grows with `↑/↓`, `PgUp/PgDn`, and `Home/End` scrolling up to about half
 the terminal height; the scroll hint appears only when the record overflows.
+A fresh prompt also opens as the host's inline form. The plugin caps that
+form's question body at 12 lines and 1,200 characters and appends a pointer
+to the Prompts section, because the host card has no height cap or scroll.
+The answer dialog centers vertically and bounds the question body to about a
+quarter of the terminal height, with `PgUp`/`PgDn` scrolling, so the answer
+field and key hints stay visible under a long question.
 Each section shows at most five slots: slots needing attention first
 (unread reports, unanswered prompts), then the rest, each group newest first.
 The pickers list every slot. The number beside a section header counts only

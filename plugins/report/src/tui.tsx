@@ -149,7 +149,26 @@ function AnswerDialog(props: {
   onCancel: () => void
 }) {
   const theme = props.ctx.theme
+  const dimensions = useTerminalDimensions()
   let textarea: any
+  let bodyScroll: any
+  const [scrollable, setScrollable] = createSignal(false)
+  // The body can be a whole report. Bound it so the textarea and the key hints
+  // stay on screen; PgUp/PgDn scroll the body, the full record is one Enter
+  // away in the history dialog.
+  const bodyRows = () => Math.max(5, Math.floor(dimensions().height * 0.28))
+  const measure = () => {
+    const check = () => {
+      if (!bodyScroll) return
+      setScrollable(bodyScroll.scrollHeight > bodyScroll.height)
+    }
+    for (const delay of [50, 250, 750]) setTimeout(check, delay)
+  }
+  createEffect(() => {
+    props.question.body
+    dimensions().height
+    measure()
+  })
 
   const submit = (mode: "steer" | "queue") => {
     const typed = typeof textarea?.plainText === "string" ? textarea.plainText : props.initial
@@ -169,6 +188,28 @@ function AnswerDialog(props: {
       { id: "report.answer.steer", title: "Steer the answer", bind: "enter", run: () => submit("steer") },
       { id: "report.answer.queue", title: "Queue the answer", bind: "ctrl+enter", run: () => submit("queue") },
       { id: "report.answer.cancel", title: "Cancel answer", bind: "escape", run: () => props.onCancel() },
+      {
+        id: "report.answer.scroll.up",
+        title: "Scroll the question up",
+        bind: "pageup",
+        run: (_input: any, event: any) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          bodyScroll?.scrollBy(-10)
+          return true
+        },
+      },
+      {
+        id: "report.answer.scroll.down",
+        title: "Scroll the question down",
+        bind: "pagedown",
+        run: (_input: any, event: any) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          bodyScroll?.scrollBy(10)
+          return true
+        },
+      },
     ],
   }))
 
@@ -176,11 +217,27 @@ function AnswerDialog(props: {
     <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <markdown
         syntaxStyle={syntaxFor(props.ctx)}
-        content={`**${props.question.title}**${props.question.body ? `\n\n${props.question.body}` : ""}`}
+        content={`**${props.question.title}**`}
         fg={theme.text.base}
         conceal
         internalBlockMode="top-level"
       />
+      <Show when={props.question.body}>
+        <scrollbox
+          ref={(element: any) => (bodyScroll = element)}
+          maxHeight={bodyRows()}
+          contentOptions={{ minHeight: 0 }}
+          scrollbarOptions={{ visible: false }}
+        >
+          <markdown
+            syntaxStyle={syntaxFor(props.ctx)}
+            content={props.question.body}
+            fg={theme.text.base}
+            conceal
+            internalBlockMode="top-level"
+          />
+        </scrollbox>
+      </Show>
       <textarea
         initialValue={props.initial}
         minHeight={1}
@@ -203,6 +260,11 @@ function AnswerDialog(props: {
         <span style={{ fg: theme.text.base }}>steer</span> <span style={{ fg: theme.text.muted }}>enter</span>   {" "}
         <span style={{ fg: theme.text.base }}>queue</span> <span style={{ fg: theme.text.muted }}>ctrl+enter</span>   {" "}
         <span style={{ fg: theme.text.base }}>cancel</span> <span style={{ fg: theme.text.muted }}>esc</span>
+        <Show when={scrollable()}>
+          {"   "}
+          <span style={{ fg: theme.text.base }}>scroll</span>{" "}
+          <span style={{ fg: theme.text.muted }}>pgup/pgdn</span>
+        </Show>
       </text>
     </box>
   )
@@ -233,7 +295,7 @@ function askAnswer(
       />
     ))
     try {
-      ctx.ui.dialog.set({ size: "medium" })
+      ctx.ui.dialog.set({ size: "xlarge", centered: true })
     } catch {}
   })
 }

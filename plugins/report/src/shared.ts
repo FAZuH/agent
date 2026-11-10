@@ -399,6 +399,43 @@ export function reportIDOfForm(formID: string): string | undefined {
   return reportID || undefined
 }
 
+/** How much of a question body the chat form shows before it points at the record. */
+export const FORM_DESCRIPTION_MAX_LINES = 12
+export const FORM_DESCRIPTION_MAX_CHARS = 1200
+
+/**
+ * The host draws a form field's description as plain text with no height cap
+ * or scroll, so one long question body fills the chat card. Keep whole lines
+ * within a small budget and point at the full text in the Prompts section.
+ */
+export function formDescription(body: string | undefined): string | undefined {
+  const text = String(body ?? "").trim()
+  if (!text) return undefined
+  const kept: string[] = []
+  let used = 0
+  let cut = false
+  for (const line of text.split("\n")) {
+    if (kept.length >= FORM_DESCRIPTION_MAX_LINES) {
+      cut = true
+      break
+    }
+    const room = FORM_DESCRIPTION_MAX_CHARS - used
+    if (room <= 0) {
+      cut = true
+      break
+    }
+    if (line.length > room) {
+      kept.push(`${line.slice(0, Math.max(0, room - 1)).trimEnd()}…`)
+      cut = true
+      break
+    }
+    kept.push(line)
+    used += line.length + 1
+  }
+  if (cut) kept.push("… full text in the Prompts section")
+  return kept.join("\n")
+}
+
 /**
  * The inline form fields for a prompt record: one string field per question,
  * with the recommendation as the first option and free text still allowed.
@@ -406,10 +443,11 @@ export function reportIDOfForm(formID: string): string | undefined {
 export function formFieldsOf(report: Report): FormField[] {
   return (report.prompts?.questions ?? []).map((question, index) => {
     const recommendation = question.recommendation?.trim()
+    const description = formDescription(question.body)
     return {
       key: `q${index}`,
       title: question.title || `Question ${index + 1}`,
-      ...(question.body ? { description: question.body } : {}),
+      ...(description ? { description } : {}),
       type: "string" as const,
       custom: true,
       ...(recommendation

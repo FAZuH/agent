@@ -18,6 +18,7 @@ import {
   contextLine,
   descriptionOf,
   dotState,
+  formDescription,
   formFieldsOf,
   formIDOf,
   groupBySession,
@@ -356,6 +357,26 @@ describe("formFieldsOf", () => {
 
   test("no questions mean no fields", () => {
     expect(formFieldsOf({ ...base })).toEqual([])
+  })
+
+  test("a short body is passed through unchanged", () => {
+    expect(formDescription("first line\nsecond line")).toBe("first line\nsecond line")
+    expect(formDescription("")).toBeUndefined()
+    expect(formDescription(undefined)).toBeUndefined()
+  })
+
+  test("a tall body is capped and points at the full record", () => {
+    const body = Array.from({ length: 40 }, (_, index) => `item ${index + 1}`).join("\n")
+    const description = formDescription(body)!
+    expect(description.split("\n")).toHaveLength(13)
+    expect(description).toContain("item 12")
+    expect(description).not.toContain("item 13")
+    expect(description).toEndWith("… full text in the Prompts section")
+    expect(formFieldsOf({
+      ...base,
+      kind: "prompt-user",
+      prompts: { questions: [{ title: "tall", body }] },
+    })[0]?.description).toBe(description)
   })
 })
 
