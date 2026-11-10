@@ -1,3 +1,10 @@
+## [0.15.3](https://github.com/FAZuH/agent/compare/v0.15.2...v0.15.3) (2026-11-10)
+
+
+### Features
+
+* **skill:** add codebase-audit skill ([ad5437e](https://github.com/FAZuH/agent/commit/ad5437efe279a3e0e6a50620c7a9fb395107baf5))
+
 ## [0.15.2](https://github.com/FAZuH/agent/compare/v0.15.1...v0.15.2) (2026-11-09)
 
 
@@ -63,19 +70,4 @@
 
 * **skill:** sweep lessons — upsert recipe, gh timeout, background resume ([95f0537](https://github.com/FAZuH/agent/commit/95f0537d1d319732a3a2b5dcf6fa76a0cb6ceb8d))
 * **sync:** skip stale prune on top-filtered pushes (-t) ([d44dc34](https://github.com/FAZuH/agent/commit/d44dc34d1ba180d61923da3301f772da46ceb8fd))
-
-## [0.14.1](https://github.com/FAZuH/agent/compare/v0.14.0...v0.14.1) (2026-10-22)
-
-
-### Features
-
-* **agent:** point the orchestrator at agent-talk ([1de855f](https://github.com/FAZuH/agent/commit/1de855f37aa495b39bb93439ac80c462db460c40))
-* **plugin:** add tell plugin for messaging subagent sessions ([ce0c7da](https://github.com/FAZuH/agent/commit/ce0c7daecd5fbdb4bbc1979dc3d3dd67e295184c))
-* **plugin:** add the tell picker and a tested descendant rule ([6d409b5](https://github.com/FAZuH/agent/commit/6d409b5c1c706cc589674ff3adc464c1e30c522c))
-* **skill:** add agent-talk skill ([14f3b50](https://github.com/FAZuH/agent/commit/14f3b50a61956f08371b97be98f3e9299642f8a0))
-
-
-### Bug Fixes
-
-* **plugin:** the fork owns its question and its report ([1c943f0](https://github.com/FAZuH/agent/commit/1c943f0938a1ca7c0adccd68f6cd71923f8f6670))
 
