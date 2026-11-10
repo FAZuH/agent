@@ -423,14 +423,13 @@ done < <(optional_packages)
 check_mmdc
 
 step "Installing required skills"
-install_skill Agents365-ai/365-skills --skill mermaid-skill
 install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*'
 install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*'
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
 # Not bonus: global-instruction makes @antislop a mandatory load
 # every session, and a default install that omits it leaves that dangling.
-install_skill miqdadbadjuber/anti-slop
+install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
 # The hindsight repo carries a full docs site; its clone blows past the skills
 # CLI's 300s default on a slow link and aborts the whole run, so raise the cap.
 SKILLS_CLONE_TIMEOUT_MS=900000 install_skill https://github.com/vectorize-io/hindsight --skill hindsight-docs
@@ -468,10 +467,7 @@ if ((BONUS == 1)); then
   step "Installing bonus skills"
   install_ffmpeg_skill
   install_rea
-  install_skill adithya-s-k/manim_skill
-  install_skill https://fframes.studio
   install_skill cloudflare/security-audit-skill --skill security-audit
-  install_skill docker/skills
 fi
 
 printf '\nInstallation complete. Restart OpenCode to load the configuration.\n'
