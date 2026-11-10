@@ -18,6 +18,7 @@ Usage:
 Arm from the agent (/desktop-ask <instruction>) or the desktop_ask_arm tool.
 The trigger captures the screen and prompts the armed session with the image.
 The answer is copied to the clipboard when the turn ends; --no-copy skips it.
+Regions are image pixels, not layout coordinates.
 EOF
 }
 
