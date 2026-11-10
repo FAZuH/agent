@@ -33,11 +33,11 @@ These are items you must do in specific situations.
 - @presenting-latex : Writing latex
 - @post-task : ending a multi-step task. Call the `post_task` tool; the Reports view renders it. Never paste the report into the reply.
 - @prompt-user : Asking follow-up questions or telling the user to do something. Call the `prompt_user` tool; the Reports view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
-- Hindsight memory is the default memory, not an occasional extra.
-  - `recall` before planning, diagnosing, or answering anything about prior work, a tool's behavior, or this user's setup. Assume a learned fact may already exist; a cheap recall beats a re-derivation.
-  - `retain` anything likely to be asked again, once verified: decisions and outcomes after review passes, tool/service quirks after a live check, research answers, user corrections and preferences.
-  - Skip one-off task trivia; a polluted bank buries the good facts.
-  - If the hindsight MCP tools are absent, continue without memory. Docs: @hindsight-docs.
+- OptMem memory is the default memory, not an occasional extra.
+  - `memo recall <regex>` before planning, diagnosing, or answering anything about prior work, a tool's behavior, or this user's setup. Assume a learned fact may already exist; a cheap recall beats a re-derivation.
+  - `memo note` anything likely to be asked again, once verified: decisions and outcomes after review passes, tool/service quirks after a live check, research answers, user corrections and preferences.
+  - Skip one-off task trivia; a polluted log buries the good facts.
+  - Never run `memo` from a subagent: it cannot judge what is already known and duplicates entries.
 
 ## Shell discipline
 
@@ -71,19 +71,17 @@ These are items you must do in specific situations.
 
 File friction before moving on (dead-end tool call, broken link, confusing setup,
 flaky command, misleading error). Defer environment improvements to the end of
-the session instead of fixing them mid-task. The store is Hindsight: one bank,
-every project and node.
+the session instead of fixing them mid-task. The store is OptMem.
 
-- File with `retain`: one or two sentences (`"<doing> > <blocked-by>"`),
-  `document_id: "friction-<short-slug>"`, tags `type:friction`,
-  `severity:minor|major|blocker`, `machine:<hostname>`, `status:open`, plus
-  `project:<repo>` for repo friction or `scope:skill|agent-def|tool|process`
-  for fixes that outlive one repo.
+- File one `memo note` line, at most 280 bytes:
+  `friction[open][<minor|major|blocker>][<scope>][<slug>] <doing> > <blocked-by> > fix: <seed>`
+  where `<scope>` is `skill|agent-def|tool|process|new-skill` for fixes that
+  outlive one repo, or `project:<repo>` for repo friction.
 - Severity: `minor`, `major` for time sinks, `blocker` for walls.
-- List open: `recall` by query, then keep only results whose `tags` include
-  `type:friction` and `status:open`. The server-side tag filter is unreliable
-  (measured 2026-10-13); tags ride on every result, so filter client-side.
-- Resolved: `retain` again with the same `document_id` and a `status:resolved`
-  tag (`update_mode: "upsert"`). Never a duplicate.
-- File in the moment, keep working. Friction, not a bug tracker. @self-improve
+- List open: `memo recall 'friction\[open\]'`, then group by scope. OptMem has
+  no tags or deletes, so filter on the bracketed fields in the text.
+- Resolved: append `friction[resolved][<slug>] adopted: ...` or
+  `rejected: ...`, naming the same slug. Friction stays in the log.
+- File in the moment, keep working; subagents report friction and the
+  orchestrator files it. Friction, not a bug tracker. @self-improve
   acts on open entries; repo code friction gets fixed in normal work.

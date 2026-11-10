@@ -34,9 +34,9 @@ Running list, entries written immediately, never reconstructed:
 
 - `[date] step N: what happened, why`
 
-Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction: Hindsight (`type:friction`, per @global-instruction). Else: working notes.
+Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction: OptMem (`friction[...]` notes, per @global-instruction). Else: working notes.
 
-Hiccups (tool failures, dead ends, environment friction) are retained to Hindsight as friction entries wherever one exists.
+Hiccups (tool failures, dead ends, environment friction) are noted to OptMem as friction entries.
 
 ## Interruption
 

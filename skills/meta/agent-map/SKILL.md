@@ -107,10 +107,9 @@ Upstream-owned; install and update through `@external-skills`, never hand-edit.
   planning), `manimce-best-practices`, `manimgl-best-practices`,
   `mermaid-skill` (mmdc/Kroki diagrams).
 - **Other**: `reverse-engineer-anything` (REA, bonus — binaries, managed code,
-  browser targets), `security-audit` (bonus), `hindsight-docs` (memory-bank
-  docs), `bgrun` (background systemd jobs), `simple-english`,
-  `gpui-kit`, `gpui-kit-design-guides` (Rust desktop UI),
-  `omarchy` (desktop config), `wizard` (human-in-loop setup),
+  browser targets), `security-audit` (bonus), `bgrun` (background systemd
+  jobs), `simple-english`, `gpui-kit`, `gpui-kit-design-guides` (Rust desktop
+  UI), `omarchy` (desktop config), `wizard` (human-in-loop setup),
   `update-pins`, `fazuh-*` machine overlays where present.
 
 ### Agents (subagents)

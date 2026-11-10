@@ -36,8 +36,8 @@ Follow the *Rules* section below.
    friction loop is additional work offered, never auto-run. In auto mode
    this gate skips, so just report the backlog line instead of asking. If
    §4 filed any friction entries, or @skill-doctor reported
-   `broken`/`drift`, or a `recall` (query "friction open backlog") surfaces
-   `type:friction` + `status:open` + `scope:` entries, tell the user:
+   `broken`/`drift`, or `memo recall 'friction\[open\]'` surfaces scoped
+   entries, tell the user:
 
    > Self-improvement backlog ready: `N` friction entries filed this session, `M`
    > open total, doctor `broken X / drift Y`. Run the friction loop now? [y/N]
@@ -79,14 +79,14 @@ missing one is the cheapest proposal you can file.
 
 ## 2. Propose (do not file yet)
 
-For each finding, **draft** one entry but do not `retain` yet: one entry = one
-`retain` with the @global-instruction friction tags:
+For each finding, **draft** one entry but do not file it yet: one entry = one
+`memo note` line in the @global-instruction friction format:
 
-- Content: `<friction observed > proposed fix>`, one or two sentences.
-- `document_id: "friction-<short-slug>"` (stable; the resolve handle).
-- Tags: `type:friction`, `severity:minor|major|blocker`, `status:open`,
-  `machine:<hostname>`; scope tag by fix location:
-  `scope:skill|agent-def|tool|process|new-skill` when the fix outlives one
+- Content: `friction[open][<severity>][<scope>][<slug>] <friction observed> > <proposed fix>`,
+  one or two sentences, at most 280 bytes.
+- `<slug>`: short and stable; it is how the resolution finds the entry later.
+- `<severity>`: `minor|major|blocker`. `<scope>` by fix location:
+  `skill|agent-def|tool|process|new-skill` when the fix outlives one
   repo, `project:<repo>` when it lands in this repo only.
 - The text must carry a proposal seed: what was tried, what got in the way,
   what would fix it. A bare complaint fails the bar.
@@ -94,7 +94,7 @@ For each finding, **draft** one entry but do not `retain` yet: one entry = one
   trigger (when it should fire), what the skill would do end-to-end, and
   evidence (transcript excerpt + steps). Format:
   `new-skill <working-name>: <trigger when> > <what it would do> > evidence: <excerpt>`.
-  The friction loop picks these up by the scope tag. Creation requires
+  The friction loop picks these up by the scope field. Creation requires
   `writing-for-agents` and a separate implementation session after explicit
   user approval, never here.
 - One finding per entry; overlapping findings get separate entries so the
@@ -102,8 +102,8 @@ For each finding, **draft** one entry but do not `retain` yet: one entry = one
 
 ## 3. Gate, ask before filing
 
-**GATE friction-file (normal → retain all drafted proposals):** filing to
-Hindsight requires user approval (filing is cheap and reversible; *applying*
+**GATE friction-file (normal → note all drafted proposals):** filing to
+OptMem requires user approval (filing is cheap and irreversible; *applying*
 what was filed is a separate, still-gated decision owned by the friction
 loop). (Vocabulary: the @gate skill.) Do not file immediately. Present the
 drafts and gate with the user:
@@ -112,8 +112,8 @@ drafts and gate with the user:
 
    | # | scope | proposal | actionable now? |
 
-   `#` is a stable 1..N in filing order. `scope` is the `scope:`/`project:`
-   tag the entry will carry.
+   `#` is a stable 1..N in filing order. `scope` is the scope field the entry
+   will carry.
 
 2. Call `default.question` to gate. Ask which proposals to file. Include
    options for "File all", "Pick individually" (multi-select of #s), and "File
@@ -122,7 +122,7 @@ drafts and gate with the user:
    ```
    default.question [{
      header: "File friction entries?",
-     question: "Found N proposals. Which should be retained to Hindsight?",
+     question: "Found N proposals. Which should be noted to OptMem?",
      options: [
        {label: "File all", description: "File every proposal above"},
        {label: "Pick individually", description: "Choose #s to file"},
@@ -134,23 +134,22 @@ drafts and gate with the user:
    If the user picks "Pick individually", follow up with a multi-select
    question listing each # + proposal summary.
 
-3. Only after an explicit answer, retain the approved subset and nothing else.
+3. Only after an explicit answer, note the approved subset and nothing else.
    If the user says "none" or does not approve, file nothing and report that.
 
 ## 4. File only approved and present
 
-For each approved proposal, `retain` it with its tags and `document_id` (the
-operation is async: poll `get_operation` to confirm before reporting filed).
-Then report a compact **filed** table:
+For each approved proposal, `memo note` its one line exactly as drafted. Then
+report a compact **filed** table:
 
-| # | document_id | scope | proposal | actionable now? |
+| # | slug | scope | proposal | actionable now? |
 
 - `#` is the same number from the proposal table, keep it stable.
-- Keep the `document_id` column: the store handle for the `status:resolved`
-  upsert once the user approves application via the friction loop.
+- Keep the `slug` column: it is the handle for the `friction[resolved]` note
+  once the user approves application via the friction loop.
 - Mark which entries look immediately actionable versus needing thought.
 - When the user later says "apply friction <N>" or "fix <N>", map N back to
-  that row's `document_id` before touching the store.
+  that row's slug before touching the log.
 - If nothing was approved, state "No friction entries filed, proposals remain
   as discussion only."
 
@@ -162,19 +161,19 @@ definitions, tooling, and process. Proposals arrive from §1 to §4 or direct
 capture (the @global-instruction friction contract); this section curates and
 applies them.
 
-One store: Hindsight, tag-filtered (`type:friction`, `status:open`). A single
-bank serves every project and node; entries carry `machine:`/`project:` tags
-instead of living in per-repo files.
+One store: OptMem, one append-only log on this machine. Entries carry their
+`<scope>` and `project:<repo>` fields inline because OptMem has no tags or
+per-project banks.
 
 ### Capture rules
 
-- **Who files:** anyone. Bash-capable subagents file directly. Narrow-surface
-  agents (document, finish, review, viewers) report friction in their output;
-  the orchestrator files it with attribution. File and continue; never stop
-  work to log.
-- **Scope tag** (required for sweep candidates): `scope:skill`,
-  `scope:agent-def`, `scope:tool`, `scope:process`, `scope:new-skill`. Repo
-  friction gets `project:<repo>` instead and is fixed in normal work, not here.
+- **Who files:** the orchestrating session. Subagents never run `memo` (they
+  cannot judge what is already known); narrow-surface agents (document, finish,
+  review, viewers) report friction in their output and the orchestrator notes
+  it with attribution. File and continue; never stop work to log.
+- **Scope field** (required for sweep candidates): `skill`, `agent-def`,
+  `tool`, `process`, `new-skill`. Repo friction gets `project:<repo>` instead
+  and is fixed in normal work, not here.
 - **Quality bar:** the entry carries a proposal seed, not a bare complaint
   (§2).
 
@@ -182,12 +181,11 @@ instead of living in per-repo files.
 
 Run top to bottom when invoked. Do not skip the user gates.
 
-1. **Sweep**: `recall` with a broad query ("friction open backlog"), then keep
-   only results whose `tags` include `type:friction`, `status:open`, and a
-   `scope:` tag (the server-side tag filter is unreliable, measured
-   2026-10-13; tags ride on every result, so filter client-side). Group by
-   target artifact (one skill / one agent def / one theme per group). Dedup
-   overlapping entries; their `document_id` (`friction-<slug>`) is the handle.
+1. **Sweep**: `memo recall 'friction\[open\]'`, then keep only entries whose
+   scope field is one of `skill|agent-def|tool|process|new-skill` (skip
+   `project:` entries). Group by target artifact (one skill / one agent def /
+   one theme per group). Dedup overlapping entries; their `<slug>` is the
+   handle.
 2. **Propose**: per group, draft the concrete change (exact edit or diff).
    Check the target is user-owned before drafting: skills in
    `~/Projects/agent/` (source) or `~/.config/opencode/skills/`
@@ -220,14 +218,11 @@ Run top to bottom when invoked. Do not skip the user gates.
    ticket instead of a direct edit; adopt or reject from the Outcome block
    afterwards. For non-repo friction the session lives under
    `~/.local/share/fazuh-agent/.scratch/<date>_<slug>/`.
-6. **Close the loop**: for each applied or rejected proposal, `retain` the
-   entry again with the same `document_id` and a `status:resolved` tag
-   (`update_mode: "upsert"`). An upsert REPLACES the stored text, never
-   appends. Exact recipe: when the entry predates the current sweep, read
-   `get_document(<id>)` and use its `original_text` verbatim, then
-   `content = <original_text> + " | " + ("adopted: <what landed>" or
-   "rejected: <why>")`. Never send an outcome-only sentence — it erases the
-   proposal detail. Rejections must record the reason.
+6. **Close the loop**: for each applied or rejected proposal, append one
+   `memo note "friction[resolved][<slug>] adopted: <what landed>"` or
+   `friction[resolved][<slug>] rejected: <why>`. OptMem is append-only: never
+   try to rewrite the open entry, and never send an outcome that omits the
+   slug. Rejections must record the reason.
 7. **Validate**: load the @skill-doctor skill and run it over every affected
    skill root; require a clean report (no broken links, stale refs,
    collisions, drift) before reporting done.
@@ -248,7 +243,7 @@ Run top to bottom when invoked. Do not skip the user gates.
   in working notes, run diagnostics without persistence (skip the `tee -a`
   append), defer filing to a write-capable mode, and state all of it in the
   run report.
-- One store, one bank: every entry carries the friction tags; scope decides
+- One store, one log: every entry carries the friction fields; scope decides
   what the sweep does with it, not where it lives.
 - Capture is cheap and immediate; curation happens at sweep time.
 - Never widen a narrow agent surface (docs-only, git-only, read-only) so it can
@@ -257,7 +252,7 @@ Run top to bottom when invoked. Do not skip the user gates.
   both are fine, silence is not.
 - Not for repo-local code sanding (fix it in normal work) or for fixing the
   user's project source.
-- Proposes friction entries but retains them only after explicit user
+- Proposes friction entries but notes them only after explicit user
   approval; it never applies fixes without a separate, still-gated decision.
 
 ## Dependency graph
