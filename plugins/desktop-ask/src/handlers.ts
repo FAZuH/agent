@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url"
 import { answerFrom } from "./answer.ts"
 import { armText, statusText, triggerText } from "./frame.ts"
 import type { CaptureResult } from "./shot.ts"
-import { clearTarget, readTarget, stateRoot, writeTarget, type Delivery, type Target } from "./state.ts"
+import { clearTarget, readTarget, writeTarget, type Delivery, type Target } from "./state.ts"
 
 export interface PromptReceipt {
   id?: string
@@ -233,5 +233,3 @@ export function createHandlers(host: Host) {
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
-
-export { stateRoot }

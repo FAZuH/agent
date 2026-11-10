@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:f
 import { join } from "node:path"
 
 import { shotsDir } from "./state.ts"
+import { parseRegion, toLayout } from "./region.ts"
 
 export type CaptureResult = { ok: true; path: string } | { ok: false; error: string }
 
@@ -34,6 +35,19 @@ export function activeWindow(): WindowInfo {
     return { label: w.title ? `${w.class} - ${w.title}` : w.class, region }
   } catch {
     return {}
+  }
+}
+
+/** Where Hyprland layout (0,0) sits; grim -g takes layout coordinates, not image ones. */
+function layoutOrigin(): { x: number; y: number } | undefined {
+  const r = spawnSync("hyprctl", ["monitors", "-j"], { encoding: "utf8", timeout: 5000 })
+  if (r.status !== 0) return undefined
+  try {
+    const list = JSON.parse(r.stdout ?? "[]")
+    if (!Array.isArray(list) || !list.length) return undefined
+    return { x: Math.min(...list.map((m) => Number(m.x ?? 0))), y: Math.min(...list.map((m) => Number(m.y ?? 0))) }
+  } catch {
+    return undefined
   }
 }
 
@@ -71,11 +85,17 @@ export interface CaptureOptions {
 }
 
 export function capture(opts: CaptureOptions): CaptureResult {
-  let region = opts.region?.trim() || undefined
+  let geometry: string | undefined
   if (opts.window) {
     const focused = activeWindow()
     if (!focused.region) return { ok: false, error: "no focused window to capture" }
-    region = focused.region
+    geometry = focused.region
+  } else if (opts.region?.trim()) {
+    const region = parseRegion(opts.region)
+    if (!region) return { ok: false, error: "region must be 'WxH' or 'X,Y WxH'" }
+    const origin = layoutOrigin()
+    if (!origin) return { ok: false, error: "no monitor layout from hyprctl" }
+    geometry = toLayout(region, origin)
   }
 
   const dir = shotsDir(opts.root)
@@ -87,8 +107,10 @@ export function capture(opts: CaptureOptions): CaptureResult {
 
   const stamp = opts.now ?? Date.now()
   const path = join(dir, `${stamp}.png`)
-  const args = ["grim"]
-  if (region) args.push("-g", region)
+  // -s 1 makes image pixels layout pixels, matching desktop-control, so a shot
+  // is not 1.25x larger than the coordinates anything else reports.
+  const args = ["grim", "-s", "1"]
+  if (geometry) args.push("-g", geometry)
   args.push(path)
 
   const r = spawnSync(args[0], args.slice(1), { encoding: "utf8", timeout: 20000 })
