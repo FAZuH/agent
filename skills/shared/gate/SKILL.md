@@ -85,7 +85,6 @@ Entry format (append `- (none yet)` → entries):
 - (none yet)
 - [2026-09-02] commit-approval (normal); skipped (auto): committed 3 groups with inferred messages
 - [2026-09-02] new-scope (always); fired: approved ("viz")
-- [2026-09-02] papercut-file (normal); skipped (auto): filed 4 entries unprompted
 ```
 
 Fields: date, gate id, class, then `fired: <outcome>` / `skipped (auto | delegated): <auto-resolution taken>` / `failed: <reason>`. Log mode switches too (`/gate auto` → interactive) so a compacted session recovers the mode.
