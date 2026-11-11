@@ -225,73 +225,6 @@ opens `http://127.0.0.1:47821/?session=<current session>`.
 - No dependencies. `web/cytoscape.min.js` is vendored (MIT, 3.34.4).
   Tests: `bun test plugins/tree`.
 
-## desktop-control (`fazuh.desktop`)
-
-Screen, window, pointer, and keyboard control for this Wayland/Hyprland
-desktop. It exists because the `computer-use` server drives Linux through
-AT-SPI2 only: on Hyprland the a11y bus carries no real apps (no kitty, Brave,
-Steam, or Wine window) and no `org.a11y.atspi.DeviceEventController` exists, so
-neither its app list nor its input can work here.
-
-Backends, chosen per action:
-
-| Action | Backend | Reaches |
-|---|---|---|
-| screenshots | `grim` | every window, every monitor; `-T` captures a toplevel by its handle |
-| windows, focus | `hyprctl` | every window |
-| pointer | `ydotool`, closed loop | every window; needs `ydotoold` |
-| keyboard | `wtype` then XTest | every window |
-
-Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
-`desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
-`desktop_type`, `desktop_key`. `desktop_click` takes image pixels, the same
-coordinates `desktop_screenshot` returns. A full-screen shot needs no offset;
-a region or window shot reports the offset to add. Capture is independent of
-workspace, focus and stacking. Input is not: the target window must be on the
-active workspace, mapped and uncovered, or the click lands on whatever is on
-top. `desktop_screenshot window` captures by foreign-toplevel handle even on
-another workspace or behind another window, and a partly off-screen window is
-captured only where it exists. `desktop_focus` cannot raise a window that a
-special workspace is covering.
-
-Hyprland has no pointer-button dispatcher. `sendshortcut` accepts `mouse:272`
-and a window target, but its `pass` path puts pointer focus at surface-local
-`(1,1)` before pressing, so it clicks only the window's top-left corner. That
-is not a coordinate click; the visibility requirement stands.
-
-Pointer input needs `ydotool` and a running `ydotoold`; `/dev/uinput` must be
-writable by the user. XTest is not a pointer backend: it moves XWayland's own
-pointer, which the compositor ignores, so a click lands wherever the real
-cursor already was. That is how a click aimed at a tab strip once landed on a
-video in another window.
-
-`ydotoold`'s virtual device advertises `EV_REL` only, so `ydotool mousemove
---absolute` does not work either — it warps. And the gain is not 1:1: on this
-machine 100 units move 200 layout pixels. So `desktop_move`, `desktop_click`,
-`desktop_drag`, and `desktop_scroll` close the loop against `hyprctl
-cursorpos`, stepping until the pointer is within 2 px, then re-reading to
-confirm the move was not still in flight. A click is only issued after that
-confirmation; if the pointer does not arrive, the call reports where it
-stopped and presses nothing.
-
-Captures ask grim for layout-scale pixels (`-s`), so an image pixel is the
-coordinate `desktop_click` takes. Hyprland's layout origin is not the image
-origin (this monitor sits at `332,-68`); the plugin adds that offset for grim
-internally and reports it for region and window captures. The caller never adds
-it.
-
-None of this makes a coordinate meaningful. The screen can change between the
-screenshot that suggested a point and the click — an app going fullscreen
-hides the bar — so take a fresh screenshot immediately before clicking and
-check that the thing under the point is still the thing meant.
-
-Hyprland's client list marks XWayland clients directly (`xwayland`), so no
-extra X11 query is needed. `src/xtest.py` is only the keyboard fallback for
-those clients; pointer input always goes through ydotool.
-
-No dependencies beyond the system binaries. Tests: `bun test
-plugins/desktop-control`.
-
 ## desktop-ask (`fazuh.desktop-ask`)
 
 Sends a screenshot from a keybind to one armed session and asks the
@@ -308,8 +241,8 @@ target with the image attached.
 - Delivery defaults to `queue`; `--steer` interrupts the target mid-turn.
 - Full screen by default; `--window` captures the focused window.
 - `--region` takes image pixels, `WxH` or `X,Y WxH`, and is converted to layout
-  coordinates before grim runs. Shots are captured at layout scale, the same
-  pixels desktop-control reports.
+  coordinates before grim runs. Shots are captured at layout scale, so each
+  image pixel matches a desktop coordinate.
 - `--ask TEXT` overrides the instruction for one trigger.
 - When the turn ends, the answer is copied to the clipboard with `wl-copy`
   (`xclip`/`xsel` fallback). `--no-copy` skips it for one trigger.
