@@ -1,10 +1,10 @@
 ---
 name: agent-map
 description: >-
-  Pick the installed skill, agent, plugin, command, or CLI for a task, and
-  search outside the install when nothing fits. Inventories everything
-  install.sh deploys. Triggers: routing a task, what to load, is there a tool
-  for X.
+  Pick the installed skill, agent, agent-facing plugin, or CLI for a task, and
+  search outside the install when nothing fits. Inventories what a full install
+  deploys, minus user-only commands and plugins. Triggers: routing a task, what
+  to load, is there a tool for X.
 ---
 
 # Agent Map
@@ -22,15 +22,13 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
    on, the fazuh.jev plugin asks Jev which skill fits and injects one advisory
    system line (`Jev routing: consider loading skill @…`). Weigh it, load the
    skill if it fits, ignore it when your own reading disagrees.
-3. **Check plugins and commands first** — they need no skill load:
+3. **Check agent plugins first** — they need no skill load:
    - Jev: the `hook_skill_pick` picker hook (advises a skill per prompt) and the
-     `hook_risk` gate on bash/edit/write, plus `/jev-status`, `/jev-model`,
-     `/jev-endpoint`, `/jev-log`. No jev tools exist.
-   - `/dispatch <task>` — background subagent, same session. `/branch <q>` —
-     fork this session and ask in the fork (`branch_ask`; the fork answers with
-     `branch_report`).
-   - `/finish` (end-session workflow), `/gate` (auto/interactive mode),
-     `/status-report`, `/imagescan-*` (ten screenshot commands).
+     `hook_risk` gate on bash/edit/write. No jev tools exist.
+   - `branch_ask` forks this session to answer a side question; `branch_report`
+     sends the answer back.
+   - `post_task` and `prompt_user` record a task report or a user prompt.
+   - Desktop tools when the task acts on the screen; see Plugins below.
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
    subagent routing and workflow selection; load them when the task is control,
    tracking, or multi-agent work rather than doing.
@@ -127,22 +125,22 @@ instead of silently changing scope.
 
 ### Plugins
 
+Agent-facing plugins only. User-only plugins and user-invoked commands are not
+agent tools and are not listed here.
+
 - **jev**: automatic Jev decisions — skill-picker hook (advises a skill per
-  prompt; criteria optimized once per skill via `/jev-optimize-skills`), risk
-  hook (gates bash/edit/write, the only blocking path);
+  prompt) and risk hook (gates bash/edit/write, the only blocking path);
   settings in `jev-state.json`, logs in `jev-calls.jsonl`.
-- **dispatch**: `/dispatch` background subagent.
-- **branch**: `/branch` fork-and-ask; agents use `branch_ask`, the fork answers
-  with `branch_report`.
+- **branch**: `branch_ask` forks this session to answer a side question;
+  `branch_report` sends the answer back. A fork keeps the current agent and
+  model.
 - **report**: `post_task` and `prompt_user` tools; the reports render in the
   TUI sidebar and the desktop Reports panel, not in the reply.
-  `/report-settings` toggles the sidebar and its Reports, Prompts, and
-  Context Watch sections.
-
-### Commands
-
-`/finish`, `/gate`, `/status-report`, `/imagescan-{answer,code,diagram,
-handwriting,latex,math,obsidian,ocr,summarize,translate}`.
+- **desktop-control**: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
+  `desktop_click`, `desktop_type`, `desktop_key`, `desktop_move`,
+  `desktop_scroll`, `desktop_drag`.
+- **desktop-ask**: `desktop_ask_arm` and `desktop_ask_disarm` pick the session
+  that receives the screenshot keybind.
 
 ### CLIs
 
