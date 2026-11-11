@@ -21,7 +21,16 @@ import {
   readMarker,
   reportTags,
 } from "./branch.ts"
+import { createForkSlots } from "./forks.ts"
+import { createReportBatcher } from "./queue.ts"
 import { Contract } from "./rpc.ts"
+import {
+  normalizeSettings,
+  parseSettingsArgs,
+  readSettings,
+  settingsText,
+  writeSettings,
+} from "./settings.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -43,6 +52,13 @@ export default {
     }
 
     const info = (result: any) => result?.data ?? result
+
+    const settings = () => readSettings()
+    const batcher = createReportBatcher(
+      (parentID, text) => ctx.session.prompt({ sessionID: parentID, text }),
+      () => settings().reportBatchMs,
+    )
+    const slots = createForkSlots()
 
     async function metadataOf(sessionID: string): Promise<Record<string, unknown>> {
       try {
@@ -68,16 +84,25 @@ export default {
       return sid
     }
 
+    type BranchStart = { forkID: string } | { error: string }
+
     /**
      * Fork, ask, and (unless silent) tell the asking session that a fork
      * exists. In report mode the answer comes back through branch_report, so
      * the fork curates what the asking session gets to read.
      */
-    async function startBranch(question: string, parentID: string, silent: boolean): Promise<string> {
+    async function startBranch(question: string, parentID: string, silent: boolean): Promise<BranchStart> {
+      let token = ""
+      if (!silent) {
+        const reserved = slots.reserve(parentID, settings().maxForks)
+        if ("error" in reserved) return reserved
+        token = reserved.token
+      }
       let forkID: string
       try {
         forkID = await forkSession(parentID)
       } catch (error) {
+        if (token) slots.release(parentID, token)
         const reason = message(error)
         await mark(parentID, { status: "failed", parentID, error: reason })
         if (!silent) {
@@ -87,8 +112,9 @@ export default {
             console.error(`[branch] failure notice failed: ${message(failure)}`)
           }
         }
-        return ""
+        return { error: `could not fork this session: ${reason}` }
       }
+      if (token) slots.confirm(parentID, token, forkID)
       await mark(forkID, { status: "forked", parentID, sessionID: forkID, question })
       await ctx.session.prompt({
         sessionID: forkID,
@@ -100,7 +126,7 @@ export default {
           text: forkedNotice(forkID, parentID, question),
         })
       }
-      return forkID
+      return { forkID }
     }
 
     /** The fork's own report channel: mark → tags → prompt to the asking session. */
@@ -109,11 +135,10 @@ export default {
       if (!marker || marker.status !== "forked") {
         throw new Error("this session was not forked by branch")
       }
-      const tags = reportTags(marker.sessionID ?? sessionID, marker.parentID)
-      await ctx.session.prompt({
-        sessionID: marker.parentID,
-        text: `${tags.open}\n${text}\n${tags.close}`,
-      })
+      const forkID = marker.sessionID ?? sessionID
+      slots.release(marker.parentID, forkID)
+      const tags = reportTags(forkID, marker.parentID)
+      batcher.push(marker.parentID, `${tags.open}\n${text}\n${tags.close}`)
     }
 
     if (typeof ctx.rpc?.register !== "function") {
@@ -128,9 +153,9 @@ export default {
             if (!parentID) return { error: "no parent session." }
             const silent = input?.silent === true
             try {
-              const forkID = await startBranch(question, parentID, silent)
-              if (!forkID) return { error: "could not fork this session." }
-              return { forkID }
+              const started = await startBranch(question, parentID, silent)
+              if ("error" in started) return { error: started.error }
+              return { forkID: started.forkID }
             } catch (error) {
               return { error: message(error) }
             }
@@ -169,10 +194,10 @@ export default {
           if (!sessionID) return { content: "branch_ask failed: no session." }
           const silent = input?.silent === true
           try {
-            const forkID = await startBranch(question, sessionID, silent)
-            if (!forkID) return { content: "branch_ask failed: could not fork this session." }
+            const started = await startBranch(question, sessionID, silent)
+            if ("error" in started) return { content: `branch_ask failed: ${started.error}` }
             return {
-              content: `Forked to \`${forkID}\` — ${silent ? "continue there." : "the answer comes back here."}`,
+              content: `Forked to \`${started.forkID}\` — ${silent ? "continue there." : "the answer comes back here."}`,
             }
           } catch (error) {
             return { content: `branch_ask failed: ${message(error)}` }
@@ -217,9 +242,9 @@ export default {
           if (!text) return { content: "Usage: /branch <question>" }
           const parentID: string | undefined = input?.sessionID
           if (!parentID) return { content: "branch failed: no parent session." }
-          const forkID = await startBranch(text, parentID, false)
-          if (!forkID) return { content: "branch failed: could not fork this session." }
-          return { content: `Forked to \`${forkID}\` — the answer comes back here.` }
+          const started = await startBranch(text, parentID, false)
+          if ("error" in started) return { content: `branch failed: ${started.error}` }
+          return { content: `Forked to \`${started.forkID}\` — the answer comes back here.` }
         },
       })
 
@@ -232,9 +257,28 @@ export default {
           if (!text) return { content: "Usage: /branch-silent <question>" }
           const parentID: string | undefined = input?.sessionID
           if (!parentID) return { content: "branch-silent failed: no parent session." }
-          const forkID = await startBranch(text, parentID, true)
-          if (!forkID) return { content: "branch-silent failed: could not fork this session." }
-          return { content: `Forked to \`${forkID}\` — continue there.` }
+          const started = await startBranch(text, parentID, true)
+          if ("error" in started) return { content: `branch-silent failed: ${started.error}` }
+          return { content: `Forked to \`${started.forkID}\` — continue there.` }
+        },
+      })
+
+      draft.add({
+        name: "branch-settings",
+        description:
+          "Show or set branch limits. maxForks caps reporting forks in flight (0 = unlimited); reportBatchMs batches reports to one prompt (0 = off). Usage: /branch-settings [maxForks=N] [reportBatchMs=MS]",
+        execute: async (input: any) => {
+          const text = String(input?.prompt?.text ?? "").trim()
+          if (!text) return { content: settingsText(settings()) }
+          const parsed = parseSettingsArgs(text)
+          if (parsed.error) return { content: `branch-settings: ${parsed.error}` }
+          const next = normalizeSettings({ ...settings(), ...parsed.settings })
+          try {
+            writeSettings(next)
+          } catch (error) {
+            return { content: `branch-settings: could not save: ${message(error)}` }
+          }
+          return { content: settingsText(next) }
         },
       })
     })
