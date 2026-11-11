@@ -149,7 +149,7 @@ handwriting,latex,math,obsidian,ocr,summarize,translate}`.
 `bgrun` (background jobs), `octask` (schedules),
 `opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `imagescan`,
 `pdf-build`, `skill-graph`, `mail-digest`/`phone-digest` (opt-in digests),
-`himalaya-gen-config`.
+`zele` (mail/calendar CLI).
 
 Optional tools each degrade one skill, never the install: `ffmpeg`
 (ffmpeg-skill), `mmdc` (pdf-write), `pandoc`/`pdflatex`/
