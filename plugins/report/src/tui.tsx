@@ -866,6 +866,9 @@ export default {
     if (typeof ctx.client?.rpc !== "function") return
     const rpc = ctx.client.rpc(Contract)
     const [reports, setReports] = createSignal<Record<string, Report[]>>({})
+    /** Disposers, collected as each subscription is made. A name that no
+     * longer exists cannot throw before the try and strand every listener. */
+    const stops: Array<(() => void) | undefined> = []
 
     const routedID = (): string | undefined => {
       const route = ctx.ui.router.current()
@@ -883,12 +886,14 @@ export default {
 
     // A report or answer written anywhere in the family refetches the view,
     // and a fresh prompt record opens as the host's inline form.
-    const off = rpc.events.on("changed", (event: any) => {
-      const sessionID = routedID()
-      if (sessionID) reload(sessionID)
-      const report = event?.data?.report
-      if (report?.kind === "prompt-user") void showForm(report)
-    })
+    stops.push(
+      rpc.events.on("changed", (event: any) => {
+        const sessionID = routedID()
+        if (sessionID) reload(sessionID)
+        const report = event?.data?.report
+        if (report?.kind === "prompt-user") void showForm(report)
+      }),
+    )
 
     /** Prompt records already offered as an inline form, by report id.
      * Process-global: a stale instance left by a failed teardown must not
@@ -936,21 +941,25 @@ export default {
 
     // The form is a second way into the same answer path. Dismissing it with
     // esc is the defer action: the record stays unanswered in the list.
-    const offReplied = ctx.data?.on?.("form.replied", (event: any) => {
-      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
-      if (!reportID) return
-      const sessionID = String(event?.data?.sessionID ?? "")
-      const answers = answersOfForm(event?.data?.answer)
-      if (!sessionID || !Object.keys(answers).length) return
-      void deliver(sessionID, reportID, answers, "steer")
-    })
-    const offCancelled = ctx.data?.on?.("form.cancelled", (event: any) => {
-      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
-      if (!reportID) return
-      const sessionID = String(event?.data?.sessionID ?? "")
-      if (sessionID) void rpc.defer({ sessionID, reportID }).catch(() => {})
-      ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
-    })
+    stops.push(
+      ctx.data?.on?.("form.replied", (event: any) => {
+        const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+        if (!reportID) return
+        const sessionID = String(event?.data?.sessionID ?? "")
+        const answers = answersOfForm(event?.data?.answer)
+        if (!sessionID || !Object.keys(answers).length) return
+        void deliver(sessionID, reportID, answers, "steer")
+      }),
+    )
+    stops.push(
+      ctx.data?.on?.("form.cancelled", (event: any) => {
+        const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+        if (!reportID) return
+        const sessionID = String(event?.data?.sessionID ?? "")
+        if (sessionID) void rpc.defer({ sessionID, reportID }).catch(() => {})
+        ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
+      }),
+    )
 
     async function read(report: Report) {
       try {
@@ -1268,9 +1277,7 @@ export default {
     })
 
     return () => {
-      // The array literal is evaluated before the try, so an undefined name
-      // here throws and skips every disposer. Keep it to the live bindings.
-      for (const stop of [off, offReplied, offCancelled]) {
+      for (const stop of stops) {
         try {
           stop?.()
         } catch {}
