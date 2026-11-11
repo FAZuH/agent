@@ -13,15 +13,15 @@ wreckage procedure only if the retry fails too.
 - Dispatch dies with `context deadline exceeded` or
   `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → transient provider hop; retry the
   dispatch once.
-- Any DNS-signed failure (`ENOTFOUND <litellm-host>`) → the litellm router
-  lives behind tailscale; check tailscale is up before anything else.
+- Any DNS-signed failure (`ENOTFOUND <provider-host>`) → the provider router
+  may sit behind a private network; check that path before anything else.
 - A child reports completion with no text: **check the tree first**. Work
   landed means the session is alive and only its report was lost → resume it
   with a delta brief (@orchestrate). No work landed means it is idle or gone →
   confirm the session id against the API before declaring it dead, then resume
   it if it resolves, else spawn the same brief once in a fresh session. A
   second silent completion is not transient.
-- NOT transient: litellm `BadRequest` deserialize on a large prompt (shrink
+- NOT transient: a provider `BadRequest` deserialize on a large prompt (shrink
   the prompt), and a resumed session carrying images into a text-only model
   (use a vision model or a fresh session).
 
