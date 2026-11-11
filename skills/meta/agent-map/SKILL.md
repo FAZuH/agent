@@ -42,7 +42,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 
 **Orchestration** — control, delegate, track, finish agent work:
 `orchestrate`, `workflows` (routing table and procedures), `agent-talk`
-(message a running agent session), `forkflow` (warm session forks), `session`
+(message a running agent session), `session`
 (spec, context packet, checkpoints in `.scratch/`), `finish`, `scratch-finish`,
 `self-improve` (retro and sweep), `long-horizon` (overnight runs), `offload`
 (remote machines), `worktree` (branch work), `pr-to-close`.
@@ -156,7 +156,7 @@ Optional tools each degrade one skill, never the install: `ffmpeg`
 `xelatex` (pdf-write), `pdftotext`/`pdftoppm`/`pdfinfo` (pdf-read/write),
 `rga` (pdf-read), `uv` (pdf-read), `clamscan` (malware-check), `bun` (jev,
 pluginhealth), `jegrep` (jev semantic grep, not installed by default),
-`gh` (every PR/issue skill), `jq` (ocv2, forkflow).
+`gh` (every PR/issue skill), `jq` (ocv2).
 
 ## Search outward
 

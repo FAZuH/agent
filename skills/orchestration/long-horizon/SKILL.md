@@ -67,7 +67,8 @@ Follow the *Rules* section below.
 
 ## Fleet children
 
-Forked children (see @forkflow) plug into the heartbeat through
+Forked children (see @workflows, `reference/parallel-lanes.md`) plug into the
+heartbeat through
 `children.txt`, one line per child (sessionID, agent, dispatch epoch, state): a
 heartbeat or a recovering orchestrator must re-read the ledger without context.
 Key completion markers by dispatch generation, or delete them on re-dispatch: a
