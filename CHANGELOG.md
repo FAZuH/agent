@@ -1,3 +1,26 @@
+## [0.15.4](https://github.com/FAZuH/agent/compare/v0.15.3...v0.15.4) (2026-11-11)
+
+
+### Features
+
+* **plugin:** cap branch forks and batch their reports ([1b300ec](https://github.com/FAZuH/agent/commit/1b300ececd11439911140e4968cf9481ebb4318d))
+* **plugin:** capture one window without switching workspace ([fc91c85](https://github.com/FAZuH/agent/commit/fc91c851ef458854c74f80d5a5b9d6e876d2aca2))
+* **skill:** give audit findings stable IDs ([9245a84](https://github.com/FAZuH/agent/commit/9245a84f11490e559ae76ec4df70f44d831bf0b6))
+* **skill:** split audit findings into confident and your call ([a929a07](https://github.com/FAZuH/agent/commit/a929a07bef66026dccbb2917376570c5c6ac503b))
+
+
+### Bug Fixes
+
+* **desktop-control:** keep click coordinates in image pixels ([53887ce](https://github.com/FAZuH/agent/commit/53887ce3a038439cf0d4ef99816ce9a601bb8542))
+* drop the retired alias from the digest ([7f6f41c](https://github.com/FAZuH/agent/commit/7f6f41cff1c7cac79bc9cef046e2338e4b12d8e8))
+* **plugin:** bound long prompt bodies in forms and answers ([ddd0f65](https://github.com/FAZuH/agent/commit/ddd0f65430292f3d1b271ed6c4ba0b16044eab2e))
+* **plugin:** capture ask shots in image pixels ([9947275](https://github.com/FAZuH/agent/commit/99472750074683ba8c957d593680c2778ff94e83))
+* **plugin:** capture regions in image pixels ([64203f3](https://github.com/FAZuH/agent/commit/64203f3a2fb99da72ba11c2433bd3fa222636deb))
+* **plugin:** deliver each prompt answer once ([666c15c](https://github.com/FAZuH/agent/commit/666c15cc894ee7000705ee585d325de5bd25ba68))
+* **plugin:** move jev state to the opencode state root ([1b936c5](https://github.com/FAZuH/agent/commit/1b936c5e0ba0ebec9c6f9675d8e25ed92f0b0b9d))
+* **plugin:** move report state to the opencode state root ([4d1e7a6](https://github.com/FAZuH/agent/commit/4d1e7a6bfdf512e32e62f5eff7b56082f469557a))
+* **plugin:** resolve blocking prompts across plugin instances ([484678d](https://github.com/FAZuH/agent/commit/484678de5307da58ed8acd6fce1cb3389020aeeb))
+
 ## [0.15.3](https://github.com/FAZuH/agent/compare/v0.15.2...v0.15.3) (2026-11-10)
 
 
@@ -57,17 +80,4 @@
 * **plugin:** add the desktop-ask screenshot bridge ([669656c](https://github.com/FAZuH/agent/commit/669656c6dcb50ab335eeaae21fe6f1f9c5e0f397))
 * **plugin:** add the session tree viewer ([a179c6b](https://github.com/FAZuH/agent/commit/a179c6b124ef9e4ca712ca7e95a526649a6eae7b))
 * **script:** add the desktop-ask trigger helper ([500a659](https://github.com/FAZuH/agent/commit/500a65933e9aa623d2077469bd2d40d4236f8609))
-
-## [0.14.2](https://github.com/FAZuH/agent/compare/v0.14.1...v0.14.2) (2026-11-03)
-
-
-### Features
-
-* **plugin:** let agents fork with aside and report back by tool ([2618fe6](https://github.com/FAZuH/agent/commit/2618fe64558ff6d0ebe189fc3d1c9affc37a92be))
-
-
-### Bug Fixes
-
-* **skill:** sweep lessons — upsert recipe, gh timeout, background resume ([95f0537](https://github.com/FAZuH/agent/commit/95f0537d1d319732a3a2b5dcf6fa76a0cb6ceb8d))
-* **sync:** skip stale prune on top-filtered pushes (-t) ([d44dc34](https://github.com/FAZuH/agent/commit/d44dc34d1ba180d61923da3301f772da46ceb8fd))
 
