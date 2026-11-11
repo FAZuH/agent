@@ -30,12 +30,12 @@ Nothing needs a change: say so and skip.
 
 ## 2. File session friction
 
-Anything noticed during the session that was never filed goes to Hindsight now,
+Anything noticed during the session that was never filed goes to OptMem now,
 per the friction contract in @global-instruction and the entry format in
 @self-improve. Nothing carries past this step unfiled, and it is not a bug
 tracker: one or two sentences each.
 
-The `/finish` invocation is the approval to file: retain these directly, with
+The `/finish` invocation is the approval to file: note these directly, with
 no further gate. GATE `friction-file` in @self-improve covers only a
 standalone retro, where no `/finish` preceded it.
 
@@ -53,8 +53,8 @@ workspace in place and note it in the summary.
 ## 5. Summarize the session
 
 Review the conversation. Concise summary: files changed or created, problems
-solved or features added, decisions made. If the hindsight MCP tools are
-present, `retain` the summary; absent → skip.
+solved or features added, decisions made. `memo note` the summary if OptMem is
+available; absent → skip.
 
 ## 6. Suggest next steps
 

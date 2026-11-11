@@ -25,6 +25,7 @@ TMP_DIR=""
 SKILLS_CLI_VERSION="1.7.0"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
+OPTMEM_REV="cd6e32e75eaf98694c26f5d51459925536d11a61"
 REA_AGENTS_VERSION="6.4.0"
 
 GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
@@ -271,7 +272,8 @@ cargo::bgrun, octask
 npx::the skills CLI
 rsync::sync.sh
 python3::install.sh, skill-doctor
-jq:pacman -S jq:the ocv2 and forkflow scripts
+zele:npm i -g zele:the fazuh-email skill and mail search
+jq:pacman -S jq:the ocv2 scripts
 gh:pacman -S github-cli:every PR, issue, and release skill
 PACKAGES
 }
@@ -302,6 +304,8 @@ installed_items() {
   cat <<ITEMS
 octask:scheduled-task
 bgrun:the bgrun skill and CLI
+memo:the OptMem memory CLI
+optmem-mcp:the OptMem MCP server
 skills:$HOME/.config/opencode/skills
 agents:$HOME/.config/opencode/agents
 plugins:$HOME/.config/opencode/plugins
@@ -430,10 +434,21 @@ install_skill FAZuH/bgrun --skill bgrun
 # Not bonus: global-instruction makes @antislop a mandatory load
 # every session, and a default install that omits it leaves that dangling.
 install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
-# The hindsight repo carries a full docs site; its clone blows past the skills
-# CLI's 300s default on a slow link and aborts the whole run, so raise the cap.
-SKILLS_CLONE_TIMEOUT_MS=900000 install_skill https://github.com/vectorize-io/hindsight --skill hindsight-docs
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"
+
+step "Installing OptMem memory"
+# The fork ships the memo CLI and the optmem-mcp server. Both are installed here;
+# only the CLI is called at startup, and a host that serves MCP runs the server
+# from ~/.cargo/bin. The repo is a workspace, so both packages are named. --force
+# keeps the pin authoritative over binaries installed some other way.
+cargo install --git https://github.com/FAZuH/optmem-rs optmem optmem-mcp \
+  --rev "$OPTMEM_REV" --locked --force
+export PATH="$HOME/.cargo/bin:$PATH"
+if [[ ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/optmem/config.toml" ]]; then
+  memo init >/dev/null
+  info "initialized the OptMem store"
+fi
+info "$(memo --version)"
 
 step "Installing repository packages"
 ensure_agent_values

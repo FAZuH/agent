@@ -25,7 +25,7 @@ type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
 const clearState = () => rmSync(STATE_FILE, { force: true })
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateLegacyLayout, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, sidebarLines, toastLine, toastOutcomeAllowed, toastsOn } = await import(
+const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateDataFile, migrateLegacyLayout, migrateLocalState, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, sidebarLines, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -1109,6 +1109,34 @@ describe("legacy layout migration", () => {
     writeFileSync(join(badDir, "jev-state.json"), "{corrupt")
     expect(migrateLegacyLayout(badDir, target)).toBe("skipped")
     rmSync(badDir, { recursive: true, force: true })
+  })
+
+  test("moves the cache and the local files into the opencode state root", () => {
+    const old = join(scratch, "old-home")
+    const home = join(scratch, "new-home")
+    mkdirSync(old, { recursive: true })
+    writeFileSync(join(old, "jev-data.json"), '{"rosterHash":"h"}')
+    const data = join(home, "jev-data.json")
+    expect(migrateDataFile(join(old, "jev-data.json"), data)).toBe("migrated")
+    expect(JSON.parse(readFileSync(data, "utf8")).rosterHash).toBe("h")
+    expect(migrateDataFile(join(old, "jev-data.json"), data)).toBe("skipped")
+
+    writeFileSync(join(old, "jev-approvals.json"), "{}")
+    writeFileSync(join(old, "jev-calls.jsonl"), '{"ts":"x"}\n')
+    writeFileSync(join(old, "jev-tui.log"), "log")
+    const target = {
+      approvals: join(home, "jev-approvals.json"),
+      grants: join(home, "jev-grants.json"),
+      log: join(home, "jev-calls.jsonl"),
+      tuiLog: join(home, "jev-tui.log"),
+    }
+    expect(migrateLocalState(old, target)).toBe("migrated")
+    expect(existsSync(target.approvals)).toBe(true)
+    expect(existsSync(target.grants)).toBe(false)
+    expect(readFileSync(target.log, "utf8")).toContain('"ts":"x"')
+    expect(migrateLocalState(old, target)).toBe("skipped")
+    rmSync(old, { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true })
   })
 })
 

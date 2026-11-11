@@ -137,7 +137,7 @@ export default {
             },
             region: {
               type: "string",
-              description: "Capture region, 'WxH' or 'X,Y WxH'. Omit for the full screen.",
+              description: "Capture region in image pixels, 'WxH' or 'X,Y WxH'. Omit for the full screen.",
             },
             delivery: {
               type: "string",

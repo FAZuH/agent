@@ -69,6 +69,7 @@ export const Contract = {
         properties: {
           ok: { type: "boolean" },
           delivered: { type: "boolean" },
+          duplicate: { type: "boolean" },
           error: { type: "string" },
         },
         required: ["ok", "delivered"],

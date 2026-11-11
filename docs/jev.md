@@ -528,20 +528,24 @@ supervises it.
 
 ## Where things live
 
-Three XDG homes, three syncabilities: config syncs between machines, data is
-expensive to rebuild so it stays local, the log is local history. Env
-overrides: `JEV_CONFIG_DIR`, `JEV_DATA_HOME`, `JEV_STATE_HOME`,
-`JEV_SECRET_DIR`. An old layout under `~/.config/fazuh-agent/data/` splits
-into these on first load after the upgrade.
+Two homes: the machine-local state root (`~/.local/state/opencode/jev/`) holds
+the settings, the optimizer cache, approvals, grants, and logs; the config root
+(`~/.config/fazuh-agent/`) holds the secrets and the default rules file. Env
+overrides: `OPENCODE_JEV_STATE_HOME`, `OPENCODE_JEV_CONFIG_DIR`,
+`OPENCODE_JEV_SECRET_DIR`. The older `JEV_STATE_HOME`, `JEV_DATA_HOME`,
+`JEV_CONFIG_DIR`, `JEV_SECRET_DIR`, and `JEV_DATA_DIR` still work as aliases.
+The old layouts under `~/.config/fazuh-agent/data/`,
+`~/.local/share/fazuh-agent/`, and `~/.local/state/fazuh-agent/` migrate once
+on the first load after the upgrade; the old files stay as the rollback path.
 
 | Path | What |
 | --- | --- |
-| `~/.config/fazuh-agent/data/jev-state.json` | every setting (machine-local), 0600 |
-| `~/.local/share/fazuh-agent/jev-data.json` | `skillCriteria` cache + `rosterHash` (local), 0600 |
-| `~/.local/state/fazuh-agent/jev-calls.jsonl` | one line per call: payload, answers, cost (local); capped at `logMax` lines, pruned to the tail |
-| `~/.local/state/fazuh-agent/jev-approvals.json` | the blocked calls waiting for a human, one entry per token (local, written by the server) |
-| `~/.local/state/fazuh-agent/jev-grants.json` | the approved tokens (local, written by the TUI, spent by the server) |
-| `~/.local/state/fazuh-agent/jev-tui.log` | TUI diagnostics, written on every panel open |
+| `~/.local/state/opencode/jev/jev-state.json` | every setting (machine-local), 0600 |
+| `~/.local/state/opencode/jev/jev-data.json` | `skillCriteria` cache + `rosterHash` (local), 0600 |
+| `~/.local/state/opencode/jev/jev-calls.jsonl` | one line per call: payload, answers, cost (local); capped at `logMax` lines, pruned to the tail |
+| `~/.local/state/opencode/jev/jev-approvals.json` | the blocked calls waiting for a human, one entry per token (local, written by the server) |
+| `~/.local/state/opencode/jev/jev-grants.json` | the approved tokens (local, written by the TUI, spent by the server) |
+| `~/.local/state/opencode/jev/jev-tui.log` | TUI diagnostics, written on every panel open |
 | `~/.config/fazuh-agent/secrets/jev_api_key` | the key, 0600 |
 | `plugins/jev/src/jev.ts` | the client, redaction, and answer validator |
 | `plugins/jev/src/state.ts` | the three homes, key resolution, the call log |
@@ -581,7 +585,7 @@ a bare string — the old shape was rejected by the host's payload validation
 before any JSON reached the parser. Three consecutive failures now also latch
 the auto path off for the process.
 
-**A panel does not open.** Read `~/.local/state/fazuh-agent/jev-tui.log`. It logs
+**A panel does not open.** Read `~/.local/state/opencode/jev/jev-tui.log`. It logs
 the TUI API shape and any error on every panel open. That log exists because this
 failure was once silent.
 

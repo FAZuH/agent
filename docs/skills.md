@@ -19,7 +19,6 @@ the category directory never reaches the installed name.
 - ⭐ **[orchestrate](../skills/orchestration/orchestrate/SKILL.md)**: Manage tasks, delegation, permissions, run mode, and subagent session reuse.
 - ⭐ **[workflows](../skills/orchestration/workflows/SKILL.md)**: Select the concrete workflow and subagent route for a task.
 - **[agent-talk](../skills/orchestration/agent-talk/SKILL.md)**: Message another running agent session over the OpenCode v2 API and read its answer.
-- **[forkflow](../skills/orchestration/forkflow/SKILL.md)**: Warm per-ticket delegation with OpenCode v2 forks.
 - **[session](../skills/orchestration/session/SKILL.md)**: Manage the feature session workspace, spec, tickets, deviations, context packet, and compaction checkpoint.
 - ⭐ **[finish](../skills/orchestration/finish/SKILL.md)**: End a session, archive its workspace, summarize, and route closeout.
 - **[self-improve](../skills/orchestration/self-improve/SKILL.md)**: Run the gated retrospective, then sweep the approved improvement backlog.
@@ -69,7 +68,7 @@ the category directory never reaches the installed name.
 
 ## Meta
 
-- ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Pick the installed skill, agent, plugin, command, or CLI for a task; search outward when nothing fits.
+- ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Pick the installed skill, agent, agent-facing plugin, or CLI for a task; search outward when nothing fits.
 - ⭐ **[update-fazuh-agent](../skills/meta/update-fazuh-agent/SKILL.md)**: Update the installed setup from the agent repository: pull, redeploy, verify.
 - **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` and `uninstall.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
@@ -90,7 +89,7 @@ These skills are loaded only when another skill or agent references them.
 
 ## OpenCode v2
 
-- **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, models, plugin authoring, plugin loading health, and session forking.
+- **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, plugin authoring, plugin loading health, and session forking. Model choice follows the host `AGENTS.md`.
 - **[ocv2-compact](../skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session and wait for its summary.
 
 Run `./sync.sh list` to see the deployed skills, and

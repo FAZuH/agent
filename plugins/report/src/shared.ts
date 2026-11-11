@@ -9,8 +9,6 @@
  * view, and the reply keeps only the answer.
  */
 
-import type { ContextStatus } from "./context-watch.ts"
-
 export type ReportKind = "post-task" | "prompt-user"
 
 export interface Hiccup {
@@ -399,6 +397,43 @@ export function reportIDOfForm(formID: string): string | undefined {
   return reportID || undefined
 }
 
+/** How much of a question body the chat form shows before it points at the record. */
+export const FORM_DESCRIPTION_MAX_LINES = 12
+export const FORM_DESCRIPTION_MAX_CHARS = 1200
+
+/**
+ * The host draws a form field's description as plain text with no height cap
+ * or scroll, so one long question body fills the chat card. Keep whole lines
+ * within a small budget and point at the full text in the Prompts section.
+ */
+export function formDescription(body: string | undefined): string | undefined {
+  const text = String(body ?? "").trim()
+  if (!text) return undefined
+  const kept: string[] = []
+  let used = 0
+  let cut = false
+  for (const line of text.split("\n")) {
+    if (kept.length >= FORM_DESCRIPTION_MAX_LINES) {
+      cut = true
+      break
+    }
+    const room = FORM_DESCRIPTION_MAX_CHARS - used
+    if (room <= 0) {
+      cut = true
+      break
+    }
+    if (line.length > room) {
+      kept.push(`${line.slice(0, Math.max(0, room - 1)).trimEnd()}…`)
+      cut = true
+      break
+    }
+    kept.push(line)
+    used += line.length + 1
+  }
+  if (cut) kept.push("… full text in the Prompts section")
+  return kept.join("\n")
+}
+
 /**
  * The inline form fields for a prompt record: one string field per question,
  * with the recommendation as the first option and free text still allowed.
@@ -406,10 +441,11 @@ export function reportIDOfForm(formID: string): string | undefined {
 export function formFieldsOf(report: Report): FormField[] {
   return (report.prompts?.questions ?? []).map((question, index) => {
     const recommendation = question.recommendation?.trim()
+    const description = formDescription(question.body)
     return {
       key: `q${index}`,
       title: question.title || `Question ${index + 1}`,
-      ...(question.body ? { description: question.body } : {}),
+      ...(description ? { description } : {}),
       type: "string" as const,
       custom: true,
       ...(recommendation
@@ -475,33 +511,4 @@ export function stampOf(report: Report, now = Date.now()): string {
 /** A stable id for one record: time plus a short random suffix. */
 export function reportID(now = Date.now()): string {
   return `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-/** A token count in one short word: 999, 394k, 1M. */
-export function compactCount(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return "?"
-  const round = (n: number) => Math.round(n * 10) / 10
-  if (value >= 1_000_000) return `${round(value / 1_000_000)}M`
-  if (value >= 1_000) return `${round(value / 1_000)}k`
-  return String(Math.round(value))
-}
-
-/**
- * The Context line: usage, then the band that will warn. A missing sample and
- * a running compaction say so instead of showing a stale percent.
- */
-export function contextLine(status: ContextStatus): string {
-  const warn =
-    status.warnTokens !== null
-      ? `warn ${compactCount(status.warnTokens)}`
-      : status.warnPercent !== null
-        ? `warn ${Math.round(status.warnPercent * 100)}%`
-        : "warn off"
-  if (status.compacting) return `compacting · ${warn}`
-  if (status.tokens === undefined) return `no sample yet · ${warn}`
-  const usage =
-    status.percent !== undefined && status.window !== undefined
-      ? `${Math.round(status.percent)}% · ${compactCount(status.tokens)}/${compactCount(status.window)}`
-      : `${compactCount(status.tokens)} tokens`
-  return `${usage} · ${warn}`
 }

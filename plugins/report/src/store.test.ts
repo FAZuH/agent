@@ -59,6 +59,17 @@ describe("appendReport / readReports", () => {
     expect(store.updateReport("ses_u", "missing", (item) => item)).toBeUndefined()
   })
 
+  test("claimReport wins once and then refuses", () => {
+    store.appendReport(report("c1", "ses_c", 1))
+    const taken = (item: any) => Boolean(item.answeredAt)
+    const claim = () =>
+      store.claimReport("ses_c", "c1", taken, (item) => ({ ...item, answeredAt: 7 }))
+    expect(claim()?.answeredAt).toBe(7)
+    expect(claim()).toBeUndefined()
+    expect(store.readReports("ses_c")[0]?.answeredAt).toBe(7)
+    expect(store.claimReport("ses_c", "missing", taken, (item) => item)).toBeUndefined()
+  })
+
   test("readMany merges sessions oldest first and caps the view", () => {
     store.appendReport(report("a1", "ses_a", 1))
     store.appendReport(report("a2", "ses_a", 3))

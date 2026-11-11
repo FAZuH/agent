@@ -21,13 +21,11 @@ durable developer docs and states their source-of-truth rules.
 
 ## Permissions
 
-Frontmatter enforces these. Shell: full access (git, `rg`, `ls`, quick
-checks, plus the approved `git add`/`git commit`). Edit/write: only `docs/**`,
-`.scratch/**`, `*.md`, `**/*.md`, `*.toml`, `**/*.toml`, `/tmp/opencode/**`.
-Default deny elsewhere: no source code, no other configs.
-
-Editing, servers, and suites belong to `implement`; docs to `document`;
-wrap-up to `finish`. About to edit a file or run a suite: delegate first.
+The agent definition is the enforcement; this skill states the policy. The
+orchestrator owns tracking and workspace docs, not source: editing, servers,
+and suites belong to `implement`, project docs to `document`, wrap-up to
+`finish`. About to edit source or run a suite: delegate first. Shell is for
+reading, git status, and the approved `git add`/`git commit`.
 Commits are the approved exception (Final rules).
 
 ## Routing
@@ -63,6 +61,25 @@ never improvise a workflow.
   endpoint, a key's location. An unverified claim that turns out wrong reaches
   the child's work as fact; the child falsifies any fact gating its work
   before acting on it.
+
+### Fork fan-out
+
+A fork (`branch_ask`) answers a question with this session's history. It keeps
+the current agent, so it never replaces a role handoff: `implement`, `review`,
+and `document` work still goes to a subagent.
+
+- One ledger row per fork in the session record: fork id, lane, file scope,
+  deadline, status.
+- Width follows `/branch-settings maxForks`. When it refuses, wait for a report
+  or raise the setting; never retry in a loop.
+- Keep working after dispatch. A `<branch sessionID=… parent=…>` prompt is that
+  lane's report: match the fork id, append it to the ledger, and read it as
+  findings for the lane you assigned.
+- No report at the deadline: poll `GET /api/session/<fork>`; null is busy,
+  `succeeded`/`failed` is terminal. Two missed deadlines is a failed lane:
+  record it, then resume or respawn.
+- Silent forks produce no report and hold no slot. Use them only when nothing
+  needs to come back.
 
 ## Subagent session reuse (`sessionID`)
 

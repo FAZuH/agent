@@ -16,7 +16,7 @@ unit needs another unit's result to start.
 START (work decomposes into N independent units)
   → SCOPE     name each lane and the files it may write
   → SPLIT     separate the lanes from the shared files
-  → DISPATCH  one worker per lane, all in flight
+  → DISPATCH  one worker per lane, all in flight (subagent, or warm fork)
   → GATE      a shared file: predecessor's deliverable + binding check
   → COLLECT   read each lane's report
   → MERGE     reconcile lanes that landed in one tree
@@ -30,7 +30,7 @@ START (work decomposes into N independent units)
 |---|---|---|---|
 | 1 | SCOPE | you | Name each lane and the files it may write. |
 | 2 | SPLIT | you | A file two lanes need is a shared file: it leaves the lanes and becomes a chain. |
-| 3 | DISPATCH | you | One worker per lane, all in flight. Each brief names its scope, its deliverable, and its run mode. |
+| 3 | DISPATCH | you | One worker per lane, all in flight. Each brief names its scope, its deliverable, and its run mode. A lane that needs this session's history: `branch_ask` (`## Fork lanes`). |
 | 4 | GATE | you | Hold a lane that needs a shared file until the predecessor's deliverable exists and the binding check passes. |
 | 5 | COLLECT | you | Read each lane's report. A lane whose scope narrowed stops and reports; you re-scope it. |
 | 6 | MERGE | you | Reconcile lanes that landed in one tree. |
@@ -69,6 +69,50 @@ resumes it, and it already holds the codebase map, the lane's conventions and
 its earlier measurements. **A lane's session is the cheapest warm context
 available**: a fresh spawn re-learns the codebase and re-reads the task from
 zero. @orchestrate owns the resume rules.
+
+## Fork lanes
+
+A lane whose work needs this session's history dispatches with `branch_ask`
+instead of a subagent. The fork inherits the transcript and the agent, so it
+needs no brief, and its report arrives as a separate prompt while the parent
+keeps working. A fork cannot change agent: role work (implement, review, docs)
+still goes to the matching subagent.
+
+1. SCOPE and SPLIT as above. Forks share the working directory, so one writer
+   per file still applies.
+2. `branch_ask` once per lane, with the ticket, the file scope, and the report
+   contract in the question. `silent: true` only when no report is wanted; a
+   silent fork is never counted or tracked.
+3. Record each fork id in the session record under `## Forks`:
+
+   | fork | lane | scope | mode | deadline | status |
+   |---|---|---|---|---|---|
+
+4. Keep working. Do not wait for the lane to start or finish.
+5. On a `<branch sessionID=… parent=…>` prompt: match the fork id to its row,
+   append the report, and check the contract. A report that ignores the
+   contract is a re-ask, not a merge input.
+6. No report at the deadline: poll `GET /api/session/<fork>`. `.data.outcome`
+   is null while busy, then `succeeded` or `failed`. Still busy gets one more
+   deadline; `failed`, or idle with no report, is a lane failure. Record it and
+   decide between a resume prompt and a fresh subagent.
+
+Report contract, placed in the `branch_ask` question:
+
+```text
+Report with branch_report, in this form:
+status: done | blocked | failed
+files: none | path (read) | path (changed)
+finding: what you concluded, one paragraph
+evidence: command + result, or file:line
+blockers: none | what stopped you
+If you cannot finish, still report with status: blocked.
+```
+
+`/branch-settings` owns the limits: `maxForks` (0 = unlimited) caps reporting
+forks in flight per parent, and `reportBatchMs` (default 1500, 0 = off)
+delivers reports that arrive inside the window as one prompt. A reporting fork
+holds its slot until its report arrives.
 
 ## Lanes in different trees
 

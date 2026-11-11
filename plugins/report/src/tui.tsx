@@ -1,23 +1,19 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Reports in the TUI: two sidebar sections, one slot per agent in each, plus
- * the context-watch status line. "Reports" holds post-task records, "Prompts"
- * holds prompt-user records, "Context Watch" reads the separate context-watch
- * plugin over RPC. A slot opens that agent's history; ←/→ move through it,
- * Enter answers an open prompt, and an unread slot blinks. The server owns
- * the records.
+ * Reports in the TUI: two sidebar sections, one slot per agent in each.
+ * "Reports" holds post-task records, "Prompts" holds prompt-user records.
+ * A slot opens that agent's history; ←/→ move through it, Enter answers an
+ * open prompt, and an unread slot blinks. The server owns the records.
  */
 import { SyntaxStyle, TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createSignal } from "solid-js"
 import { Contract } from "./rpc.ts"
-import { Contract as WatchContract, type ContextStatus } from "./context-watch.ts"
 import {
   ago,
   answersOfForm,
   attentionForSection,
   attentionOf,
-  contextLine,
   descriptionOf,
   formFieldsOf,
   formIDOf,
@@ -149,7 +145,26 @@ function AnswerDialog(props: {
   onCancel: () => void
 }) {
   const theme = props.ctx.theme
+  const dimensions = useTerminalDimensions()
   let textarea: any
+  let bodyScroll: any
+  const [scrollable, setScrollable] = createSignal(false)
+  // The body can be a whole report. Bound it so the textarea and the key hints
+  // stay on screen; PgUp/PgDn scroll the body, the full record is one Enter
+  // away in the history dialog.
+  const bodyRows = () => Math.max(5, Math.floor(dimensions().height * 0.28))
+  const measure = () => {
+    const check = () => {
+      if (!bodyScroll) return
+      setScrollable(bodyScroll.scrollHeight > bodyScroll.height)
+    }
+    for (const delay of [50, 250, 750]) setTimeout(check, delay)
+  }
+  createEffect(() => {
+    props.question.body
+    dimensions().height
+    measure()
+  })
 
   const submit = (mode: "steer" | "queue") => {
     const typed = typeof textarea?.plainText === "string" ? textarea.plainText : props.initial
@@ -169,6 +184,28 @@ function AnswerDialog(props: {
       { id: "report.answer.steer", title: "Steer the answer", bind: "enter", run: () => submit("steer") },
       { id: "report.answer.queue", title: "Queue the answer", bind: "ctrl+enter", run: () => submit("queue") },
       { id: "report.answer.cancel", title: "Cancel answer", bind: "escape", run: () => props.onCancel() },
+      {
+        id: "report.answer.scroll.up",
+        title: "Scroll the question up",
+        bind: "pageup",
+        run: (_input: any, event: any) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          bodyScroll?.scrollBy(-10)
+          return true
+        },
+      },
+      {
+        id: "report.answer.scroll.down",
+        title: "Scroll the question down",
+        bind: "pagedown",
+        run: (_input: any, event: any) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          bodyScroll?.scrollBy(10)
+          return true
+        },
+      },
     ],
   }))
 
@@ -176,11 +213,27 @@ function AnswerDialog(props: {
     <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <markdown
         syntaxStyle={syntaxFor(props.ctx)}
-        content={`**${props.question.title}**${props.question.body ? `\n\n${props.question.body}` : ""}`}
+        content={`**${props.question.title}**`}
         fg={theme.text.base}
         conceal
         internalBlockMode="top-level"
       />
+      <Show when={props.question.body}>
+        <scrollbox
+          ref={(element: any) => (bodyScroll = element)}
+          maxHeight={bodyRows()}
+          contentOptions={{ minHeight: 0 }}
+          scrollbarOptions={{ visible: false }}
+        >
+          <markdown
+            syntaxStyle={syntaxFor(props.ctx)}
+            content={props.question.body}
+            fg={theme.text.base}
+            conceal
+            internalBlockMode="top-level"
+          />
+        </scrollbox>
+      </Show>
       <textarea
         initialValue={props.initial}
         minHeight={1}
@@ -203,6 +256,11 @@ function AnswerDialog(props: {
         <span style={{ fg: theme.text.base }}>steer</span> <span style={{ fg: theme.text.muted }}>enter</span>   {" "}
         <span style={{ fg: theme.text.base }}>queue</span> <span style={{ fg: theme.text.muted }}>ctrl+enter</span>   {" "}
         <span style={{ fg: theme.text.base }}>cancel</span> <span style={{ fg: theme.text.muted }}>esc</span>
+        <Show when={scrollable()}>
+          {"   "}
+          <span style={{ fg: theme.text.base }}>scroll</span>{" "}
+          <span style={{ fg: theme.text.muted }}>pgup/pgdn</span>
+        </Show>
       </text>
     </box>
   )
@@ -233,7 +291,7 @@ function askAnswer(
       />
     ))
     try {
-      ctx.ui.dialog.set({ size: "medium" })
+      ctx.ui.dialog.set({ size: "xlarge", centered: true })
     } catch {}
   })
 }
@@ -675,27 +733,6 @@ function Section(props: {
   )
 }
 
-/** Context Watch: the title turns yellow over the band or while compacting. */
-function ContextStatusLine(props: { ctx: any; status: ContextStatus; marginTop?: number }) {
-  const theme = props.ctx.theme
-  const over = () => props.status.compacting || props.status.over
-  return (
-    <box marginTop={props.marginTop ?? 0}>
-      <box flexDirection="row" gap={1}>
-        <text fg={over() ? theme.text.feedback.warning.base : theme.text.base}>
-          <b>Context Watch</b>
-        </text>
-        <Show when={props.status.over}>
-          <text fg={theme.text.feedback.warning.base}> · over</text>
-        </Show>
-      </box>
-      <text fg={theme.text.muted} wrapMode="none" truncate>
-        {contextLine(props.status)}
-      </text>
-    </box>
-  )
-}
-
 function Sidebar(props: {
   ctx: any
   sessionID: string
@@ -703,8 +740,6 @@ function Sidebar(props: {
   setView: any
   list: () => Report[]
   reload: (sessionID: string) => void
-  refreshContext: (sessionID: string) => void
-  context: () => ContextStatus | undefined
   onAnswer: (report: Report) => void
   onRead: (report: Report) => void
   onDismiss: (report: Report) => void
@@ -713,10 +748,6 @@ function Sidebar(props: {
     const sessionID = props.sessionID
     if (!sessionID) return
     props.reload(sessionID)
-    props.refreshContext(sessionID)
-    // The RPC event is the fast path; the poll covers a client that misses it.
-    const timer = setInterval(() => props.refreshContext(sessionID), 5_000)
-    onCleanup(() => clearInterval(timer))
   })
   const latestOf = (group: ReportGroup) => group.reports[group.reports.length - 1]!
   const needs = (group: ReportGroup, kind: "report" | "prompt") =>
@@ -765,12 +796,8 @@ function Sidebar(props: {
   const sidebarShown = () => props.view?.sidebar !== false
   const reportsShown = () => props.view?.showReports !== false
   const promptsShown = () => props.view?.showPrompts !== false
-  const watch = () => props.context()
-  const contextShown = () => props.view?.showContext !== false && watch() !== undefined
   const hasContent = () =>
-    (reportsShown() && reports().length > 0) ||
-    (promptsShown() && prompts().length > 0) ||
-    contextShown()
+    (reportsShown() && reports().length > 0) || (promptsShown() && prompts().length > 0)
   return (
     <Show when={sidebarShown() && hasContent()}>
       <box>
@@ -827,9 +854,6 @@ function Sidebar(props: {
             onDismiss={props.onDismiss}
           />
         </Show>
-        <Show when={contextShown()}>
-          <ContextStatusLine ctx={props.ctx} status={watch()!} marginTop={1} />
-        </Show>
       </box>
     </Show>
   )
@@ -842,7 +866,9 @@ export default {
     if (typeof ctx.client?.rpc !== "function") return
     const rpc = ctx.client.rpc(Contract)
     const [reports, setReports] = createSignal<Record<string, Report[]>>({})
-    const [contexts, setContexts] = createSignal<Record<string, ContextStatus | undefined>>({})
+    /** Disposers, collected as each subscription is made. A name that no
+     * longer exists cannot throw before the try and strand every listener. */
+    const stops: Array<(() => void) | undefined> = []
 
     const routedID = (): string | undefined => {
       const route = ctx.ui.router.current()
@@ -858,50 +884,22 @@ export default {
         .catch(() => {})
     }
 
-    // Context-watch is a separate plugin. Its RPC is optional: without it the
-    // Context section stays off and the rest of the sidebar is unaffected.
-    const watch = (() => {
-      try {
-        return ctx.client.rpc(WatchContract)
-      } catch {
-        return undefined
-      }
-    })()
-    const refreshContext = (sessionID: string) => {
-      if (!watch) return
-      try {
-        void watch
-          .status({ sessionID })
-          .then((result: any) => {
-            if (result?.ok && result.status) {
-              setContexts((previous) => ({ ...previous, [sessionID]: result.status }))
-            }
-          })
-          .catch(() => {})
-      } catch {}
-    }
-    let offContext: (() => void) | undefined
-    try {
-      offContext = watch?.events.on("changed", (event: any) => {
-        const sessionID = String(event?.data?.sessionID ?? "")
-        const status = event?.data?.status
-        if (sessionID && status) {
-          setContexts((previous) => ({ ...previous, [sessionID]: status }))
-        }
-      })
-    } catch {}
-
     // A report or answer written anywhere in the family refetches the view,
     // and a fresh prompt record opens as the host's inline form.
-    const off = rpc.events.on("changed", (event: any) => {
-      const sessionID = routedID()
-      if (sessionID) reload(sessionID)
-      const report = event?.data?.report
-      if (report?.kind === "prompt-user") void showForm(report)
-    })
+    stops.push(
+      rpc.events.on("changed", (event: any) => {
+        const sessionID = routedID()
+        if (sessionID) reload(sessionID)
+        const report = event?.data?.report
+        if (report?.kind === "prompt-user") void showForm(report)
+      }),
+    )
 
-    /** Prompt records already offered as an inline form, by report id. */
-    const shownForms = new Set<string>()
+    /** Prompt records already offered as an inline form, by report id.
+     * Process-global: a stale instance left by a failed teardown must not
+     * create the same form a second time. */
+    const formsKey = Symbol.for("fazuh.report.forms")
+    const shownForms: Set<string> = ((globalThis as any)[formsKey] ??= new Set())
     let warnedNoForm = false
 
     /**
@@ -943,21 +941,25 @@ export default {
 
     // The form is a second way into the same answer path. Dismissing it with
     // esc is the defer action: the record stays unanswered in the list.
-    const offReplied = ctx.data?.on?.("form.replied", (event: any) => {
-      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
-      if (!reportID) return
-      const sessionID = String(event?.data?.sessionID ?? "")
-      const answers = answersOfForm(event?.data?.answer)
-      if (!sessionID || !Object.keys(answers).length) return
-      void deliver(sessionID, reportID, answers, "steer")
-    })
-    const offCancelled = ctx.data?.on?.("form.cancelled", (event: any) => {
-      const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
-      if (!reportID) return
-      const sessionID = String(event?.data?.sessionID ?? "")
-      if (sessionID) void rpc.defer({ sessionID, reportID }).catch(() => {})
-      ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
-    })
+    stops.push(
+      ctx.data?.on?.("form.replied", (event: any) => {
+        const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+        if (!reportID) return
+        const sessionID = String(event?.data?.sessionID ?? "")
+        const answers = answersOfForm(event?.data?.answer)
+        if (!sessionID || !Object.keys(answers).length) return
+        void deliver(sessionID, reportID, answers, "steer")
+      }),
+    )
+    stops.push(
+      ctx.data?.on?.("form.cancelled", (event: any) => {
+        const reportID = reportIDOfForm(String(event?.data?.id ?? ""))
+        if (!reportID) return
+        const sessionID = String(event?.data?.sessionID ?? "")
+        if (sessionID) void rpc.defer({ sessionID, reportID }).catch(() => {})
+        ctx.ui.toast.show({ message: "Prompt deferred to the Prompts list.", variant: "info" })
+      }),
+    )
 
     async function read(report: Report) {
       try {
@@ -992,6 +994,8 @@ export default {
         const result: any = await rpc.answer({ sessionID, reportID, answers, mode })
         if (result?.error && !result?.delivered) {
           ctx.ui.toast.show({ message: `Answers saved, but ${result.error}`, variant: "warning" })
+        } else if (result?.duplicate) {
+          ctx.ui.toast.show({ message: "Already answered; the agent has it.", variant: "info" })
         } else {
           ctx.ui.toast.show({
             message: `Answers ${mode === "queue" ? "queued for" : "steered to"} ${sessionTitle(ctx, sessionID)}.`,
@@ -1155,7 +1159,6 @@ export default {
         { key: "sidebar", title: "Sidebar", note: "master" },
         { key: "showReports", title: "Reports", note: "section" },
         { key: "showPrompts", title: "Prompts", note: "section" },
-        { key: "showContext", title: "Context Watch", note: "section" },
       ] as const
       for (;;) {
         const picked = await ctx.ui.dialog
@@ -1185,7 +1188,6 @@ export default {
         sidebar: true,
         showReports: true,
         showPrompts: true,
-        showContext: true,
       },
     })
 
@@ -1199,8 +1201,6 @@ export default {
           setView={setView}
           list={() => reports()[input.sessionID] ?? []}
           reload={reload}
-          refreshContext={refreshContext}
-          context={() => contexts()[input.sessionID]}
           onAnswer={(report) => void answer(report)}
           onRead={(report) => void read(report)}
           onDismiss={(report) => void dismiss(report)}
@@ -1277,7 +1277,7 @@ export default {
     })
 
     return () => {
-      for (const stop of [off, offReplied, offCancelled, offContext]) {
+      for (const stop of stops) {
         try {
           stop?.()
         } catch {}

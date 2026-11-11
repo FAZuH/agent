@@ -18,8 +18,7 @@
 
 - OpenCode v2 on your `PATH`.
 - `git`, `cargo`, `npx`, `rsync`, `python3`, `jq`, and `gh`. The `jq` scripts
-  back the OpenCode v2 and forkflow skills; `gh` backs every PR, issue, and
-  release skill.
+  back the OpenCode v2 skills; `gh` backs every PR, issue, and release skill.
 - `ffmpeg` only for the bonus install.
 
 `install.sh` checks these commands. It never installs operating-system packages
@@ -80,6 +79,9 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
   `simple-english`.
 - [FAZuH/bgrun](https://github.com/FAZuH/bgrun): the `bgrun` skill and the
   `bgrun` CLI, which runs a command as a systemd user unit.
+- [FAZuH/optmem-rs](https://github.com/FAZuH/optmem-rs): the `memo` memory CLI
+  and its `optmem-mcp` server, a Rust port of OptMem. `install.sh` initializes
+  the store on the first run.
 
 Add `-b` to also install the bonus items: `anti-slop` for filtering generic AI
 output, `ffmpeg-skill` for editing media locally, and REA for reverse
@@ -113,7 +115,7 @@ JavaScript, Electron, and .NET inspection need none of them.
 ### Pinned versions
 
 `install.sh` pins everything it fetches outside the `skills` CLI: the CLI's and
-REA's npm versions, and the bgrun and ffmpeg-skill commits. The
+REA's npm versions, and the bgrun, optmem-rs, and ffmpeg-skill commits. The
 pin block sits at the top of `install.sh`. To move one, load the `update-pins`
 skill: it checks each remote, shows the diff between the pinned and current
 commit, and only edits after you approve. `uninstall.sh` mirrors the npm pins
@@ -129,8 +131,8 @@ because a newer CLI cannot remove what it did not write.
 The default removes the sync-managed skills, agents, plugins, commands, and
 scripts, and uninstalls the local `agent` Cargo package. It keeps OpenCode,
 the external skills, operating-system packages, and the checkout.
-Add `--external-packages` to remove `bgrun` too, or `--external-skills` to
-remove the external skills listed under Install.
+Add `--external-packages` to remove `bgrun` and OptMem too, or
+`--external-skills` to remove the external skills listed under Install.
 
 ## Usage
 

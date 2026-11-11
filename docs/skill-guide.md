@@ -88,15 +88,13 @@ Give the work its own branch, workspace, and context.
 flowchart LR
   N[Decided ticket] --> S[session opens the workspace]
   S --> W[worktree]
-  W --> F[forkflow]
-  F --> C[session context packet]
+  W --> C[session context packet]
   C --> B[Build]
 ```
 
 - **session**: the `.scratch/` workspace: spec, tickets, deviations, checkpoints, context packet.
 - **scratch**: the workspace layout and lifecycle those files follow.
 - **worktree**: an isolated branch in a separate worktree, then its finish and cleanup.
-- **forkflow**: a warm fork of a finished session, so the child already has the context.
 
 ### Build
 
@@ -229,7 +227,6 @@ flowchart LR
 - **notes**: durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behaviour.
 - **skill-doctor**: audit skill links, name collisions, and drift from the source.
 - **external-skills**: install, update, or remove upstream-owned skills.
-- **hindsight-docs**: the memory system's documentation; the recall/retain habit lives in global-instruction.
 - **scheduled-task**, **scheduled-agent**: systemd user timers and the restricted agents they run.
 - **omarchy-plugin-install**: install an Omarchy shell plugin end to end.
 - **simple-english**: plain, layman-readable prose for readers outside the field.

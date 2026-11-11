@@ -327,6 +327,8 @@ export default Plugin.define({
           .answer({ sessionID: report.sessionID, reportID: report.id, answers, mode })
         if (result?.error && !result?.delivered) {
           ctx.toast.show({ title: "Answers saved", description: result.error, variant: "error" })
+        } else if (result?.duplicate) {
+          ctx.toast.show({ title: "Already answered", description: "The agent has this answer.", variant: "info" })
         } else {
           ctx.toast.show({
             title: mode === "queue" ? "Answers queued" : "Answers steered",

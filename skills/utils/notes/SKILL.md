@@ -14,7 +14,7 @@ changing that system. Create one when the task produces reusable knowledge.
 
 ## OpenCode v2 findings
 
-OpenCode v2 findings live in Hindsight bank `coding-agent::faz-lab`, tagged `topic:opencode-v2` (migrated from the retired `ocv2-findings.md` note). `recall` them via the hindsight MCP; never keep a second copy in a note.
+OpenCode v2 findings live in OptMem (migrated from the retired `ocv2-findings.md` note). `memo recall` them by keyword; never keep a second copy in a note.
 
 ## Write a note
 

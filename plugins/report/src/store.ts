@@ -7,16 +7,32 @@
  * half-written file must never be observable. Write a sibling temp file,
  * then rename it over the old one.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
 import type { Report } from "./shared.ts"
 
+const OLD_HOME = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "fazuh-agent")
 const STATE_HOME =
+  process.env.OPENCODE_REPORT_STATE_HOME ??
   process.env.REPORT_STATE_HOME ??
-  join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "fazuh-agent")
+  join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "report")
 export const REPORTS_DIR = join(STATE_HOME, "reports")
+
+// One-shot move from the old shared root, like the other plugins. The old
+// directory stays as the rollback path. Skipped when an override is set, so a
+// test can never pull the live reports into its scratch home.
+if (
+  !process.env.OPENCODE_REPORT_STATE_HOME &&
+  !process.env.REPORT_STATE_HOME &&
+  !existsSync(REPORTS_DIR) &&
+  existsSync(join(OLD_HOME, "reports"))
+) {
+  try {
+    cpSync(join(OLD_HOME, "reports"), REPORTS_DIR, { recursive: true })
+  } catch {}
+}
 
 /** How many reports one session keeps. The views list the newest first. */
 export const REPORTS_LIMIT = 50
@@ -76,6 +92,28 @@ export function updateReport(
   const index = list.findIndex((report) => report.id === reportID)
   if (index === -1) return undefined
   const next = patch(list[index]!)
+  list[index] = next
+  writeReports(sessionID, list)
+  return next
+}
+
+/**
+ * Apply `patch` to one report only when `taken` says nobody else has already,
+ * in one synchronous read and write. Undefined when the report is gone or was
+ * taken first, so a repeated answer cannot deliver the same text twice.
+ */
+export function claimReport(
+  sessionID: string,
+  reportID: string,
+  taken: (report: Report) => boolean,
+  patch: (report: Report) => Report,
+): Report | undefined {
+  const list = readReports(sessionID)
+  const index = list.findIndex((report) => report.id === reportID)
+  if (index === -1) return undefined
+  const current = list[index]!
+  if (taken(current)) return undefined
+  const next = patch(current)
   list[index] = next
   writeReports(sessionID, list)
   return next

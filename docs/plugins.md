@@ -68,7 +68,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   TUI only: the picker needs a dialog, and one name has one owner.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
-  live in `skillCriteria` in `~/.local/share/fazuh-agent/jev-data.json`, keyed
+  live in `skillCriteria` in `~/.local/state/opencode/jev/jev-data.json`, keyed
   by description hash.
 - **`/jev-log`**: recent calls: what was sent, what came back, what it cost.
   Skipped-hook lines read `<feature> [on <tool>] skipped: <reason>`; a regular
@@ -237,21 +237,27 @@ Backends, chosen per action:
 
 | Action | Backend | Reaches |
 |---|---|---|
-| screenshots | `grim` | every window, every monitor |
+| screenshots | `grim` | every window, every monitor; `-T` captures a toplevel by its handle |
 | windows, focus | `hyprctl` | every window |
 | pointer | `ydotool`, closed loop | every window; needs `ydotoold` |
 | keyboard | `wtype` then XTest | every window |
 
 Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
 `desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
-`desktop_type`, `desktop_key`. Coordinates are absolute desktop pixels, the
-same ones `desktop_screenshot` returns, so a click can be aimed straight off a
-screenshot without conversion.
+`desktop_type`, `desktop_key`. `desktop_click` takes image pixels, the same
+coordinates `desktop_screenshot` returns. A full-screen shot needs no offset;
+a region or window shot reports the offset to add. Capture is independent of
+workspace, focus and stacking. Input is not: the target window must be on the
+active workspace, mapped and uncovered, or the click lands on whatever is on
+top. `desktop_screenshot window` captures by foreign-toplevel handle even on
+another workspace or behind another window, and a partly off-screen window is
+captured only where it exists. `desktop_focus` cannot raise a window that a
+special workspace is covering.
 
-`desktop_focus` accepts an address from `desktop_windows`, `class:NAME`,
-`title:SUBSTR`, or a bare class/title substring; exact class beats a title
-mention. `desktop_key` takes a keysym or a chord (`Return`, `ctrl+shift+t`,
-`super+1`).
+Hyprland has no pointer-button dispatcher. `sendshortcut` accepts `mouse:272`
+and a window target, but its `pass` path puts pointer focus at surface-local
+`(1,1)` before pressing, so it clicks only the window's top-left corner. That
+is not a coordinate click; the visibility requirement stands.
 
 Pointer input needs `ydotool` and a running `ydotoold`; `/dev/uinput` must be
 writable by the user. XTest is not a pointer backend: it moves XWayland's own
@@ -268,18 +274,20 @@ confirm the move was not still in flight. A click is only issued after that
 confirmation; if the pointer does not arrive, the call reports where it
 stopped and presses nothing.
 
-Screenshot pixels are not layout pixels: the monitor sits at `332,-68`, so a
-layout point is `screenshot + layoutOrigin()`. That offset is read from
-`hyprctl monitors`, not assumed.
+Captures ask grim for layout-scale pixels (`-s`), so an image pixel is the
+coordinate `desktop_click` takes. Hyprland's layout origin is not the image
+origin (this monitor sits at `332,-68`); the plugin adds that offset for grim
+internally and reports it for region and window captures. The caller never adds
+it.
 
 None of this makes a coordinate meaningful. The screen can change between the
 screenshot that suggested a point and the click — an app going fullscreen
 hides the bar — so take a fresh screenshot immediately before clicking and
 check that the thing under the point is still the thing meant.
 
-Wayland window addresses are not X11 window ids, so the plugin tells which
-client is XWayland by matching class and title against the X11 window list
-(`src/xtest.py windows`).
+Hyprland's client list marks XWayland clients directly (`xwayland`), so no
+extra X11 query is needed. `src/xtest.py` is only the keyboard fallback for
+those clients; pointer input always goes through ydotool.
 
 No dependencies beyond the system binaries. Tests: `bun test
 plugins/desktop-control`.
@@ -299,6 +307,9 @@ target with the image attached.
 
 - Delivery defaults to `queue`; `--steer` interrupts the target mid-turn.
 - Full screen by default; `--window` captures the focused window.
+- `--region` takes image pixels, `WxH` or `X,Y WxH`, and is converted to layout
+  coordinates before grim runs. Shots are captured at layout scale, the same
+  pixels desktop-control reports.
 - `--ask TEXT` overrides the instruction for one trigger.
 - When the turn ends, the answer is copied to the clipboard with `wl-copy`
   (`xclip`/`xsel` fallback). `--no-copy` skips it for one trigger.
@@ -340,8 +351,10 @@ tools and keep the printed block as a fallback for hosts without the plugin.
   of writing a second report that repeats the first.
 
 Records are one JSON file per session under
-`${XDG_STATE_HOME:-~/.local/state}/fazuh-agent/reports/`, newest last,
-capped at 50; `REPORT_STATE_HOME` overrides the root. The server writes them
+`${XDG_STATE_HOME:-~/.local/state}/opencode/report/reports/`, newest last,
+capped at 50; `OPENCODE_REPORT_STATE_HOME` overrides the root (the older
+`REPORT_STATE_HOME` still works). Reports move there from the old
+`fazuh-agent/reports/` on the first load. The server writes them
 atomically and exposes `report.list({sessionIDs})`, `report.read`,
 `report.answer`, `report.dismiss`, `report.defer`, and a `changed` event over
 RPC. Views pass the routed session's family
@@ -369,6 +382,12 @@ description, and its relative age (the update age when revised), colors keybinds
 apart from their descriptions,
 and grows with `↑/↓`, `PgUp/PgDn`, and `Home/End` scrolling up to about half
 the terminal height; the scroll hint appears only when the record overflows.
+A fresh prompt also opens as the host's inline form. The plugin caps that
+form's question body at 12 lines and 1,200 characters and appends a pointer
+to the Prompts section, because the host card has no height cap or scroll.
+The answer dialog centers vertically and bounds the question body to about a
+quarter of the terminal height, with `PgUp`/`PgDn` scrolling, so the answer
+field and key hints stay visible under a long question.
 Each section shows at most five slots: slots needing attention first
 (unread reports, unanswered prompts), then the rest, each group newest first.
 The pickers list every slot. The number beside a section header counts only
@@ -379,15 +398,9 @@ when the key was pressed so reading or dismissing the shown entry does not
 remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
 same histories by picker; `/read-reports` marks every unread report in the
 session family read, and `/dismiss-prompts` dismisses every prompt still
-awaiting an answer. **Context Watch** reads the separate
-`opencode-context-watch` plugin over its `context-watch.status` RPC: the line
-shows the percent, the tokens over the model window, and the active warn band
-(for example `39% · 394k/1M · warn 300k`), with the title yellow over the
-band or while a session compacts. It asks on session switch, follows the
-plugin's `changed` event, and polls the same call every 5 seconds as a
-fallback. The section stays hidden when
-context-watch is not installed. `/report-settings`
-toggles the whole sidebar and each section (Reports, Prompts, Context Watch);
+awaiting an answer. Context usage is not drawn here: the
+`opencode-context-watch` plugin renders its own sidebar section. `/report-settings`
+toggles the whole sidebar and each section (Reports, Prompts);
 the flags persist in the `report-view-v2` view store, and the existing
 collapse states stay separate. The GUI half
 mirrors the two sections, dots, blink, older/newer, and Answer buttons in a

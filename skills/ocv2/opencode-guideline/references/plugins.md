@@ -182,7 +182,7 @@ opencode2 api get /api/command    # which commands actually registered
 
 Then **drive a real call** through the HTTP API against a free model and read
 the output. Schema-valid is not correct; only a real call shows the decision.
-Pick a free model per `references/models.md`.
+Pick a free model per the host `AGENTS.md` `## ocv2-models` section.
 
 A stub `ctx` is a genuine testing tool and it caught several real bugs here:
 it exercises `setup`, tool `execute`, hook dispatch, command registration, and
@@ -207,4 +207,4 @@ dialog lifecycle without a TUI. It cannot check pixels, and any
 
 ## Memory
 
-The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.
+The OptMem memory contract lives in the umbrella SKILL.md, Shared facts.

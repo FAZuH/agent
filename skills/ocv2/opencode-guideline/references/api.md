@@ -100,4 +100,4 @@ Gotchas 1 to 3 (service vs plain serve, project discovery and location, the plug
 
 ## Memory
 
-The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.
+The OptMem memory contract lives in the umbrella SKILL.md, Shared facts.

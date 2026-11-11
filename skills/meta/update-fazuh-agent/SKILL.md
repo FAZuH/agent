@@ -67,9 +67,10 @@ fall back to a guessed directory.
    (version pins moved upstream with the pull), `scripts/` (Rust workspace, needs
    checks).
 
-7. **Run the repository checks** when the pull touched `scripts/`, `plugins/`,
-   or the Rust workspace: `./dev.sh all` from the checkout. Fix nothing here;
-   report a red run and let the user decide.
+7. **Run the read-only test check** when the pull touched `scripts/`,
+   `plugins/`, or the Rust workspace: `./dev.sh test` from the checkout. `all`
+   also formats and auto-fixes. Fix nothing here; report a red run and let the
+   user decide.
 
 8. **Redeploy the configuration**, the step that makes the update real:
 
