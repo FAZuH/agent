@@ -49,6 +49,33 @@ Rules:
 
 Done when: the scope and exclusions are fixed and can be printed in the report.
 
+## Item IDs
+
+Every kept finding carries one ID, so the user can name it in a reply without
+quoting the path.
+
+| Prefix | List |
+|---|---|
+| `B` | Confident / Blocker |
+| `M` | Confident / Major |
+| `L` | Confident / Minor |
+| `D` | Needs your call |
+
+`L`, not `m`, so it cannot be misread as `M`.
+
+Rules:
+
+- Number within the namespace in report order: `B1`, `M1`, `M2`, `L1`, `D1`.
+- Allocate once, when the report is written. Never renumber, never reuse.
+- A finding raised after the report takes the next free number in its namespace.
+- A withdrawn finding keeps its ID, marked `withdrawn: <reason>`.
+- One root cause with many sites is one ID. Add `.a`, `.b` to the site only when
+  that site needs its own fix.
+- A ticket or TODO that comes from a finding names its ID (`M2: ...`), so the
+  report and the later work stay linked.
+
+Done when: every kept finding has exactly one ID and no ID repeats.
+
 ## 1. Establish the baseline
 
 - Read the manifests and CI to find the commands the repo actually defines:
@@ -119,9 +146,10 @@ Rules:
   findings are dropped in step 3.
 - When the same evidence supports a certain defect and an uncertain fix, list
   the defect as Confident and the decision separately.
+- Triage fixes the namespace: `D`, or confident pending the level in step 5.
 
-Done when: every kept finding sits in exactly one list, and every discussion
-item carries a question.
+Done when: every kept finding sits in exactly one list, every item carries its
+namespace, and every discussion item carries a question.
 
 ## 5. Classify severity
 
@@ -137,7 +165,8 @@ blocker. Within a level, order by blast radius: live paths first.
 Severity applies to Confident findings. A discussion item may carry a
 provisional level, but it is not counted in the totals.
 
-Done when: every confident finding takes its level from one of these rows.
+Done when: every confident finding takes its level from one of these rows, which
+fixes its `B`, `M`, or `L` prefix.
 
 ## 6. Report
 
@@ -145,12 +174,12 @@ Done when: every confident finding takes its level from one of these rows.
 Scope: <path or "whole repo"> @ <sha>
 Checks: <commands and result>
 Excluded: <paths and patterns>
-Findings: <N> confident (blocker B, major M, minor m), <D> for your call
+Findings: <N> confident (<B> blocker, <M> major, <L> minor), <D> for your call
 
 ## Confident
 
 ### Blocker
-- `path:line` defect. Consequence. Smallest fix.
+- **B1** `path:line` defect. Consequence. Smallest fix.
 
 ### Major
 ...
@@ -159,8 +188,8 @@ Findings: <N> confident (blocker B, major M, minor m), <D> for your call
 ...
 
 ## Needs your call
-- `path:line` <question>. Evidence. Options: <A and its cost>; <B and its cost>.
-  (provisional: <level>, because <reason>.)
+- **D1** `path:line` <question>. Evidence. Options: <A and its cost>;
+  <B and its cost>. (provisional: <level>, because <reason>.)
 
 ## Coverage
 Read: <top-level areas>.
@@ -175,13 +204,16 @@ Rules:
 - Discussion items are not severity-grouped: order by blast radius, one question
   per bullet, options with their costs.
 - One root cause with many sites is one finding listing the sites.
+- Every bullet starts with its ID, numbered in report order within its list.
+- A reply that names IDs refers to this report: resolve it and do not re-sweep.
+  An ID that is not in the report: ask, never guess.
 - Nothing found in a class or list: say so. An empty report is a valid result;
   never invent a finding to fill a section.
 - Report only. Fixes are listed, not applied. Turn them into tickets or a
   `.scratch/` spec only when asked.
 
 Done when: the report accounts for every kept finding in both lists and every
-swept class.
+swept class, each bullet carrying exactly one unique ID.
 
 ## Boundaries
 
@@ -191,7 +223,7 @@ swept class.
 - A generated or vendored tree stays out of scope even when it looks broken;
   name it as excluded.
 - The report is the deliverable. Fixing starts a new task with its own scope and
-  approval.
+  approval. An ID-named reply sets that task's scope; it is not a new sweep.
 
 ## Dependency graph
 
