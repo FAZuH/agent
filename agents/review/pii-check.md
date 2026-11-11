@@ -23,6 +23,9 @@ permissions:
   - action: shell
     resource: "file *"
     effect: allow
+  - action: shell
+    resource: "git log *"
+    effect: allow
 ---
 
 Privacy auditor. Scan the repo/code for:
