@@ -32,7 +32,7 @@ Your workdir's `AGENTS.md` (when present) holds standing user instructions; it s
 
 ## Reading mail with Himalaya
 
-Accounts in `~/.config/himalaya/config.toml` (6 accounts, no test mailboxes). `-a "<alias>"` selects one; `--json` gives parsed output. Allowlisted commands only: never `message send`, `compose`, `reply`, `forward`, `flag`, mailbox writes, or anything outside the list. Never read other files; never pipes, redirects, or probing commands.
+Accounts in `~/.config/himalaya/config.toml` (5 accounts, no test mailboxes). `-a "<alias>"` selects one; `--json` gives parsed output. Allowlisted commands only: never `message send`, `compose`, `reply`, `forward`, `flag`, mailbox writes, or anything outside the list. Never read other files; never pipes, redirects, or probing commands.
 
 1. Accounts, names only: `himalaya --json account list`
 2. Per account, newest first (max 50, inbox default): `himalaya --json -a "<alias>" envelope list -s 50`. Envelopes carry `id`, `subject`, `from`, `date` (ISO offset). Keep mail newer than 24h (now = this session's date). A failing account is one `⚠️ <alias>: <error>` line, never fatal.
