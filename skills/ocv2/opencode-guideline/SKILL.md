@@ -9,14 +9,14 @@ description: >-
 
 # opencode-guideline
 
-The OpenCode v2 operations reference. Five topics, one skill: the HTTP API, models, plugin authoring, plugin loading health, and session forking and control.
+The OpenCode v2 operations reference. Four references, one skill: the HTTP API, plugin authoring, plugin loading health, and session forking and control. Model choice is machine-specific: follow the host `AGENTS.md` `## ocv2-models` section.
 
 ## Routing
 
 | Task | Read |
 |---|---|
 | Call the HTTP API, find its docs | `references/api.md` |
-| Pick a free model, switch model, recover from 402 | `references/models.md` |
+| Pick a free model, switch model, recover from 402 | the host `AGENTS.md` `## ocv2-models` section; switch via `references/sessions.md` |
 | Write or change a plugin | `references/plugins.md` |
 | Diagnose plugin loading | `references/pluginhealth.md` |
 | Fork and control a session | `references/sessions.md` |
@@ -33,7 +33,7 @@ All scripts live in `scripts/`. They wrap `opencode2 api`, put the result on std
 | `scripts/oc-plugin-load.mjs` | Load plugins out of process, report what they register | `references/pluginhealth.md` |
 | `scripts/oc-plugins.sh` | Plugin load status table, exit 1 when a plugin failed | `references/pluginhealth.md` |
 | `scripts/oc-prompt.sh` | Send a prompt to a session, print the message id | `references/sessions.md` |
-| `scripts/oc-set.sh` | Switch agent and/or model on a session | `references/sessions.md`, `references/models.md` |
+| `scripts/oc-set.sh` | Switch agent and/or model on a session | `references/sessions.md` |
 | `scripts/oc-status.sh` | One-line JSON status of a session | `references/sessions.md` |
 | `scripts/oc-wait.sh` | Poll a session until the turn ends | `references/sessions.md` |
 

@@ -182,7 +182,7 @@ opencode2 api get /api/command    # which commands actually registered
 
 Then **drive a real call** through the HTTP API against a free model and read
 the output. Schema-valid is not correct; only a real call shows the decision.
-Pick a free model per `references/models.md`.
+Pick a free model per the host `AGENTS.md` `## ocv2-models` section.
 
 A stub `ctx` is a genuine testing tool and it caught several real bugs here:
 it exercises `setup`, tool `execute`, hook dispatch, command registration, and
