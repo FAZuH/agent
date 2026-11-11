@@ -28,7 +28,6 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
    - `branch_ask` forks this session to answer a side question; `branch_report`
      sends the answer back.
    - `post_task` and `prompt_user` record a task report or a user prompt.
-   - Desktop tools when the task acts on the screen; see Plugins below.
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
    subagent routing and workflow selection; load them when the task is control,
    tracking, or multi-agent work rather than doing.
@@ -136,9 +135,6 @@ agent tools and are not listed here.
   model.
 - **report**: `post_task` and `prompt_user` tools; the reports render in the
   TUI sidebar and the desktop Reports panel, not in the reply.
-- **desktop-control**: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
-  `desktop_click`, `desktop_type`, `desktop_key`, `desktop_move`,
-  `desktop_scroll`, `desktop_drag`.
 - **desktop-ask**: `desktop_ask_arm` and `desktop_ask_disarm` pick the session
   that receives the screenshot keybind.
 
