@@ -273,7 +273,7 @@ npx::the skills CLI
 rsync::sync.sh
 python3::install.sh, skill-doctor
 zele:npm i -g zele:the fazuh-email skill and mail search
-jq:pacman -S jq:the ocv2 and forkflow scripts
+jq:pacman -S jq:the ocv2 scripts
 gh:pacman -S github-cli:every PR, issue, and release skill
 PACKAGES
 }
