@@ -13,8 +13,8 @@ Feature, ticket/spec/plan, or bug fix.
 
 ```
 START (user request: feature / ticket / bug fix)
-  → RECALL    OptMem: `memo recall` decisions/outcomes relevant to the request
-      │  memo missing? → note it, continue without memory
+  → RECALL    hindsight memory: recall decisions/outcomes relevant to the request
+      │  server down? → note it, continue without memory
   → PLAN      create a plan in Plan mode
   → GRILL     cover plan gaps
   → PERSIST   session doc + CONTEXT.md + ADRs, then read them
@@ -24,8 +24,8 @@ START (user request: feature / ticket / bug fix)
       │  failures? → loop back to IMPLEMENT (RESUME sessions via sessionID)
   → REVIEW    delegate to review (Standards + Spec)
       │  fixes found? → loop back to IMPLEMENT, then VERIFY again (RESUME sessions via sessionID)
-  → REMEMBER  OptMem: `memo note` decisions/deviations/outcomes
-      │  memo missing? → note it, continue
+  → REMEMBER  hindsight memory: retain decisions/deviations/outcomes
+      │  server down? → note it, continue
   → FINISH    only on explicit user request
   → DONE
 ```
@@ -34,7 +34,7 @@ START (user request: feature / ticket / bug fix)
 
 | # | State | Owner | Action |
 |---|---|---|---|
-| 1 | RECALL | you | OptMem `memo recall` (query = the request) before planning; @global-instruction owns the memory habit. Memory missing → note it, continue. |
+| 1 | RECALL | you | Hindsight MCP `recall` (query = the request, budget `mid`) before planning; @hindsight-docs for tool details. Server down → note it, continue. |
 | 2 | PLAN | you | Create a plan in Plan mode. |
 | 3 | GRILL | you | On plan gaps: @grilling or @grill-with-docs. Plan too large for one session: @wayfinder. |
 | 4 | PERSIST | you | @grill-with-docs leaves a `CONTEXT.md` glossary + `docs/adr/` paper trail; read them before implementation so names match the domain language. Persist the plan with @session, and log plan deviations with @session as they surface. |
@@ -42,7 +42,7 @@ START (user request: feature / ticket / bug fix)
 | 6 | IMPLEMENT | `implement` | Spawn or resume `implement` with the research report. A warm fork keeps the calling agent and cannot become `implement`, so role handoffs stay subagents. |
 | 7 | VERIFY | `implement` | Ask `implement` to run checks in verification-only mode before review. Checks fail → resume IMPLEMENT (step 6). |
 | 8 | REVIEW | `review` | Spawn or resume `review` with the implement report. Fixes found → resume an implement session; never switch a running child to another agent. |
-| 9 | REMEMBER | you | After review passes: `memo note` decisions, deviations, outcomes. Memory missing → note it, continue. |
+| 9 | REMEMBER | you | After review passes: hindsight MCP `retain`: decisions, deviations, outcomes. Server down → note it, continue. |
 | 10 | FINISH | `finish` | Commit only on explicit user request. Delegate to `finish` to propose grouped commit messages, restate them for approval, then run the `git add` + `git commit` yourself. |
 
 ## Dependency graph
@@ -63,7 +63,7 @@ worktrees. Procedure: `reference/parallel-lanes.md`.
 
 ## Gates
 
-- RECALL runs on every loop entry; a memory failure is a skip, not a failure.
+- RECALL runs on every loop entry; a hindsight MCP failure is a skip, not a failure.
 - GRILL only runs on plan gaps.
 - A step skipped because its gate did not fire is not failed, and later steps still run.
 - REMEMBER fires once review passes; IMPROVE stays inside FINISH and keeps its explicit-user-request gate.
