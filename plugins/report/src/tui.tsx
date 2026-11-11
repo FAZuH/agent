@@ -890,8 +890,11 @@ export default {
       if (report?.kind === "prompt-user") void showForm(report)
     })
 
-    /** Prompt records already offered as an inline form, by report id. */
-    const shownForms = new Set<string>()
+    /** Prompt records already offered as an inline form, by report id.
+     * Process-global: a stale instance left by a failed teardown must not
+     * create the same form a second time. */
+    const formsKey = Symbol.for("fazuh.report.forms")
+    const shownForms: Set<string> = ((globalThis as any)[formsKey] ??= new Set())
     let warnedNoForm = false
 
     /**
@@ -982,6 +985,8 @@ export default {
         const result: any = await rpc.answer({ sessionID, reportID, answers, mode })
         if (result?.error && !result?.delivered) {
           ctx.ui.toast.show({ message: `Answers saved, but ${result.error}`, variant: "warning" })
+        } else if (result?.duplicate) {
+          ctx.ui.toast.show({ message: "Already answered; the agent has it.", variant: "info" })
         } else {
           ctx.ui.toast.show({
             message: `Answers ${mode === "queue" ? "queued for" : "steered to"} ${sessionTitle(ctx, sessionID)}.`,
@@ -1263,7 +1268,9 @@ export default {
     })
 
     return () => {
-      for (const stop of [off, offReplied, offCancelled, offContext]) {
+      // The array literal is evaluated before the try, so an undefined name
+      // here throws and skips every disposer. Keep it to the live bindings.
+      for (const stop of [off, offReplied, offCancelled]) {
         try {
           stop?.()
         } catch {}

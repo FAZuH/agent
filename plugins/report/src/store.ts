@@ -97,6 +97,28 @@ export function updateReport(
   return next
 }
 
+/**
+ * Apply `patch` to one report only when `taken` says nobody else has already,
+ * in one synchronous read and write. Undefined when the report is gone or was
+ * taken first, so a repeated answer cannot deliver the same text twice.
+ */
+export function claimReport(
+  sessionID: string,
+  reportID: string,
+  taken: (report: Report) => boolean,
+  patch: (report: Report) => Report,
+): Report | undefined {
+  const list = readReports(sessionID)
+  const index = list.findIndex((report) => report.id === reportID)
+  if (index === -1) return undefined
+  const current = list[index]!
+  if (taken(current)) return undefined
+  const next = patch(current)
+  list[index] = next
+  writeReports(sessionID, list)
+  return next
+}
+
 /** Append one report and return the stored list, capped at the limit. */
 export function appendReport(report: Report, limit = REPORTS_LIMIT): Report[] {
   const list = readReports(report.sessionID)

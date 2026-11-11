@@ -18,7 +18,7 @@ import {
   type Prompts,
   type Report,
 } from "./shared.ts"
-import { appendReport, readMany, readReports, updateReport } from "./store.ts"
+import { appendReport, claimReport, readMany, readReports, updateReport } from "./store.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -177,49 +177,55 @@ export default {
             }
             const report = readReports(sessionID).find((item) => item.id === reportID)
             if (!report) return { ok: false, delivered: false, error: "report not found" }
-            // A blocking prompt_user is waiting for this answer. The tool
-            // result carries it back to the agent, so sending the usual user
-            // message too would deliver the same answer twice.
+            // One answer per record. A second call comes from another view, a
+            // repeated keybind, or a leaked handler, and each prompt call posts
+            // its own message, so without this claim the same text lands in the
+            // chat twice. A blocking prompt_user resolves through the waiter
+            // below and never posts the text at all.
+            const claimed = claimReport(
+              sessionID,
+              reportID,
+              (current) => Boolean(current.answeredAt),
+              (current) => ({
+                ...current,
+                answers: { ...(current.answers ?? {}), ...answers },
+                answeredAt: Date.now(),
+              }),
+            )
+            if (!claimed) return { ok: true, delivered: false, duplicate: true }
+            if (runtime.emit) {
+              void runtime.emit({ sessionID, report: claimed }).catch((cause) =>
+                console.error(`[report] emit failed: ${message(cause)}`),
+              )
+            }
             const waiter = runtime.blocked.get(reportID)
             if (waiter) {
               runtime.blocked.delete(reportID)
-              try {
-                const updated = updateReport(sessionID, reportID, (current) => ({
-                  ...current,
-                  answers: { ...(current.answers ?? {}), ...answers },
-                  answeredAt: Date.now(),
-                }))
-                if (updated && runtime.emit) {
-                  void runtime.emit({ sessionID, report: updated }).catch((cause) =>
-                    console.error(`[report] emit failed: ${message(cause)}`),
-                  )
-                }
-                return { ok: true, delivered: true }
-              } finally {
-                waiter({ type: "answered", answers })
-              }
+              waiter({ type: "answered", answers })
+              return { ok: true, delivered: true }
             }
             let delivered = false
             let error: string | undefined
             try {
               await ctx.session.prompt({
                 sessionID,
-                text: answerText(report, answers),
+                text: answerText(claimed, answers),
                 delivery: mode,
               })
               delivered = true
             } catch (cause) {
               error = message(cause)
-            }
-            const updated = updateReport(sessionID, reportID, (current) => ({
-              ...current,
-              answers: { ...(current.answers ?? {}), ...answers },
-              answeredAt: Date.now(),
-            }))
-            if (updated && runtime.emit) {
-              void runtime.emit({ sessionID, report: updated }).catch((cause) =>
-                console.error(`[report] emit failed: ${message(cause)}`),
-              )
+              // Nothing reached the agent, so release the claim and let the
+              // next answer try again.
+              const released = updateReport(sessionID, reportID, (current) => ({
+                ...current,
+                answeredAt: undefined,
+              }))
+              if (released && runtime.emit) {
+                void runtime.emit({ sessionID, report: released }).catch((cause) =>
+                  console.error(`[report] emit failed: ${message(cause)}`),
+                )
+              }
             }
             return { ok: true, delivered, ...(error ? { error } : {}) }
           },

@@ -130,8 +130,39 @@ describe("tools", () => {
     expect(stored.answeredAt).toBeGreaterThan(0)
   })
 
-  test("answer with queue uses queue delivery", async () => {
+  test("a repeated answer delivers nothing the second time", async () => {
     const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const created = await prompt.execute(
+      { description: "Answer once", questions: [{ title: "only once", body: "dup" }] },
+      { sessionID: "ses_dup" },
+    )
+    const id = String(created.content).match(/([a-z0-9-]+);/)?.[1]
+    const before = prompts.length
+    const first = await handlers.answer({ sessionID: "ses_dup", reportID: id, answers: { "0": "one" } })
+    const second = await handlers.answer({ sessionID: "ses_dup", reportID: id, answers: { "0": "one" } })
+    expect(first.delivered).toBe(true)
+    expect(second.delivered).toBe(false)
+    expect(second.duplicate).toBe(true)
+    expect(prompts.length).toBe(before + 1)
+  })
+
+  test("a repeated answer to a blocking prompt posts the text once", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const pending = prompt.execute(
+      { description: "Block dup", block: true, questions: [{ title: "blocked", body: "wait" }] },
+      { sessionID: "ses_blockdup" },
+    )
+    const id = store.readReports("ses_blockdup")[0]!.id
+    const before = prompts.length
+    const first = await handlers.answer({ sessionID: "ses_blockdup", reportID: id, answers: { "0": "yeah" } })
+    const second = await handlers.answer({ sessionID: "ses_blockdup", reportID: id, answers: { "0": "yeah" } })
+    expect(first.delivered).toBe(true)
+    expect(second.duplicate).toBe(true)
+    expect((await pending).content).toContain("blocked\nyeah")
+    expect(prompts.length).toBe(before)
+  })
+
+  test("answer with queue uses queue delivery", async () => {    const prompt = tools.find((tool) => tool.name === "prompt_user")
     const created = await prompt.execute(
       { description: "Queue it", questions: [{ title: "queue question", body: "queue it" }] },
       { sessionID: "ses_queue" },
