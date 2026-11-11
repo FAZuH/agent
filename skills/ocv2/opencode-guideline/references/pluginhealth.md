@@ -119,4 +119,4 @@ This skill diagnoses loading. To author one, read
 
 ## Memory
 
-The OptMem memory contract lives in the umbrella SKILL.md, Shared facts.
+The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.
