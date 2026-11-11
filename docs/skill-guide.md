@@ -88,15 +88,13 @@ Give the work its own branch, workspace, and context.
 flowchart LR
   N[Decided ticket] --> S[session opens the workspace]
   S --> W[worktree]
-  W --> F[forkflow]
-  F --> C[session context packet]
+  W --> C[session context packet]
   C --> B[Build]
 ```
 
 - **session**: the `.scratch/` workspace: spec, tickets, deviations, checkpoints, context packet.
 - **scratch**: the workspace layout and lifecycle those files follow.
 - **worktree**: an isolated branch in a separate worktree, then its finish and cleanup.
-- **forkflow**: a warm fork of a finished session, so the child already has the context.
 
 ### Build
 
