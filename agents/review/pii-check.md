@@ -26,6 +26,9 @@ permissions:
   - action: shell
     resource: "git log *"
     effect: allow
+  - action: skill
+    resource: report-hygiene
+    effect: allow
 ---
 
 Privacy auditor. Scan the repo/code for:
@@ -34,6 +37,7 @@ Privacy auditor. Scan the repo/code for:
 2. **PII:** emails, phone numbers, SSNs, card numbers, home addresses, birth dates, government IDs.
 3. **Internal URLs/hosts:** dev URLs, staging endpoints, DB connection strings, private IPs that should not be public.
 4. **Committed config:** `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, and the like.
+5. **Provenance leaks:** private device, session, instruction, and work context in files, commits, PRs, and docs. Run the @report-hygiene mechanical pass and apply its subject rule. Report each hit with the replacement.
 
 High-risk first, each with impact. Severity: **Critical**, **High**, **Medium**, **Low**.
 

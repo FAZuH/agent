@@ -1,5 +1,5 @@
 ---
-description: Permission scope for the @review-agent skill. Reviews a diff, a file, or another agent definition along Standards and Spec; the skill supplies the method, this definition supplies read/glob/grep/git/gh plus one write to the OS temp directory. Never edits code or commits.
+description: Permission scope for the @review-agent skill. Reviews a diff, a file, or another agent definition along Standards, Spec, and Publication; the skill supplies the method, this definition supplies read/glob/grep/git/gh plus one write to the OS temp directory. Never edits code or commits.
 mode: subagent
 permissions:
   - action: "*"
