@@ -38,7 +38,8 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 ### Repo skills (`~/.config/opencode/skills`)
 
 **Orchestration** — control, delegate, track, finish agent work:
-`orchestrate`, `workflows` (routing table and procedures), `agent-talk`
+`orchestrate`, `routing` (project/session router and dispatch),
+`workflows` (routing table and procedures), `agent-talk`
 (message a running agent session), `session`
 (spec, context packet, checkpoints in `.scratch/`), `finish`, `scratch-finish`,
 `self-improve` (retro and sweep), `long-horizon` (overnight runs), `offload`
@@ -114,8 +115,8 @@ Upstream-owned; install and update through `@external-skills`, never hand-edit.
 
 ### Agents (subagents)
 
-- **primary**: `orchestrator`, `chat`, `autocommit` — conversation,
-  delegation, unattended commits.
+- **primary**: `router` (project/session route and dispatch), `orchestrator`,
+  `chat`, `autocommit` — conversation, delegation, unattended commits.
 - **build**: `implement` — implementation and verification.
 - **review**: `review` (standards+spec), `malware-check`, `pii-check`.
 - **research**: `research-discovery` (codebase pointers),
