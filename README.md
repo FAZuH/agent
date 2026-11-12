@@ -2,7 +2,7 @@
 
 # agent
 
-**My personal OpenCode setup: skills, agents, plugins, and commands, installed with one script.**
+**My personal OpenCode setup: skills, agents, plugins, commands, and global instructions, installed with one script.**
 
 </div>
 
@@ -53,11 +53,17 @@ It installs every item below.
 
 From this repository, with no upstream:
 
-- `skills/`, `agents/`, `plugins/`, and `commands/` into `~/.config/opencode/`.
+- `skills/`, `agents/`, `plugins/`, `commands/`, and `instructions/` into
+  `~/.config/opencode/`.
 - Every executable file in `scripts/` into `~/.local/bin/`.
 - The Rust package `agent`, giving you `octask`, `phone-digest`, and
   `mail-digest`.
 - `.agent-values`, created from `.agent-values.example` on the first run.
+
+The install also adds `~/.config/opencode/instructions/*.md` to the
+`instructions` array in `~/.config/opencode/opencode.json`, so every file in
+`instructions/` loads in every session, on any project. The glob is the entry:
+a new instruction file needs no config change, only a sync.
 
 From an upstream, installed through the
 [`skills`](https://github.com/vercel-labs/skills) CLI into `~/.agents/skills/`.
@@ -125,11 +131,13 @@ because a newer CLI cannot remove what it did not write.
 ./uninstall.sh
 ```
 
-The default removes the sync-managed skills, agents, plugins, commands, and
-scripts, and uninstalls the local `agent` Cargo package. It keeps OpenCode,
-the external skills, operating-system packages, and the checkout.
-Add `--external-packages` to remove `bgrun` too, or `--external-skills` to
-remove the external skills listed under Install.
+The default removes the sync-managed skills, agents, plugins, commands,
+instructions, and scripts, and uninstalls the local `agent` Cargo package. It
+keeps OpenCode, the external skills, operating-system packages, and the
+checkout. It also keeps the global config's `instructions` entry, so a reinstall
+needs no re-wiring. Add `--external-packages` to remove `bgrun` too,
+`--external-skills` to remove the external skills listed under Install, or
+`--instructions` to drop the entry.
 
 ## Usage
 
@@ -145,7 +153,7 @@ does not appear or a plugin is not loaded.
 
 ## Docs
 
-- [Skills](docs/skills.md): all 54 skills, one line each
+- [Skills](docs/skills.md): all 53 skills, one line each
 - [Skill Guide](docs/skill-guide.md): which skills to load at each phase of a change
 - [Agents](docs/agents.md): all 10 agent definitions, by role
 - [Plugins](docs/plugins.md): the OpenCode plugins, plus the command definitions in `commands/`

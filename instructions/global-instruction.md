@@ -1,15 +1,6 @@
----
-name: global-instruction
-description: >-
-  Machine-agnostic rules for every session: mandatory skill loads, working
-  habits, shell discipline, friction contract. Load first in every session.
-  Triggers: global instructions, full rule text, a repo AGENTS.md pointing
-  here.
----
-
 # Global Instruction
 
-Rules for every session, on any machine. The host AGENTS.md keeps host-only facts (paths, credentials, installed commands) and points here for the rest.
+Rules for every session, on any machine. The host AGENTS.md keeps host-only facts (paths, credentials, installed commands).
 
 ## Mandatory skill load
 

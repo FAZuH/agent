@@ -65,9 +65,11 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 `external-skills` (manage upstream skills), `skill-doctor` (skill-graph
 drift), `review-agent` (two-axis review).
 
-**Shared** — loaded only when referenced: `global-instruction`,
-`post-task`, `prompt-user`, `presenting-latex`, `following-procedures`,
-`gate`, `scratch`.
+**Shared** — loaded only when referenced: `post-task`, `prompt-user`,
+`presenting-latex`, `following-procedures`, `gate`, `scratch`.
+
+The global rules are not a skill: they sit in `instructions/` and the global
+config loads them in every session.
 
 **OpenCode v2**: `opencode-guideline` (the HTTP API, models, sessions, plugin
 authoring, plugin loading), `ocv2-compact` (compact a session).

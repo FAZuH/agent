@@ -80,7 +80,7 @@ missing one is the cheapest proposal you can file.
 ## 2. Propose (do not file yet)
 
 For each finding, **draft** one entry but do not `retain` yet: one entry = one
-`retain` with the @global-instruction friction tags:
+`retain` with the friction tags the global instructions define:
 
 - Content: `<friction observed > proposed fix>`, one or two sentences.
 - `document_id: "friction-<short-slug>"` (stable; the resolve handle).
@@ -159,7 +159,7 @@ Then report a compact **filed** table:
 A feedback loop where the agent learns from its own friction: capture problems
 while working, then convert them into improvements to skills, agent
 definitions, tooling, and process. Proposals arrive from §1 to §4 or direct
-capture (the @global-instruction friction contract); this section curates and
+capture (the friction contract in the global instructions); this section curates and
 applies them.
 
 One store: Hindsight, tag-filtered (`type:friction`, `status:open`). A single

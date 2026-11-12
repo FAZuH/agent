@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# agent — sync. Copies repo items (skills, agents, plugins, commands) into
-# OpenCode config dirs. Repo is the source of truth; targets hold copies.
+# agent — sync. Copies repo items (skills, agents, plugins, commands,
+# instructions) into OpenCode config dirs. Repo is the source of truth; targets
+# hold copies.
 # Items can be tagged in tags.conf and deployed selectively with -t/--tags.
 set -euo pipefail
 shopt -s extglob   # tags.conf patterns may use @(), !(), etc.
@@ -17,7 +18,7 @@ AGENTS_SKILLS="$HOME/.agents/skills"
 REPO_POINTER=".agent-repo"
 # Machine-global install root for repo scripts/ (overridable for tests).
 BIN_DIR="${AGENT_BIN_DIR:-$HOME/.local/bin}"
-TOPS=(skills agents plugins commands)
+TOPS=(skills agents plugins commands instructions)
 
 DRY=0
 FORCE=0
@@ -46,7 +47,8 @@ die()   { printf '%s✗ error:%s %s\n' "$RED" "$R" "$1" >&2; exit 1; }
 usage() {
   cat <<EOF
 ${B}agent — sync${R}
-Copy repo items (skills, agents, plugins, commands) into OpenCode config dirs.
+Copy repo items (skills, agents, plugins, commands, instructions) into
+OpenCode config dirs.
 The repo is the source of truth — run push after editing repo content.
 
 ${B}Usage:${R}
@@ -315,6 +317,12 @@ enumerate_items() {
           name="${child#"$REPO/commands/"}"
           emit_item "commands/$name" "commands/$name"
         done < <(find "$REPO/commands" -type f -name '*.md' -print0 | sort -z) ;;
+      instructions)
+        for child in "$REPO/instructions"/*.md; do
+          [[ -f "$child" ]] || continue
+          name="$(basename "$child")"
+          emit_item "instructions/$name" "instructions/$name"
+        done ;;
     esac
   done
 }

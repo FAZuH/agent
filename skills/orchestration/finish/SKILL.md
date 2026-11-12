@@ -31,7 +31,7 @@ Nothing needs a change: say so and skip.
 ## 2. File session friction
 
 Anything noticed during the session that was never filed goes to Hindsight now,
-per the friction contract in @global-instruction and the entry format in
+per the friction contract in the global instructions and the entry format in
 @self-improve. Nothing carries past this step unfiled, and it is not a bug
 tracker: one or two sentences each.
 

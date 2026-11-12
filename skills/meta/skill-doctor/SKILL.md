@@ -104,7 +104,7 @@ python3 scripts/build_graph.py | head -1
 # High-severity findings only
 python3 scripts/build_graph.py | grep '"severity":"high"'
 
-# File friction whose fix lives outside this repo (see @global-instruction)
+# File friction whose fix lives outside this repo (see the global instructions)
 # retain { content: "…", document_id: "friction-<slug>",
 #          tags: ["type:friction","severity:minor","scope:skill","status:open"] }
 # open backlog: recall "friction open backlog", keep type:friction+status:open
