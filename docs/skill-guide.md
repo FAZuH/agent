@@ -13,7 +13,7 @@ The eight phases, in order:
 | [Isolate](#isolate) | Give the work its own branch, workspace, and context |
 | [Build](#build) | Write the thing |
 | [Verify](#verify) | Make the checks mean the same thing here and on the runner |
-| [Review](#review) | Standards and spec, read side by side |
+| [Review](#review) | Standards, spec, and publication, read side by side |
 | [Ship](#ship) | Branch to merged |
 | [Close](#close) | Commit, document, archive, improve |
 
@@ -154,6 +154,7 @@ flowchart LR
 ```
 
 - **code-review**: the Standards axis and the Spec axis, side by side.
+- **report-hygiene**: the Publication axis: comprehension gaps and provenance leaks.
 - **writing-defect-reports**: establish a finding before you publish it, and correct it after.
 - **shipping-across-surfaces**: land the same fact everywhere it is stated.
 

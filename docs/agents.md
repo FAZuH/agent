@@ -29,7 +29,7 @@ octask timer or edits the model on the existing one.
 
 - ⭐ **[review](../agents/review/review.md)**: the permission scope for the [review-agent](../skills/meta/review-agent/SKILL.md) skill, which supplies the method. Reads everything, writes only the handoff.
 - **[malware-check](../agents/review/malware-check.md)**: scans repositories for malware and malicious code patterns.
-- **[pii-check](../agents/review/pii-check.md)**: scans repositories for PII and leaked secrets.
+- **[pii-check](../agents/review/pii-check.md)**: scans repositories for PII, leaked secrets, and provenance leaks.
 
 ## Research
 
