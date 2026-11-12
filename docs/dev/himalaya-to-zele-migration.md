@@ -6,12 +6,11 @@ Scope: repo mail tooling only. OmaMail, the mail servers, and the IMAP data are 
 ## Done
 
 - zele 0.11.0 installed. Five accounts authenticate over IMAP and SMTP:
-  `admin@fazuh.com`, `admin@bimbel-bci.com`, `admin@kros-anevasi.com`,
-  `admin@arthaenergi.id`, `fazuhhh@gmail.com`.
-- `admin@arthaenergi.id` uses the mailcow app token from
-  `~/.secrets/mailcow-admin-tokens.env`; its old env password was stale.
-- `krosanevasi.com` is an alias domain, not a mailbox. Its env file is now
-  `mail_admin@krosanevasi.com.env.disabled`; use `admin@kros-anevasi.com`.
+  two personal mailboxes and three organisation mailboxes.
+- One organisation account uses a mailcow app token from a file under
+  `~/.secrets/`; its old env password was stale.
+- One organisation domain is an alias domain, not a mailbox. Its env file is
+  now disabled; use the primary admin address for that organisation.
 - Secrets live in `~/.secrets/mail/*.env` (dir 0700, files 0600). The old
   directory and its symlinks are gone.
 - `scripts/himalaya-gen-config` and `~/.local/bin/himalaya-gen-config` are
