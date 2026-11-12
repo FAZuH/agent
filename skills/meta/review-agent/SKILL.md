@@ -1,9 +1,10 @@
 ---
 name: review-agent
 description: >-
-  Review a diff, file, or agent definition on Standards and Spec, then hand
-  off the fixes. Runs in the read-only `review` subagent. Triggers: review
-  since X, review this branch, PR, agent, or workflow.
+  Review a diff, file, or agent definition on Standards, Spec, and
+  Publication, then hand off the fixes. Runs in the read-only `review`
+  subagent. Triggers: review since X, review this branch, PR, agent, or
+  workflow.
 ---
 
 # review-agent
@@ -36,17 +37,28 @@ target.
 - Name the standards sources (`CODING_STANDARDS.md`, `CONTRIBUTING.md`, `AGENTS.md`) plus the @code-review smell baseline. Surgical-change discipline is a useful second lens: no overcomplication, surface the assumptions.
 - Name the spec source, or state that there is none. `docs/agents/issue-tracker.md` missing is not a blocker; the Spec axis reports "no spec available" instead.
 
-## The two axes
+## The axes
 
-Spawn both as parallel sub-agents, using the built-in `general` type for each
-(@code-review says `general-purpose`, which does not exist in this config).
-Aggregate under `## Standards` and `## Spec`, side by side. Never merge or
-rerank across axes, and never edit the target.
+Spawn the Standards and Spec sub-agents in parallel, using the built-in
+`general` type for each (@code-review says `general-purpose`, which does not
+exist in this config). Aggregate under `## Standards` and `## Spec`, side by
+side, plus `## Publication` when that axis applies. Never merge or rerank
+across axes, and never edit the target.
 
 Then over the same target:
 
 - @antislop for UI or copy, @antislop-code for code comments. Report only the
   rules they break.
+
+## The publication axis
+
+Applies when the target can leave the device: a commit range, PR body, doc,
+issue, agent definition, or report. Skip it only for a private code-only diff;
+say so.
+
+Spawn a third `general` sub-agent with the artifact and @report-hygiene. Give it
+no session context. It returns two lists: comprehension gaps and provenance
+hits. Aggregate under `## Publication`.
 
 ## When the target is an agent definition
 

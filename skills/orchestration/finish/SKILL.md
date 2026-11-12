@@ -41,6 +41,10 @@ standalone retro, where no `/finish` preceded it.
 
 ## 3. Commit changes
 
+Before loading @commit, load @report-hygiene and run its gate on the session's
+artifacts: proposed commit messages, docs, the summary, and any PR or issue
+text.
+
 Load the @commit skill and follow it exactly. Return its proposed groups
 unchanged. Do not duplicate its steps here.
 

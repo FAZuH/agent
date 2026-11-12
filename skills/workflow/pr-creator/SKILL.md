@@ -91,6 +91,10 @@ Content rules, applied inside whatever sections the template has:
 - **Risky, wide, or hard change**: a longer body with context and rationale, not a bullet list.
 - Diagrams and code snippets beat prose for structure and behavior.
 
+Before you finish the body, load @report-hygiene and run its gate on the body
+and the diff. The body states behavior and evidence, not the session or the
+device.
+
 ### 6. Preflight Checks
 
 Run the repo's own checks (build, lint, tests). Discover, don't assume:

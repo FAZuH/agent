@@ -64,10 +64,10 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 **Meta** — the agent system itself:
 `agent-map` (this skill), `update-fazuh-agent` (pull and redeploy),
 `external-skills` (manage upstream skills), `skill-doctor` (skill-graph
-drift), `review-agent` (two-axis review).
+drift), `review-agent` (three-axis review).
 
-**Shared** — loaded only when referenced: `post-task`, `prompt-user`,
-`presenting-latex`, `following-procedures`, `gate`, `scratch`.
+**Shared** — loaded only when referenced: `post-task`, `report-hygiene`,
+`prompt-user`, `presenting-latex`, `following-procedures`, `gate`, `scratch`.
 
 The global rules are not a skill: they sit in `instructions/` and the global
 config loads them in every session.
