@@ -32,6 +32,8 @@ export interface BranchMarker {
   sessionID?: string
   question?: string
   error?: string
+  /** Fork made without moving the view to it. */
+  background?: boolean
 }
 
 /** Read the marker out of session metadata. Anything else is not ours. */
@@ -50,6 +52,7 @@ export function readMarker(metadata: unknown): BranchMarker | undefined {
     sessionID: typeof value.sessionID === "string" ? value.sessionID : undefined,
     question: typeof value.question === "string" ? value.question : undefined,
     error: typeof value.error === "string" ? value.error : undefined,
+    background: value.background === true,
   }
 }
 

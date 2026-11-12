@@ -30,7 +30,7 @@ export default {
         return
       }
       if (marker.sessionID !== sessionID) return
-      ctx.ui.router.navigate({ type: "session", sessionID })
+      if (!marker.background) ctx.ui.router.navigate({ type: "session", sessionID })
       toast(`Forked to ${sessionID}`, "info")
     })
 

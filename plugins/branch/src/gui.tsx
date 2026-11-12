@@ -32,7 +32,9 @@ export default Plugin.define({
               return
             }
             if (!marker.sessionID) return
-            ctx.tabs.open({ server: session.server.id, id: marker.sessionID }, { focus: true })
+            if (!marker.background) {
+              ctx.tabs.open({ server: session.server.id, id: marker.sessionID }, { focus: true })
+            }
             ctx.toast.show({ title: `Forked to ${marker.sessionID}` })
           }),
         ),

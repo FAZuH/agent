@@ -100,10 +100,10 @@ it. Rebuild with `bun run build:gui` (or `./dev.sh gui`); tests:
 `/branch <question>` forks the current session at its latest state, asks the
 question in the fork, and reports back to the session that asked. The fork
 keeps full history and stays open for follow-ups, unlike `/btw` which answers
-once in place. In the TUI the view moves to the fork; on hosts with no TUI
-module (desktop, API, mini) the fork id is in the reply. One name, one
-owner: the server plugin owns the command and both tools, so they work on
-every host.
+once in place. In the TUI the view moves to the fork, unless the fork was
+made in the background; on hosts with no TUI module (desktop, API, mini) the
+fork id is in the reply. One name, one owner: the server plugin owns the
+command and both tools, so they work on every host.
 
 The question reaches the fork inside `<question>` tags, so the fork can tell
 the user's words from the plugin's own instructions around them. The session
@@ -118,8 +118,9 @@ session gets to read. `/branch-silent` never asks for a report.
 
 - **`/branch <question>`**: fork, ask, and tell this session the fork exists.
 - **`/branch-silent <question>`**: fork and ask, with no notice and no report.
-- **`branch_ask`** (`question`, `silent?`): the same fork from an agent turn,
-  so the agent does not block while the fork works.
+- **`branch_ask`** (`question`, `silent?`, `background?`): the same fork from an
+  agent turn, so the agent does not block while the fork works. `background`
+  creates the fork without moving the TUI or desktop view to it.
 - **`branch_report`** (`text`): send the answer back. Only works inside a fork
   this plugin made.
 

@@ -22,6 +22,13 @@ describe("readMarker", () => {
     expect(marker?.status).toBe("forked")
   })
 
+  test("reads a background fork, and defaults to foreground", () => {
+    expect(
+      readMarker({ branch: { status: "forked", parentID: "ses_parent", background: true } })?.background,
+    ).toBe(true)
+    expect(readMarker({ branch: { status: "forked", parentID: "ses_parent" } })?.background).toBe(false)
+  })
+
   test("rejects foreign metadata", () => {
     expect(readMarker(undefined)).toBeUndefined()
     expect(readMarker({ other: 1 })).toBeUndefined()

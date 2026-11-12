@@ -15,6 +15,7 @@ export const Contract = {
           question: { type: "string" },
           parentID: { type: "string" },
           silent: { type: "boolean" },
+          background: { type: "boolean" },
         },
         required: ["question", "parentID"],
         additionalProperties: false,

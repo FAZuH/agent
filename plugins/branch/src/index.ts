@@ -91,7 +91,12 @@ export default {
      * exists. In report mode the answer comes back through branch_report, so
      * the fork curates what the asking session gets to read.
      */
-    async function startBranch(question: string, parentID: string, silent: boolean): Promise<BranchStart> {
+    async function startBranch(
+      question: string,
+      parentID: string,
+      silent: boolean,
+      background = false,
+    ): Promise<BranchStart> {
       let token = ""
       if (!silent) {
         const reserved = slots.reserve(parentID, settings().maxForks)
@@ -115,7 +120,7 @@ export default {
         return { error: `could not fork this session: ${reason}` }
       }
       if (token) slots.confirm(parentID, token, forkID)
-      await mark(forkID, { status: "forked", parentID, sessionID: forkID, question })
+      await mark(forkID, { status: "forked", parentID, sessionID: forkID, question, background })
       await ctx.session.prompt({
         sessionID: forkID,
         text: askText(question, parentID, forkID, !silent),
@@ -152,8 +157,9 @@ export default {
             const parentID = String(input?.parentID ?? "")
             if (!parentID) return { error: "no parent session." }
             const silent = input?.silent === true
+            const background = input?.background === true
             try {
-              const started = await startBranch(question, parentID, silent)
+              const started = await startBranch(question, parentID, silent, background)
               if ("error" in started) return { error: started.error }
               return { forkID: started.forkID }
             } catch (error) {
@@ -170,7 +176,7 @@ export default {
       tools.add({
         name: "branch_ask",
         description:
-          "Fork this session at its latest state and ask a question in the fork, so this session keeps working. The fork answers on its own and reports back with branch_report. Use for a side question that needs this session's context; set silent to fork with no notice and no report, like /branch-silent.",
+          "Fork this session at its latest state and ask a question in the fork, so this session keeps working. The fork answers on its own and reports back with branch_report. Use for a side question that needs this session's context; set silent to fork with no notice and no report, like /branch-silent; set background to keep the UI view on this session.",
         input: {
           type: "object",
           properties: {
@@ -183,6 +189,11 @@ export default {
               description:
                 "Fork without telling this session and without asking for a report (default false).",
             },
+            background: {
+              type: "boolean",
+              description:
+                "Create the fork without moving the UI view to it; the view stays on this session (default false).",
+            },
           },
           required: ["question"],
           additionalProperties: false,
@@ -193,11 +204,13 @@ export default {
           const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
           if (!sessionID) return { content: "branch_ask failed: no session." }
           const silent = input?.silent === true
+          const background = input?.background === true
           try {
-            const started = await startBranch(question, sessionID, silent)
+            const started = await startBranch(question, sessionID, silent, background)
             if ("error" in started) return { content: `branch_ask failed: ${started.error}` }
+            const mode = silent ? "continue there." : "the answer comes back here."
             return {
-              content: `Forked to \`${started.forkID}\` — ${silent ? "continue there." : "the answer comes back here."}`,
+              content: `Forked to \`${started.forkID}\` — ${mode}${background ? " The view stays on this session." : ""}`,
             }
           } catch (error) {
             return { content: `branch_ask failed: ${message(error)}` }
