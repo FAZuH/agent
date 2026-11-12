@@ -82,6 +82,15 @@ Read the chosen template. The description follows its structure.
 
 Non-applicable sections: follow the template's own guidance. The bundled template says omit, never "N/A".
 
+Content rules, applied inside whatever sections the template has:
+
+- **Show, don't assert.** A validation section holds the output (test run, failing-to-passing diff, command result), not "ran lint and tests".
+- **Visual change** (direct or indirect, incl. CLI output, layout, generated artifacts): a before/after table with attached media.
+- **Benchmark**: a before/after table, baseline measured on the base branch.
+- **No intermediate archaeology**: line-count deltas, "refactored across N commits", WIP history. Describe only the squashed result that lands.
+- **Risky, wide, or hard change**: a longer body with context and rationale, not a bullet list.
+- Diagrams and code snippets beat prose for structure and behavior. @pr has the visual menu.
+
 ### 6. Preflight Checks
 
 Run the repo's own checks (build, lint, tests). Discover, don't assume:
