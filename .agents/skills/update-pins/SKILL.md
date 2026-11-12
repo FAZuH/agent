@@ -30,6 +30,10 @@ install through
 the `skills` CLI, which has no ref flag and always takes upstream HEAD. They
 move on their own; do not add a pin without switching them off the CLI.
 
+`install.sh` names skills explicitly instead of passing `--skill '*'`, so a
+skill upstream adds does not install itself. Adopting a new one is a three-file
+edit: `install.sh`, `uninstall.sh` `EXTERNAL_SKILLS`, and the README list.
+
 ## Procedure
 
 1. **Read the current pins** out of `install.sh` and `uninstall.sh`. Do not

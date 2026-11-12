@@ -17,7 +17,7 @@ EXTERNAL_SKILLS=(
   grill-with-docs implement improve-codebase-architecture prototype research
   resolving-merge-conflicts setup-matt-pocock-skills tdd to-spec to-tickets
   triage wayfinder wizard
-  grill-me grilling handoff to-questionnaire wait-what writing-for-agents
+  grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
   simple-english
   hindsight-docs
   bgrun

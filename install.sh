@@ -424,11 +424,20 @@ done < <(optional_packages)
 check_mmdc
 
 step "Installing required skills"
-install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*'
-install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*'
+# Explicit names, never --skill '*': the wildcard follows upstream HEAD, so a
+# new upstream skill lands unlisted and unremovable. Add a name here, in
+# uninstall.sh EXTERNAL_SKILLS, and in the README together. `pr` is excluded on
+# purpose: this repo's pr-creator owns PR bodies.
+install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering \
+  --skill ask-matt code-review codebase-design diagnosing-bugs domain-modeling \
+  grill-with-docs implement improve-codebase-architecture prototype research \
+  resolving-merge-conflicts setup-matt-pocock-skills tdd to-spec to-tickets \
+  triage wayfinder wizard
+install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity \
+  --skill grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
-# Not bonus: global-instruction makes @antislop a mandatory load
+# Not bonus: the global instructions make @antislop a mandatory load
 # every session, and a default install that omits it leaves that dangling.
 install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
 # The hindsight repo carries a full docs site; its clone blows past the skills

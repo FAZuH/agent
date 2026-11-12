@@ -70,9 +70,9 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
   `improve-codebase-architecture`, `prototype`, `research`,
   `resolving-merge-conflicts`, `setup-matt-pocock-skills`, `tdd`, `to-spec`,
   `to-tickets`, `triage`, `wayfinder`, `wizard`.
-- [mattpocock/skills](https://github.com/mattpocock/skills): 6 productivity
-  skills: `grill-me`, `grilling`, `handoff`, `to-questionnaire`, `wait-what`,
-  `writing-for-agents`.
+- [mattpocock/skills](https://github.com/mattpocock/skills): 7 productivity
+  skills: `grill-me`, `grilling`, `handoff`, `teach`, `to-questionnaire`,
+  `wait-what`, `writing-for-agents`.
 - [Agents365-ai/365-skills](https://github.com/Agents365-ai/365-skills):
   `mermaid-skill`.
 - [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish):
