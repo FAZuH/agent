@@ -7,6 +7,7 @@ orchestrator routes work to.
 
 ## Primary
 
+- ⭐ **[router](../agents/primary/router.md)**: routes a prompt with no named project to the project and session that should own it, then dispatches an orchestrator.
 - ⭐ **[orchestrator](../agents/primary/orchestrator.md)**: routes work to the subagents below and owns delegation and run mode.
 - **[autocommit](../agents/primary/autocommit.md)**: commits pending changes, auto-discovering the repository's commit convention.
 - **[chat](../agents/primary/chat.md)**: exploration and general discussion.

@@ -17,6 +17,7 @@ the category directory never reaches the installed name.
 ## Orchestration
 
 - ⭐ **[orchestrate](../skills/orchestration/orchestrate/SKILL.md)**: Manage tasks, delegation, permissions, run mode, and subagent session reuse.
+- ⭐ **[routing](../skills/orchestration/routing/SKILL.md)**: Route a prompt to the project and session that should own it, then dispatch an orchestrator.
 - ⭐ **[workflows](../skills/orchestration/workflows/SKILL.md)**: Select the concrete workflow and subagent route for a task.
 - **[agent-talk](../skills/orchestration/agent-talk/SKILL.md)**: Message another running agent session over the OpenCode v2 API and read its answer.
 - **[session](../skills/orchestration/session/SKILL.md)**: Manage the feature session workspace, spec, tickets, deviations, context packet, and compaction checkpoint.
