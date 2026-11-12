@@ -89,7 +89,7 @@ Content rules, applied inside whatever sections the template has:
 - **Benchmark**: a before/after table, baseline measured on the base branch.
 - **No intermediate archaeology**: line-count deltas, "refactored across N commits", WIP history. Describe only the squashed result that lands.
 - **Risky, wide, or hard change**: a longer body with context and rationale, not a bullet list.
-- Diagrams and code snippets beat prose for structure and behavior. @pr has the visual menu.
+- Diagrams and code snippets beat prose for structure and behavior.
 
 ### 6. Preflight Checks
 
