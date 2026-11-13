@@ -60,7 +60,8 @@ One entry per interruption, updated in place, deleted only when resumed and fini
 
 ## After finishing: the run report
 
-Hand the report to @post-task. It owns the format.
+Answer the user with what the procedure produced, in the reply. Anything they
+must decide or run goes in a separate `prompt_user` call (@prompt-user).
 
 ## Authoring convention (for procedure authors)
 

@@ -27,7 +27,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
      `hook_risk` gate on bash/edit/write. No jev tools exist.
    - `branch_ask` forks this session to answer a side question; `branch_report`
      sends the answer back.
-   - `post_task` and `prompt_user` record a task report or a user prompt.
+   - `prompt_user` records a prompt in the Prompts view.
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
    subagent routing and workflow selection; load them when the task is control,
    tracking, or multi-agent work rather than doing.
@@ -66,7 +66,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 `external-skills` (manage upstream skills), `skill-doctor` (skill-graph
 drift), `review-agent` (three-axis review).
 
-**Shared** — loaded only when referenced: `post-task`, `report-hygiene`,
+**Shared** — loaded only when referenced: `report-hygiene`,
 `prompt-user`, `presenting-latex`, `following-procedures`, `gate`, `scratch`.
 
 The global rules are not a skill: they sit in `instructions/` and the global
@@ -137,8 +137,8 @@ agent tools and are not listed here.
 - **branch**: `branch_ask` forks this session to answer a side question;
   `branch_report` sends the answer back. A fork keeps the current agent and
   model.
-- **report**: `post_task` and `prompt_user` tools; the reports render in the
-  TUI sidebar and the desktop Reports panel, not in the reply.
+- **prompt**: the `prompt_user` tool; a prompt renders in the TUI sidebar,
+  not in the reply.
 - **desktop-ask**: `desktop_ask_arm` and `desktop_ask_disarm` pick the session
   that receives the screenshot keybind.
 
