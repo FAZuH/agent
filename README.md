@@ -63,7 +63,9 @@ From this repository, with no upstream:
 The install also adds `~/.config/opencode/instructions/*.md` to the
 `instructions` array in `~/.config/opencode/opencode.json`, so every file in
 `instructions/` loads in every session, on any project. The glob is the entry:
-a new instruction file needs no config change, only a sync.
+a new instruction file needs no config change, only a sync. The two always-on
+skills, `terse` and `antislop-copywriting`, are linked into that directory from
+their deployed `SKILL.md`, so their bodies load without a `skill` call.
 
 From an upstream, installed through the
 [`skills`](https://github.com/vercel-labs/skills) CLI into `~/.agents/skills/`.

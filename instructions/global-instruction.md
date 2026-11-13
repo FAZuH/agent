@@ -2,21 +2,12 @@
 
 Rules for every session, on any machine. The host AGENTS.md keeps host-only facts (paths, credentials, installed commands).
 
-## Mandatory skill load
-
-Load these before the first tool call, every session:
-
-| Skill | Owns |
-|---|---|
-| `@antislop-copywriting` | The anti-slop filter for writing in general. |
-| `@agent-map` | Skill routing. |
-| `@terse` | Terse docs and comments: keep only what earns its place. |
-
 ## Working habits
 
 These are items you must do in specific situations.
 
 - Check the current working directory first.
+- @agent-map: Skill routing. Load it when the skill catalog does not disambiguate.
 - @presenting-latex: For presenting latex equations to user.
 - @prompt-user : Asking follow-up questions or telling the user to do something. Prefer `prompt_user` tool over `question`; the Prompts view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
 - Answer post-task: what the task produced, then a `---` horizontal rule, then `next` with what follows.
