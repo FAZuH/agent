@@ -33,7 +33,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   scans). A confident pick is injected into the next context build as one
   system line: `Jev routing: consider loading skill @<name> (P=…)`. One Jev
   call per prompt (cached across the agentic loop's turns), awaited with a
-  configurable timeout (default 2000ms); a timeout or low-confidence answer
+  configurable timeout (default 5000ms); a timeout or low-confidence answer
   injects nothing. Subagent sessions are skipped.
 - **`hook_tool_risk`** (off by default): every tool call the host checks for
   permission, inside `hook_tool_risk.actions`, is sent to Jev, which answers

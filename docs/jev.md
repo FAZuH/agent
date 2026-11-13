@@ -491,8 +491,9 @@ whatever the provider.
 
 Latency is provider- and protocol-specific: a hosted `systemone` call runs
 0.6–2.0s, a local `chat` call runs 3–13s with thinking off and far longer with it
-on. The skill hook's timeout (default 1s) means a slow provider simply yields no
-advice for that prompt — the conversation does not wait longer than the timeout.
+on. The skill hook's timeout (default 5000ms) means a slow provider simply
+yields no advice for that prompt — the conversation does not wait longer than
+the timeout.
 
 ## Pointing it at another provider
 
