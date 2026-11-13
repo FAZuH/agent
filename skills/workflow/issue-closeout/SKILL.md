@@ -32,6 +32,9 @@ GitHub auto-close silently fails.
 
 ## 2. Post the closeout comment
 
+Before you compose the comment, load @report-hygiene and run its gate on the
+comment text.
+
 One comment per issue, naming what a reader needs to audit the fix:
 
 ```sh

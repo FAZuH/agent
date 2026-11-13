@@ -25,6 +25,9 @@ A submission bundle needs both: author the typed parts, then assemble them.
 
 ## Rules that hold for both
 
+- **Gate before delivery.** Before the PDF leaves the machine, load
+  @report-hygiene and run its gate on the source text. The render check below
+  is separate.
 - **Keep the sources.** The delivered PDF is a build artifact; part PDFs,
   `.md`, and scans stay on disk, so a later edit rebuilds one part, not all.
 - **One width across one delivered file.** Unless the user asks otherwise,

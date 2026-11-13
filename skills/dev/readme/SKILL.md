@@ -10,6 +10,9 @@ description: >-
 
 Keep the README short, scannable, and in `FAZuH/*` shape.
 
+Before you write or rewrite a README, load @report-hygiene and run its gate on
+the text.
+
 ## Top pattern (exact)
 
 Every README starts with this exact header block. Tagline is bold and repo-specific.
