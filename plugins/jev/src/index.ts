@@ -9,11 +9,11 @@
  * which is the one switch allowed to block.
  */
 
-import { ask, JevError } from "./jev.ts"
+import { ask, JevError, redact, signalFor } from "./jev.ts"
 import { autoAccept } from "./autopermit.ts"
 import { callToken, consumeGrant, recordApproval } from "./approve.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
-import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES } from "./state.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES, USD_PER_MILLION_TOKENS } from "./state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { readFileSync, readdirSync } from "node:fs"
@@ -810,7 +810,7 @@ function logDecision(
   logCall({
     hook,
     tool: info.action,
-    subject: info.text,
+    subject: redact(info.text),
     sent: result.sent,
     decisions: result.decisions,
     inputTokens: result.inputTokens,
@@ -839,7 +839,7 @@ async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<vo
       await fetch(webhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: `# Jev Alert (hook_tool_risk)\n${fence}\n${info.text}\n${fence}` }),
+        body: JSON.stringify({ content: `# Jev Alert (hook_tool_risk)\n${fence}\n${String(redact(info.text))}\n${fence}` }),
         signal: signalFor(5000),
       })
     } catch {}
