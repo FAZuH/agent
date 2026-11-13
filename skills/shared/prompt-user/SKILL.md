@@ -11,7 +11,8 @@ description: >-
 
 Anything the user must decide or run goes in a `prompt_user` tool call. The
 tool stores it and the Prompts view renders it: the sidebar section in the
-TUI. The reply carries the answer, not the prompts.
+TUI, the Prompts panel in Desktop. The reply carries the answer, not the
+prompts.
 
 Two kinds:
 
