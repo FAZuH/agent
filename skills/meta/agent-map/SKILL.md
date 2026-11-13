@@ -137,8 +137,8 @@ agent tools and are not listed here.
 - **branch**: `branch_ask` forks this session to answer a side question;
   `branch_report` sends the answer back. A fork keeps the current agent and
   model.
-- **prompt**: the `prompt_user` tool; a prompt renders in the TUI sidebar,
-  not in the reply.
+- **prompt**: the `prompt_user` tool; a prompt renders in the TUI sidebar and
+  the Desktop Prompts panel, not in the reply.
 - **desktop-ask**: `desktop_ask_arm` and `desktop_ask_disarm` pick the session
   that receives the screenshot keybind.
 
