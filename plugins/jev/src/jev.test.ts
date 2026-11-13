@@ -564,6 +564,16 @@ describe("per-feature config", () => {
     setFeatureConfig("hook_skill_pick", "timeout", FEATURE_DEFAULTS.hook_skill_pick.timeout)
   })
 
+  test("a numeric setting takes the feature key, not the row label", () => {
+    clearState()
+    // The settings panel once passed the row label here ("Skill picker"), so
+    // every numeric row threw "unknown jev feature" and saved nothing.
+    setFeatureConfig("hook_skill_pick", "maxPicks", 2)
+    expect(featureConfig("hook_skill_pick").maxPicks).toBe(2)
+    expect(() => setFeatureConfig("Skill picker", "maxPicks", 3)).toThrow(/unknown jev feature/)
+    clearState()
+  })
+
   test("pruneLog keeps the tail at logMax", async () => {
     const { LOG_FILE } = await import("./state.ts")
     clearState()
