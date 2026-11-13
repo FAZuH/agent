@@ -285,6 +285,9 @@ export function optimizerModel(override: string, session: unknown, hostDefault: 
   return ref(session) ?? ref(hostDefault)
 }
 
+/** Skills per optimizer call. The rest stay stale for the next run. */
+const OPTIMIZE_BATCH = 30
+
 /**
  * Optimize stale skill descriptions through the host LLM. One prompt, all
  * stale skills batched: N descriptions in, N terse criteria out as JSON.
@@ -307,10 +310,12 @@ export async function optimizeCriteria(
   opts: { manual?: boolean; sessionID?: string } = {},
 ): Promise<{ done: number; failed: number }> {
   const self = optimizeCriteria as any
+  // One call handles this many skills; the rest stay stale for the next run.
+  const batch = stale.slice(0, OPTIMIZE_BATCH)
   // Remember a missing generate.text per process: without this, every prompt
   // on such a host logs the same "unavailable" line and the log fills with it.
-  if (self._noGenerate) return { done: 0, failed: stale.length }
-  if (self._latched && !opts.manual) return { done: 0, failed: stale.length }
+  if (self._noGenerate) return { done: 0, failed: batch.length }
+  if (self._latched && !opts.manual) return { done: 0, failed: batch.length }
   let generate: any
   try {
     generate = ctx?.generate?.text
@@ -318,9 +323,8 @@ export async function optimizeCriteria(
   } catch (error) {
     self._noGenerate = true
     logCall({ hook: "hook_skill_pick", skipped: `optimizer unavailable: ${error instanceof Error ? error.message : String(error)}` })
-    return { done: 0, failed: stale.length }
+    return { done: 0, failed: batch.length }
   }
-  const batch = stale.slice(0, 30)
   const prompt = [
     "Rewrite each skill description below as ONE terse choice criterion, max 40 words: when the skill is the right pick AND when it is not. Start directly with the trigger; never open with \"Pick for/when/to\" or any label. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
     "",
@@ -1041,7 +1045,7 @@ export default {
                     const answers = (r.decisions ?? [])
                       .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
                       .join(" ")
-                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * 0.04).toFixed(6)}`
+                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
                   })
                   .join("\n"),
               }
@@ -1064,7 +1068,9 @@ export default {
                 manual: true,
                 sessionID: String(input?.sessionID ?? input?.invocation?.sessionID ?? "") || undefined,
               })
-              return { content: `Optimized ${done} of ${targets.length} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}.` }
+              const attempted = Math.min(targets.length, OPTIMIZE_BATCH)
+              const left = targets.length - attempted
+              return { content: `Optimized ${done} of ${attempted} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}${left ? `, ${left} left for a follow-up run` : ""}.` }
             }
             const key = keySource()
             const money = spend()

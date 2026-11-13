@@ -522,11 +522,6 @@ export async function ask(
   return { decisions, model: state.model, inputTokens, elapsedMs, sent: payload }
 }
 
-/** Jev costs $0.04/M input tokens and nothing for output. */
-export function estimateCost(inputTokens: number): string {
-  return `$${((inputTokens / 1_000_000) * 0.04).toFixed(6)}`
-}
-
 /**
  * Find the answers object in a System One reply. Native providers return it
  * at top level; some endpoints (or gateways in front of them) nest the whole

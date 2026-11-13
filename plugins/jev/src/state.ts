@@ -846,10 +846,13 @@ export function readLog(limit = 40): any[] {
   }
 }
 
+/** Jev bills input tokens only: $0.04 per million. */
+export const USD_PER_MILLION_TOKENS = 0.04
+
 export function spend(): { calls: number; tokens: number; usd: number } {
   const rows = readLog(1000)
   const tokens = rows.reduce((sum, row: any) => sum + (row.inputTokens ?? 0), 0)
-  return { calls: rows.length, tokens, usd: (tokens / 1_000_000) * 0.04 }
+  return { calls: rows.length, tokens, usd: (tokens / 1_000_000) * USD_PER_MILLION_TOKENS }
 }
 
 /**
