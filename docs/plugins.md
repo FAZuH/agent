@@ -250,7 +250,7 @@ target with the image attached.
 - When the turn ends, the answer is copied to the clipboard with `wl-copy`
   (`xclip`/`xsel` fallback). `--no-copy` skips it for one trigger.
 - The trigger prompt asks for the text to paste inside `<copy>` and `</copy>`
-  so the post-task report stays out of the clipboard; the tags are stripped.
+  so the rest of the reply stays out of the clipboard; the tags are stripped.
   A reply without them is copied whole.
 - The copy runs in the plugin after the trigger returns. Its outcome lands in
   `.../desktop-ask/last-copy.json`, and `desktop-ask status` prints it.
@@ -263,85 +263,66 @@ target with the image attached.
 
 Tests: `bun test plugins/desktop-ask`.
 
-## report (`fazuh.report`)
+## prompt (`fazuh.prompt`)
 
-`post_task` and `prompt_user` replace the two skill blocks at the end of a
-reply. The tool stores a record; the reply carries only the answer. The
-skills in `skills/shared/post-task` and `skills/shared/prompt-user` call the
-tools and keep the printed block as a fallback for hosts without the plugin.
+`prompt_user` replaces the prompt-user block at the end of a reply. The tool
+stores a record; the reply carries only the answer. The skill in
+`skills/shared/prompt-user` calls the tool and keeps the printed block as a
+fallback for hosts without the plugin.
 
-- **`post_task`** (`description`, `completed`, `deviations`, `hiccups`,
-  `failed`, `next`): the @post-task report. `description` is required and at
-  most 35 characters; it is the slot label. Decisions go in a separate
-  `prompt_user` call.
-- **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`):
-  the @prompt-user block for a standalone ask. `description` is required and
-  at most 35 characters. `block: true` waits for the answer in the same turn
-  and returns it as the tool result; it needs at least one question. A
-  dismissed blocking prompt returns as dismissed, and a deferred one returns
-  as deferred and stays unanswered. Without `block` the call returns
-  immediately and the answer arrives as a new message.
-- **`report_update`** (`id?`, the same section fields): patches one record in
-  place, keeping every field the call omits, and bumps its revision. `id`
-  defaults to the session's latest report. Use it to revise a section instead
-  of writing a second report that repeats the first.
+- **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`): the
+  @prompt-user block for a standalone ask. `description` is required and at
+  most 35 characters. `block: true` waits for the answer in the same turn and
+  returns it as the tool result; it needs at least one question. A dismissed
+  blocking prompt returns as dismissed, and a deferred one returns as deferred
+  and stays unanswered. Without `block` the call returns immediately and the
+  answer arrives as a new message.
 
 Records are one JSON file per session under
-`${XDG_STATE_HOME:-~/.local/state}/opencode/report/reports/`, newest last,
-capped at 50; `OPENCODE_REPORT_STATE_HOME` overrides the root (the older
-`REPORT_STATE_HOME` still works). Reports move there from the old
-`fazuh-agent/reports/` on the first load. The server writes them
-atomically and exposes `report.list({sessionIDs})`, `report.read`,
-`report.answer`, `report.dismiss`, `report.defer`, and a `changed` event over
-RPC. Views pass the routed session's family
-(`data.session.family`), so a subagent's reports appear in the parent's view.
-Forks stay out of the family.
+`${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
+capped at 50; `OPENCODE_PROMPT_STATE_HOME` overrides the root. The server
+writes them atomically and exposes `prompt.list({sessionIDs})`,
+`prompt.answer`, `prompt.dismiss`, `prompt.defer`, and a `changed` event over
+RPC. The view passes the routed session's family (`data.session.family`), so a
+subagent's prompts appear in the parent's view. Forks stay out of the family.
 
-The TUI half (`./tui`) adds three sidebar sections, each a slot per agent
-(the routed session and each subagent that has a record). **Reports** holds
-post-task records, **Prompts** holds prompt-user records. The dot is yellow
-while a record has questions without answers, green while unread, and gray
-once read; an unread slot's name blinks. Clicking a slot opens that agent's
-history for the section: `←`/`→` move through it, `Ctrl+↑`/`Ctrl+↓`
-switch to the previous/next session in the list the history was opened from
-(wrapping at the ends; with the attention filter on, sessions with nothing
-matching are skipped), and `enter` on an open prompt walks the questions and
-sends the answers to the agent. Opening a
-record marks it read (`report.read`); reading never bumps its revision.
-Answering uses **Enter** to steer the answer (interrupt and deliver now) or
-**Ctrl+Enter** to queue it behind the agent's current turn; an empty answer
-takes the question's recommendation. The answers reach the agent as a
-`# Prompt: <description>` block with each question and its answer under it,
-like the host's question card. The dialog renders the record
-as Markdown with padding, shows the reporting session's title, its 35-character
-description, and its relative age (the update age when revised), colors keybinds
-apart from their descriptions,
-and grows with `↑/↓`, `PgUp/PgDn`, and `Home/End` scrolling up to about half
-the terminal height; the scroll hint appears only when the record overflows.
-A fresh prompt also opens as the host's inline form. The plugin caps that
-form's question body at 12 lines and 1,200 characters and appends a pointer
-to the Prompts section, because the host card has no height cap or scroll.
-The answer dialog centers vertically and bounds the question body to about a
-quarter of the terminal height, with `PgUp`/`PgDn` scrolling, so the answer
-field and key hints stay visible under a long question.
-Each section shows at most five slots: slots needing attention first
-(unread reports, unanswered prompts), then the rest, each group newest first.
-The pickers list every slot. The number beside a section header counts only
-the slots needing attention. `Ctrl+A` in either picker toggles that section
-between all entries and attention-only (default: all); inside a history it
-filters the entries to unread reports or unanswered prompts, using the state
-when the key was pressed so reading or dismissing the shown entry does not
-remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
-same histories by picker; `/read-reports` marks every unread report in the
-session family read, and `/dismiss-prompts` dismisses every prompt still
-awaiting an answer. Context usage is not drawn here: the
-`opencode-context-watch` plugin renders its own sidebar section. `/report-settings`
-toggles the whole sidebar and each section (Reports, Prompts);
-the flags persist in the `report-view-v2` view store, and the existing
-collapse states stay separate. The GUI half
-mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
-side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
-bundle: `./dev.sh gui`.
+The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
+session and each subagent that has a record). OpenCode Desktop loads no TUI
+module and the plugin ships no GUI half, so the panel is TUI-only. The dot is
+yellow while a record has questions without answers, and muted once it is
+answered or dismissed. Clicking a slot opens that agent's history: `←`/`→`
+move through it, `Ctrl+↑`/`Ctrl+↓` switch to the previous/next session in the
+list the history was opened from (wrapping at the ends; with the attention
+filter on, sessions with nothing matching are skipped), and `enter` on an open
+prompt walks the questions and sends the answers to the agent. Answering uses
+**Enter** to steer the answer or **Ctrl+Enter** to queue it; both wait for the
+agent's current turn to end, and steer is the lane that wakes an idle session.
+An empty answer takes the question's recommendation. The answers reach the
+agent as a `# Prompt: <description>` block with each question and its answer
+under it, like the host's question card. The dialog renders the record as
+Markdown with padding, shows the reporting session's title, its 35-character
+description, and its relative age, colors keybinds apart from their
+descriptions, and grows with `↑/↓`, `PgUp`/`PgDn`, and `Home`/`End` scrolling
+up to about half the terminal height; the scroll hint appears only when the
+record overflows. A fresh prompt also opens as the host's inline form. The
+plugin caps that form's question body at 12 lines and 1,200 characters and
+appends a pointer to the Prompts section, because the host card has no height
+cap or scroll. The answer dialog centers vertically and bounds the question
+body to about a quarter of the terminal height, with `PgUp`/`PgDn` scrolling,
+so the answer field and key hints stay visible under a long question.
+
+The section shows at most five slots: unanswered first, then the rest, each
+group newest first. The picker lists every slot. The number beside the section
+header counts only the slots needing an answer. `Ctrl+A` in the picker toggles
+the section between all entries and unanswered-only (default: all); inside a
+history it filters the entries to unanswered prompts, using the state when the
+key was pressed so dismissing the shown entry does not remove it, and `Ctrl+A`
+again shows all. `/prompts` opens the same history by picker;
+`/dismiss-prompts` dismisses every prompt still awaiting an answer. Context
+usage is not drawn here: the `opencode-context-watch` plugin renders its own
+sidebar section. `/prompt-settings` toggles the whole sidebar and the Prompts
+section; the flags persist in the `prompt-view-v2` view store, and the
+existing collapse state stays separate. Tests: `bun test plugins/prompt`.
 
 ## Commands
 
