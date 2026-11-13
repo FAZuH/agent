@@ -146,7 +146,8 @@ the id belongs, esc closes. The message is typed after the id. One name, one
 owner: the server owns the command, so the text form works in every host,
 including the ones that load no TUI module.
 
-- **enter**: send, and steer the target, which interrupts a turn in progress.
+- **enter**: send, and steer the target. Steer runs after the target's current
+  turn ends; measured on 2.2.7, it aborts nothing.
 - **ctrl+enter**: send queued. The message waits for the target's current turn
   to finish.
 - **`--queue` / `--steer`**: the same two modes as a flag in the text, for the
@@ -239,7 +240,8 @@ makes the current session the target; `/desktop-ask off` or
 `~/.local/bin/desktop-ask trigger`, which captures with `grim` and prompts the
 target with the image attached.
 
-- Delivery defaults to `queue`; `--steer` interrupts the target mid-turn.
+- Delivery defaults to `queue`; `--steer` wakes an idle target and otherwise
+  runs after the current turn.
 - Full screen by default; `--window` captures the focused window.
 - `--region` takes image pixels, `WxH` or `X,Y WxH`, and is converted to layout
   coordinates before grim runs. Shots are captured at layout scale, so each
