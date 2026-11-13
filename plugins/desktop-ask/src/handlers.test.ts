@@ -125,7 +125,7 @@ describe("trigger", () => {
     expect(prompts[0].files[0].uri.startsWith("file://")).toBe(true)
     expect(prompts[0].files[0].uri.endsWith("/shots/1.png")).toBe(true)
     expect(prompts[0].text).toContain("<instruction>\nTell me the selected enemy.\n</instruction>")
-    expect(prompts[0].text).toContain("Active window: Brave - Inbox")
+    expect(prompts[0].text).toContain("<active-window>\nBrave - Inbox\n</active-window>")
     expect(readTarget(root)?.triggers).toBe(1)
   })
 
