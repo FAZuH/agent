@@ -270,7 +270,7 @@ function askAnswer(
   ctx: any,
   question: Question,
   initial: string,
-): Promise<{ value: string; mode: "now" | "next" } | undefined> {
+): Promise<{ value: string; mode: "steer" | "queue" } | undefined> {
   return new Promise((resolve) => {
     let settled = false
     const finish = (result?: { value: string; mode: "steer" | "queue" }) => {
