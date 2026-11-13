@@ -18,8 +18,7 @@ These are items you must do in specific situations.
 
 - Check the current working directory first.
 - @presenting-latex: For presenting latex equations to user.
-- @post-task : Ending a multi-step task. Call the `post_task` tool; the Reports view renders it. Never paste the report into the reply.
-- @prompt-user : Asking follow-up questions or telling the user to do something. Prefer `prompt_user` tool over `question`; the Reports view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
+- @prompt-user : Asking follow-up questions or telling the user to do something. Prefer `prompt_user` tool over `question`; the Prompts view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
 - Hindsight memory is the default memory, not an occasional extra. Docs: @hindsight-docs.
   - `recall` before planning, diagnosing, or answering anything about prior work, a tool's behavior, or this user's setup. Assume a learned fact may already exist; a cheap recall beats a re-derivation.
   - `retain` anything likely to be asked again, once verified: decisions and outcomes after review passes, tool/service quirks after a live check, research answers, user corrections and preferences.
