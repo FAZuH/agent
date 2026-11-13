@@ -287,9 +287,15 @@ RPC. The view passes the routed session's family (`data.session.family`), so a
 subagent's prompts appear in the parent's view. Forks stay out of the family.
 
 The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
-session and each subagent that has a record). OpenCode Desktop loads no TUI
-module and the plugin ships no GUI half, so the panel is TUI-only. The dot is
-yellow while a record has questions without answers, and muted once it is
+session and each subagent that has a record). OpenCode Desktop's
+`./gui-experimental` half adds **Prompts** to the session panel menu. It lists
+the same family, opens each agent's prompt history, and offers **Answer** and
+**Dismiss**. Answering walks the questions, then offers steer or queue;
+cancelling defers the prompt without answering. Both delivery modes wait for
+a running turn to end; steer also wakes an idle agent. Rebuild its shipped
+`dist/gui-experimental.cjs` with `bun run --cwd plugins/prompt build:gui` or
+`./dev.sh gui`. The TUI dot is yellow while a record has questions without
+answers, and muted once it is
 answered or dismissed. Clicking a slot opens that agent's history: `←`/`→`
 move through it, `Ctrl+↑`/`Ctrl+↓` switch to the previous/next session in the
 list the history was opened from (wrapping at the ends; with the attention
