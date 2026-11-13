@@ -17,38 +17,23 @@ Load these before the first tool call, every session:
 These are items you must do in specific situations.
 
 - Check the current working directory first.
-- Generated artifact: when the source is newer than the output, the output is
-  stale. Rebuild before reporting it done, even if the source edit happened
-  mid-run (a steered subagent, a late patch).
-- For latex, follow @presenting-latex.
-- @presenting-latex : Writing latex
-- @post-task : ending a multi-step task. Call the `post_task` tool; the Reports view renders it. Never paste the report into the reply.
-- @prompt-user : Asking follow-up questions or telling the user to do something. Call the `prompt_user` tool; the Reports view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
-- Hindsight memory is the default memory, not an occasional extra.
+- @presenting-latex: For presenting latex equations to user.
+- @post-task : Ending a multi-step task. Call the `post_task` tool; the Reports view renders it. Never paste the report into the reply.
+- @prompt-user : Asking follow-up questions or telling the user to do something. Prefer `prompt_user` tool over `question`; the Reports view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
+- Hindsight memory is the default memory, not an occasional extra. Docs: @hindsight-docs.
   - `recall` before planning, diagnosing, or answering anything about prior work, a tool's behavior, or this user's setup. Assume a learned fact may already exist; a cheap recall beats a re-derivation.
   - `retain` anything likely to be asked again, once verified: decisions and outcomes after review passes, tool/service quirks after a live check, research answers, user corrections and preferences.
   - Skip one-off task trivia; a polluted bank buries the good facts.
-  - If the hindsight MCP tools are absent, continue without memory. Docs: @hindsight-docs.
+  - If the hindsight MCP tools are absent, continue without memory.
 
 ## Shell discipline
 
-- Serialize writes to one path: never batch a write or edit of a file with any
-  other call that reads or rewrites that same path, whatever the tool; the later
-  write wins and the earlier one is lost, or a command runs on a half-written
-  file. One write per call, then the command in the next call.
-- Never kill with `pkill -f <pattern>`: the pattern matches the invoking
-  wrapper's own cmdline. The same trap applies to `pgrep -f`, which reports a
-  phantom match on the remote `sh -c` wrapper. Kill the captured PID, count
-  with `pgrep -x <name>`, then verify with
-  `ps -e -o pid,args | grep -F <exact path>`.
+- Never kill with `pkill -f <pattern>`. Kill the captured PID, count
+  with `pgrep -x <name>`, then verify with `ps -e -o pid,args | grep -F <exact path>`.
 - Shell output is not trustworthy: the harness can replace it with a
   `N matches in 1F:` header or stale text from an earlier command. When the
   output decides the next step, redirect it
   (`<cmd> > /tmp/opencode/<name>.txt`) and read the file.
-- `gh` network calls hang silently on API outages (no error, just no output):
-  wrap every `gh` call that touches the network in `timeout 30`. On RC=124,
-  fall back to a local file for the intended write and retry when the network
-  returns; never burn a long timeout twice.
 - `git commit` with explicit pathspecs. `git commit -m` commits the whole index,
   which may hold staged work from another concern. `git commit -F <file> --
   <path>` fails on an untracked new file (`pathspec did not match any
