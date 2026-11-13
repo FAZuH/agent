@@ -1,10 +1,9 @@
 /**
- * The RPC contract the TUI and the GUI read reports through. Rpc.define is
- * an identity function, so a plain JSON-Schema object works without the host
- * package.
+ * The RPC contract the TUI reads prompts through. Rpc.define is an identity
+ * function, so a plain JSON-Schema object works without the host package.
  */
 export const Contract = {
-  id: "report",
+  id: "prompt",
   methods: {
     list: {
       input: {
@@ -23,29 +22,12 @@ export const Contract = {
       output: {
         type: "object",
         properties: {
-          reports: {
+          prompts: {
             type: "array",
             items: { type: "object", additionalProperties: true },
           },
         },
-        required: ["reports"],
-        additionalProperties: false,
-      },
-    },
-    read: {
-      input: {
-        type: "object",
-        properties: {
-          sessionID: { type: "string" },
-          reportID: { type: "string" },
-        },
-        required: ["sessionID", "reportID"],
-        additionalProperties: false,
-      },
-      output: {
-        type: "object",
-        properties: { ok: { type: "boolean" } },
-        required: ["ok"],
+        required: ["prompts"],
         additionalProperties: false,
       },
     },
@@ -54,14 +36,14 @@ export const Contract = {
         type: "object",
         properties: {
           sessionID: { type: "string" },
-          reportID: { type: "string" },
+          promptID: { type: "string" },
           answers: {
             type: "object",
             additionalProperties: { type: "string" },
           },
           mode: { type: "string", enum: ["steer", "queue"] },
         },
-        required: ["sessionID", "reportID", "answers"],
+        required: ["sessionID", "promptID", "answers"],
         additionalProperties: false,
       },
       output: {
@@ -81,9 +63,9 @@ export const Contract = {
         type: "object",
         properties: {
           sessionID: { type: "string" },
-          reportID: { type: "string" },
+          promptID: { type: "string" },
         },
-        required: ["sessionID", "reportID"],
+        required: ["sessionID", "promptID"],
         additionalProperties: false,
       },
       output: {
@@ -98,9 +80,9 @@ export const Contract = {
         type: "object",
         properties: {
           sessionID: { type: "string" },
-          reportID: { type: "string" },
+          promptID: { type: "string" },
         },
-        required: ["sessionID", "reportID"],
+        required: ["sessionID", "promptID"],
         additionalProperties: false,
       },
       output: {
@@ -117,9 +99,9 @@ export const Contract = {
         type: "object",
         properties: {
           sessionID: { type: "string" },
-          report: { type: "object", additionalProperties: true },
+          prompt: { type: "object", additionalProperties: true },
         },
-        required: ["sessionID", "report"],
+        required: ["sessionID", "prompt"],
         additionalProperties: false,
       },
     },

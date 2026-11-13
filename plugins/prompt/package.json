@@ -1,0 +1,10 @@
+{
+  "name": "fazuh-prompt",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./rpc": "./src/rpc.ts"
+  }
+}
