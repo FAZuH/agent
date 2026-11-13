@@ -176,7 +176,7 @@ export default {
       tools.add({
         name: "branch_ask",
         description:
-          "Fork this session at its latest state and ask a question in the fork, so this session keeps working. The fork answers on its own and reports back with branch_report. Use for a side question that needs this session's context; set silent to fork with no notice and no report, like /branch-silent; set background to keep the UI view on this session.",
+          "Fork this session at its latest state and send a prompt to the fork, so this session keeps working. The fork works on it on its own and reports back with branch_report. Use for a side question that needs this session's context; set silent to fork with no notice and no report, like /branch-silent; set background to keep the UI view on this session.",
         input: {
           type: "object",
           properties: {
@@ -221,11 +221,11 @@ export default {
       tools.add({
         name: "branch_report",
         description:
-          "Send the answer back to the session that forked this one with branch_ask, wrapped in the <branch> tags that identify it there. Use only inside a branch fork, once the question is answered.",
+          "Send your report back to the session that forked this one with branch_ask, wrapped in the <branch> tags that identify it there. Use only inside a branch fork, once the prompt is addressed.",
         input: {
           type: "object",
           properties: {
-            text: { type: "string", description: "The answer, written for the asking session." },
+            text: { type: "string", description: "The report, written for the asking session." },
           },
           required: ["text"],
           additionalProperties: false,
@@ -249,10 +249,10 @@ export default {
       draft.add({
         name: "branch",
         description:
-          "Fork this session at its latest state, ask something in the fork, and tell this session what came back. Usage: /branch <question>",
+          "Fork this session at its latest state, send a prompt to the fork, and tell this session what came back. Usage: /branch <prompt>",
         execute: async (input: any) => {
           const text = String(input?.prompt?.text ?? "").trim()
-          if (!text) return { content: "Usage: /branch <question>" }
+          if (!text) return { content: "Usage: /branch <prompt>" }
           const parentID: string | undefined = input?.sessionID
           if (!parentID) return { content: "branch failed: no parent session." }
           const started = await startBranch(text, parentID, false)
@@ -264,10 +264,10 @@ export default {
       draft.add({
         name: "branch-silent",
         description:
-          "Fork this session at its latest state and ask something in the fork, without telling this session. Usage: /branch-silent <question>",
+          "Fork this session at its latest state and send a prompt to the fork, without telling this session. Usage: /branch-silent <prompt>",
         execute: async (input: any) => {
           const text = String(input?.prompt?.text ?? "").trim()
-          if (!text) return { content: "Usage: /branch-silent <question>" }
+          if (!text) return { content: "Usage: /branch-silent <prompt>" }
           const parentID: string | undefined = input?.sessionID
           if (!parentID) return { content: "branch-silent failed: no parent session." }
           const started = await startBranch(text, parentID, true)

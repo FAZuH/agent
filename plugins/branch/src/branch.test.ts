@@ -8,7 +8,7 @@
 
 import { describe, expect, test } from "bun:test"
 
-import { askText, forkedNotice, questionBlock, readMarker, reportTags } from "./branch.ts"
+import { askText, forkedNotice, promptBlock, readMarker, reportTags } from "./branch.ts"
 
 describe("readMarker", () => {
   test("reads a forked marker", () => {
@@ -37,9 +37,9 @@ describe("readMarker", () => {
   })
 })
 
-describe("question block", () => {
+describe("prompt block", () => {
   test("fences the user's words in a tag", () => {
-    expect(questionBlock("what is up")).toBe("<question>\nwhat is up\n</question>")
+    expect(promptBlock("what is up")).toBe("<prompt>\nwhat is up\n</prompt>")
   })
 })
 
@@ -52,10 +52,10 @@ describe("report tags", () => {
 })
 
 describe("notices", () => {
-  test("the fork notice hands the question over as the fork's task", () => {
+  test("the fork notice hands the prompt over as the fork's task", () => {
     const notice = forkedNotice("ses_fork", "ses_parent", "1. do this\n2. do that")
     expect(notice).toContain("not an instruction for this session")
-    expect(notice).toContain("<question>\n1. do this\n2. do that\n</question>")
+    expect(notice).toContain("<prompt>\n1. do this\n2. do that\n</prompt>")
   })
 })
 
@@ -67,22 +67,24 @@ describe("ask text", () => {
     expect(text).toContain('<branch sessionID="ses_fork" state="completed" parent="ses_parent">')
   })
 
-  test("report mode wraps the question in a tag", () => {
+  test("report mode wraps the prompt in a tag", () => {
     const text = askText("what is up", "ses_parent", "ses_fork")
-    expect(text).toContain("<question>\nwhat is up\n</question>")
+    expect(text).toContain("<prompt>\nwhat is up\n</prompt>")
   })
 
   test("silent mode asks for no report", () => {
     const text = askText("what is up", "ses_parent", "ses_fork", false)
     expect(text).toContain("/branch-silent")
     expect(text).toContain("do not call branch_report")
+    expect(text).toContain("do the work here")
+    expect(text).toContain("expects no report")
     expect(text).not.toContain("opencode2 api")
     expect(text).not.toContain("state=\"completed\"")
   })
 
-  test("keeps the question as the fork's only task", () => {
+  test("keeps the prompt as the fork's only task", () => {
     const text = askText("what is up", "ses_parent", "ses_fork")
-    expect(text).toContain("The user only wants you to answer this question")
-    expect(text).toContain("<question>\nwhat is up\n</question>")
+    expect(text).toContain("The user only wants you to address the following prompt/instruction")
+    expect(text).toContain("<prompt>\nwhat is up\n</prompt>")
   })
 })
