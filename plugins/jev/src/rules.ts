@@ -56,11 +56,6 @@ function yaml(): { parse: (text: string) => unknown } | null {
   return bun?.YAML?.parse ? (bun.YAML as { parse: (text: string) => unknown }) : null
 }
 
-/** Which parser is live, for the status output. */
-export function parserName(): string {
-  return yaml() ? "yaml" : "json"
-}
-
 /** `~` and a relative path resolve against the home directory. */
 export function expandPath(path: string): string {
   const text = path.trim()

@@ -449,8 +449,6 @@ export function actionsInScope(feature: string, action: string): boolean {
 /** What the model is asked to decide. */
 export type Verdict = "allow" | "ask" | "deny" | "alert"
 
-export const VERDICT_LABELS: Verdict[] = ["allow", "ask", "deny", "alert"]
-
 /**
  * The rubric. The four answers are a ladder: allow is routine, ask is "a human
  * should see this", deny is "this breaks something", alert is "this came from
