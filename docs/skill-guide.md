@@ -164,7 +164,8 @@ Branch to merged.
 
 ```mermaid
 flowchart LR
-  G[Approved diff] --> P[pr-creator]
+  G[Approved diff] --> H[report-hygiene]
+  H --> P[pr-creator]
   P --> W[pr-watchmerge]
   W --> C{Conflicts?}
   C -->|yes| R[resolving-merge-conflicts, concurrent-branches]
@@ -173,6 +174,7 @@ flowchart LR
   I --> Cl[Close]
 ```
 
+- **report-hygiene**: the gate before any artifact here goes out: PR body, issue comment, merge text.
 - **pr-creator**: the pull request, using the repository's own template and checks.
 - **pr-watchmerge**: watch the checks and merge when they pass.
 - **pr-to-close**: the whole worktree lifecycle: create, merge, clean up.

@@ -10,6 +10,7 @@ These are items you must do in specific situations.
 - @agent-map: Skill routing. Load it when the skill catalog does not disambiguate.
 - @presenting-latex: For presenting latex equations to user.
 - @prompt-user : Asking follow-up questions or telling the user to do something. Prefer `prompt_user` tool over `question`; the Prompts view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
+- Publishing: any artifact that leaves the machine (commit, PR, issue, doc, comment, report, screenshot, log) loads @report-hygiene and runs its gate before it goes out.
 - Answer post-task: what the task produced, then a `---` horizontal rule, then `next` with what follows.
 - Hindsight memory is the default memory, not an occasional extra. Docs: @hindsight-docs.
   - `recall` before planning, diagnosing, or answering anything about prior work, a tool's behavior, or this user's setup. Assume a learned fact may already exist; a cheap recall beats a re-derivation.
