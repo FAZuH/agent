@@ -54,7 +54,16 @@ Gotchas 1 to 4 (plain serve lists nothing, global-location-only endpoints, proje
    top-level `env` key, so a var set there never reaches the plugin host; verify
    with `tr '\0' '\n' < /proc/$(pgrep -f "opencode2 serve"|head -1)/environ`.
    Not module caching. Prove the live build with a behaviour marker,
-   never a log line.
+   never a log line. A manifest change is not hot-reloaded at all: `features`
+   in `GET /api/plugin` come from the `package.json` exports read when the
+   plugin registers, so a new `./gui-experimental` leaves the registry
+   reporting `server`/`tui`/`rpc` and Desktop showing no menu item until the
+   server restarts. The built file never sets the flag: a plugin with an empty
+   `dist/` reports `gui: true` from its manifest, and one with a built bundle
+   reports nothing until the restart. The TUI half binds once per plugin id at
+   client start: a renamed id or a first `./tui` export shows no section and
+   writes no `<plugin>-tui.<store>.json` until the TUI client restarts, while
+   the old id's section keeps rendering against RPC methods that are gone.
 
 ## Verifying a plugin actually ran its setup
 
