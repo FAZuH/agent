@@ -95,6 +95,46 @@ ensure_instructions_config() { # [check]
   info "$GLOBAL_CONFIG loads every file in $INSTRUCTIONS_GLOB"
 }
 
+# Preload terse and antislop-copywriting as instructions: a link in
+# instructions/ loads the skill body with the config, and it points at the
+# deployed skill, so a skill update lands with no second step.
+SKILL_INSTRUCTION_LINKS=(
+  "terse=$HOME/.config/opencode/skills/terse/SKILL.md"
+  "antislop-copywriting=$HOME/.agents/skills/antislop-copywriting/SKILL.md"
+)
+ensure_skill_instructions() { # [check]
+  local pair name src dir tgt
+  dir="$HOME/.config/opencode/instructions"
+
+  for pair in "${SKILL_INSTRUCTION_LINKS[@]}"; do
+    name="${pair%%=*}"
+    src="${pair#*=}"
+    tgt="$dir/$name.md"
+
+    if [[ ! -f "$src" ]]; then
+      info "note: $name is not deployed, so no instruction link"
+      continue
+    fi
+
+    if [[ "${1:-}" == check ]]; then
+      if [[ -L "$tgt" && "$(readlink -f "$tgt")" == "$(readlink -f "$src")" ]]; then
+        printf '  [ok]      %-36s %s\n' "instructions/$name.md" "$src"
+      else
+        printf '  [MISSING] %-36s %s\n' "instructions/$name.md" "link to $src"
+      fi
+      continue
+    fi
+
+    mkdir -p "$dir"
+    if [[ -e "$tgt" && ! -L "$tgt" ]]; then
+      info "note: $tgt is a real file, left alone"
+      continue
+    fi
+    ln -sfn "$src" "$tgt"
+    info "linked $tgt -> $src"
+  done
+}
+
 # mermaid-cli v12 dropped -w/--width for --size, and pdf-build passes --size,
 # so v11 dies on the first diagram. Soft tier: a
 # note, like a missing mmdc, because a skill degrades rather than breaking.
@@ -296,6 +336,7 @@ checklist() {
 
   printf '\nHost configuration\n'
   ensure_instructions_config check
+  ensure_skill_instructions check
 
   printf '\nInstalled by this script\n'
   while IFS=: read -r name path; do
@@ -380,8 +421,8 @@ install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity
   --skill grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
-# Not bonus: the global instructions make @antislop a mandatory load
-# every session, and a default install that omits it leaves that dangling.
+# Not bonus: the install links @antislop-copywriting into the instructions, so a
+# default install that omits it leaves that link dangling.
 install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
 # The hindsight repo carries a full docs site; its clone blows past the skills
 # CLI's 300s default on a slow link and aborts the whole run, so raise the cap.
@@ -415,6 +456,7 @@ fi
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g
 ensure_instructions_config
+ensure_skill_instructions
 
 if ((BONUS == 1)); then
   step "Installing bonus skills"
