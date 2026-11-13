@@ -27,6 +27,18 @@ real question open. Run `route.py` as one command: never pipe it, and never chai
 it with `;` or `&&`. Permission rules match every command in a pipeline or list,
 so a trailing `| head` or `; echo $?` is denied.
 
+The brief scores a session's first prompt and its last three user prompts. A turn
+buried mid-session does not show up there. For "where did we discuss X" the
+transcript is the thing to search:
+
+```sh
+route.py sessions --query "term anotherterm" --detail > /tmp/opencode/route-hits.json
+```
+
+Read the file. Omit `--project` to search every project; pass `--any` to match any
+term instead of all of them. The session whose first prompt is the prompt itself
+is the routing turn, not a destination.
+
 `route.py doctor` checks the registry, index, and API. Exit codes: 0 ok, 2 error.
 
 ## 2. Judge the evidence
@@ -131,7 +143,7 @@ Update the registry only from confirmed proposals.
 | `route.py index [--refresh]` | Build or refresh the project index. |
 | `route.py brief --compact --prompt-file PATH` | Compact evidence dossier. Read-only. |
 | `route.py brief --prompt-file PATH` | Full dossier with every session excerpt. |
-| `route.py sessions --project PATH [--query TEXT] [--detail]` | List top-level sessions; `--query` searches titles and message text. |
+| `route.py sessions [--project PATH] [--query TEXT] [--detail] [--any]` | List top-level sessions. `--query` searches titles and the whole transcript, requiring every term; `--any` relaxes that. Without `--project` it searches every project. |
 | `route.py dispatch ... [--dry-run] [--yes]` | Create or resume a session. |
 | `route.py eval --prompts PATH [--json]` | Run the routing eval set. |
 | `route.py doctor` | Check registry, index, `opencode2`, API. |
@@ -143,3 +155,7 @@ Update the registry only from confirmed proposals.
 - `dispatch` refuses child and archived sessions.
 - `dispatch` needs `--project` for a new session and refuses a new session outside a git repo. A resume skips both checks.
 - Matching is lexical. When the words do not separate the candidates, ask.
+- Read a directory with the `read` tool; `ls` is not allowlisted. Read JSON with
+  `read` or `jq FILE`. Shell `grep` is not allowlisted; use the `grep` tool.
+  Never open `opencode.db` by hand: `sessions --detail` already reports `child`,
+  `parent`, and `archived`.
