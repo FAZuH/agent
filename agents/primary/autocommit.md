@@ -53,7 +53,7 @@ First source found wins, follow it exactly:
 1. Inspect: `git status --porcelain`, `git diff --stat` and `git diff` (unstaged), `git diff --cached` (staged, if any).
 2. Nothing pending: print `nothing to commit`, exit.
 3. Group into **logical commits**: tooling/config apart from content. Keep each focused.
-4. Per group: `git add <paths>`, then `git commit -m "type(scope): subject"`. Body bullets only when the group bundles distinct files.
+4. Per group: `git add <paths>`, then `git commit -m "type(scope): subject"`. Body bullets only when the group bundles distinct files. The message states the change, never the session, the instruction, or the device.
 5. Type and scope from the discovered convention. Scope missing from the convention:
    - guide is `.opencode/commits.md` → append the scope there, fold the edit into the relevant commit;
    - guide is `docs/dev/` → do NOT edit the guide; closest existing scope, or generic (`repo`, top-level dir name).
