@@ -4,18 +4,20 @@
 Usage:
     route.py init
     route.py index [--refresh]
-    route.py brief --prompt-file PATH
-    route.py sessions --project PATH [--query TEXT]
-    route.py dispatch --project PATH --prompt-file PATH [--session ID]
-                      [--agent NAME] [--model PROVIDER/MODEL] [--title TITLE]
-                      [--dry-run] [--yes]
+    route.py brief --prompt-file PATH [--compact]
+    route.py sessions --project PATH [--query TEXT] [--detail]
+    route.py dispatch [--project PATH] --prompt-file PATH [--session ID]
+                      [--agent NAME] [--model PROVIDER/MODEL[#VARIANT]]
+                      [--title TITLE] [--dry-run] [--yes]
     route.py eval --prompts PATH [--json]
     route.py doctor
 
 `brief` is read-only. It returns a dossier of evidence, not a verdict: the
 router reads the evidence and decides. `dispatch` refuses to create or prompt
 a session without `--yes`; the agent asks the user first unless the route is
-unambiguous and the user asked for auto mode.
+unambiguous and the user asked for auto mode. A new session needs `--project`;
+a resumed session uses its own directory. `--model` and `--agent` switch those
+fields on a resumed session.
 
 Exit codes: 0 ok, 2 error.
 """
@@ -131,6 +133,21 @@ def display_path(path):
         return "~/" + str(path.relative_to(HOME))
     except ValueError:
         return str(path)
+
+
+def normalize_model(value):
+    """Return `{providerID,id,variant}` from an API or database value."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(value, dict):
+        return None
+    model = {key: value[key] for key in ("providerID", "id", "variant") if value.get(key)}
+    return model or None
 
 
 def git_root(path):
@@ -706,20 +723,21 @@ def db_session_rows():
     try:
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
         rows = con.execute(
-            "select id, title, directory, agent, idle_outcome, parent_id, time_created, time_updated "
+            "select id, title, directory, agent, model, idle_outcome, parent_id, time_created, time_updated "
             "from session_v2 where time_archived is null"
         ).fetchall()
         con.close()
     except sqlite3.Error:
         return []
     out = []
-    for session_id, title, directory, agent, outcome, parent_id, created, updated in rows:
+    for session_id, title, directory, agent, model, outcome, parent_id, created, updated in rows:
         if not directory or not title:
             continue
         out.append({
             "id": session_id,
             "title": title,
             "agent": agent,
+            "model": normalize_model(model),
             "outcome": outcome,
             "parentID": parent_id,
             "location": {"directory": directory},
@@ -891,9 +909,12 @@ def session_dossier(row, prompt, registry, snippet_chars, generic=None):
     recent_users = all_users[-3:]
     recent_assistants = all_assistants[-2:]
     recent_text = " ".join([first_user] + recent_users + recent_assistants)
-    recent_tokens = set(tokens(recent_text))
+    user_text = " ".join([first_user] + recent_users)
+    assistant_text = " ".join(recent_assistants)
     ignored = generic | SESSION_STOPWORDS
-    hits = (recent_tokens & prompt_tokens) - ignored
+    user_hits = (set(tokens(user_text)) & prompt_tokens) - ignored
+    assistant_hits = (set(tokens(assistant_text)) & prompt_tokens) - ignored
+    hits = user_hits | assistant_hits
     title_tokens = set(tokens(row.get("title", "")))
     title_hits = (title_tokens & prompt_tokens) - ignored
     drift = []
@@ -907,6 +928,7 @@ def session_dossier(row, prompt, registry, snippet_chars, generic=None):
         "sessionID": row.get("id"),
         "title": row.get("title", ""),
         "agent": row.get("agent"),
+        "model": normalize_model(row.get("model")),
         "directory": location,
         "outcome": row.get("outcome"),
         "child": bool(row.get("parentID") or row.get("parent_id")),
@@ -915,6 +937,8 @@ def session_dossier(row, prompt, registry, snippet_chars, generic=None):
         "last_user_prompts": recent_users,
         "last_assistant_excerpts": recent_assistants,
         "title_match": sorted(title_hits),
+        "user_match": sorted(user_hits),
+        "assistant_match": sorted(assistant_hits),
         "recent_match": sorted(hits),
         "title_only": bool(title_hits and not hits),
         "drift": bool(drift),
@@ -950,7 +974,8 @@ def related_sessions(project_path, prompt, registry, snippet_chars, generic=None
             if not title_hits and not wants_context:
                 continue
             seen.add(sid)
-            out.append((row, f"session lives in {display_path(directory)}; title matches: {', '.join(sorted(title_hits)) or 'context prompt'}"))
+            matched = ', '.join(sorted(title_hits)) or 'context prompt'
+            out.append((row, f"session in {display_path(directory)}; {matched}"))
     if wants_context:
         for term in ("migration", "migrate", "module", "answer key", "repo"):
             if term not in prompt_lower:
@@ -966,11 +991,63 @@ def related_sessions(project_path, prompt, registry, snippet_chars, generic=None
                 seen.add(sid)
                 out.append((row, f"title search matched \"{term}\""))
     dossiers = []
-    for row, why in out[:5]:
+    for row, why in out[:8]:
         dossier = session_dossier(row, prompt, registry, snippet_chars, generic)
         dossier["why"] = why
         dossiers.append(dossier)
     return dossiers
+
+
+def session_candidates(project_path, candidates, related, max_items=8):
+    """Resumable sessions in the project and its parent directories.
+
+    The router reads this first. The full dossier stays below it for detail.
+    A parent-directory session is a valid resume target even when its directory
+    is outside the git repo.
+    """
+    project = expand(project_path) if project_path else None
+    parent_directories = (project.parent, project.parent.parent) if project else ()
+    entries = []
+    seen = set()
+    top = candidates[0] if candidates else None
+    if top:
+        for item in top.get("sessions") or []:
+            session_id = item.get("sessionID")
+            if not session_id or session_id in seen or item.get("agent") == "router":
+                continue
+            seen.add(session_id)
+            entry = dict(item)
+            entry["relation"] = "repo"
+            entry["resumable"] = not bool(entry.get("child"))
+            entry["session_matches_project"] = True
+            entries.append(entry)
+    for item in related or []:
+        session_id = item.get("sessionID")
+        if not session_id or session_id in seen or item.get("agent") == "router":
+            continue
+        seen.add(session_id)
+        entry = dict(item)
+        directory = entry.get("directory")
+        relation = "title"
+        if project and directory:
+            session_path = expand(directory)
+            if session_path == project:
+                relation = "repo"
+            elif session_path in parent_directories:
+                relation = "parent"
+        entry["relation"] = relation
+        entry["resumable"] = not bool(entry.get("child"))
+        entry["session_matches_project"] = bool(
+            project and directory and str(expand(directory)) == str(project)
+        )
+        entries.append(entry)
+    entries.sort(key=lambda item: (
+        -len(item.get("user_match") or []),
+        -len(item.get("recent_match") or []),
+        -len(item.get("title_match") or []),
+        -(item.get("updated") or 0),
+    ))
+    return entries[:max_items]
 
 
 # ── brief ────────────────────────────────────────────────────────────────────
@@ -1052,24 +1129,31 @@ def build_brief(prompt_path, registry=None, refresh=False):
         local_sessions = [item for item in sessions if item.get("why") is None]
         global_sessions = [item for item in sessions if item.get("why")]
         local_sessions.sort(key=lambda item: (
+            -len(item["user_match"]),
             -len(item["recent_match"]),
             -len(item["title_match"]),
             -(item.get("updated") or 0),
         ))
         candidate["sessions"] = (global_sessions + local_sessions)[:max_sessions]
-        session_hits = [
-            item for item in candidate["sessions"]
-            if item["recent_match"]
-        ]
-        if session_hits:
-            best_session = session_hits[0]
-            strength = len(best_session["recent_match"])
+        user_hits = [item for item in candidate["sessions"] if item["user_match"]]
+        if user_hits:
+            best_session = user_hits[0]
+            matched = best_session["user_match"]
+            specificity = "unique" if len(matched) >= 2 else "shared"
+            evidence_prefix = "user prompts match"
+        else:
+            assistant_hits = [item for item in candidate["sessions"] if item["assistant_match"]]
+            best_session = assistant_hits[0] if assistant_hits else None
+            matched = best_session["assistant_match"] if best_session else []
+            specificity = "shared"
+            evidence_prefix = "assistant text matches"
+        if best_session:
             candidate["signals"].append({
                 "kind": "session_text",
-                "evidence": f"{best_session['sessionID']} recent text matches: {', '.join(best_session['recent_match'][:5])}",
-                "specificity": "unique" if strength >= 2 else "shared",
+                "evidence": f"{best_session['sessionID']} {evidence_prefix}: {', '.join(matched[:5])}",
+                "specificity": specificity,
             })
-            if strength >= 2:
+            if specificity == "unique":
                 candidate["unique_signals"] += 1
             else:
                 candidate["shared_signals"] += 1
@@ -1098,6 +1182,7 @@ def build_brief(prompt_path, registry=None, refresh=False):
         warnings.append("generic terms in prompt: " + ", ".join(generic_hits[:8]))
 
     related = related_sessions(candidates[0]["path"], clean, registry, snippet_chars, generic) if candidates else []
+    session_list = session_candidates(candidates[0]["path"] if candidates else None, candidates, related)
 
     return {
         "prompt": {
@@ -1111,11 +1196,44 @@ def build_brief(prompt_path, registry=None, refresh=False):
             "age_seconds": age,
             "projects": len(projects),
         },
+        "session_candidates": session_list,
         "project_candidates": candidates,
         "references": references,
         "related_sessions": related,
         "warnings": warnings,
         "judgment": "The router decides. Read the evidence, check specificity, and ask when the candidates do not actually fit.",
+    }
+
+
+def compact_brief(data):
+    """Trim the dossier to the part the router reads first."""
+    candidates = []
+    for candidate in (data.get("project_candidates") or [])[:3]:
+        candidates.append({
+            "path": candidate.get("path"),
+            "display": candidate.get("display"),
+            "name": candidate.get("name"),
+            "remote": candidate.get("remote"),
+            "direct_signals": candidate.get("direct_signals", 0),
+            "unique_signals": candidate.get("unique_signals", 0),
+            "shared_signals": candidate.get("shared_signals", 0),
+            "rank_hint": candidate.get("rank_hint"),
+            "session_hint": candidate.get("session_hint"),
+            "signals": (candidate.get("signals") or [])[:6],
+            "counter_signals": candidate.get("counter_signals") or [],
+        })
+    return {
+        "prompt": {
+            "raw": (data.get("prompt") or {}).get("raw", ""),
+            "clean": (data.get("prompt") or {}).get("clean", ""),
+            "shape": (data.get("prompt") or {}).get("shape", ""),
+        },
+        "index": data.get("index") or {},
+        "session_candidates": data.get("session_candidates") or [],
+        "project_candidates": candidates,
+        "references": data.get("references") or [],
+        "warnings": data.get("warnings") or [],
+        "judgment": data.get("judgment", ""),
     }
 
 
@@ -1130,38 +1248,46 @@ def session_info(session_id):
 
 
 def parse_model(reference):
-    """Split `provider/model` while keeping slashes inside the model id."""
+    """Split `provider/model[#variant]`, keeping slashes inside the model id."""
     if not reference:
         return None
-    provider, separator, model = reference.partition("/")
-    if not separator or not provider or not model:
-        raise RouteError(f"model must be provider/model, got: {reference}")
-    return {"providerID": provider, "id": model}
+    provider, separator, rest = reference.partition("/")
+    if not separator or not provider or not rest:
+        raise RouteError(f"model must be provider/model[#variant], got: {reference}")
+    model, variant_separator, variant = rest.rpartition("#")
+    if not variant_separator:
+        model = rest
+        variant = ""
+    if not model:
+        raise RouteError(f"model must be provider/model[#variant], got: {reference}")
+    parsed = {"providerID": provider, "id": model}
+    if variant:
+        parsed["variant"] = variant
+    return parsed
 
 
 def dispatch(
-    project,
-    prompt_path,
+    project=None,
+    prompt_path=None,
     session=None,
-    agent="orchestrator",
+    agent=None,
     title=None,
     model=None,
     dry_run=False,
     yes=False,
 ):
-    project_path = expand(project)
-    if not project_path.is_dir():
-        raise RouteError(f"project directory does not exist: {project_path}")
-    root = git_root(project_path)
-    if not root:
-        raise RouteError(f"project is not inside a git repository: {project_path}")
-    project_path = root
     prompt = read_text(expand(prompt_path)).strip()
     if not prompt:
         raise RouteError("prompt file is empty")
     clean = clean_prompt(prompt)
+    requested_project = expand(project) if project else None
+    requested_model = parse_model(model)
     action = "new"
     resolved_session = None
+    session_directory = None
+    session_agent = None
+    session_model = None
+    session_title = None
     if session:
         info = session_info(session)
         if info.get("parentID") or info.get("parent_id"):
@@ -1170,45 +1296,84 @@ def dispatch(
             raise RouteError(f"refusing to resume archived session {session}")
         action = "resume"
         resolved_session = session
-    if not title:
-        title = f"{project_path.name}: {clean[:60]}"
+        session_directory = (info.get("location") or {}).get("directory")
+        if not session_directory:
+            raise RouteError(f"session {session} has no directory")
+        project_path = expand(session_directory)
+        if not project_path.is_dir():
+            raise RouteError(f"session directory does not exist: {project_path}")
+        session_agent = info.get("agent")
+        session_model = normalize_model(info.get("model"))
+        session_title = info.get("title")
+    else:
+        if not requested_project:
+            raise RouteError("--project is required for a new session")
+        project_path = requested_project
+        if not project_path.is_dir():
+            raise RouteError(f"project directory does not exist: {project_path}")
+        root = git_root(project_path)
+        if not root:
+            raise RouteError(f"project is not inside a git repository: {project_path}")
+        project_path = root
+    actual_agent = session_agent if action == "resume" else (agent or "orchestrator")
+    actual_title = session_title if action == "resume" else (title or f"{project_path.name}: {clean[:60]}")
+    actual_model = session_model if action == "resume" else requested_model
     plan = {
         "action": action,
         "project": str(project_path),
         "project_display": display_path(project_path),
         "sessionID": resolved_session,
-        "agent": agent,
-        "model": model if action == "new" else None,
-        "title": title,
+        "agent": actual_agent,
+        "model": actual_model,
+        "title": actual_title,
         "prompt_chars": len(prompt),
+        "prompt_preview": prompt[:280],
         "dry_run": dry_run or not yes,
     }
-    if resolved_session:
-        info = session_info(resolved_session)
-        session_directory = (info.get("location") or {}).get("directory")
+    if requested_project and str(requested_project) != str(project_path):
+        plan["requested_project"] = str(requested_project)
+        plan["requested_project_display"] = display_path(requested_project)
+    if action == "resume":
         plan["session_directory"] = session_directory
-        plan["session_matches_project"] = bool(session_directory) and str(expand(session_directory)) == str(project_path)
+        if requested_project:
+            plan["session_matches_project"] = str(expand(session_directory)) == str(requested_project)
+        plan["open"] = f"opencode {project_path} -s {resolved_session}"
+        if agent and agent != session_agent:
+            plan["requested_agent"] = agent
+        if requested_model and requested_model != session_model:
+            plan["requested_model"] = requested_model
+        if title and title != session_title:
+            plan["requested_title"] = title
     if dry_run or not yes:
         return plan
     if action == "new":
         body = {
-            "title": title,
+            "title": actual_title,
             "location": {"directory": str(project_path)},
-            "agent": agent,
+            "agent": actual_agent,
         }
-        parsed = parse_model(model)
-        if parsed:
-            body["model"] = parsed
+        if requested_model:
+            body["model"] = requested_model
         payload = api("post", "/api/session", body)
         data = api_data(payload)
         resolved_session = (data or {}).get("id") or (data or {}).get("sessionID")
         if not resolved_session:
             raise RouteError("session create returned no id")
+        plan["open"] = f"opencode {project_path} -s {resolved_session}"
+    else:
+        if requested_model and requested_model != session_model:
+            api("post", f"/api/session/{resolved_session}/model", {"model": requested_model})
+            plan["model"] = requested_model
+        if agent and agent != session_agent:
+            api("post", f"/api/session/{resolved_session}/agent", {"agent": agent})
+            plan["agent"] = agent
+        if title and title != session_title:
+            api("patch", f"/api/session/{resolved_session}", {"title": title})
+            plan["title"] = title
     api("post", f"/api/session/{resolved_session}/prompt", {"text": prompt})
     plan.update({
         "sessionID": resolved_session,
         "dry_run": False,
-        "open": f"opencode {project_path} -s {resolved_session}",
     })
     LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LEDGER_PATH.open("a", encoding="utf-8") as handle:
@@ -1217,9 +1382,9 @@ def dispatch(
             "action": action,
             "project": str(project_path),
             "sessionID": resolved_session,
-            "agent": agent,
+            "agent": plan["agent"],
             "model": plan["model"],
-            "title": title,
+            "title": plan["title"],
             "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         }) + "\n")
     return plan
@@ -1308,26 +1473,50 @@ def command_index(args):
 
 
 def command_brief(args):
-    print(json.dumps(build_brief(args.prompt_file), indent=2))
+    data = build_brief(args.prompt_file)
+    if args.compact:
+        data = compact_brief(data)
+    print(json.dumps(data, indent=2))
     return 0
+
+
+def session_query_hits(row, query, snippet_chars):
+    """Title and message-text matches for `sessions --query`."""
+    title_hits = sorted(query & set(tokens(row.get("title", ""))))
+    if title_hits:
+        return {"title": title_hits, "text": []}
+    users, assistants = session_messages(row.get("id"), snippet_chars)
+    text = " ".join(users + assistants)
+    return {"title": [], "text": sorted(query & set(tokens(text)))}
 
 
 def command_sessions(args):
     registry = load_registry()
+    snippet_chars = int(registry["signals"]["snippet_chars"])
     rows = session_rows(args.project, limit=args.limit)
     query = set(tokens(args.query)) if args.query else set()
     output = []
     for row in rows:
-        if query and not (query & set(tokens(row.get("title", "")))):
+        hits = session_query_hits(row, query, snippet_chars) if query else {"title": [], "text": []}
+        if query and not hits["title"] and not hits["text"]:
             continue
-        output.append({
+        entry = {
             "sessionID": row.get("id"),
             "title": row.get("title"),
             "agent": row.get("agent"),
+            "model": normalize_model(row.get("model")),
             "directory": (row.get("location") or {}).get("directory"),
             "updated": (row.get("time") or {}).get("updated"),
             "outcome": row.get("outcome"),
-        })
+        }
+        if query:
+            entry["matched"] = hits["title"] or hits["text"]
+        if args.detail:
+            users, assistants = session_messages(row.get("id"), snippet_chars)
+            entry["first_user_prompt"] = users[0] if users else ""
+            entry["last_user_prompts"] = users[-3:]
+            entry["last_assistant_excerpts"] = assistants[-2:]
+        output.append(entry)
     print(json.dumps(output, indent=2))
     return 0
 
@@ -1382,19 +1571,21 @@ def main(argv=None):
 
     brief = sub.add_parser("brief")
     brief.add_argument("--prompt-file", required=True)
+    brief.add_argument("--compact", action="store_true")
     brief.set_defaults(func=command_brief)
 
     sessions = sub.add_parser("sessions")
     sessions.add_argument("--project", required=True)
     sessions.add_argument("--query", default="")
+    sessions.add_argument("--detail", action="store_true")
     sessions.add_argument("--limit", type=int, default=50)
     sessions.set_defaults(func=command_sessions)
 
     dispatch_parser = sub.add_parser("dispatch")
-    dispatch_parser.add_argument("--project", required=True)
+    dispatch_parser.add_argument("--project")
     dispatch_parser.add_argument("--prompt-file", required=True)
     dispatch_parser.add_argument("--session")
-    dispatch_parser.add_argument("--agent", default="orchestrator")
+    dispatch_parser.add_argument("--agent")
     dispatch_parser.add_argument("--model")
     dispatch_parser.add_argument("--title")
     dispatch_parser.add_argument("--dry-run", action="store_true")

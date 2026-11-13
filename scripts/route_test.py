@@ -141,7 +141,7 @@ class SessionTests(RouteTestCase):
         connection = sqlite3.connect(self.db)
         connection.execute(
             "create table session_v2 ("
-            "id text, title text, directory text, agent text, idle_outcome text, "
+            "id text, title text, directory text, agent text, model text, idle_outcome text, "
             "parent_id text, time_archived integer, time_created integer, time_updated integer)"
         )
         self.connection = connection
@@ -154,10 +154,10 @@ class SessionTests(RouteTestCase):
             os.environ["OPENCODE_DB"] = self.old_db
         super().tearDown()
 
-    def add_session(self, session_id, title, directory, parent=None, archived=0, updated=1):
+    def add_session(self, session_id, title, directory, parent=None, archived=0, updated=1, model=None):
         self.connection.execute(
-            "insert into session_v2 values (?, ?, ?, 'build', 'succeeded', ?, ?, ?, ?)",
-            (session_id, title, str(directory), parent, archived or None, updated, updated),
+            "insert into session_v2 values (?, ?, ?, 'build', ?, 'succeeded', ?, ?, ?, ?)",
+            (session_id, title, str(directory), model, parent, archived or None, updated, updated),
         )
         self.connection.commit()
 
@@ -219,6 +219,155 @@ class SessionTests(RouteTestCase):
         self.assertTrue(dossier["drift"])
         self.assertIn("other", dossier["drift_evidence"][0])
 
+    def test_db_rows_include_model(self):
+        repo = self.repo("repo")
+        self.add_session(
+            "ses_model",
+            "OOP-Module6 repository migration",
+            repo,
+            model='{"providerID": "commandcode", "id": "deepseek/deepseek-v4.1-flash", "variant": "max"}',
+        )
+        rows = route.db_session_rows()
+        self.assertEqual(rows[0]["model"], {
+            "providerID": "commandcode",
+            "id": "deepseek/deepseek-v4.1-flash",
+            "variant": "max",
+        })
+
+    def test_session_dossier_splits_user_and_assistant_matches(self):
+        repo = self.repo("repo")
+        old_messages = route.session_messages
+        route.session_messages = lambda session_id, chars: (
+            ["migrate the PA8 assignment repository"],
+            ["the observer pattern is unrelated"],
+        )
+        try:
+            dossier = route.session_dossier(
+                {"id": "ses_1", "title": "notes", "location": {"directory": str(repo)}},
+                "migrate PA8 assignment observer",
+                self.registry(),
+                400,
+            )
+        finally:
+            route.session_messages = old_messages
+        self.assertEqual(dossier["user_match"], ["assignment", "pa8"])
+        self.assertEqual(dossier["assistant_match"], ["observer"])
+        self.assertEqual(dossier["recent_match"], ["assignment", "observer", "pa8"])
+
+    def test_session_candidates_merge_parent_sessions_first(self):
+        repo = self.repo("practicum/FarisAhmadZubairBauw_OOP")
+        parent = repo.parent
+        candidates = [{
+            "path": str(repo),
+            "sessions": [{
+                "sessionID": "ses_repo",
+                "child": False,
+                "directory": str(repo),
+                "user_match": ["module"],
+                "recent_match": ["module"],
+                "title_match": [],
+                "updated": 5,
+            }],
+        }]
+        related = [{
+            "sessionID": "ses_parent",
+            "child": False,
+            "directory": str(parent),
+            "user_match": ["assignment", "pa8", "repository"],
+            "recent_match": ["assignment", "pa8", "repository"],
+            "title_match": ["migration"],
+            "updated": 1,
+        }]
+        entries = route.session_candidates(str(repo), candidates, related)
+        self.assertEqual([entry["sessionID"] for entry in entries], ["ses_parent", "ses_repo"])
+        self.assertEqual([entry["relation"] for entry in entries], ["parent", "repo"])
+        self.assertTrue(all(entry["resumable"] for entry in entries))
+
+    def test_session_candidates_mark_child_sessions_unresumable(self):
+        repo = self.repo("repo")
+        candidates = [{"path": str(repo), "sessions": [{
+            "sessionID": "ses_child",
+            "child": True,
+            "directory": str(repo),
+            "user_match": [],
+            "recent_match": [],
+            "title_match": [],
+            "updated": 1,
+        }]}]
+        entries = route.session_candidates(str(repo), candidates, [])
+        self.assertFalse(entries[0]["resumable"])
+
+    def test_session_candidates_skip_router_sessions(self):
+        repo = self.repo("repo")
+        candidates = [{"path": str(repo), "sessions": [
+            {
+                "sessionID": "ses_router",
+                "agent": "router",
+                "directory": str(repo),
+                "user_match": ["a", "b", "c"],
+                "recent_match": ["a", "b", "c"],
+                "title_match": [],
+                "updated": 9,
+            },
+            {
+                "sessionID": "ses_work",
+                "agent": "build",
+                "directory": str(repo),
+                "user_match": ["a"],
+                "recent_match": ["a"],
+                "title_match": [],
+                "updated": 1,
+            },
+        ]}]
+        entries = route.session_candidates(str(repo), candidates, [])
+        self.assertEqual([entry["sessionID"] for entry in entries], ["ses_work"])
+
+    def test_session_candidates_label_distant_ancestors_as_title(self):
+        repo = self.repo("college/semester/project")
+        distant = repo.parent.parent.parent
+        related = [{
+            "sessionID": "ses_distant",
+            "agent": "build",
+            "directory": str(distant),
+            "user_match": [],
+            "recent_match": [],
+            "title_match": ["project"],
+            "updated": 1,
+        }]
+        entries = route.session_candidates(str(repo), [], related)
+        self.assertEqual(entries[0]["relation"], "title")
+
+    def test_compact_brief_keeps_sessions_and_limits_projects(self):
+        data = {
+            "prompt": {"raw": "x", "clean": "x", "shape": "task", "tokens": ["x"]},
+            "index": {"projects": 2},
+            "session_candidates": [{"sessionID": "ses_1"}],
+            "project_candidates": [{"path": f"/p{index}"} for index in range(4)],
+            "related_sessions": [{"sessionID": "ses_1"}],
+            "references": [],
+            "warnings": ["w"],
+            "judgment": "j",
+        }
+        compact = route.compact_brief(data)
+        self.assertEqual(len(compact["project_candidates"]), 3)
+        self.assertNotIn("tokens", compact["prompt"])
+        self.assertNotIn("related_sessions", compact)
+        self.assertEqual(compact["session_candidates"], [{"sessionID": "ses_1"}])
+
+    def test_session_query_searches_message_text(self):
+        old_messages = route.session_messages
+        route.session_messages = lambda session_id, chars: (
+            ["migrate the PA8 assignment module"],
+            [],
+        )
+        try:
+            hits = route.session_query_hits(
+                {"id": "ses_1", "title": "OOP-Module6"}, {"assignment"}, 400
+            )
+        finally:
+            route.session_messages = old_messages
+        self.assertEqual(hits, {"title": [], "text": ["assignment"]})
+
 
 class DispatchTests(RouteTestCase):
     def setUp(self):
@@ -227,6 +376,14 @@ class DispatchTests(RouteTestCase):
         self.prompt_path = self.root / "prompt.txt"
         self.prompt_text = 'fix "quotes"\nand unicode ✅'
         self.prompt_path.write_text(self.prompt_text, encoding="utf-8")
+        self.session_dir = self.repo_path
+        self.session_title = "OOP-Module6 repository migration"
+        self.session_agent = "build"
+        self.session_model = {
+            "providerID": "commandcode",
+            "id": "deepseek/deepseek-v4.1-flash",
+            "variant": "max",
+        }
         self.calls = []
         self.old_api = route.api
         self.old_info = route.session_info
@@ -244,10 +401,20 @@ class DispatchTests(RouteTestCase):
             return {"data": {"id": "ses_new"}}
         if method == "post" and path.endswith("/prompt"):
             return {"data": {"accepted": True}}
+        if method == "post" and (path.endswith("/model") or path.endswith("/agent")):
+            return {"data": {"accepted": True}}
+        if method == "patch" and path.startswith("/api/session/"):
+            return {"data": {"accepted": True}}
         raise AssertionError(f"unexpected API call: {method} {path}")
 
     def fake_info(self, session_id):
-        return {"id": session_id, "location": {"directory": str(self.repo_path)}}
+        return {
+            "id": session_id,
+            "title": self.session_title,
+            "agent": self.session_agent,
+            "model": dict(self.session_model),
+            "location": {"directory": str(self.session_dir)},
+        }
 
     def test_dry_run_makes_no_api_calls(self):
         plan = route.dispatch(
@@ -295,6 +462,80 @@ class DispatchTests(RouteTestCase):
         )
         with self.assertRaises(route.RouteError):
             route.parse_model("no-slash")
+
+    def test_parse_model_supports_variant(self):
+        self.assertEqual(
+            route.parse_model("commandcode/deepseek/deepseek-v4.1-flash#max"),
+            {
+                "providerID": "commandcode",
+                "id": "deepseek/deepseek-v4.1-flash",
+                "variant": "max",
+            },
+        )
+
+    def test_resume_without_project_uses_session_directory_and_keeps_state(self):
+        self.session_dir = self.root / "practicum parent"
+        self.session_dir.mkdir(parents=True)
+        plan = route.dispatch(
+            prompt_path=str(self.prompt_path),
+            session="ses_resume",
+            dry_run=False,
+            yes=True,
+        )
+        self.assertEqual(plan["action"], "resume")
+        self.assertEqual(plan["project"], str(self.session_dir))
+        self.assertEqual(plan["agent"], self.session_agent)
+        self.assertEqual(plan["model"], self.session_model)
+        self.assertEqual(plan["title"], self.session_title)
+        self.assertIn("ses_resume", plan["open"])
+        self.assertFalse(any(call[1].endswith("/model") for call in self.calls))
+        self.assertFalse(any(call[1].endswith("/agent") for call in self.calls))
+        prompt = [call for call in self.calls if call[1].endswith("/prompt")][0]
+        self.assertEqual(prompt[1], "/api/session/ses_resume/prompt")
+        self.assertEqual(prompt[2]["text"], self.prompt_text)
+
+    def test_resume_with_project_reports_where_the_session_lives(self):
+        self.session_dir = self.root / "practicum parent"
+        self.session_dir.mkdir(parents=True)
+        plan = route.dispatch(
+            str(self.repo_path),
+            str(self.prompt_path),
+            session="ses_resume",
+            dry_run=True,
+        )
+        self.assertEqual(plan["project"], str(self.session_dir))
+        self.assertEqual(plan["requested_project"], str(self.repo_path))
+        self.assertFalse(plan["session_matches_project"])
+
+    def test_resume_switches_model_agent_and_title_when_passed(self):
+        plan = route.dispatch(
+            prompt_path=str(self.prompt_path),
+            session="ses_resume",
+            agent="orchestrator",
+            model="example/team/model-v2#max",
+            title="New title",
+            dry_run=False,
+            yes=True,
+        )
+        expected_model = {
+            "providerID": "example",
+            "id": "team/model-v2",
+            "variant": "max",
+        }
+        self.assertEqual(plan["agent"], "orchestrator")
+        self.assertEqual(plan["model"], expected_model)
+        self.assertEqual(plan["title"], "New title")
+        model_call = [call for call in self.calls if call[1].endswith("/model")][0]
+        self.assertEqual(model_call[2], {"model": expected_model})
+        agent_call = [call for call in self.calls if call[1].endswith("/agent")][0]
+        self.assertEqual(agent_call[2], {"agent": "orchestrator"})
+        title_call = [call for call in self.calls if call[0] == "patch"][0]
+        self.assertEqual(title_call[1], "/api/session/ses_resume")
+        self.assertEqual(title_call[2], {"title": "New title"})
+
+    def test_new_session_requires_project(self):
+        with self.assertRaises(route.RouteError):
+            route.dispatch(prompt_path=str(self.prompt_path), dry_run=True)
 
     def test_resume_refuses_child_session(self):
         route.session_info = lambda session_id: {
