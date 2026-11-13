@@ -1,9 +1,7 @@
 ---
 name: post-task
 description: >-
-  Close a finished task, procedure, or investigation with one `post_task`
-  tool call: Completed, Deviations, Hiccups, Failed/skipped, Next.
-  The Reports view renders it; the reply stays short. Triggers: end of
+  Close a finished task, procedure, or investigation. Triggers: end of
   multi-step work, what happened, what broke. Not a status update.
 ---
 
@@ -82,38 +80,3 @@ last two paragraphs, skip the report and put anything they must act on in
   "the node's gitconfig rewrites https to ssh and it has no key" is a cause.
 - Facts, not feelings. A verification that did not run is `not verified`, not
   `done`.
-
-## Fallback
-
-Only when `post_task` is unavailable (an older host, or a session without the
-plugin), print this block at the end of the reply instead:
-
-```markdown
-## 📋 Post Task
-
-### ✅ Completed
-1. item
-
-### 🔀 Deviations
-1. item
-
-### 🐛 Hiccups
-| Problem | Cause | Fix |
-|---|---|---|
-| what broke | why it really broke | what resolved it |
-
-### ❌ Failed / skipped
-1. item
-
-### ➡️ Next
-1. item
-
-### Needs your decision
-
-<the prompts, in the @prompt-user shape>
-```
-
-Only the printed fallback keeps this block inside the report; with the tools
-available, call `prompt_user` separately.
-
-Omit an empty section entirely.
