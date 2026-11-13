@@ -78,7 +78,7 @@ export function writeReports(sessionID: string, list: Report[]): void {
   const file = fileOf(sessionID)
   mkdirSync(REPORTS_DIR, { recursive: true })
   const temp = `${file}.${process.pid}.tmp`
-  writeFileSync(temp, `${JSON.stringify(list, null, 2)}\n`, "utf8")
+  writeFileSync(temp, `${JSON.stringify(list, null, 2)}\n`, { encoding: "utf8", mode: 0o600 })
   renameSync(temp, file)
 }
 
