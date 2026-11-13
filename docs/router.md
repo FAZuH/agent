@@ -54,8 +54,10 @@ match `grafana`.
 
 Project-local sessions are listed from the API. Global session search reads
 `session_v2` and `session_message` from `~/.local/share/opencode/opencode.db`.
-`route.py sessions --query TEXT` searches titles first, then message text; add
-`--detail` to see each session's first and recent user prompts.
+`route.py sessions --query TEXT` searches titles and the whole transcript,
+requiring every term unless `--any` is passed; add `--detail` to see each
+session's first and recent user prompts. Omitting `--project` searches every
+project, newest 300 sessions when a query is present.
 
 - Titles locate sessions. A title word must be rare enough: document frequency
   at most `signals.title_term_df_limit`.
@@ -65,11 +67,19 @@ Project-local sessions are listed from the API. Global session search reads
 - `user_match` words come from the session's own user prompts; `assistant_match`
   words come only from its answers. User matches outrank assistant matches.
 - Child sessions are searched because they hold context, but they are never
-  offered for resume.
+  offered for resume. `sessions --detail` reports `child`, `parent`, and
+  `archived`, so there is never a reason to open the database directly.
 - Sessions run by the `router` agent are skipped: a dispatcher is not a
-  destination.
+  destination. The same applies to any session whose first prompt is the prompt
+  being routed, because that session is the routing turn itself.
 - Archived sessions are ignored.
 - Resuming is refused for child or archived sessions.
+
+The dossier scores the first prompt, the last three user prompts, and the last
+two assistant excerpts. A match buried earlier in a long session is invisible to
+it, so when the top project has no `user_match` hit, the brief scans whole
+transcripts and adds the matches as `relation: repo` entries with a
+`full transcript matches` reason.
 
 `session_candidates` is the short list the router reads first. It merges the top
 project's local sessions with `related_sessions` from the project's parent
