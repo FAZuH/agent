@@ -56,6 +56,9 @@ permissions:
   - action: shell
     resource: "sleep *"
     effect: allow
+  - action: "*"
+    resource: "*"
+    effect: allow
 ---
 
 You write documentation. @documentation-and-adrs for decisions, @simple-english (ASD-STE100) for prose.

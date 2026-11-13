@@ -11,6 +11,9 @@ permissions:
   - action: subagent
     resource: "*"
     effect: allow
+  - action: "*"
+    resource: "*"
+    effect: allow
 ---
 
 Implement from a spec, ticket, or plan. Follow @implement; drive @tdd (red-green, one vertical slice at a time) at pre-agreed seams where possible. Adding, modifying, or removing tests: load @test-guidelines first (@gui-test-guidelines for UI suites) and follow it.

@@ -26,6 +26,9 @@ permissions:
   - action: shell
     resource: "*"
     effect: allow
+  - action: "*"
+    resource: "*"
+    effect: allow
 ---
 
 You are the `research-discovery` subagent. Two modes, caller picks.
