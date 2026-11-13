@@ -368,6 +368,45 @@ class SessionTests(RouteTestCase):
             route.session_messages = old_messages
         self.assertEqual(hits, {"title": [], "text": ["assignment"]})
 
+    def test_session_query_reads_text_when_the_title_matches(self):
+        old_messages = route.session_messages
+        route.session_messages = lambda session_id, chars: (["the jev plugin"], [])
+        try:
+            hits = route.session_query_hits(
+                {"id": "ses_1", "title": "supervisor notes"},
+                {"supervisor", "jev"},
+                400,
+            )
+        finally:
+            route.session_messages = old_messages
+        self.assertEqual(hits["title"], ["supervisor"])
+        self.assertEqual(hits["text"], ["jev"])
+
+    def test_session_query_can_require_every_term(self):
+        old_messages = route.session_messages
+        route.session_messages = lambda session_id, chars: (["the jev plugin"], [])
+        row = {"id": "ses_1", "title": "supervisor notes"}
+        try:
+            partial = route.session_query_hits(row, {"supervisor", "missing"}, 400, match_all=True)
+            full = route.session_query_hits(row, {"supervisor", "jev"}, 400, match_all=True)
+        finally:
+            route.session_messages = old_messages
+        self.assertEqual(partial, {"title": [], "text": []})
+        self.assertEqual(full["title"], ["supervisor"])
+        self.assertEqual(full["text"], ["jev"])
+
+    def test_routing_turn_is_the_session_that_asks(self):
+        prompt = "search my sessions for the supervisor discussion"
+        self.assertTrue(route.is_routing_turn(
+            {"agent": "build", "first_user_prompt": prompt}, prompt
+        ))
+        self.assertTrue(route.is_routing_turn(
+            {"agent": "router", "first_user_prompt": "something else"}, prompt
+        ))
+        self.assertFalse(route.is_routing_turn(
+            {"agent": "build", "first_user_prompt": "an older task"}, prompt
+        ))
+
 
 class DispatchTests(RouteTestCase):
     def setUp(self):

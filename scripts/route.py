@@ -240,7 +240,7 @@ def default_registry():
             "recent_user_prompts": 3,
             "recent_assistant_excerpts": 2,
             "max_candidates": 5,
-            "max_sessions_per_project": 3,
+            "max_sessions_per_project": 5,
             "generic_term_projects": 3,
             "title_term_df_limit": 12,
             "index_max_age_hours": 24,
@@ -946,6 +946,18 @@ def session_dossier(row, prompt, registry, snippet_chars, generic=None):
     }
 
 
+def is_routing_turn(dossier, prompt):
+    """True for the session that is asking the question, not a destination.
+
+    The router quotes the prompt verbatim, so its own session always wins a
+    lexical match against the session that actually holds the work. The agent
+    name alone is not enough: a router session can switch agents mid-turn.
+    """
+    if (dossier.get("agent") or "") == "router":
+        return True
+    return (dossier.get("first_user_prompt") or "").strip() == prompt.strip()
+
+
 def related_sessions(project_path, prompt, registry, snippet_chars, generic=None):
     """Sessions in the immediate parent or a title search that may hold context.
 
@@ -960,6 +972,7 @@ def related_sessions(project_path, prompt, registry, snippet_chars, generic=None
     seen_directories = set()
     out = []
     ancestors = [expand(project_path).parent, expand(project_path).parent.parent]
+    generic_terms = generic or set()
     for directory in ancestors:
         if directory in seen_directories:
             continue
@@ -971,7 +984,9 @@ def related_sessions(project_path, prompt, registry, snippet_chars, generic=None
             if sid in seen:
                 continue
             title_hits = set(tokens(row.get("title", ""))) & prompt_tokens - SESSION_STOPWORDS
-            if not title_hits and not wants_context:
+            # One weak title word ("installing") matches half of ~/Projects.
+            # Require two non-generic terms unless the prompt is a continuation.
+            if not wants_context and len(title_hits - generic_terms) < 2:
                 continue
             seen.add(sid)
             matched = ', '.join(sorted(title_hits)) or 'context prompt'
@@ -998,12 +1013,13 @@ def related_sessions(project_path, prompt, registry, snippet_chars, generic=None
     return dossiers
 
 
-def session_candidates(project_path, candidates, related, max_items=8):
+def session_candidates(project_path, candidates, related, max_items=8, text_matches=None):
     """Resumable sessions in the project and its parent directories.
 
     The router reads this first. The full dossier stays below it for detail.
     A parent-directory session is a valid resume target even when its directory
-    is outside the git repo.
+    is outside the git repo. `text_matches` are whole-transcript hits, tried
+    only when the tail window scored nothing.
     """
     project = expand(project_path) if project_path else None
     parent_directories = (project.parent, project.parent.parent) if project else ()
@@ -1021,7 +1037,7 @@ def session_candidates(project_path, candidates, related, max_items=8):
             entry["resumable"] = not bool(entry.get("child"))
             entry["session_matches_project"] = True
             entries.append(entry)
-    for item in related or []:
+    for item in list(text_matches or []) + list(related or []):
         session_id = item.get("sessionID")
         if not session_id or session_id in seen or item.get("agent") == "router":
             continue
@@ -1050,6 +1066,33 @@ def session_candidates(project_path, candidates, related, max_items=8):
     return entries[:max_items]
 
 
+def text_matched_sessions(project_path, prompt, registry, snippet_chars, generic=None):
+    """Sessions whose whole transcript matches, not just the tail.
+
+    `session_dossier` scores the last few messages. In a long session the
+    relevant turn scrolls out of that window, so the session cannot be found
+    through it even though the text is still there.
+    """
+    terms = set(tokens(prompt)) - (generic or set()) - SESSION_STOPWORDS
+    if len(terms) < 2:
+        return []
+    scored = []
+    for row in session_rows(project_path, limit=200):
+        if (row.get("agent") or "") == "router":
+            continue
+        hits = session_query_hits(row, terms, snippet_chars)
+        matched = hits["title"] + hits["text"]
+        if len(matched) < 2:
+            continue
+        dossier = session_dossier(row, prompt, registry, snippet_chars, generic)
+        if is_routing_turn(dossier, prompt):
+            continue
+        dossier["why"] = f"full transcript matches: {', '.join(matched[:5])}"
+        scored.append((len(matched), dossier))
+    scored.sort(key=lambda item: (-item[0], -(item[1].get("updated") or 0)))
+    return [dossier for _, dossier in scored[:3]]
+
+
 # ── brief ────────────────────────────────────────────────────────────────────
 
 def build_brief(prompt_path, registry=None, refresh=False):
@@ -1069,6 +1112,14 @@ def build_brief(prompt_path, registry=None, refresh=False):
     for path, hits in session_title_hits(clean, projects, registry, generic).items():
         project = projects_by_path.get(path)
         if not project:
+            continue
+        hits = [hit for hit in hits if (hit["row"].get("agent") or "") != "router"]
+        if hits:
+            top_row = hits[0]["row"]
+            users, _ = session_messages(top_row.get("id"), len(prompt) + 100)
+            if users and users[0].strip() == prompt.strip():
+                hits = hits[1:]
+        if not hits:
             continue
         candidate = candidates_by_path.get(path)
         if candidate is None:
@@ -1123,26 +1174,29 @@ def build_brief(prompt_path, registry=None, refresh=False):
                 continue
             seen.add(session_id)
             dossier = session_dossier(row, clean, registry, snippet_chars, generic)
+            if is_routing_turn(dossier, clean):
+                continue
             if session_id in global_ids:
                 dossier["why"] = "global session title matched the prompt"
             sessions.append(dossier)
-        local_sessions = [item for item in sessions if item.get("why") is None]
-        global_sessions = [item for item in sessions if item.get("why")]
-        local_sessions.sort(key=lambda item: (
+        sessions.sort(key=lambda item: (
             -len(item["user_match"]),
             -len(item["recent_match"]),
             -len(item["title_match"]),
             -(item.get("updated") or 0),
         ))
-        candidate["sessions"] = (global_sessions + local_sessions)[:max_sessions]
-        user_hits = [item for item in candidate["sessions"] if item["user_match"]]
+        candidate["sessions"] = sessions[:max_sessions]
+        # Signals keep the older ordering: a session located by its title speaks
+        # for the project first. Only the list the router reads is re-ranked.
+        signal_sessions = sorted(sessions, key=lambda item: 0 if item.get("why") else 1)
+        user_hits = [item for item in signal_sessions if item["user_match"]]
         if user_hits:
             best_session = user_hits[0]
             matched = best_session["user_match"]
             specificity = "unique" if len(matched) >= 2 else "shared"
             evidence_prefix = "user prompts match"
         else:
-            assistant_hits = [item for item in candidate["sessions"] if item["assistant_match"]]
+            assistant_hits = [item for item in signal_sessions if item["assistant_match"]]
             best_session = assistant_hits[0] if assistant_hits else None
             matched = best_session["assistant_match"] if best_session else []
             specificity = "shared"
@@ -1182,7 +1236,23 @@ def build_brief(prompt_path, registry=None, refresh=False):
         warnings.append("generic terms in prompt: " + ", ".join(generic_hits[:8]))
 
     related = related_sessions(candidates[0]["path"], clean, registry, snippet_chars, generic) if candidates else []
-    session_list = session_candidates(candidates[0]["path"] if candidates else None, candidates, related)
+    text_matches = []
+    if candidates:
+        seen_text = set()
+        for candidate in candidates[:2]:
+            if any(item.get("user_match") for item in (candidate.get("sessions") or [])):
+                continue
+            for item in text_matched_sessions(
+                candidate["path"], clean, registry, snippet_chars, generic
+            ):
+                if item["sessionID"] in seen_text:
+                    continue
+                seen_text.add(item["sessionID"])
+                text_matches.append(item)
+    session_list = session_candidates(
+        candidates[0]["path"] if candidates else None, candidates, related,
+        text_matches=text_matches,
+    )
 
     return {
         "prompt": {
@@ -1480,24 +1550,43 @@ def command_brief(args):
     return 0
 
 
-def session_query_hits(row, query, snippet_chars):
-    """Title and message-text matches for `sessions --query`."""
-    title_hits = sorted(query & set(tokens(row.get("title", ""))))
-    if title_hits:
-        return {"title": title_hits, "text": []}
+def session_query_hits(row, query, snippet_chars, match_all=False):
+    """Title and message-text matches for `sessions --query`.
+
+    A title never hides a text match: a session titled after the topic that
+    started it still holds the later discussion. With match_all, every query
+    term must appear in the title or the transcript.
+    """
+    title_hits = set(query) & set(tokens(row.get("title", "")))
     users, assistants = session_messages(row.get("id"), snippet_chars)
-    text = " ".join(users + assistants)
-    return {"title": [], "text": sorted(query & set(tokens(text)))}
+    text_hits = set(query) & set(tokens(" ".join(users + assistants)))
+    found = title_hits | text_hits
+    if match_all and found != set(query):
+        return {"title": [], "text": []}
+    return {"title": sorted(title_hits), "text": sorted(text_hits - title_hits)}
 
 
 def command_sessions(args):
     registry = load_registry()
     snippet_chars = int(registry["signals"]["snippet_chars"])
-    rows = session_rows(args.project, limit=args.limit)
     query = set(tokens(args.query)) if args.query else set()
+    if args.project:
+        rows = session_rows(args.project, limit=args.limit)
+    else:
+        # No project named: search the newest sessions across every project.
+        rows = sorted(
+            db_session_rows(),
+            key=lambda row: (row.get("time") or {}).get("updated") or 0,
+            reverse=True,
+        )
+        rows = rows[: max(args.limit, 300) if query else args.limit]
+    match_all = bool(query) and not args.any
     output = []
     for row in rows:
-        hits = session_query_hits(row, query, snippet_chars) if query else {"title": [], "text": []}
+        hits = (
+            session_query_hits(row, query, snippet_chars, match_all=match_all)
+            if query else {"title": [], "text": []}
+        )
         if query and not hits["title"] and not hits["text"]:
             continue
         entry = {
@@ -1508,6 +1597,9 @@ def command_sessions(args):
             "directory": (row.get("location") or {}).get("directory"),
             "updated": (row.get("time") or {}).get("updated"),
             "outcome": row.get("outcome"),
+            "child": bool(row.get("parentID") or row.get("parent_id")),
+            "parent": row.get("parentID") or row.get("parent_id"),
+            "archived": bool((row.get("time") or {}).get("archived")),
         }
         if query:
             entry["matched"] = hits["title"] or hits["text"]
@@ -1575,8 +1667,9 @@ def main(argv=None):
     brief.set_defaults(func=command_brief)
 
     sessions = sub.add_parser("sessions")
-    sessions.add_argument("--project", required=True)
+    sessions.add_argument("--project", help="limit to one project; omit to search everywhere")
     sessions.add_argument("--query", default="")
+    sessions.add_argument("--any", action="store_true", help="match any term instead of all")
     sessions.add_argument("--detail", action="store_true")
     sessions.add_argument("--limit", type=int, default=50)
     sessions.set_defaults(func=command_sessions)
