@@ -2,7 +2,7 @@
  * Machine settings for the branch plugin, read fresh on every call so
  * /branch-settings and a hand edit both take effect without a restart.
  *
- * maxForks caps reporting forks in flight per parent. A silent fork never
+ * maxForks caps reporting forks in flight per caller. A silent fork never
  * reports, so it is not counted: its slot would never free.
  * reportBatchMs batches reports to one parent into one prompt inside the
  * window; 0 delivers each report immediately.

@@ -6,11 +6,12 @@ import { Contract } from "./rpc.ts"
 /**
  * The desktop half of fazuh.branch.
  *
- * The server still owns `/branch`, `/branch-silent` and both tools, so they work
- * on every host. This half only reads the same fork markers the TUI reads:
- * a fork of the session on screen opens its tab, a fork that never started
- * says why, and a fork's composer offers the way back to the session that
- * asked. The panel lists the forks of whatever session is on screen.
+ * The server still owns `/branch`, `/branch-silent`, `branch_ask`,
+ * `branch_subagent`, and `branch_report`, so they work on every host. This half
+ * only reads the same fork markers the TUI reads: a fork of the session on
+ * screen opens its tab, a fork that never started says why, and a fork's
+ * composer offers the way back to the session that asked. The panel lists the
+ * forks of whatever session is on screen.
  */
 export default Plugin.define({
   setup(ctx) {
@@ -21,6 +22,7 @@ export default Plugin.define({
           data.on("session.metadata.updated", (event: any) => {
             const marker = readMarker(event.data?.metadata)
             if (!marker) return
+            if (marker.reportedAt) return
             const session = ctx.sessions.current()
             if (!session || marker.parentID !== session.id) return
             if (marker.status === "failed") {
@@ -85,7 +87,7 @@ export default Plugin.define({
                     >
                       Open fork
                     </button>
-                    <span>{(marker as any)?.question ?? fork.title ?? fork.id}</span>
+                    <span>{(marker as any)?.prompt ?? (marker as any)?.question ?? fork.title ?? fork.id}</span>
                   </div>
                 )
               }}
@@ -98,17 +100,23 @@ export default Plugin.define({
     ctx.add(Command, {
       id: "ask",
       title: "Ask in a fork",
-      description: "Fork this session and ask a question in the fork.",
+      description: "Fork this session with a prompt and open the fork.",
       section: "session",
       bind: "mod+shift+a",
+      get enabled() {
+        const session = ctx.sessions.current()
+        if (!session) return false
+        const info: any = ctx.servers.get("sidecar")?.data?.session.get(session.id)
+        return !info || info.parentID == null
+      },
       run: async () => {
         const session = ctx.sessions.current()
         if (!session) return
-        const question = await ctx.dialogs.prompt({ title: "Ask in a fork", placeholder: "Question for the fork" })
-        if (!question) return
+        const prompt = await ctx.dialogs.prompt({ title: "Ask in a fork", placeholder: "Prompt for the fork" })
+        if (!prompt) return
         let result: any
         try {
-          result = await ctx.client.rpc(Contract).start({ question, parentID: session.id, silent: false })
+          result = await ctx.client.rpc(Contract).start({ prompt, parentID: session.id, silent: false })
         } catch (error) {
           ctx.toast.show({ title: "Fork failed", description: String(error), variant: "error" })
           return

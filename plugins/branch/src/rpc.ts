@@ -12,12 +12,14 @@ export const Contract = {
       input: {
         type: "object",
         properties: {
+          prompt: { type: "string" },
           question: { type: "string" },
           parentID: { type: "string" },
           silent: { type: "boolean" },
           background: { type: "boolean" },
+          agent: { type: "string" },
         },
-        required: ["question", "parentID"],
+        required: ["parentID"],
         additionalProperties: false,
       },
       output: {
