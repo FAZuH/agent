@@ -64,14 +64,25 @@ never improvise a workflow.
 
 ### Fork fan-out
 
-A fork (`branch_ask`) answers a question with this session's history. It keeps
-the current agent, so it never replaces a role handoff: `implement`, `review`,
-and `document` work still goes to a subagent.
+Two fork tools. A fork copies a session's transcript, agent, and model into a
+new session, so it needs no brief and starts warm.
 
-- One ledger row per fork in the session record: fork id, lane, file scope,
-  deadline, status.
-- Width follows `/branch-settings maxForks`. When it refuses, wait for a report
-  or raise the setting; never retry in a loop.
+- `branch_ask` forks this session for a lane that needs this session's history.
+  Primary sessions only: a subagent gets a refusal that points at
+  `branch_subagent`.
+- `branch_subagent` forks a finished subagent in this session's tree for a lane
+  that needs that subagent's role and context. The target is a descendant with
+  a `parentID` and an `outcome`; a running target or one outside the tree is
+  refused.
+
+A fork keeps the source's agent unless `agent` switches it. Neither tool
+replaces a cold role handoff: `implement`, `review`, and `document` work still
+starts as a subagent when no session owns the context.
+
+- One ledger row per fork in the session record: fork id, source, lane, file
+  scope, deadline, status.
+- Width follows `/branch-settings maxForks`, shared by both tools. When it
+  refuses, wait for a report or raise the setting; never retry in a loop.
 - Keep working after dispatch. A `<branch sessionID=… parent=…>` prompt is that
   lane's report: match the fork id, append it to the ledger, and read it as
   findings for the lane you assigned.
@@ -136,8 +147,8 @@ Spawn exactly one fresh reviewer at a milestone — immediately before filing or
 disclosure — because a cold read is the closest approximation of the
 recipient. One cold pass, not one per iteration.
 
-A fork starts a fresh session, so it pays the learning again. **Fork when the
-role changes; resume when it does not.**
+A fork copies warm history into a new session. **Resume when one session
+continues the work; fork when two lanes need the same warm context at once.**
 
 A long-resumed child can come back as `Subagent completed without a text
 response`. **Check the tree before believing it**: `git diff --stat` against the

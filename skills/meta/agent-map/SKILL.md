@@ -25,8 +25,9 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 3. **Check agent plugins first** — they need no skill load:
    - Jev: the `hook_skill_pick` picker hook (advises a skill per prompt) and the
      `hook_risk` gate on bash/edit/write. No jev tools exist.
-   - `branch_ask` forks this session to answer a side question; `branch_report`
-     sends the answer back.
+   - `branch_ask` forks this session to answer a side question; `branch_subagent`
+     forks a finished subagent in this session's tree; `branch_report` sends the
+     answer back.
    - `prompt_user` records a prompt in the Prompts view.
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
    subagent routing and workflow selection; load them when the task is control,
@@ -134,9 +135,10 @@ agent tools and are not listed here.
 - **jev**: automatic Jev decisions — skill-picker hook (advises a skill per
   prompt) and risk hook (gates bash/edit/write, the only blocking path);
   settings in `jev-state.json`, logs in `jev-calls.jsonl`.
-- **branch**: `branch_ask` forks this session to answer a side question;
-  `branch_report` sends the answer back. A fork keeps the current agent and
-  model.
+- **branch**: `branch_ask` forks this session for a side task (primary sessions
+  only); `branch_subagent` forks a finished subagent in this session's tree;
+  `branch_report` sends the answer back. A fork keeps the source's agent, model,
+  and history.
 - **prompt**: the `prompt_user` tool; a prompt renders in the TUI sidebar and
   the Desktop Prompts panel, not in the reply.
 - **desktop-ask**: `desktop_ask_arm` and `desktop_ask_disarm` pick the session

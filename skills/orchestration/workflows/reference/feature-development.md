@@ -39,7 +39,7 @@ START (user request: feature / ticket / bug fix)
 | 3 | GRILL | you | On plan gaps: @grilling or @grill-with-docs. Plan too large for one session: @wayfinder. |
 | 4 | PERSIST | you | @grill-with-docs leaves a `CONTEXT.md` glossary + `docs/adr/` paper trail; read them before implementation so names match the domain language. Persist the plan with @session, and log plan deviations with @session as they surface. |
 | 5 | RESEARCH | `research-discovery` | Delegate a preliminary pass to map the code and gather library/API facts, then read the files it points to. A deeper external fact a decision waits on: @deep-research, which delegates back to `research-discovery` for a cited findings file. |
-| 6 | IMPLEMENT | `implement` | Spawn or resume `implement` with the research report. A warm fork keeps the calling agent and cannot become `implement`, so role handoffs stay subagents. |
+| 6 | IMPLEMENT | `implement` | Spawn or resume `implement` with the research report. A fork keeps its source's agent unless `agent` switches it, and the switch drops the shared cache, so role handoffs stay subagents. |
 | 7 | VERIFY | `implement` | Ask `implement` to run checks in verification-only mode before review. Checks fail → resume IMPLEMENT (step 6). |
 | 8 | REVIEW | `review` | Spawn or resume `review` with the implement report. Fixes found → resume an implement session; never switch a running child to another agent. |
 | 9 | REMEMBER | you | After review passes: hindsight MCP `retain`: decisions, deviations, outcomes. Server down → note it, continue. |
@@ -55,11 +55,12 @@ different files, fan out per `reference/parallel-lanes.md` instead of
 serialising the chain. The steps inside a lane stay a chain; the lanes run
 concurrently, and a file two lanes need becomes a chain of its own.
 
-A warm fork (`branch_ask`) answers a side question with this session's
-history; it cannot become another agent. The research → implement → review
-chain therefore uses subagents, one owner per role. When lanes do run as
-forks, they share the working directory, so parallel writers need separate
-worktrees. Procedure: `reference/parallel-lanes.md`.
+A warm fork answers a side question with a session's history: `branch_ask`
+from this session, `branch_subagent` from a finished subagent. A fork keeps the
+source's agent unless `agent` switches it, so the research → implement → review
+chain still uses subagents, one owner per role. When lanes do run as forks, they
+share the working directory, so parallel writers need separate worktrees.
+Procedure: `reference/parallel-lanes.md`.
 
 ## Gates
 
