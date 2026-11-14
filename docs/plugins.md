@@ -97,40 +97,65 @@ it. Rebuild with `bun run build:gui` (or `./dev.sh gui`); tests:
 
 ## branch (`fazuh.branch`)
 
-`/branch <prompt>` forks the current session at its latest state, sends the
-prompt to the fork, and reports back to the session that asked. The fork
-keeps full history and stays open for follow-ups, unlike `/btw` which answers
-once in place. In the TUI the view moves to the fork, unless the fork was
-made in the background; on hosts with no TUI module (desktop, API, mini) the
-fork id is in the reply. One name, one owner: the server plugin owns the
-command and both tools, so they work on every host.
+The plugin forks a session, sends it a prompt, and lets the fork report back to
+the session that asked. Two sources:
 
-The prompt reaches the fork inside `<prompt>` tags, so the fork can tell
-the user's words from the plugin's own instructions around them. The session
-that asked hears about the fork once, when the fork starts. That notice
-labels the prompt as the fork's task, so the asking session does not read
-it as its own instructions.
+- `/branch <prompt>` and `branch_ask` fork the current primary session. The
+  fork keeps that session's agent and full history, so it needs no brief.
+- `branch_subagent` forks a finished subagent below the caller in the session
+  tree. The fork keeps that subagent's agent, model, and history, so follow-on
+  work starts from what that subagent already did.
+
+`/branch-silent` and `silent: true` skip both the notice and the report. A fork
+stays open for follow-ups, unlike `/btw` which answers once in place. The fork
+id is in the reply; the TUI and desktop open the fork when the asking session
+is on screen, unless `background` is set. One name, one owner: the server owns
+the commands and the three tools, so they work on every host.
+
+The prompt reaches the fork inside `<prompt>` tags, so the fork can tell the
+user's words from the plugin's own instructions around them. The session that
+asked hears about the fork once, when the fork starts. That notice labels the
+prompt as the fork's task, so the asking session does not read it as its own
+instructions.
 
 The answer comes back on the fork's own initiative through the `branch_report`
-tool: the fork calls it when the work is done, and it arrives here
-wrapped in `<branch state="completed">` tags, so the fork curates what that
-session gets to read. `/branch-silent` never asks for a report.
+tool: the fork calls it when the work is done, and it arrives here wrapped in
+`<branch state="completed">` tags, so the fork curates what that session gets
+to read. A fork reports once; a second call is refused. A silent fork never
+asks for a report.
 
-- **`/branch <prompt>`**: fork, send the prompt, and tell this session the fork exists.
-- **`/branch-silent <prompt>`**: fork and send the prompt, with no notice and no report.
-- **`branch_ask`** (`question`, `silent?`, `background?`): the same fork from an
-  agent turn, so the agent does not block while the fork works. `background`
-  creates the fork without moving the TUI or desktop view to it.
+- **`/branch <prompt>`**: primary session only. Fork, send the prompt, and tell
+  this session the fork exists.
+- **`/branch-silent <prompt>`**: primary session only. Fork with no notice and
+  no report.
+- **`branch_ask`** (`prompt`, `agent?`, `silent?`, `background?`): primary
+  session only. The same fork from an agent turn, so the turn does not block.
+- **`branch_subagent`** (`sessionID`, `prompt`, `agent?`, `silent?`,
+  `background?`): any agent. Fork a finished subagent in this session's tree.
+  The target must be a child or deeper descendant with a parent and a completed
+  turn; a running target is refused so the fork copies a whole turn, and a
+  target outside the tree is refused.
 - **`branch_report`** (`text`): send the answer back. Only works inside a fork
-  this plugin made.
+  this plugin made, once.
 
-On OpenCode Desktop its `./gui-experimental` half reads the same markers:
-a fork of the session on screen opens its tab (a failure toasts instead),
-a fork's composer shows a back-link pill to the session that asked, a side
-panel lists the forks of the session on screen, and **Ask in a fork**
-(`mod+shift+a`) opens a dialog and forks through the `branch.start` RPC,
-whose contract is `rpc.ts`. Rebuild with `bun run build:gui` (or
-`./dev.sh gui`); tests: `bun test plugins/branch`.
+`agent` switches the fork's role before it starts. The switch rewrites the
+system prompt, so the shared prefix is no longer cached; omit it to keep the
+source's role and the cache. A fork of a subagent is a root session, so the
+caller collects through `branch_report`, not OpenCode's automatic subagent
+report.
+
+`/branch-settings` sets `maxForks`, the reporting forks in flight per caller
+(0 = unlimited), and `reportBatchMs`, which batches reports to one prompt
+(0 = off). Silent forks are not counted, and `branch_ask` and `branch_subagent`
+share the cap.
+
+On OpenCode Desktop its `./gui-experimental` half reads the same markers: a
+fork of the session on screen opens its tab (a failure toasts instead), a
+fork's composer shows a back-link pill to the session that asked, a side panel
+lists the forks of the session on screen, and **Ask in a fork**
+(`mod+shift+a`) opens a dialog and forks through the `branch.start` RPC, whose
+contract is `rpc.ts`. The command is disabled in a subagent session. Rebuild
+with `bun run build:gui` (or `./dev.sh gui`); tests: `bun test plugins/branch`.
 
 
 ## tell (`fazuh.tell`)
