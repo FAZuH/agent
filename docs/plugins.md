@@ -13,13 +13,14 @@ OpenCode config.
 Bounded decisions from [Jev](https://typesafe.ai), TypeSafe's System One decision
 model, over any provider exposing a `/systemone` endpoint. Jev answers typed
 questions (`choice`, `noul`, `score`) with probabilities. Hooks only, no tools:
-the plugin's power is automatic. Every hook fails open — a Jev outage never
-blocks work — and the two tool hooks are off until you turn them on.
+the plugin's power is automatic. Every Jev decision hook fails open, so a Jev
+outage never blocks work, except the no-respawn admission path, which denies
+when it cannot decide. All four switches are off until you turn them on.
 
 The provider is a setting, not an assumption: the wire model id and the endpoint
 path are provider-specific and neither has a portable default. `/jev-settings`
 edits the endpoint, model, key source, and the per-feature config;
-`/jev-features` flips the three feature switches. Both stay open (arrows move,
+`/jev-features` flips the four feature switches. Both stay open (arrows move,
 enter changes one value, esc closes), so they read like OpenCode's own settings
 panel. They are TUI commands, since the desktop app loads no TUI module.
 `/jev-model <id>`, `/jev-endpoint <url>` do the same as text and work in any
@@ -49,15 +50,22 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   file with `{file:<path>}`, and a rule may override the global action and
   threshold. A file that cannot be parsed changes nothing and says so in the
   log.
+- **`hook_no_respawn`** (off by default): stops an aborted task from being
+  replaced automatically in the same turn. Admission runs before the wrapped
+  `subagent` call; a replacement holds as the host's own permission prompt,
+  where `once` grants that call, `reject` denies it, and `always` grants that
+  call only, because the plugin passes no `save` array. An unanswered hold
+  denies after 60 seconds when it is the session's only pending prompt. State
+  under `~/.local/state/opencode/jev/nospawn/`; see [jev.md](jev.md).
 - **Sidebar section**: the plugin adds a `Jev` section to the TUI sidebar with
   the recent hook calls, one terse line each. `sidebar`, `sidebarCount` and
   `sidebarSubject` in `/jev-settings` control it.
 - **`/jev-features`**: the panel. **Plugin** at the top is the master switch:
-  on or off, and it does not touch the three below it. Off means no hook runs
-  and nothing is sent, so nothing is spent, while the three keep their values,
+  on or off, and it does not touch the four below it. Off means no hook runs
+  and nothing is sent, so nothing is spent, while the four keep their values,
   so you can configure with the plugin disabled and get your setup back when
   you re-enable it. Below it: `hook_skill_pick`, `hook_tool_risk`,
-  `hook_tool_standard`.
+  `hook_tool_standard`, `hook_no_respawn`.
 - **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
   `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
   own numbers; there are no global thresholds.
@@ -66,6 +74,12 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   costs no model call and no tokens. The picker is not filtered by the
   session on screen, because a blocked call often ran in a subagent session.
   TUI only: the picker needs a dialog, and one name has one owner.
+- **`/jev-abort [prefix] | session`**: stop a task of this session by
+  fingerprint prefix, or the whole session. It seals the tombstone before
+  revoking, interrupts the bound children, and fences each one. It refuses with
+  a named reason when no host is registered, the switch is off, nothing matches,
+  a prefix is ambiguous, the store is unreadable, or the task already ended, and
+  it reports `NOT DURABLE` and `NOT FENCED` rather than implying either.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
   live in `skillCriteria` in `~/.local/state/opencode/jev/jev-data.json`, keyed
