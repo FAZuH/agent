@@ -13,6 +13,9 @@ import { ask, JevError, redact, signalFor } from "./jev.ts"
 import { autoAccept } from "./autopermit.ts"
 import { callToken, consumeGrant, recordApproval } from "./approve.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
+import { start as startNoRespawn, type AbortReceipt, type AbortRequest, type NoRespawnHandle } from "./nospawn-host.ts"
+import { readSnapshot, type SnapshotRead } from "./nospawn-state.ts"
+import type { AbortAuthority, TaskRecord } from "./nospawn.ts"
 import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES, USD_PER_MILLION_TOKENS } from "./state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -896,6 +899,146 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   if (outcome.alert) void alertUser(ctx, info, outcome)
 }
 
+/**
+ * The `/jev-*` commands. Hoisted so the tests can read the registered names
+ * without running `setup`; the server owns these, and the TUI owns the panel
+ * names (`tui.ts`).
+ */
+export const JEV_COMMANDS: Record<string, string> = {
+  "jev-status": "Jev endpoint, model, key source, which features are on, thresholds, and spend",
+  "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
+  "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
+  "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
+  "jev-abort": "Stop a task of this session by fingerprint prefix, or the whole session: /jev-abort <prefix> | session",
+  "jev-optimize-skills": "Rewrite every unoptimized skill description into a terse choice criterion via the host LLM; /jev-optimize-skills <id> refreshes one skill",
+}
+
+/**
+ * The no-respawn handle `setup` keeps. Module state because a command closure is
+ * created at setup time and there is nowhere else to put it: the plugin context
+ * has no registry.
+ */
+let noRespawn: NoRespawnHandle | null = null
+
+export interface AbortCommandHost {
+  abort(request: AbortRequest): Promise<AbortReceipt>
+  abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
+}
+
+export interface AbortCommandDeps {
+  /** The feature switch, re-read per command like every other Jev setting. */
+  enabled: () => boolean
+  /** The per-parent snapshot read. Injected so a test needs no state directory. */
+  read: (parentID: string) => SnapshotRead
+  /** The registered host, or null when `setup` could not register one. */
+  host: AbortCommandHost | null
+}
+
+const shortKey = (key: string) => key.slice(0, 12)
+
+const many = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`
+
+/**
+ * The one durability sentence. Every success message carries it exactly as the
+ * receipt reports it, including the already-aborted branch: a memory-only seal
+ * that is not named reads like a durable one.
+ */
+const durability = (receipt: AbortReceipt): string =>
+  receipt.durable ? "" : " NOT DURABLE: held in memory only, a restart loses it."
+
+/** One receipt as one line: what stopped, what did not, and what to do next. */
+function receiptLine(what: string, receipt: AbortReceipt): string {
+  const counts = [
+    `${many(receipt.revoked.length, "call")} settled deny`,
+    `${many(receipt.interrupted.length, "session")} interrupted`,
+    ...(receipt.fenced ? [`${many(receipt.fenced, "child session")} fenced`] : []),
+    ...(receipt.preserved.length ? [`${many(receipt.preserved.length, "child")} preserved`] : []),
+  ].join(", ")
+  const unfenced = receipt.fenceFailures.length ? fenceFailureClause(receipt.fenceFailures) : ""
+  return `jev-abort: ${what} stopped (${counts}). Unrelated work continues; a replacement is held until your next message.${unfenced}${durability(receipt)}`
+}
+
+/**
+ * The failure the audit also records, in the place a user reads. Row 6 does not
+ * hold for these children, so the line must not read like a clean fence.
+ */
+function fenceFailureClause(failures: string[]): string {
+  const ids = failures.map(shortKey).join(", ")
+  const them = failures.length === 1 ? "it" : "them"
+  return ` NOT FENCED: ${many(failures.length, "child session")} refused the subtree fence (${ids}), so a new subagent call inside ${them} is not denied.`
+}
+
+function taskListing(rows: TaskRecord[]): string {
+  if (rows.length === 0) return "no task records in this session."
+  const state = (rec: TaskRecord) =>
+    rec.abortedAt == null ? "admitted" : typeof rec.retiredAt === "number" ? "retired" : "aborted"
+  return [
+    "tasks:",
+    ...rows.map(
+      (rec) =>
+        `  ${shortKey(rec.fingerprint)}  ${rec.agent || "?"}  gen ${rec.generation}  ${state(rec)}  ${many(rec.childIDs.length, "child")}`,
+    ),
+  ].join("\n")
+}
+
+/**
+ * `/jev-abort`. The only route from a decision to a stopped task, so every
+ * refusal is explicit: a prefix that names nothing, two rows, an unreadable
+ * store, or a feature that is off never aborts anything.
+ */
+export async function runAbort(
+  parentID: string,
+  arg: string,
+  deps: AbortCommandDeps,
+  /** The receipt behind the text, so the command can tell whether the host spoke. */
+  seen?: (receipt: AbortReceipt) => void,
+): Promise<string> {
+  if (!deps.enabled()) return "jev-abort: hook_no_respawn is off, so nothing is recorded and nothing can be stopped."
+  if (!parentID) return "jev-abort: this command needs a session."
+  const read = deps.read(parentID)
+  if (!read.ok && read.reason !== "missing") {
+    return `jev-abort: cannot read this session's tasks (${read.reason}); nothing was aborted.`
+  }
+  const rows: TaskRecord[] = read.ok && read.snap ? Object.values(read.snap.tasks) : []
+  const target = arg.trim().split(/\s+/)[0] ?? ""
+
+  if (target === "session") {
+    if (!deps.host) return "jev-abort: the no-respawn host is not registered in this process."
+    const receipt = await deps.host.abortSession(parentID, "user", "user command")
+    seen?.(receipt)
+    return receiptLine(`session ${shortKey(parentID)}`, receipt)
+  }
+  if (!target) return taskListing(rows)
+
+  const matches = rows.filter((rec) => rec.fingerprint.startsWith(target))
+  if (matches.length === 0) return `jev-abort: no task with that prefix in this session.\n${taskListing(rows)}`
+  if (matches.length > 1) return `jev-abort: ambiguous prefix; nothing was aborted.\n${taskListing(rows)}`
+  const rec = matches[0]
+  if (!deps.host) return "jev-abort: the no-respawn host is not registered in this process."
+
+  const receipt = await deps.host.abort({
+    parentID,
+    fingerprint: rec.fingerprint,
+    scope: "task",
+    by: "user",
+    cause: "user command",
+  })
+  seen?.(receipt)
+  // A sealed task stays stopped. A second abort re-seals nothing: it names the
+  // seal's durability exactly as the receipt does, and cancels only calls this
+  // record owns. A retired or expired tombstone is refused, never re-sealed.
+  if (receipt.reason === "already aborted") {
+    const cancelled = receipt.revoked.length ? `; cancelled ${many(receipt.revoked.length, "held call")}` : ""
+    return `jev-abort: task ${shortKey(rec.fingerprint)} was already aborted${cancelled}.${durability(receipt)}`
+  }
+  if (receipt.reason === "already_retired" || receipt.reason === "already_expired") {
+    const spent = receipt.reason === "already_retired" ? "retired" : "expired"
+    return `jev-abort: task ${shortKey(rec.fingerprint)} is already ${spent}; nothing was sealed.`
+  }
+  if (!receipt.sealed) return `jev-abort: nothing was aborted (${receipt.reason ?? "the store refused"}).`
+  return receiptLine(`task ${shortKey(rec.fingerprint)}${rec.agent ? ` (${rec.agent})` : ""}`, receipt)
+}
+
 export default {
   id: "fazuh.jev",
   tui: true,
@@ -988,6 +1131,22 @@ export default {
       })
     }
 
+    // The no-respawn admission path, behind its own switch. It is the one hook
+    // in the plugin that fails closed, so an off flag must leave exactly
+    // today's plugin: no wrapper, no subscription, no state file. `start`
+    // checks the flag before it touches the context for that reason.
+    try {
+      // The handle is what `/jev-abort` reaches: a disposer alone leaves no
+      // route from a decision to a stopped task.
+      noRespawn = await startNoRespawn(ctx, () => featureOn("hook_no_respawn"), {
+        holdMs: Math.max(1, Math.round(cfgNum("hook_no_respawn", "holdMs"))),
+        graceMs: Math.max(0, Math.round(cfgNum("hook_no_respawn", "bindGraceMs"))),
+        capMs: Math.max(1, Math.round(cfgNum("hook_no_respawn", "admissionWindowMs"))),
+      })
+    } catch (error) {
+      logCall({ hook: "hook_no_respawn", error: error instanceof JevError ? error.message : String(error) })
+    }
+
     // /jev commands. Every field the client reads at call time is a setting,
     // not a constant: the wire model id and the endpoint path are
     // provider-specific and neither has a portable default. The same settings
@@ -1000,17 +1159,10 @@ export default {
     // duplicated the panel badly enough to be more confusing than missing.
     // /jev-gate and /jev-on are gone for the same reason: the risk hook is the
     // hook_risk feature switch, and two names for one switch is one too many.
-    // /jev-status, /jev-model, /jev-endpoint and /jev-log remain the text route.
+    // /jev-status, /jev-model, /jev-endpoint, /jev-log and /jev-abort remain
+    // the text route.
     // See tui.ts.
-    const COMMANDS: Record<string, string> = {
-      "jev-status": "Jev endpoint, model, key source, which features are on, thresholds, and spend",
-      "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
-      "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
-      "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
-      "jev-optimize-skills": "Rewrite every unoptimized skill description into a terse choice criterion via the host LLM; /jev-optimize-skills <id> refreshes one skill",
-    }
-
-    for (const [name, description] of Object.entries(COMMANDS)) {
+    for (const [name, description] of Object.entries(JEV_COMMANDS)) {
       await ctx.command.transform((draft: any) => {
         draft.add({
           name,
@@ -1018,37 +1170,68 @@ export default {
           execute: async (input: any) => {
             const arg = String(input?.prompt?.text ?? "").trim()
             const state = loadState()
+            // opencode v2.3.0's command route returns void and drops `content`,
+            // so the same text also goes out as a synthetic message. `resume:
+            // false` is what keeps it from starting a model turn.
+            const respond = async (text: string) => {
+              if (typeof ctx?.session?.synthetic === "function") {
+                try {
+                  await ctx.session.synthetic({ sessionID: input.sessionID, text, resume: false })
+                } catch (error) {
+                  logCall({ hook: name, error: error instanceof JevError ? error.message : String(error) })
+                }
+              }
+              return { content: text }
+            }
 
             if (name === "jev-model") {
-              if (!arg) return { content: `Model: ${state.model}` }
+              if (!arg) return respond(`Model: ${state.model}`)
               saveState({ model: arg })
-              return { content: `Model set to ${arg}.` }
+              return respond(`Model set to ${arg}.`)
             }
             if (name === "jev-endpoint") {
-              if (!arg) return { content: `Endpoint: ${state.endpoint}` }
+              if (!arg) return respond(`Endpoint: ${state.endpoint}`)
               saveState({ endpoint: arg })
-              return { content: `Endpoint set to ${arg}.` }
+              return respond(`Endpoint set to ${arg}.`)
             }
             if (name === "jev-log") {
               const rows = readLog(20)
-              if (rows.length === 0) return { content: "No Jev calls logged yet." }
-              return {
-                content: rows
-                  .map((r) => {
-                    // A skipped or failed entry names the feature in `hook` and
-                    // the reason in `skipped`/`error`; the risk hook adds the
-                    // tool it judged. A regular call logs its decisions instead.
-                    if (r.skipped || r.error) {
-                      const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
-                      return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
-                    }
-                    const answers = (r.decisions ?? [])
-                      .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
-                      .join(" ")
-                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
-                  })
-                  .join("\n"),
-              }
+              if (rows.length === 0) return respond("No Jev calls logged yet.")
+              const text = rows
+                .map((r) => {
+                  // A skipped or failed entry names the feature in `hook` and
+                  // the reason in `skipped`/`error`; the risk hook adds the
+                  // tool it judged. A regular call logs its decisions instead.
+                  if (r.skipped || r.error) {
+                    const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
+                    return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
+                  }
+                  const answers = (r.decisions ?? [])
+                    .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
+                    .join(" ")
+                  return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
+                })
+                .join("\n")
+              return respond(text)
+            }
+            if (name === "jev-abort") {
+              const parentID = String(input?.sessionID ?? input?.invocation?.sessionID ?? "")
+              // A real abort posts its own notice through the host; only a
+              // path that never notified needs the command to speak.
+              let notified = false
+              const text = await runAbort(
+                parentID,
+                arg,
+                {
+                  enabled: () => featureOn("hook_no_respawn"),
+                  read: readSnapshot,
+                  host: noRespawn,
+                },
+                (receipt) => {
+                  notified = receipt.notified
+                },
+              )
+              return notified ? { content: text } : respond(text)
             }
             if (name === "jev-optimize-skills") {
               const roster = await skillRoster(ctx, ROSTER_ROOTS)
@@ -1060,7 +1243,7 @@ export default {
                 const known = roster.some((s) => s.id === arg)
                 return { content: known ? `@${arg} is already optimized.` : `No installed skill @${arg}.` }
               }
-              if (targets.length === 0) return { content: `All ${roster.length} skill criteria are current.` }
+              if (targets.length === 0) return respond(`All ${roster.length} skill criteria are current.`)
               // Awaited, not background: the user asked for this explicitly
               // and wants the result, unlike the hook's silent warm-up. Manual
               // bypasses the failure latch; a success clears it.
@@ -1070,30 +1253,29 @@ export default {
               })
               const attempted = Math.min(targets.length, OPTIMIZE_BATCH)
               const left = targets.length - attempted
-              return { content: `Optimized ${done} of ${attempted} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}${left ? `, ${left} left for a follow-up run` : ""}.` }
+              return respond(`Optimized ${done} of ${attempted} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}${left ? `, ${left} left for a follow-up run` : ""}.`)
             }
             const key = keySource()
             const money = spend()
-            return {
-              content: [
-                `endpoint  ${state.endpoint}`,
-                `model     ${state.model}`,
-                `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
-                `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
-                `toast     ${state.toast ? "on" : "off"}`,
-                `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-                `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-                ...FEATURES.map(
-                  (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
-                    .map(([k, v]) => `${k}=${v}`)
-                    .join(" ")}`,
-                ),
-                `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
-                `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
-                "",
-                "Edit any of it with /jev-settings.",
-              ].join("\n"),
-            }
+            const text = [
+              `endpoint  ${state.endpoint}`,
+              `model     ${state.model}`,
+              `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
+              `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
+              `toast     ${state.toast ? "on" : "off"}`,
+              `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+              `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+              ...FEATURES.map(
+                (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(" ")}`,
+              ),
+              `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
+              `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
+              "",
+              "Edit any of it with /jev-settings.",
+            ].join("\n")
+            return respond(text)
           },
         })
       })

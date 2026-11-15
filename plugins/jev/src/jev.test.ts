@@ -9,7 +9,7 @@
  */
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -17,7 +17,8 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { actionsInScope, firstSentence, hashDescription, normalizeAction, optimizeCriteria, optimizerModel, askOutcome, renderAdvice, resolveCriteria, rosterHash, stronger, stripCriterionPreamble, verdictOutcome } = await import("./index.ts")
+const { actionsInScope, firstSentence, hashDescription, normalizeAction, optimizeCriteria, optimizerModel, askOutcome, renderAdvice, resolveCriteria, rosterHash, runAbort, JEV_COMMANDS, stronger, stripCriterionPreamble, verdictOutcome } = await import("./index.ts")
+const jevPlugin = (await import("./index.ts")).default
 const { answersOf, JevError, normalize, redact, signalFor } = await import("./jev.ts")
 const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await import("./approve.ts")
 const { expandFileRefs, matchesPattern, parseRules, ruleApplies } = await import("./rules.ts")
@@ -25,7 +26,7 @@ type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
 const clearState = () => rmSync(STATE_FILE, { force: true })
-const { DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateDataFile, migrateLegacyLayout, migrateLocalState, migrateStatePath, newSince, pluginEnabled, pruneLog, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, sidebarLines, toastLine, toastOutcomeAllowed, toastsOn } = await import(
+const { DATA_FILE, DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateDataFile, migrateLegacyLayout, migrateLocalState, migrateStatePath, newSince, pluginEnabled, pruneLog, readLog: readCallLog, saveData, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, sidebarLines, toastLine, toastOutcomeAllowed, toastsOn } = await import(
   "./state.ts"
 )
 type JevState = import("./state.ts").JevState
@@ -1241,5 +1242,348 @@ describe("optimizer", () => {
     await optimizeCriteria(counting, stale)
     expect(calls).toBe(2)
     reset()
+  })
+})
+
+// ——— /jev-abort ———
+
+/**
+ * The plugin's command closures with the host's command draft captured, so a
+ * test can call one the way a client does. The synthetic route is the only
+ * host capability these closures reach.
+ */
+const commandContext = (synthetic?: (message: any) => Promise<void>) => {
+  const commands: Record<string, any> = {}
+  const ctx: any = {
+    command: {
+      transform: async (fn: any) =>
+        fn({
+          add: (command: any) => {
+            commands[command.name] = command
+          },
+        }),
+    },
+  }
+  if (synthetic) ctx.session = { synthetic }
+  return { ctx, commands }
+}
+
+/**
+ * The command's body, with its three dependencies injected: the flag, the
+ * snapshot read and the host handle. No state directory is touched, so these
+ * are pure refusal and routing checks; the abort itself is tested in
+ * `nospawn-host.test.ts`.
+ */
+describe("jev-abort command", () => {
+  const KEY = "a".repeat(64)
+  const OTHER = "b".repeat(64)
+
+  const record = (over: Record<string, unknown> = {}) => ({
+    parentID: "ses_x",
+    fingerprint: KEY,
+    agent: "general",
+    generation: 1,
+    frontierAtAdmit: 0,
+    callKeys: [],
+    childIDs: [],
+    retiredAt: null,
+    ...over,
+  })
+
+  const snapshot = (rows: any[]) => ({
+    ok: true,
+    reason: "ok",
+    audit: "clean",
+    snap: { v: 1, parentID: "ses_x", frontierSeq: 0, eventCursor: 0, tasks: Object.fromEntries(rows.map((row) => [row.fingerprint, row])) },
+  }) as any
+
+  const fakeHost = (receipt: any = { sealed: true, durable: true, revoked: [], interrupted: [], preserved: [] }) => {
+    const calls: any[] = []
+    return {
+      calls,
+      abort: async (request: any) => {
+        calls.push(["abort", request])
+        return { fenced: 0, fenceFailures: [], notified: false, ...receipt }
+      },
+      abortSession: async (parentID: string, by: string, cause: string) => {
+        calls.push(["session", parentID, by, cause])
+        return { sealed: true, durable: true, revoked: [], interrupted: [parentID], preserved: [], fenced: 0, fenceFailures: [], notified: false }
+      },
+    }
+  }
+
+  test("is registered with the other text commands", () => {
+    expect(typeof JEV_COMMANDS["jev-abort"]).toBe("string")
+    expect(JEV_COMMANDS["jev-abort"]).toContain("/jev-abort")
+  })
+
+  test("refuses while the feature is off, without reading or writing state", async () => {
+    let reads = 0
+    const host = fakeHost()
+    const message = await runAbort("ses_x", "", {
+      enabled: () => false,
+      read: (() => {
+        reads += 1
+        return snapshot([])
+      }) as any,
+      host,
+    })
+    expect(message).toContain("off")
+    expect(reads).toBe(0)
+    expect(host.calls).toEqual([])
+    expect(existsSync(join(scratch, "nospawn"))).toBe(false)
+  })
+
+  test("lists the session's tasks when no target is given", async () => {
+    const message = await runAbort(
+      "ses_x",
+      "",
+      { enabled: () => true, read: (() => snapshot([record({ childIDs: ["ses_c"] }), record({ fingerprint: OTHER, agent: "explore", abortedAt: 1 })])) as any, host: fakeHost() },
+    )
+    expect(message).toContain(KEY.slice(0, 12))
+    expect(message).toContain("general")
+    expect(message).toContain("gen 1")
+    expect(message).toContain("admitted")
+    expect(message).toContain("aborted")
+    expect(message).toContain("1 child")
+  })
+
+  test("refuses a prefix that names nothing and prints the list", async () => {
+    const host = fakeHost()
+    const message = await runAbort("ses_x", "ffff", { enabled: () => true, read: (() => snapshot([record()])) as any, host })
+    expect(message).toContain("no task with that prefix")
+    expect(message).toContain(KEY.slice(0, 12))
+    expect(host.calls).toEqual([])
+  })
+
+  test("refuses an ambiguous prefix and aborts nothing", async () => {
+    const host = fakeHost()
+    const message = await runAbort("ses_x", "a", {
+      enabled: () => true,
+      read: (() => snapshot([record(), record({ fingerprint: `a${OTHER.slice(1)}` })])) as any,
+      host,
+    })
+    expect(message).toContain("ambiguous")
+    expect(host.calls).toEqual([])
+  })
+
+  test("aborts the one task a unique prefix names", async () => {
+    const host = fakeHost()
+    const message = await runAbort("ses_x", KEY.slice(0, 6), { enabled: () => true, read: (() => snapshot([record()])) as any, host })
+    expect(host.calls.length).toBe(1)
+    expect(host.calls[0][1]).toMatchObject({ parentID: "ses_x", fingerprint: KEY, scope: "task", by: "user", cause: "user command" })
+    expect(message).toContain(KEY.slice(0, 12))
+    expect(message).toContain("Unrelated work continues")
+  })
+
+  test("reports an already aborted task and the replacement it cancelled", async () => {
+    const host = fakeHost({ sealed: true, durable: true, revoked: ["k"], interrupted: [], preserved: [], reason: "already aborted" })
+    const message = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => snapshot([record({ abortedAt: 1 })])) as any,
+      host,
+    })
+    expect(message).toContain("already aborted")
+    expect(message).toContain("cancelled 1 held call")
+  })
+
+  test("says a memory-only seal is not durable", async () => {
+    const host = fakeHost({ sealed: true, durable: false, revoked: [], interrupted: [], preserved: [] })
+    const message = await runAbort("ses_x", KEY.slice(0, 6), { enabled: () => true, read: (() => snapshot([record()])) as any, host })
+    expect(message).toContain("NOT DURABLE")
+  })
+
+  test("carries the durability of a seal that was already aborted", async () => {
+    const host = fakeHost({ sealed: true, durable: false, revoked: [], interrupted: [], preserved: [], reason: "already aborted" })
+    const message = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => snapshot([record({ abortedAt: 1 })])) as any,
+      host,
+    })
+    // The seal is old, not new: a bare "already aborted" would read as durable.
+    expect(message).toContain("already aborted")
+    expect(message).toContain("NOT DURABLE")
+  })
+
+  test("says a retired or expired task was not sealed", async () => {
+    const retired = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => snapshot([record({ abortedAt: 1, retiredAt: 2 })])) as any,
+      host: fakeHost({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], reason: "already_retired" }),
+    })
+    expect(retired).toContain("already retired")
+    expect(retired).toContain("nothing was sealed")
+
+    const expired = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => snapshot([record({ abortedAt: 1 })])) as any,
+      host: fakeHost({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], reason: "already_expired" }),
+    })
+    expect(expired).toContain("already expired")
+    expect(expired).toContain("nothing was sealed")
+  })
+
+  test("reports a child session the subtree fence missed", async () => {
+    const missed = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => snapshot([record()])) as any,
+      host: fakeHost({ sealed: true, durable: true, revoked: [], interrupted: ["ses_c"], preserved: [], fenced: 0, fenceFailures: ["ses_c"] }),
+    })
+    expect(missed).toContain("NOT FENCED")
+    expect(missed).toContain("ses_c")
+
+    const fenced = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => snapshot([record()])) as any,
+      host: fakeHost({ sealed: true, durable: true, revoked: [], interrupted: ["ses_c"], preserved: [], fenced: 1, fenceFailures: [] }),
+    })
+    expect(fenced).toContain("1 child session fenced")
+    expect(fenced).not.toContain("NOT FENCED")
+  })
+
+  test("refuses an unreadable store", async () => {
+    const host = fakeHost()
+    const message = await runAbort("ses_x", KEY.slice(0, 6), {
+      enabled: () => true,
+      read: (() => ({ ok: false, reason: "unreadable", audit: "unreadable", snap: null })) as any,
+      host,
+    })
+    expect(message).toContain("unreadable")
+    expect(message).toContain("nothing was aborted")
+    expect(host.calls).toEqual([])
+  })
+
+  test("aborts the session on the session target", async () => {
+    const host = fakeHost()
+    const message = await runAbort("ses_x", "session", { enabled: () => true, read: (() => snapshot([])) as any, host })
+    expect(host.calls[0][0]).toBe("session")
+    expect(host.calls[0].slice(1)).toEqual(["ses_x", "user", "user command"])
+    expect(message).toContain("session")
+    expect(message).toContain("1 session interrupted")
+  })
+
+  test("refuses when the host handle is missing", async () => {
+    const message = await runAbort("ses_x", KEY.slice(0, 6), { enabled: () => true, read: (() => snapshot([record()])) as any, host: null })
+    expect(message).toContain("not registered")
+  })
+
+  test("sends its refusal through the synthetic route and still returns it", async () => {
+    clearState()
+    const sent: any[] = []
+    const { ctx, commands } = commandContext(async (message) => {
+      sent.push(message)
+    })
+    await jevPlugin.setup(ctx)
+    const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "" } })
+    expect(result.content).toContain("hook_no_respawn is off")
+    expect(sent.length).toBe(1)
+    expect(sent[0]).toMatchObject({ sessionID: "ses_cmd", resume: false })
+    expect(sent[0].text).toBe(result.content)
+  })
+
+  test("sends one message for an abort: the host's own notice", async () => {
+    clearState()
+    setFeature("hook_no_respawn", true)
+    const sent: any[] = []
+    const { ctx, commands } = commandContext(async (message) => {
+      sent.push(message)
+    })
+    try {
+      await jevPlugin.setup(ctx)
+      const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "session" } })
+      expect(result.content).toContain("ses_cmd stopped")
+      expect(result.content).not.toContain("hook_no_respawn is off")
+      // The host already told the session, so the command stays quiet: one
+      // message, and it is not the returned line.
+      expect(sent.length).toBe(1)
+      expect(sent[0].delivery).toBe("queue")
+      expect(sent[0].text).toContain("Jev aborted this session")
+      expect(sent[0].text).not.toBe(result.content)
+    } finally {
+      setFeature("hook_no_respawn", false)
+      clearState()
+      rmSync(join(scratch, "nospawn"), { recursive: true, force: true })
+    }
+  })
+
+  test("the receipt says whether the host spoke", async () => {
+    const { register } = await import("./nospawn-host.ts")
+    const notices: any[] = []
+    const wired = await register({ session: { synthetic: async (message: any) => { notices.push(message) } } })
+    const mute = await register({})
+    try {
+      const heard = await wired.abortSession("ses_receipt", "user", "test")
+      expect(heard.notified).toBe(true)
+      expect(notices.length).toBe(1)
+      const silent = await mute.abortSession("ses_mute", "user", "test")
+      expect(silent.notified).toBe(false)
+    } finally {
+      wired.dispose()
+      mute.dispose()
+      rmSync(join(scratch, "nospawn"), { recursive: true, force: true })
+    }
+  })
+
+  test("a throttled synthetic route keeps the content and logs the failure", async () => {
+    clearState()
+    const { LOG_FILE } = await import("./state.ts")
+    rmSync(LOG_FILE, { force: true })
+    const { ctx, commands } = commandContext(async () => {
+      throw new Error("synthetic refused")
+    })
+    await jevPlugin.setup(ctx)
+    const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "" } })
+    expect(result.content).toContain("hook_no_respawn is off")
+    const [entry] = readCallLog(1)
+    expect(entry.hook).toBe("jev-abort")
+    expect(entry.error).toContain("synthetic refused")
+    rmSync(LOG_FILE, { force: true })
+    clearState()
+  })
+})
+
+describe("jev-status command", () => {
+  test("sends its report through the synthetic route and still returns it", async () => {
+    clearState()
+    const sent: any[] = []
+    const { ctx, commands } = commandContext(async (message) => {
+      sent.push(message)
+    })
+    await jevPlugin.setup(ctx)
+    const result = await commands["jev-status"].execute({ sessionID: "ses_cmd", prompt: { text: "" } })
+    expect(result.content).toContain("endpoint")
+    expect(sent.length).toBe(1)
+    expect(sent[0]).toMatchObject({ sessionID: "ses_cmd", resume: false })
+    expect(sent[0].text).toBe(result.content)
+    clearState()
+  })
+})
+
+describe("state file modes", () => {
+  const modeOf = (path: string) => statSync(path).mode & 0o777
+
+  test("a fresh state and data file are written 0600", () => {
+    rmSync(STATE_FILE, { force: true })
+    rmSync(DATA_FILE, { force: true })
+    saveState({ logMax: 200 })
+    saveData({ rosterHash: "fresh" })
+    expect(modeOf(STATE_FILE)).toBe(0o600)
+    expect(modeOf(DATA_FILE)).toBe(0o600)
+    clearState()
+    rmSync(DATA_FILE, { force: true })
+  })
+
+  test("a write over an existing 0644 file ends at 0600", () => {
+    writeFileSync(STATE_FILE, JSON.stringify({ logMax: 100 }), "utf8")
+    writeFileSync(DATA_FILE, JSON.stringify({ rosterHash: "" }), "utf8")
+    chmodSync(STATE_FILE, 0o644)
+    chmodSync(DATA_FILE, 0o644)
+    expect(modeOf(STATE_FILE)).toBe(0o644)
+    saveState({ logMax: 300 })
+    saveData({ rosterHash: "rewritten" })
+    expect(modeOf(STATE_FILE)).toBe(0o600)
+    expect(modeOf(DATA_FILE)).toBe(0o600)
+    clearState()
+    rmSync(DATA_FILE, { force: true })
   })
 })
