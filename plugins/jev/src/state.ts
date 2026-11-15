@@ -56,6 +56,7 @@ export const FEATURES: Feature[] = [
   { key: "hook_skill_pick", label: "Skill picker", what: "Asks Jev which skill fits each prompt and advises it in context" },
   { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: allow, ask, deny, or alert" },
   { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
+  { key: "hook_no_respawn", label: "No respawn", what: "Holds a subagent replacement of an aborted task: once or reject, never always" },
 ]
 
 /**
@@ -110,6 +111,11 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // defaultEffect and defaultThreshold are the global bar; a rule overrides
   // either. actions is the coarse gate: nothing outside it is examined.
   hook_tool_standard: { rulesFile: "~/.config/fazuh-agent/jev-rules.yaml", defaultEffect: "block", defaultThreshold: 0.7, minProbability: 0.7, timeout: 5000, actions: "shell,edit", fileMaxChars: 8000, toast: true, toastOutcomes: "deny" },
+  // The editable numbers: a hold waits 60 s for a human, and an unbound child
+  // is contained only inside the aborted call's window. The tombstone TTL and
+  // the repair delays are fixed decisions in `nospawn.ts` and
+  // `nospawn-frontier.ts`, so they are not settings.
+  hook_no_respawn: { holdMs: 60000, bindGraceMs: 2000, admissionWindowMs: 60000, toast: true, toastOutcomes: "deny" },
 }
 
 export interface JevState {
@@ -190,7 +196,7 @@ export const DEFAULTS: JevState = {
   sidebar: true,
   sidebarCount: 5,
   sidebarSubject: true,
-  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false },
+  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_no_respawn: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
 }
@@ -385,10 +391,19 @@ export function loadData(): JevData {
   }
 }
 
+/**
+ * Write a state or cache file at 0600. The mode option applies only when the
+ * file is created, so the chmod is what fixes an existing 0644 file.
+ */
+function writePrivate(path: string, text: string): void {
+  writeFileSync(path, text, { encoding: "utf8", mode: 0o600 })
+  chmodSync(path, 0o600)
+}
+
 export function saveData(patch: Partial<JevData>): JevData {
   const next = { ...loadData(), ...patch }
   mkdirSync(dirnameOf(DATA_FILE), { recursive: true })
-  writeFileSync(DATA_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
+  writePrivate(DATA_FILE, `${JSON.stringify(next, null, 2)}\n`)
   return next
 }
 
@@ -736,7 +751,7 @@ export function setFeature(key: string, on: boolean): boolean {
 export function saveState(patch: Partial<JevState>): JevState {
   const next = { ...loadState(), ...patch }
   mkdirSync(dirnameOf(STATE_FILE), { recursive: true })
-  writeFileSync(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
+  writePrivate(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`)
   return next
 }
 
@@ -750,7 +765,7 @@ export function migrateStatePath(oldPath = join(CONFIG_DIR, "jev-state.json"), n
   try {
     const raw = readFileSync(oldPath, "utf8")
     mkdirSync(dirnameOf(newPath), { recursive: true })
-    writeFileSync(newPath, raw, "utf8")
+    writePrivate(newPath, raw)
     return "migrated"
   } catch {
     return "skipped"
@@ -886,9 +901,9 @@ export function migrateLegacyLayout(
   delete raw.skillCriteria
   delete raw.rosterHash
   mkdirSync(dirnameOf(target.state), { recursive: true })
-  writeFileSync(target.state, `${JSON.stringify(raw, null, 2)}\n`, "utf8")
+  writePrivate(target.state, `${JSON.stringify(raw, null, 2)}\n`)
   mkdirSync(dirnameOf(target.data), { recursive: true })
-  if (!existsSync(target.data)) writeFileSync(target.data, `${JSON.stringify(data, null, 2)}\n`, "utf8")
+  if (!existsSync(target.data)) writePrivate(target.data, `${JSON.stringify(data, null, 2)}\n`)
   // Move the log to the local home.
   if (existsSync(oldLog) && !existsSync(target.log)) {
     mkdirSync(dirnameOf(target.log), { recursive: true })
@@ -908,7 +923,7 @@ export function migrateDataFile(
   if (!existsSync(oldPath) || existsSync(newPath)) return "skipped"
   try {
     mkdirSync(dirnameOf(newPath), { recursive: true })
-    writeFileSync(newPath, readFileSync(oldPath, "utf8"), "utf8")
+    writePrivate(newPath, readFileSync(oldPath, "utf8"))
     return "migrated"
   } catch {
     return "skipped"
