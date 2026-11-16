@@ -98,7 +98,7 @@ course directory instead of the repo.
 The default gate is a user question: chosen project, session, action, and one
 line of reasoning per candidate. It can also offer `report only` when the prompt
 is discovery: the router answers with the candidates and pending work, and
-dispatches nothing. Auto mode skips the gate only when the user asked for auto.
+dispatches nothing. Auto mode skips the gate only when enabled.
 
 Before dispatch, the router writes a handoff prompt to
 `/tmp/opencode/route-handoff.txt`: the task, the decision so far, the next
@@ -119,6 +119,35 @@ create or prompt a session.
 
 It never calls `session_move`: v2 keeps child sessions in the old directory and
 the TUI does not follow.
+
+## Follow-up watcher
+
+A live dispatch registers a watcher before `dispatch` returns. The caller comes
+from `OPENCODE_SESSION_ID`, or from `--notify-session` when that variable is
+unset. `--no-watch` opts out. Each watch gets a `dispatch_id`, a spec file, and a
+lock file under `~/.local/state/fazuh-agent/route-watch/`. The watcher runs
+detached and logs to `/tmp/opencode/route-watch.log`.
+
+Turn end alone is not enough. The watcher uses
+`POST /api/experimental/session/{id}/wait` to wait out the target's current
+turn, then requires all of:
+
+- target and every descendant absent from `/api/session/active`;
+- no queued input in any inbox;
+- terminal target outcome (`succeeded`, `failed`, or `interrupted`);
+- every `--sentinel PATH` file present;
+- two quiet samples 5 seconds apart.
+
+On fire it writes `<dispatch_id>.result.json` and posts a `[route-watch]` prompt
+to the caller with the target, outcome, and a short result. The router treats
+that prompt as a completion notice: it verifies the target, reports, and ends
+the turn. The watcher never starts work. It can also end as `timed_out` (24h by
+default), `cancelled` (STOP marker), or `locked` (another watcher owns the spec).
+Retries cannot wake twice: `finish_watch` returns early unless the spec is still
+`pending`.
+
+A detached process with no sentinel stays invisible. Pass one `--sentinel` per
+completion marker when the handoff starts detached work.
 
 ## Permissions
 
@@ -159,9 +188,12 @@ route.py brief --compact --prompt-file PATH
 route.py brief --prompt-file PATH
 route.py sessions --project PATH [--query TEXT] [--detail]
 route.py dispatch --project PATH --prompt-file PATH [--agent NAME] [--model PROVIDER/MODEL[#VARIANT]]
-                  [--title TITLE] [--dry-run] [--yes]
+                  [--title TITLE] [--dry-run] [--yes] [--watch | --no-watch]
+                  [--notify-session ID] [--sentinel PATH]
 route.py dispatch --prompt-file PATH --session ID [--agent NAME] [--model PROVIDER/MODEL[#VARIANT]]
-                  [--title TITLE] [--dry-run] [--yes]
+                  [--title TITLE] [--dry-run] [--yes] [--watch | --no-watch]
+                  [--notify-session ID] [--sentinel PATH]
+route.py watch --spec PATH [--quiet-seconds N] [--max-hours N]
 route.py eval --prompts PATH [--json]
 route.py doctor
 ```
@@ -178,3 +210,5 @@ Tests: `python3 scripts/route_test.py`.
 - `~/.config/fazuh-agent/route-projects.json`: registry
 - `~/.cache/fazuh-agent/projects.json`: project index
 - `~/.local/state/fazuh-agent/routes.jsonl`: dispatch ledger (hashes, no prompt text)
+- `~/.local/state/fazuh-agent/route-watch/`: watch specs, locks, and results
+- `/tmp/opencode/route-watch.log`: detached watcher log
