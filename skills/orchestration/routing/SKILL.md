@@ -82,7 +82,7 @@ Write the handoff prompt to `/tmp/opencode/route-handoff.txt`: the task, the dec
 
 ## 4. Gate
 
-Default: ask before dispatch with the `question` tool. Show the chosen project and session, one line per candidate saying why it fits or why not, and the action (resume or new). Offer `report only` when the prompt is discovery: answer with the candidate sessions and pending work, and dispatch nothing. Skip the gate only when the user said auto for this run. An explicit project or session in the prompt still gets a one-line confirmation.
+Default: ask before dispatch with the `question` tool. Show the chosen project and session, one line per candidate saying why it fits or why not, and the action (resume or new). Offer `report only` when the prompt is discovery: answer with the candidate sessions and pending work, and dispatch nothing. Skip the gate only in auto mode. An explicit project or session in the prompt still gets a one-line confirmation.
 
 ## 5. Dispatch
 
@@ -109,7 +109,27 @@ nothing. `--yes` is required to create or prompt a session.
 
 Never call `session_move`: child sessions stay behind and the TUI does not follow. The router dispatches; the orchestrator does the work.
 
-## 6. Report and propose signals
+## 6. Follow-up watcher
+
+A live `dispatch --yes` registers a watcher automatically. It reads the caller
+from `OPENCODE_SESSION_ID` and writes a spec under
+`~/.local/state/fazuh-agent/route-watch/`. Pass `--no-watch` to opt out, or
+`--watch --notify-session ses_...` when the environment variable is missing.
+
+The watcher fires only when the target is fully idle:
+
+- target and every descendant absent from `/api/session/active`;
+- no queued input in any inbox;
+- terminal target outcome (`succeeded`, `failed`, or `interrupted`);
+- every `--sentinel PATH` file present, one per detached worker;
+- two quiet samples 5 seconds apart.
+
+On fire it writes a `.result.json` and posts a `[route-watch]` prompt to the
+caller. Treat that prompt as a completion notice: verify the target, report the
+outcome, and end the turn. Do not redispatch from it. The watcher never starts
+work itself.
+
+## 7. Report and propose signals
 
 Report the project, session ID, and `opencode <dir> -s <id>`. If the user chose
 report only, report the candidates and pending work; do not dispatch.
@@ -144,7 +164,8 @@ Update the registry only from confirmed proposals.
 | `route.py brief --compact --prompt-file PATH` | Compact evidence dossier. Read-only. |
 | `route.py brief --prompt-file PATH` | Full dossier with every session excerpt. |
 | `route.py sessions [--project PATH] [--query TEXT] [--detail] [--any]` | List top-level sessions. `--query` searches titles and the whole transcript, requiring every term; `--any` relaxes that. Without `--project` it searches every project. |
-| `route.py dispatch ... [--dry-run] [--yes]` | Create or resume a session. |
+| `route.py dispatch ... [--dry-run] [--yes] [--watch \| --no-watch] [--notify-session ID] [--sentinel PATH]` | Create or resume a session; register a follow-up watcher by default. |
+| `route.py watch --spec PATH [--quiet-seconds N] [--max-hours N]` | Run one watcher to completion; logs to `/tmp/opencode/route-watch.log`. |
 | `route.py eval --prompts PATH [--json]` | Run the routing eval set. |
 | `route.py doctor` | Check registry, index, `opencode2`, API. |
 
@@ -154,6 +175,8 @@ Update the registry only from confirmed proposals.
 - Session text comes from the local `opencode.db`; the API is the fallback.
 - `dispatch` refuses child and archived sessions.
 - `dispatch` needs `--project` for a new session and refuses a new session outside a git repo. A resume skips both checks.
+- The wait endpoint covers one turn; the watcher checks children, inboxes, and sentinels separately.
+- A detached process with no sentinel is invisible to the watcher.
 - Matching is lexical. When the words do not separate the candidates, ask.
 - Read a directory with the `read` tool; `ls` is not allowlisted. Read JSON with
   `read` or `jq FILE`. Shell `grep` is not allowlisted; use the `grep` tool.
