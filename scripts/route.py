@@ -9,20 +9,24 @@ Usage:
     route.py dispatch [--project PATH] --prompt-file PATH [--session ID]
                       [--agent NAME] [--model PROVIDER/MODEL[#VARIANT]]
                       [--title TITLE] [--dry-run] [--yes]
+                      [--watch | --no-watch] [--notify-session ID] [--sentinel PATH]
+    route.py watch --spec PATH [--quiet-seconds N] [--max-hours N]
     route.py eval --prompts PATH [--json]
     route.py doctor
 
 `brief` is read-only. It returns a dossier of evidence, not a verdict: the
 router reads the evidence and decides. `dispatch` refuses to create or prompt
 a session without `--yes`; the agent asks the user first unless the route is
-unambiguous and the user asked for auto mode. A new session needs `--project`;
+unambiguous and auto mode is enabled. A new session needs `--project`;
 a resumed session uses its own directory. `--model` and `--agent` switch those
-fields on a resumed session.
+fields on a resumed session. A live dispatch registers a follow-up watcher that
+wakes the calling session when the target and its children go fully idle.
 
 Exit codes: 0 ok, 2 error.
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -42,6 +46,8 @@ CACHE_BASE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache"))
 INDEX_PATH = CACHE_BASE / "fazuh-agent" / "projects.json"
 STATE_BASE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state"))
 LEDGER_PATH = STATE_BASE / "fazuh-agent" / "routes.jsonl"
+WATCH_DIR = STATE_BASE / "fazuh-agent" / "route-watch"
+WATCH_LOG = Path("/tmp/opencode/route-watch.log")
 
 EXCLUDES = {
     ".git", ".hg", ".svn", "node_modules", "target", "build", "dist",
@@ -1345,6 +1351,9 @@ def dispatch(
     model=None,
     dry_run=False,
     yes=False,
+    watch=None,
+    notify_session=None,
+    sentinels=None,
 ):
     prompt = read_text(expand(prompt_path)).strip()
     if not prompt:
@@ -1445,6 +1454,24 @@ def dispatch(
         "sessionID": resolved_session,
         "dry_run": False,
     })
+    prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
+    notify = watch_notify(watch, notify_session)
+    spec = None
+    if notify:
+        try:
+            spec = register_watch(
+                plan,
+                prompt_sha=prompt_sha,
+                notify_session=notify,
+                sentinels=sentinels or [],
+            )
+            plan["watch"] = {
+                "dispatch_id": spec["dispatch_id"],
+                "notify_session": notify,
+                "spec": str(watch_spec_path(spec["dispatch_id"])),
+            }
+        except OSError as error:
+            plan["watch_error"] = str(error)
     LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LEDGER_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({
@@ -1455,9 +1482,285 @@ def dispatch(
             "agent": plan["agent"],
             "model": plan["model"],
             "title": plan["title"],
-            "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+            "prompt_sha256": prompt_sha,
+            "dispatch_id": spec["dispatch_id"] if spec else None,
+            "notify_session": notify if spec else None,
         }) + "\n")
     return plan
+
+
+# ── idle watch ───────────────────────────────────────────────────────────────
+
+def watch_notify(watch, notify_session):
+    """Resolve the session to wake when the dispatch finishes."""
+    if watch is False:
+        return None
+    if notify_session:
+        return notify_session
+    if watch is True:
+        session_id = os.environ.get("OPENCODE_SESSION_ID")
+        if not session_id:
+            raise RouteError("--notify-session is required when OPENCODE_SESSION_ID is unset")
+        return session_id
+    return os.environ.get("OPENCODE_SESSION_ID")
+
+
+def watch_spec_path(dispatch_id):
+    return WATCH_DIR / f"{dispatch_id}.json"
+
+
+def load_watch_spec(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RouteError(f"cannot read watch spec {path}: {error}") from error
+
+
+def write_watch_spec(spec):
+    WATCH_DIR.mkdir(parents=True, exist_ok=True)
+    path = watch_spec_path(spec["dispatch_id"])
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
+def start_watcher(spec_path):
+    """Detach the watcher: in-session background jobs get reaped."""
+    WATCH_LOG.parent.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(Path(__file__).resolve()), "watch", "--spec", str(spec_path)]
+    with WATCH_LOG.open("a", encoding="utf-8") as log:
+        return subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+
+def register_watch(plan, prompt_sha, notify_session, sentinels=(), start=True):
+    at = int(time.time())
+    dispatch_id = hashlib.sha256(
+        f"{plan['sessionID']}:{prompt_sha}:{at}".encode()
+    ).hexdigest()[:16]
+    spec = {
+        "version": 1,
+        "dispatch_id": dispatch_id,
+        "target": plan["sessionID"],
+        "notify": notify_session,
+        "project": plan["project"],
+        "agent": plan["agent"],
+        "model": plan["model"],
+        "title": plan["title"],
+        "prompt_sha256": prompt_sha,
+        "sentinels": [str(expand(path)) for path in sentinels],
+        "created_at": at,
+        "status": "pending",
+    }
+    path = write_watch_spec(spec)
+    if start:
+        start_watcher(path)
+    return spec
+
+
+def claim_watch(path):
+    """Return an open lock handle, or None when another watcher owns the spec."""
+    lock_path = Path(path).with_suffix(".lock")
+    handle = lock_path.open("a+")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
+
+
+def active_session_ids():
+    try:
+        payload = api("get", "/api/session/active")
+    except RouteError:
+        return set()
+    return set((api_data(payload) or {}).keys())
+
+
+def descendant_ids(target):
+    db = Path(os.environ.get("OPENCODE_DB", HOME / ".local/share/opencode/opencode.db"))
+    if not db.exists():
+        return []
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        rows = con.execute(
+            "select id, parent_id from session_v2 where time_archived is null"
+        ).fetchall()
+        con.close()
+    except sqlite3.Error:
+        return []
+    children = {}
+    for session_id, parent in rows:
+        children.setdefault(parent, []).append(session_id)
+    found = []
+    seen = {target}
+    stack = [target]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            if child in seen:
+                continue
+            seen.add(child)
+            found.append(child)
+            stack.append(child)
+    return found
+
+
+def pending_inbox(session_id):
+    try:
+        payload = api("get", f"/api/session/{session_id}/inbox")
+    except RouteError:
+        return False
+    return bool(api_data(payload))
+
+
+def session_outcomes(session_ids):
+    if not session_ids:
+        return {}
+    db = Path(os.environ.get("OPENCODE_DB", HOME / ".local/share/opencode/opencode.db"))
+    if not db.exists():
+        return {}
+    placeholders = ",".join("?" for _ in session_ids)
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        rows = con.execute(
+            f"select id, idle_outcome from session_v2 where id in ({placeholders})",
+            session_ids,
+        ).fetchall()
+        con.close()
+    except sqlite3.Error:
+        return {}
+    return {session_id: outcome for session_id, outcome in rows}
+
+
+def tree_idle_state(target, active, descendants, inboxes, outcomes, sentinels=()):
+    """True only when no session, queued input, or sentinel blocks completion."""
+    reasons = []
+    if target in active:
+        reasons.append("target active")
+    for session_id in descendants:
+        if session_id in active:
+            reasons.append(f"child {session_id} active")
+    for session_id in [target, *descendants]:
+        if inboxes.get(session_id):
+            reasons.append(f"{session_id} has queued input")
+    outcome = outcomes.get(target)
+    if outcome not in ("succeeded", "failed", "interrupted"):
+        reasons.append(f"target outcome {outcome!r} is not terminal")
+    missing = [str(path) for path in sentinels if not Path(path).exists()]
+    if missing:
+        reasons.append("missing sentinels: " + ", ".join(missing))
+    return (not reasons), reasons
+
+
+def sample_tree(spec):
+    target = spec["target"]
+    descendants = descendant_ids(target)
+    ids = [target, *descendants]
+    return tree_idle_state(
+        target,
+        active_session_ids(),
+        descendants,
+        {session_id: pending_inbox(session_id) for session_id in ids},
+        session_outcomes(ids),
+        spec.get("sentinels") or [],
+    )
+
+
+def wait_for_turn(target):
+    """The wait endpoint covers one turn only, not the child tree."""
+    try:
+        api("post", f"/api/experimental/session/{target}/wait")
+    except RouteError as error:
+        log_watch(f"wait {target}: {error}")
+
+
+def log_watch(message):
+    WATCH_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with WATCH_LOG.open("a", encoding="utf-8") as log:
+        log.write(f"{int(time.time())} {message}\n")
+
+
+def watch_summary(target):
+    users, assistants = session_messages(target, 700)
+    text = assistants[-1] if assistants else (users[-1] if users else "")
+    return text.replace("\n", " ")[:700]
+
+
+def finish_watch(spec, status, outcome, summary=""):
+    """Wake the caller once. The fired marker makes retries harmless."""
+    if spec.get("status") != "pending":
+        return spec
+    target = spec["target"]
+    notify = spec.get("notify")
+    result = {
+        "dispatch_id": spec["dispatch_id"],
+        "target": target,
+        "notify": notify,
+        "status": status,
+        "outcome": outcome,
+        "summary": summary,
+        "at": int(time.time()),
+    }
+    WATCH_DIR.mkdir(parents=True, exist_ok=True)
+    result_path = WATCH_DIR / f"{spec['dispatch_id']}.result.json"
+    result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    if notify and notify != target:
+        text = (
+            f"[route-watch] dispatch={spec['dispatch_id']} target={target} "
+            f"outcome={outcome}\n{summary or 'The watch could not confirm completion.'}\n\n"
+            "Verify the target session and report the result to the user. "
+            "Do not redispatch without confirmation. End your turn."
+        )
+        api("post", f"/api/session/{notify}/prompt", {"text": text})
+    spec["status"] = status
+    spec["finished_at"] = result["at"]
+    spec["result"] = str(result_path)
+    write_watch_spec(spec)
+    return spec
+
+
+def run_watch(spec, quiet_seconds=5, max_hours=24, poll_seconds=2):
+    path = watch_spec_path(spec["dispatch_id"])
+    lock = claim_watch(path)
+    if lock is None:
+        return {"dispatch_id": spec["dispatch_id"], "status": "locked"}
+    deadline = time.time() + max_hours * 3600
+    try:
+        while True:
+            current = load_watch_spec(path)
+            if current.get("status") != "pending":
+                return current
+            if (WATCH_DIR / "STOP").exists():
+                current["status"] = "cancelled"
+                write_watch_spec(current)
+                return current
+            if time.time() > deadline:
+                return finish_watch(
+                    current, "timed_out", "watch timeout",
+                    f"No fully idle state within {max_hours} hours.",
+                )
+            wait_for_turn(spec["target"])
+            idle, _ = sample_tree(current)
+            if idle:
+                time.sleep(quiet_seconds)
+                current = load_watch_spec(path)
+                if current.get("status") != "pending":
+                    return current
+                idle_again, _ = sample_tree(current)
+                if idle_again:
+                    outcome = session_outcomes([spec["target"]]).get(spec["target"]) or "unknown"
+                    return finish_watch(current, "fired", outcome, watch_summary(spec["target"]))
+            time.sleep(poll_seconds)
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 
 # ── eval ─────────────────────────────────────────────────────────────────────
@@ -1614,10 +1917,23 @@ def command_sessions(args):
 
 
 def command_dispatch(args):
+    watch = None if args.watch == args.no_watch else not args.no_watch
     print(json.dumps(dispatch(
         args.project, args.prompt_file, session=args.session, agent=args.agent,
         title=args.title, model=args.model, dry_run=args.dry_run, yes=args.yes,
+        watch=watch, notify_session=args.notify_session, sentinels=args.sentinel,
     ), indent=2))
+    return 0
+
+
+def command_watch(args):
+    spec = load_watch_spec(args.spec)
+    result = run_watch(spec, quiet_seconds=args.quiet_seconds, max_hours=args.max_hours)
+    print(json.dumps({
+        "dispatch_id": spec["dispatch_id"],
+        "status": result.get("status"),
+        "spec": str(watch_spec_path(spec["dispatch_id"])),
+    }, indent=2))
     return 0
 
 
@@ -1683,7 +1999,17 @@ def main(argv=None):
     dispatch_parser.add_argument("--title")
     dispatch_parser.add_argument("--dry-run", action="store_true")
     dispatch_parser.add_argument("--yes", action="store_true")
+    dispatch_parser.add_argument("--watch", action="store_true")
+    dispatch_parser.add_argument("--no-watch", action="store_true")
+    dispatch_parser.add_argument("--notify-session")
+    dispatch_parser.add_argument("--sentinel", action="append", default=[])
     dispatch_parser.set_defaults(func=command_dispatch)
+
+    watch_parser = sub.add_parser("watch")
+    watch_parser.add_argument("--spec", required=True)
+    watch_parser.add_argument("--quiet-seconds", type=int, default=5)
+    watch_parser.add_argument("--max-hours", type=int, default=24)
+    watch_parser.set_defaults(func=command_watch)
 
     evaluate = sub.add_parser("eval")
     evaluate.add_argument("--prompts", required=True)

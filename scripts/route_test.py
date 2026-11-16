@@ -8,7 +8,9 @@ The tests import route.py directly and patch its module globals, so no
 configuration or live OpenCode database is touched.
 """
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sqlite3
@@ -29,12 +31,15 @@ class RouteTestCase(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.old_home = route.HOME
         self.old_ledger = route.LEDGER_PATH
+        self.old_watch = route.WATCH_DIR
         route.HOME = self.root
         route.LEDGER_PATH = self.root / "state" / "routes.jsonl"
+        route.WATCH_DIR = self.root / "state" / "route-watch"
 
     def tearDown(self):
         route.HOME = self.old_home
         route.LEDGER_PATH = self.old_ledger
+        route.WATCH_DIR = self.old_watch
         self.tmp.cleanup()
 
     def repo(self, name, files=()):
@@ -424,14 +429,24 @@ class DispatchTests(RouteTestCase):
             "variant": "max",
         }
         self.calls = []
+        self.watchers = []
         self.old_api = route.api
         self.old_info = route.session_info
+        self.old_notify = os.environ.get("OPENCODE_SESSION_ID")
+        self.old_start = route.start_watcher
+        os.environ.pop("OPENCODE_SESSION_ID", None)
         route.api = self.fake_api
         route.session_info = self.fake_info
+        route.start_watcher = lambda path: self.watchers.append(path)
 
     def tearDown(self):
         route.api = self.old_api
         route.session_info = self.old_info
+        route.start_watcher = self.old_start
+        if self.old_notify is None:
+            os.environ.pop("OPENCODE_SESSION_ID", None)
+        else:
+            os.environ["OPENCODE_SESSION_ID"] = self.old_notify
         super().tearDown()
 
     def fake_api(self, method, path, body=None):
@@ -597,6 +612,173 @@ class DispatchTests(RouteTestCase):
         record = json.loads(line)
         self.assertEqual(len(record["prompt_sha256"]), 64)
         self.assertNotIn(self.prompt_text, line)
+
+
+class WatchTests(RouteTestCase):
+    def spec(self, **overrides):
+        spec = {
+            "version": 1,
+            "dispatch_id": "dispatch1",
+            "target": "ses_target",
+            "notify": "ses_caller",
+            "project": str(self.root),
+            "agent": "build",
+            "model": None,
+            "title": "task",
+            "prompt_sha256": "0" * 64,
+            "sentinels": [],
+            "created_at": 1,
+            "status": "pending",
+        }
+        spec.update(overrides)
+        return spec
+
+    def test_tree_idle_state_blocks_on_busy_tree_and_queued_input(self):
+        done = self.root / "done.txt"
+        done.write_text("", encoding="utf-8")
+        missing = self.root / "missing.txt"
+        idle, reasons = route.tree_idle_state(
+            "ses_target",
+            {"ses_target", "ses_child"},
+            ["ses_child"],
+            {"ses_target": ["queued"]},
+            {"ses_target": "succeeded"},
+            [done, missing],
+        )
+        self.assertFalse(idle)
+        self.assertIn("target active", reasons)
+        self.assertIn("child ses_child active", reasons)
+        self.assertIn("ses_target has queued input", reasons)
+        self.assertIn(f"missing sentinels: {missing}", reasons)
+
+    def test_tree_idle_state_accepts_terminal_outcomes(self):
+        for outcome in ("succeeded", "failed", "interrupted"):
+            idle, reasons = route.tree_idle_state(
+                "ses_target", set(), [], {}, {"ses_target": outcome}, []
+            )
+            self.assertTrue(idle, reasons)
+
+    def test_write_and_load_watch_spec(self):
+        spec = self.spec()
+        path = route.write_watch_spec(spec)
+        self.assertEqual(path, route.watch_spec_path("dispatch1"))
+        self.assertEqual(route.load_watch_spec(path), spec)
+
+    def test_watch_notify_resolution(self):
+        old = os.environ.get("OPENCODE_SESSION_ID")
+        try:
+            os.environ.pop("OPENCODE_SESSION_ID", None)
+            self.assertIsNone(route.watch_notify(None, None))
+            self.assertEqual(route.watch_notify(None, "ses_explicit"), "ses_explicit")
+            with self.assertRaises(route.RouteError):
+                route.watch_notify(True, None)
+            os.environ["OPENCODE_SESSION_ID"] = "ses_caller"
+            self.assertEqual(route.watch_notify(None, None), "ses_caller")
+            self.assertEqual(route.watch_notify(True, None), "ses_caller")
+            self.assertIsNone(route.watch_notify(False, None))
+        finally:
+            if old is None:
+                os.environ.pop("OPENCODE_SESSION_ID", None)
+            else:
+                os.environ["OPENCODE_SESSION_ID"] = old
+
+    def test_fire_watch_wakes_once_and_writes_result(self):
+        old_api = route.api
+        old_summary = route.watch_summary
+        calls = []
+        route.api = lambda method, path, body=None: calls.append((method, path, body))
+        route.watch_summary = lambda target: "done"
+        try:
+            spec = self.spec()
+            first = route.finish_watch(spec, "fired", "succeeded", "done")
+            second = route.finish_watch(first, "fired", "succeeded", "done")
+        finally:
+            route.api = old_api
+            route.watch_summary = old_summary
+        self.assertEqual(first["status"], "fired")
+        self.assertEqual(second, first)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1], "/api/session/ses_caller/prompt")
+        self.assertIn("[route-watch]", calls[0][2]["text"])
+        result = json.loads(Path(first["result"]).read_text(encoding="utf-8"))
+        self.assertEqual(result["outcome"], "succeeded")
+
+    def test_locked_watch_is_skipped(self):
+        spec = self.spec()
+        route.write_watch_spec(spec)
+        old_claim = route.claim_watch
+        route.claim_watch = lambda path: None
+        try:
+            result = route.run_watch(spec)
+        finally:
+            route.claim_watch = old_claim
+        self.assertEqual(result["status"], "locked")
+
+
+class DispatchWatchTests(DispatchTests):
+    def test_dispatch_registers_watch_from_environment(self):
+        os.environ["OPENCODE_SESSION_ID"] = "ses_caller"
+        plan = route.dispatch(
+            str(self.repo_path), str(self.prompt_path), dry_run=False, yes=True
+        )
+        self.assertEqual(plan["watch"]["notify_session"], "ses_caller")
+        self.assertEqual(len(self.watchers), 1)
+        spec = route.load_watch_spec(self.watchers[0])
+        self.assertEqual(spec["target"], plan["sessionID"])
+        self.assertEqual(spec["notify"], "ses_caller")
+        record = json.loads(route.LEDGER_PATH.read_text(encoding="utf-8").strip())
+        self.assertEqual(record["dispatch_id"], spec["dispatch_id"])
+
+    def test_nowatch_skips_registration(self):
+        os.environ["OPENCODE_SESSION_ID"] = "ses_caller"
+        route.dispatch(
+            str(self.repo_path), str(self.prompt_path), dry_run=False, yes=True,
+            watch=False,
+        )
+        self.assertEqual(self.watchers, [])
+        self.assertFalse(route.WATCH_DIR.exists())
+
+    def test_dry_run_skips_registration(self):
+        os.environ["OPENCODE_SESSION_ID"] = "ses_caller"
+        route.dispatch(str(self.repo_path), str(self.prompt_path), dry_run=True)
+        self.assertEqual(self.watchers, [])
+
+    def test_forced_watch_without_caller_fails(self):
+        with self.assertRaises(route.RouteError):
+            route.dispatch(
+                str(self.repo_path), str(self.prompt_path), dry_run=False, yes=True,
+                watch=True,
+            )
+
+
+class CliWatchFlagTests(RouteTestCase):
+    def captured_dispatch(self, *flags):
+        old_dispatch = route.dispatch
+        captured = {}
+
+        def fake_dispatch(*args, **kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+        route.dispatch = fake_dispatch
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                route.main(["dispatch", "--prompt-file", "x.txt", *flags])
+        finally:
+            route.dispatch = old_dispatch
+        return captured
+
+    def test_cli_watch_flags_resolve(self):
+        self.assertIsNone(self.captured_dispatch()["watch"])
+        self.assertTrue(self.captured_dispatch("--watch")["watch"])
+        self.assertFalse(self.captured_dispatch("--no-watch")["watch"])
+
+    def test_cli_forwards_notify_and_sentinels(self):
+        captured = self.captured_dispatch(
+            "--notify-session", "ses_caller", "--sentinel", "/tmp/a", "--sentinel", "/tmp/b"
+        )
+        self.assertEqual(captured["notify_session"], "ses_caller")
+        self.assertEqual(captured["sentinels"], ["/tmp/a", "/tmp/b"])
 
 
 if __name__ == "__main__":
