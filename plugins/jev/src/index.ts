@@ -651,7 +651,7 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
   const key = `${info.sessionID}|${info.action}|${info.resources.join("\0")}`
   const cached = verdictCache.get(key)
   if (cached !== undefined && cfgBool(F, "cache")) {
-    logCall({ hook: F, tool: info.action, subject: info.text, skipped: "cached verdict" })
+    logCall({ hook: F, sessionID: info.sessionID, tool: info.action, subject: info.text, skipped: "cached verdict" })
     return cached
   }
   const timeout = Math.round(cfgNum(F, "timeout"))
@@ -731,7 +731,7 @@ async function standardOutcome(ctx: any, info: CallInfo): Promise<Outcome | null
   if (set.error) {
     // A policy file that cannot be read is a real problem, not a skip: it
     // says so loudly and changes nothing.
-    logCall({ hook: F, error: `rules file invalid: ${set.error}` })
+    logCall({ hook: F, sessionID: info.sessionID, error: `rules file invalid: ${set.error}` })
     return null
   }
   if (!set.rules.length) return null
@@ -743,7 +743,7 @@ async function standardOutcome(ctx: any, info: CallInfo): Promise<Outcome | null
   for (const rule of applicable) {
     const expanded = expandFileRefs(rule.text, dir, Math.max(0, Math.round(cfgNum(F, "fileMaxChars"))))
     if (expanded.missing.length) {
-      logCall({ hook: F, skipped: `rule ${rule.id} skipped: cannot read ${expanded.missing.join(", ")}` })
+      logCall({ hook: F, sessionID: info.sessionID, skipped: `rule ${rule.id} skipped: cannot read ${expanded.missing.join(", ")}` })
       continue
     }
     questions[rule.id] = {
@@ -832,6 +832,7 @@ function logDecision(
 ): void {
   logCall({
     hook,
+    sessionID: info.sessionID,
     tool: info.action,
     subject: redact(info.text),
     sent: result.sent,
@@ -1011,7 +1012,7 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   // An approved call spends its grant here: no model call, no tokens, no wait.
   const token = callToken(sessionID, action, resources)
   if (consumeGrant(token)) {
-    logCall({ hook: "hook_tool_risk", tool: action, skipped: `approved by the user (${token})` })
+    logCall({ hook: "hook_tool_risk", sessionID, tool: action, skipped: `approved by the user (${token})` })
     event.effect = "allow"
     return
   }
@@ -1202,7 +1203,19 @@ export default {
     // rpc.register simply has no Desktop panel, as before.
     if (typeof ctx?.rpc?.register === "function") {
       try {
-        const registration = await ctx.rpc.register(JevContract, jevRpcHandlers())
+        const registration = await ctx.rpc.register(
+          JevContract,
+          jevRpcHandlers({
+            sessionTitle: async (sessionID) => {
+              try {
+                const session = await ctx.session?.get?.({ sessionID })
+                return typeof session?.title === "string" ? session.title : undefined
+              } catch {
+                return undefined
+              }
+            },
+          }),
+        )
         setJevEmitter((event) => registration.events.emit("changed", event))
       } catch (error) {
         logCall({ hook: "rpc", error: error instanceof JevError ? error.message : String(error) })
@@ -1290,6 +1303,7 @@ export default {
           // while the provider failed on every call.
           logCall({
             hook: "hook_tool_risk",
+            sessionID: String(event?.sessionID ?? ""),
             error: error instanceof JevError ? error.message : String(error),
           })
         }

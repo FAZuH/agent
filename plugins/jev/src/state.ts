@@ -134,7 +134,7 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
     timeoutMs: 30000,
     maxRounds: 3,
     maxEvidence: 6,
-    trial: true,
+    trial: false,
     askWaitMs: 5000,
     toast: true,
   },
@@ -839,20 +839,41 @@ function dirnameOf(path: string): string {
   return i > 0 ? path.slice(0, i) : "."
 }
 
+const logListeners = new Set<() => void>()
+
+/** Subscribe to successful call-log appends. Returns an unsubscribe function. */
+export function onLog(listener: () => void): () => void {
+  logListeners.add(listener)
+  return () => {
+    logListeners.delete(listener)
+  }
+}
+
+function notifyLog(): void {
+  for (const listener of logListeners) {
+    try {
+      listener()
+    } catch {}
+  }
+}
+
 /** Append one line per call. Never records the key. */
 let logWrites = 0
 export function logCall(entry: Record<string, unknown>): void {
+  let appended = false
   try {
     mkdirSync(dirnameOf(LOG_FILE), { recursive: true })
     // 0600: a logged payload is a shell command or file body, redacted but not
     // secret-free.
     writeFileSync(LOG_FILE, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, { flag: "a", mode: 0o600 })
     chmodSync(LOG_FILE, 0o600)
+    appended = true
     // The log is unbounded by nature; prune to the configured tail. Every 16th
     // write, not every write: one read+rewrite is amortized over 15 appends,
     // and a 16-call burst between prunes stays well under any sane logMax.
     if (++logWrites % 16 === 0) pruneLog()
   } catch {}
+  if (appended) notifyLog()
 }
 
 /** Keep the last `logMax` non-empty lines. Safe no-op on a missing log. */

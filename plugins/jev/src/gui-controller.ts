@@ -30,10 +30,12 @@ export interface Approval {
 
 export interface JevRPC {
   status(input: {}): Promise<JevStatus>
-  log(input: { limit: number }): Promise<{ rows: Array<Record<string, unknown>> }>
+  log(input: { limit: number; sessionID?: string }): Promise<{ rows: Array<Record<string, unknown>> }>
   approvals(input: {}): Promise<{ approvals: Approval[] }>
   approve(input: { token: string; sessionID: string }): Promise<{ ok: boolean }>
   reject(input: { token: string }): Promise<{ ok: boolean }>
+  approveAll(input: {}): Promise<{ ok: boolean; count: number }>
+  rejectAll(input: {}): Promise<{ ok: boolean; count: number }>
   setEnabled(input: { on: boolean }): Promise<{ ok: boolean }>
   setFeature(input: { key: string; on: boolean }): Promise<{ ok: boolean }>
   subscribe(listener: (event: { reason: string }) => void): () => void
@@ -74,6 +76,8 @@ export function errorText(error: unknown, depth = 0): string {
 export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
   let disposed = false
   let generation = 0
+  // undefined = all sessions; a value scopes recent calls to one session.
+  let sessionID: string | undefined
   let state: JevViewState = { rows: [], approvals: [], loading: false }
   const update = (next: JevViewState) => {
     state = next
@@ -87,7 +91,7 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
     try {
       const [status, log, pending] = await Promise.all([
         rpc.status({}),
-        rpc.log({ limit: 30 }),
+        rpc.log({ limit: 30, ...(sessionID ? { sessionID } : {}) }),
         rpc.approvals({}),
       ])
       if (disposed || request !== generation) return
@@ -117,13 +121,38 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
     }
   }
 
+  async function bulk(key: string, run: () => Promise<{ ok: boolean; count: number }>): Promise<number> {
+    if (disposed) return 0
+    update({ ...state, busy: key })
+    try {
+      const result = await run()
+      if (!result.ok) dialogs.error("That change was not applied.")
+      await load()
+      return result.ok ? result.count : 0
+    } catch (error) {
+      dialogs.error(errorText(error))
+      await load()
+      return 0
+    } finally {
+      if (!disposed) update({ ...state, busy: undefined })
+    }
+  }
+
   return {
     load,
+    /** Scope recent calls to one session (id) or every session (undefined). */
+    setSessionFilter(id: string | undefined) {
+      if (disposed || id === sessionID) return
+      sessionID = id
+      void load()
+    },
     setEnabled: (on: boolean) => mutate("enabled", () => rpc.setEnabled({ on })),
     setFeature: (key: string, on: boolean) => mutate(key, () => rpc.setFeature({ key, on })),
     approve: (token: string, sessionID: string) =>
       mutate(`approve:${token}`, () => rpc.approve({ token, sessionID })),
     reject: (token: string) => mutate(`reject:${token}`, () => rpc.reject({ token })),
+    approveAll: () => bulk("approveAll", () => rpc.approveAll({})),
+    rejectAll: () => bulk("rejectAll", () => rpc.rejectAll({})),
     dispose() {
       disposed = true
       unsubscribe()

@@ -11,10 +11,19 @@ const CSS = `
 .fazuh-jev-alert { display: flex; gap: 8px; align-items: center; }
 .fazuh-jev-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; }
 .fazuh-jev-title { font-size: 14px; font-weight: 600; }
+.fazuh-jev-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border-weak-base); flex-shrink: 0; }
+.fazuh-jev-tab { border: 0; border-bottom: 2px solid transparent; background: transparent; color: inherit; font-size: 12px; opacity: .7; padding: 6px 9px; }
+.fazuh-jev-tab:hover { opacity: 1; }
+.fazuh-jev-tab[aria-pressed=true] { opacity: 1; font-weight: 600; border-bottom-color: #e0a458; }
+.fazuh-jev-tab-count { opacity: .7; font-variant-numeric: tabular-nums; margin-left: 4px; }
+.fazuh-jev-bulk { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-weak-base); border-radius: 6px; padding: 7px 9px; flex-shrink: 0; }
+.fazuh-jev-bulk-label { color: #e0a458; font-weight: 600; font-size: 12px; margin-right: auto; }
 .fazuh-jev-link { border: 0; background: transparent; color: inherit; font-size: 12px; opacity: .7; padding: 2px 4px; text-decoration: underline; }
-.fazuh-jev-link:hover { opacity: 1; }
+.fazuh-jev-link:hover, .fazuh-jev-link[aria-pressed=true] { opacity: 1; font-weight: 600; }
 .fazuh-jev-section { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 .fazuh-jev-section > strong { font-size: 12px; opacity: .7; text-transform: uppercase; letter-spacing: .04em; }
+.fazuh-jev-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.fazuh-jev-section-head > strong { font-size: 12px; opacity: .7; text-transform: uppercase; letter-spacing: .04em; }
 .fazuh-jev-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: start; padding: 7px 9px; border: 1px solid var(--border-weak-base); border-radius: 6px; background: transparent; color: inherit; font-size: 13px; }
 .fazuh-jev-row:hover { background: var(--surface-base-hover); }
 .fazuh-jev-row span { min-width: 0; }
@@ -42,6 +51,12 @@ const CSS = `
 
 function clock(ts: unknown): string {
   const text = String(ts ?? "")
+  const date = new Date(text)
+  if (!Number.isNaN(date.getTime())) {
+    const hh = String(date.getHours()).padStart(2, "0")
+    const mm = String(date.getMinutes()).padStart(2, "0")
+    return `${hh}:${mm}`
+  }
   const match = text.match(/T(\d\d:\d\d)/)
   return match ? match[1]! : text.slice(0, 5)
 }
@@ -82,11 +97,18 @@ function detailLines(row: Record<string, unknown>): Array<[string, string]> {
   if (row.decisions) lines.push(["Decisions", JSON.stringify(row.decisions)])
   if (row.rules) lines.push(["Rules", JSON.stringify(row.rules)])
   if (row.token) lines.push(["Token", String(row.token)])
+  if (row.sessionID) {
+    const id = String(row.sessionID)
+    const title = typeof row.sessionTitle === "string" && row.sessionTitle.trim()
+      ? ` (${row.sessionTitle})`
+      : ""
+    lines.push(["Session", `${id}${title}`])
+  }
   lines.push(["Time", String(row.ts ?? "")])
   return lines
 }
 
-function JevView(props: { ctx: any; server: any }) {
+function JevView(props: { ctx: any; server: any; sessionID: string }) {
   const ui = props.ctx.ui
   const [state, setState] = createSignal({
     rows: [] as Array<Record<string, unknown>>,
@@ -97,7 +119,8 @@ function JevView(props: { ctx: any; server: any }) {
     status: undefined as any,
   })
   const [expanded, setExpanded] = createSignal<number>()
-  const [screen, setScreen] = createSignal<"main" | "more">("main")
+  const [tab, setTab] = createSignal<"blocked" | "features" | "calls">("blocked")
+  const [scope, setScope] = createSignal<"all" | "session">("all")
   const rpc = props.server.client.rpc(Contract)
   const controller = createJevView(
     {
@@ -109,6 +132,8 @@ function JevView(props: { ctx: any; server: any }) {
       approvals: (input) => rpc.approvals(input),
       approve: (input) => rpc.approve(input),
       reject: (input) => rpc.reject(input),
+      approveAll: (input) => rpc.approveAll(input),
+      rejectAll: (input) => rpc.rejectAll(input),
       setEnabled: (input) => rpc.setEnabled(input),
       setFeature: (input) => rpc.setFeature(input),
       subscribe: (listener) => rpc.events.on("changed", (event: any) => listener({ reason: String(event?.data?.reason ?? "") })),
@@ -125,6 +150,37 @@ function JevView(props: { ctx: any; server: any }) {
   const features = () => status()?.features ?? []
   const running = (key: string) => state().busy === key
   const recent = () => state().rows.slice(0, 15)
+  const selectTab = (next: "blocked" | "features" | "calls") => {
+    setTab(next)
+    setExpanded(undefined)
+  }
+  const toggleScope = () => {
+    const next = scope() === "all" ? "session" : "all"
+    setScope(next)
+    setExpanded(undefined)
+    controller.setSessionFilter(next === "session" ? props.sessionID : undefined)
+  }
+  const runBulk = async (kind: "approveAll" | "rejectAll") => {
+    const count = state().approvals.length
+    if (kind === "approveAll") {
+      const confirmed = await props.ctx.dialogs.confirm({
+        title: `Approve all ${count} held calls?`,
+        description: "Every call currently held by Jev gets a one-time grant.",
+        confirm: "Approve all",
+        cancel: "Cancel",
+      })
+      if (confirmed) await controller.approveAll()
+    } else {
+      const confirmed = await props.ctx.dialogs.confirm({
+        title: `Reject all ${count} held calls?`,
+        description: "Every call currently held by Jev is rejected. The calls stay in the log.",
+        confirm: "Reject all",
+        cancel: "Cancel",
+        danger: true,
+      })
+      if (confirmed) await controller.rejectAll()
+    }
+  }
 
   return (
     <section class="fazuh-jev" aria-label="Jev">
@@ -140,28 +196,55 @@ function JevView(props: { ctx: any; server: any }) {
 
       <div class="fazuh-jev-nav">
         <span class="fazuh-jev-title">Jev</span>
-        <button
-          class="fazuh-jev-link"
-          aria-label={screen() === "main" ? "Show more Jev options" : "Back to blocked calls"}
-          onClick={() => setScreen(screen() === "main" ? "more" : "main")}
-        >
-          {screen() === "main" ? "More" : "Back"}
+        <Show when={status()}>
+          <ui.Button
+            variant="contrast"
+            size="small"
+            busy={running("enabled")}
+            onClick={() => void controller.setEnabled(!status().enabled)}
+          >
+            {status().enabled ? "Turn Jev off" : "Turn Jev on"}
+          </ui.Button>
+        </Show>
+      </div>
+
+      <div class="fazuh-jev-tabs" role="group" aria-label="Jev sections">
+        <button class="fazuh-jev-tab" aria-pressed={tab() === "blocked"} onClick={() => selectTab("blocked")}>
+          Blocked<span class="fazuh-jev-tab-count">{state().approvals.length}</span>
+        </button>
+        <button class="fazuh-jev-tab" aria-pressed={tab() === "features"} onClick={() => selectTab("features")}>
+          Features
+        </button>
+        <button class="fazuh-jev-tab" aria-pressed={tab() === "calls"} onClick={() => selectTab("calls")}>
+          Calls
         </button>
       </div>
 
-      <Show when={status()}>
-        <ui.Button
-          variant="contrast"
-          busy={running("enabled")}
-          onClick={() => void controller.setEnabled(!status().enabled)}
-        >
-          {status().enabled ? "Turn Jev off" : "Turn Jev on"}
-        </ui.Button>
-      </Show>
-
-      <Show when={screen() === "main"}>
+      <Show when={tab() === "blocked"}>
         <div class="fazuh-jev-section" style={{ flex: "1", "min-height": "0" }}>
-          <strong>Blocked calls{state().approvals.length ? ` · ${state().approvals.length}` : ""}</strong>
+          <Show when={state().approvals.length > 0}>
+            <div class="fazuh-jev-bulk">
+              <span class="fazuh-jev-bulk-label">{state().approvals.length} calls need you</span>
+              <ui.Button
+                variant="contrast"
+                size="small"
+                disabled={!!state().busy || state().approvals.length === 0}
+                busy={running("approveAll")}
+                onClick={() => void runBulk("approveAll")}
+              >
+                Approve all
+              </ui.Button>
+              <ui.Button
+                variant="danger"
+                size="small"
+                disabled={!!state().busy || state().approvals.length === 0}
+                busy={running("rejectAll")}
+                onClick={() => void runBulk("rejectAll")}
+              >
+                Reject all
+              </ui.Button>
+            </div>
+          </Show>
           <div class="fazuh-jev-approvals">
             <Show when={state().approvals.length > 0} fallback={<span class="fazuh-jev-empty">Nothing blocked</span>}>
               <For each={state().approvals}>
@@ -195,7 +278,7 @@ function JevView(props: { ctx: any; server: any }) {
         </div>
       </Show>
 
-      <Show when={screen() === "more"}>
+      <Show when={tab() === "features"}>
         <div class="fazuh-jev-section">
           <strong>Features</strong>
           <For each={features()}>
@@ -216,11 +299,31 @@ function JevView(props: { ctx: any; server: any }) {
             )}
           </For>
         </div>
+      </Show>
 
+      <Show when={tab() === "calls"}>
         <div class="fazuh-jev-section" style={{ flex: "1", "min-height": "0" }}>
-          <strong>Recent calls</strong>
+          <div class="fazuh-jev-section-head">
+            <strong>Recent calls</strong>
+            <button
+              class="fazuh-jev-link"
+              aria-pressed={scope() === "session"}
+              aria-label={scope() === "all" ? "Show recent calls for this session only" : "Show recent calls from all sessions"}
+              title={scope() === "all" ? "Showing all sessions" : "Showing this session"}
+              onClick={toggleScope}
+            >
+              {scope() === "all" ? "All sessions" : "This session"}
+            </button>
+          </div>
           <div class="fazuh-jev-log" role="log">
-            <For each={recent()} fallback={<span role="status">No Jev calls logged yet.</span>}>
+            <For
+              each={recent()}
+              fallback={
+                <span role="status">
+                  {scope() === "session" ? "No Jev calls in this session yet." : "No Jev calls logged yet."}
+                </span>
+              }
+            >
               {(row, index) => (
                 <div class="fazuh-jev-logitem">
                   <button
@@ -268,7 +371,7 @@ export default Plugin.define({
           keyed
           fallback={<p role="status">Connecting to Jev…</p>}
         >
-          {(server) => <JevView ctx={ctx} server={server} />}
+          {(server) => <JevView ctx={ctx} server={server} sessionID={props.session.id} />}
         </Show>
       ),
     })

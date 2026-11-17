@@ -81,7 +81,7 @@ export const Contract = {
     log: {
       input: {
         type: "object",
-        properties: { limit: { type: "number" } },
+        properties: { limit: { type: "number" }, sessionID: { type: "string" } },
         additionalProperties: false,
       },
       output: {
@@ -150,6 +150,24 @@ export const Contract = {
         type: "object",
         properties: { ok: { type: "boolean" } },
         required: ["ok"],
+        additionalProperties: false,
+      },
+    },
+    approveAll: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        required: ["ok", "count"],
+        additionalProperties: false,
+      },
+    },
+    rejectAll: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        required: ["ok", "count"],
         additionalProperties: false,
       },
     },

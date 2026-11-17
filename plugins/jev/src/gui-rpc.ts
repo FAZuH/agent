@@ -13,6 +13,7 @@ import {
   keySource,
   loadState,
   maskUrl,
+  onLog,
   readLog,
   setEnabled,
   setFeature,
@@ -36,9 +37,12 @@ function changed(reason: string): void {
   }
 }
 
+onLog(() => changed("log"))
+
 /** Fields of a call row the panel may show. Never `sent`, `received`, or a URL. */
 const LOG_FIELDS = [
   "ts",
+  "sessionID",
   "hook",
   "event",
   "verdict",
@@ -85,7 +89,7 @@ export function statusSnapshot() {
       timeoutMs: Number(supervisor.timeoutMs ?? 30000),
       maxRounds: Number(supervisor.maxRounds ?? 3),
       maxEvidence: Number(supervisor.maxEvidence ?? 6),
-      trial: Boolean(supervisor.trial ?? true),
+      trial: Boolean(supervisor.trial ?? false),
       askWaitMs: Number(supervisor.askWaitMs ?? 5000),
     },
     key: { present: key.present, from: key.from },
@@ -95,9 +99,16 @@ export function statusSnapshot() {
   }
 }
 
-export function logRows(limit = 30) {
+/**
+ * Recent call rows, newest first. With a `sessionID`, only that session's
+ * tagged rows are returned; untagged legacy rows belong to no session and are
+ * excluded. Reading a wider tail keeps `cap` matches when one session is a
+ * small share of the global log.
+ */
+export function logRows(limit = 30, sessionID?: string) {
   const cap = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.floor(limit))) : 30
-  return readLog(cap).map((row: any) => {
+  const rows = sessionID ? readLog(1000).filter((row: any) => row?.sessionID === sessionID).slice(0, cap) : readLog(cap)
+  return rows.map((row: any) => {
     const out: Record<string, unknown> = {}
     for (const field of LOG_FIELDS) {
       const value = row?.[field]
@@ -121,14 +132,42 @@ export function pendingApprovals() {
   }))
 }
 
+export interface JevRpcDeps {
+  /** Resolve a session title for the expanded call detail. Failures are ignored. */
+  sessionTitle?: (sessionID: string) => Promise<string | undefined>
+}
+
 /**
  * Handlers bound to `ctx.rpc.register`. Mutations are the same functions the
  * TUI uses, so the Desktop panel and the terminal cannot disagree on a switch.
  */
-export function jevRpcHandlers() {
+export function jevRpcHandlers(deps: JevRpcDeps = {}) {
   return {
     status: async () => statusSnapshot(),
-    log: async (input: any) => ({ rows: logRows(Number(input?.limit ?? 30)) }),
+    log: async (input: any) => {
+      const sessionID = typeof input?.sessionID === "string" && input.sessionID ? input.sessionID : undefined
+      const rows = logRows(Number(input?.limit ?? 30), sessionID)
+      if (deps.sessionTitle) {
+        const ids = Array.from(
+          new Set(rows.map((r: any) => r.sessionID).filter((id: any): id is string => typeof id === "string" && !!id)),
+        )
+        const titles = new Map<string, string>()
+        await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const title = await deps.sessionTitle!(id)
+              if (typeof title === "string" && title.trim()) titles.set(id, title)
+            } catch {}
+          }),
+        )
+        for (const row of rows) {
+          if (typeof (row as any).sessionID === "string" && titles.has((row as any).sessionID)) {
+            ;(row as any).sessionTitle = titles.get((row as any).sessionID)
+          }
+        }
+      }
+      return { rows }
+    },
     approvals: async () => ({ approvals: pendingApprovals() }),
     approve: async (input: any) => {
       const token = String(input?.token ?? "")
@@ -146,6 +185,27 @@ export function jevRpcHandlers() {
       const ok = rejectApproval(token)
       if (ok) changed(`rejected ${token}`)
       return { ok }
+    },
+    approveAll: async () => {
+      const pending = pendingApprovals().slice(0, 200)
+      let count = 0
+      for (const item of pending) {
+        if (!item.token || !item.sessionID) continue
+        grant(item.token, item.sessionID)
+        count++
+      }
+      changed("approveAll")
+      return { ok: true, count }
+    },
+    rejectAll: async () => {
+      const pending = pendingApprovals().slice(0, 200)
+      let count = 0
+      for (const item of pending) {
+        if (!item.token) continue
+        if (rejectApproval(item.token)) count++
+      }
+      changed("rejectAll")
+      return { ok: true, count }
     },
     setEnabled: async (input: any) => {
       const on = input?.on === true

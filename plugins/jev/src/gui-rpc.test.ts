@@ -8,7 +8,7 @@ process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { jevRpcHandlers, logRows, setJevEmitter, statusSnapshot } = await import("./gui-rpc.ts")
-const { STATE_FILE, LOG_FILE } = await import("./state.ts")
+const { STATE_FILE, LOG_FILE, logCall } = await import("./state.ts")
 
 test("statusSnapshot projects safe config fields and masks the endpoint", () => {
   writeFileSync(
@@ -71,6 +71,57 @@ test("logRows keeps only allowlisted fields and never a payload", () => {
   expect(JSON.stringify(rows)).not.toContain("SECRET-REPLY")
 })
 
+test("logRows filters to one session's tagged rows and keeps sessionID", () => {
+  writeFileSync(
+    LOG_FILE,
+    [
+      JSON.stringify({ ts: "2026-11-17T05:00:00.000Z", hook: "hook_tool_risk", sessionID: "ses_one", verdict: "allow" }),
+      JSON.stringify({ ts: "2026-11-17T05:01:00.000Z", hook: "hook_tool_risk", sessionID: "ses_two", verdict: "deny" }),
+      JSON.stringify({ ts: "2026-11-17T05:02:00.000Z", hook: "hook_tool_risk", verdict: "allow" }), // untagged legacy row
+    ].join("\n"),
+  )
+  const one = logRows(10, "ses_one")
+  expect(one).toHaveLength(1)
+  expect(one[0]!.sessionID).toBe("ses_one")
+  expect(one[0]!.verdict).toBe("allow")
+  expect(logRows(10, "ses_two")).toHaveLength(1)
+  expect(logRows(10, "ses_missing")).toHaveLength(0)
+  // No filter still returns every row, including the untagged one.
+  expect(logRows(10)).toHaveLength(3)
+})
+
+test("the log handler forwards a sessionID filter", async () => {
+  writeFileSync(
+    LOG_FILE,
+    [
+      JSON.stringify({ ts: "2026-11-17T05:00:00.000Z", hook: "hook_tool_risk", sessionID: "ses_one", verdict: "allow" }),
+      JSON.stringify({ ts: "2026-11-17T05:01:00.000Z", hook: "hook_tool_risk", sessionID: "ses_two", verdict: "deny" }),
+    ].join("\n"),
+  )
+  const handlers = jevRpcHandlers()
+  const log = await (handlers as any).log({ limit: 10, sessionID: "ses_two" })
+  expect(log.rows).toHaveLength(1)
+  expect(log.rows[0]!.verdict).toBe("deny")
+})
+
+test("the log handler attaches resolved session titles to rows", async () => {
+  writeFileSync(
+    LOG_FILE,
+    [
+      JSON.stringify({ ts: "2026-11-17T05:00:00.000Z", sessionID: "ses_one", verdict: "allow" }),
+      JSON.stringify({ ts: "2026-11-17T05:01:00.000Z", sessionID: "ses_two", verdict: "deny" }),
+    ].join("\n"),
+  )
+  const titles: Record<string, string> = { ses_one: "Work session" }
+  const handlers = jevRpcHandlers({ sessionTitle: async (id) => titles[id] })
+  const log = await (handlers as any).log({ limit: 10 })
+  expect(log.rows).toHaveLength(2)
+  const one = log.rows.find((r: any) => r.sessionID === "ses_one")
+  const two = log.rows.find((r: any) => r.sessionID === "ses_two")
+  expect(one.sessionTitle).toBe("Work session")
+  expect(two.sessionTitle).toBeUndefined()
+})
+
 test("setFeature rejects an unknown key", async () => {
   const handlers = jevRpcHandlers()
   setJevEmitter(undefined)
@@ -111,4 +162,59 @@ test("status and log handlers agree with the direct projections", async () => {
   expect(status.enabled).toBe(statusSnapshot().enabled)
   const log = await (handlers as any).log({ limit: 5 })
   expect(Array.isArray(log.rows)).toBe(true)
+})
+
+test("approveAll grants every pending call with its own session and emits one change", async () => {
+  const { recordApproval, readGrants, rejectApproval } = await import("./approve.ts")
+  const ts = new Date().toISOString()
+  recordApproval(
+    { token: "bulk_ok_a", sessionID: "ses_a", action: "shell", resources: ["echo a"], subject: "shell: echo a", reason: "human", ts },
+    600,
+  )
+  recordApproval(
+    { token: "bulk_ok_b", sessionID: "ses_b", action: "webfetch", resources: ["https://example.com"], subject: "webfetch: example.com", reason: "human", ts },
+    600,
+  )
+  const reasons: string[] = []
+  setJevEmitter((event) => reasons.push(event.reason))
+  const handlers = jevRpcHandlers()
+  const result = await (handlers as any).approveAll({})
+  expect(result.ok).toBe(true)
+  expect(result.count).toBe(2)
+  const grants = readGrants()
+  expect(grants.bulk_ok_a?.sessionID).toBe("ses_a")
+  expect(grants.bulk_ok_b?.sessionID).toBe("ses_b")
+  expect(reasons.filter((reason) => reason === "approveAll")).toHaveLength(1)
+  rejectApproval("bulk_ok_a")
+  rejectApproval("bulk_ok_b")
+})
+
+test("rejectAll drops every pending call and emits one change", async () => {
+  const { recordApproval } = await import("./approve.ts")
+  const ts = new Date().toISOString()
+  recordApproval(
+    { token: "bulk_no_a", sessionID: "ses_a", action: "shell", resources: ["echo a"], subject: "shell: echo a", reason: "human", ts },
+    600,
+  )
+  recordApproval(
+    { token: "bulk_no_b", sessionID: "ses_b", action: "webfetch", resources: ["https://example.com"], subject: "webfetch: example.com", reason: "human", ts },
+    600,
+  )
+  const reasons: string[] = []
+  setJevEmitter((event) => reasons.push(event.reason))
+  const handlers = jevRpcHandlers()
+  const result = await (handlers as any).rejectAll({})
+  expect(result.ok).toBe(true)
+  expect(result.count).toBe(2)
+  const tokens = (await (handlers as any).approvals()).approvals.map((item: any) => item.token)
+  expect(tokens).not.toContain("bulk_no_a")
+  expect(tokens).not.toContain("bulk_no_b")
+  expect(reasons.filter((reason) => reason === "rejectAll")).toHaveLength(1)
+})
+
+test("a successful log write emits a changed event with reason log to RPC emitters", async () => {
+  const reasons: string[] = []
+  setJevEmitter((event) => reasons.push(event.reason))
+  logCall({ hook: "hook_tool_risk", event: "pre_tool", verdict: "allow", sessionID: "ses_log_event", detail: "shell: echo hi" })
+  expect(reasons).toContain("log")
 })
