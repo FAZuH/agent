@@ -353,24 +353,28 @@ once, server-side, so TUI, Desktop, and mobile autocomplete each show a single
 entry. GUI errors are read from the object's `message` field so RPC failures do
 not render as `[object Object]`.
 
-The Desktop panel is a read-only history: a session bar, a prompt list with
-answered/awaiting dots and relative times, and the selected record's Markdown.
-It no longer answers or dismisses through its own dialogs, so the native card
-is the only answer surface. Its **Reopen card** button calls `prompt.reopen`
-with the selected prompt id. Because the host shows one card at a time and
-queues later ones, `prompt.reopen` cancels every card this plugin has open in
-that session before creating the new one: the selected prompt replaces the card
-on screen instead of waiting behind it. The prompts themselves stay unanswered.
-The session bar names the session and counts prompts; it does not repeat the
-selected prompt's title, which sits in the detail header instead.
+The Desktop panel is read-only history in three tabs: **Awaiting**, **Answered**
+and **Dismissed**, each with a count. One tab shows at a time; the session bar
+switches sessions when the family has more than one. A card shows the title, a
+one-line preview and the session with a relative time. **View full prompt**
+replaces the list with the whole prompt: a state badge, the session line, the
+Markdown, and **Reopen card** and **Dismiss** for an awaiting record. A single
+`← Prompts` button returns to the tabbed list. The panel does not answer through
+its own dialogs, so the native card is the only answer surface. **Reopen card**
+calls `prompt.reopen` with the prompt id. Because the host shows one card at a
+time and queues later ones, `prompt.reopen` cancels every card this plugin has
+open in that session before creating the new one: the selected prompt replaces
+the card on screen instead of waiting behind it. The prompts themselves stay
+unanswered. **Dismiss** in the full view asks for confirmation, then calls
+`prompt.dismiss` with the session and prompt id.
 
-Two toolbar buttons work on the family as loaded. **Only awaiting** filters the
-list to prompts with questions and no answer or dismissal; it is a view filter,
-so the records stay. **Dismiss all** asks for confirmation, then calls
-`prompt.dismissAll({sessionIDs})` to mark every awaiting prompt in the family as
-dismissed. The bulk handler reads each session's prompts before settling any of
-them, so one pass cannot dismiss a prompt twice. It closes any card those
-prompts had open and leaves answered and already-dismissed records untouched.
+The Awaiting tab has a bulk bar with the family-wide awaiting count and
+**Dismiss all**. It asks for confirmation, then calls
+`prompt.dismissAll({sessionIDs})` to mark every unresolved prompt in the family
+as dismissed, including prompts with no questions. The bulk handler reads each
+session's prompts before settling any of them, so one pass cannot dismiss a
+prompt twice. It closes any card those prompts had open and leaves answered and
+already-dismissed records untouched.
 
 The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
 session and each subagent that has a record). OpenCode Desktop's
