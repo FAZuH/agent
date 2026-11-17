@@ -11,6 +11,7 @@
 //! carrying the per-account full text. The mention pings when any item is
 //! urgent or the agent passed `--ping`.
 
+pub mod check;
 pub mod setup;
 
 use std::collections::BTreeMap;
@@ -18,6 +19,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use anyhow::anyhow;
 use digest_post::DISCORD_MAX;
+pub use digest_post::PostOutcome;
 pub use digest_post::Posted;
 pub use digest_post::Rendered;
 use digest_post::clean;
@@ -283,12 +285,87 @@ pub fn execute(arg: &str, today: &str, epoch: i64, ping: bool) -> Result<Posted>
     digest_post::post(&webhook, &rendered, ping_id.as_deref(), USER_AGENT)
 }
 
+/// Merge the gate's fetch errors into the agent's payload when the agent did
+/// not include any. This keeps the trailing errors section without making the
+/// agent read the state file itself.
+fn with_pending_errors(arg: &str) -> Result<String> {
+    let state = check::load(&check::state_path()?)?;
+    let Some(pending) = state.pending else {
+        return Ok(arg.to_owned());
+    };
+    if pending.errors.is_empty() {
+        return Ok(arg.to_owned());
+    }
+    let mut data: Value =
+        serde_json::from_str(arg).map_err(|_| anyhow!("argument must be a JSON object"))?;
+    let Some(map) = data.as_object_mut() else {
+        return Ok(arg.to_owned());
+    };
+    if map.contains_key("errors") {
+        return Ok(arg.to_owned());
+    }
+    let errors = serde_json::Map::from_iter(
+        pending
+            .errors
+            .into_iter()
+            .map(|(alias, message)| (alias, Value::String(message))),
+    );
+    map.insert("errors".to_owned(), Value::Object(errors));
+    Ok(data.to_string())
+}
+
+/// Idempotent variant of [`execute`]. The run id comes from the pending gate
+/// batch, so a repeated agent call after a partial failure posts only once.
+/// A successful post advances the watermark via [`check::advance`].
+pub fn execute_idempotent(arg: &str, today: &str, epoch: i64, ping: bool) -> Result<PostOutcome> {
+    let merged = with_pending_errors(arg)?;
+    let state = check::load(&check::state_path()?)?;
+    let run_id = state.pending.map(|p| p.run_id);
+    let hash = digest_post::content_hash(&merged);
+
+    if !digest_post::already_delivered(run_id.as_deref(), &hash)? {
+        let ping_id = if ping {
+            Some(
+                digest_post::mention_id()
+                    .ok_or_else(|| anyhow!("no Discord user id to ping (line 2 of notify.key)"))?,
+            )
+        } else if has_urgent(&merged) {
+            digest_post::mention_id()
+        } else {
+            None
+        };
+        let mention_chars = ping_id.as_ref().map_or(0, |id| id.chars().count() + 3);
+        let rendered = render(&merged, today, epoch, mention_chars)?;
+        let webhook = digest_post::webhook_url(&WEBHOOK_NAMES)?;
+        let outcome = digest_post::post_idempotent(
+            &webhook,
+            &rendered,
+            ping_id.as_deref(),
+            USER_AGENT,
+            run_id.as_deref(),
+            &hash,
+        )?;
+        // A duplicate means a prior run already posted this batch. Advance also
+        // in that case: the receipt is proof of delivery, and leaving the
+        // pending batch would keep the gate triggering forever.
+        check::advance(run_id.as_deref())?;
+        return Ok(outcome);
+    }
+    // Already delivered, likely from a run that posted but failed to advance.
+    // The receipt proves delivery, so clear the pending batch to stop retries.
+    check::advance(run_id.as_deref())?;
+    Ok(PostOutcome {
+        duplicate: true,
+        posted: None,
+    })
+}
+
 /// The `mail-digest` entry point: render with the current date and generation
-/// instant, post, log. Pings when any item is urgent or `--ping` is passed.
+/// instant, post once, log. Pings when any item is urgent or `--ping` is passed.
 pub fn run(arg: &str, ping: bool) -> Result<()> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let epoch = chrono::Utc::now().timestamp();
-    let posted = execute(arg, &today, epoch, ping)?;
-    println!("{}", posted.log_line());
+    let outcome = execute_idempotent(arg, &today, epoch, ping)?;
+    println!("{}", outcome.log_line());
     Ok(())
 }

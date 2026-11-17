@@ -442,7 +442,7 @@ if ((DIGEST_MAIL || DIGEST_PHONE)); then
   if ((DIGEST_PHONE)); then DIGESTS+=("phone-digest"); fi
   deploy_digest "${DIGESTS[@]}"
   # Override the unattended model with DIGEST_MODEL=... ./install.sh
-  DIGEST_MODEL="${DIGEST_MODEL:-opencode/mimo-v2.6-flash-free}"
+  DIGEST_MODEL="${DIGEST_MODEL:-commandcode/deepseek/deepseek-v4.1-flash}"
   if ((DIGEST_MAIL)); then
     "$HOME/.cargo/bin/mail-digest" setup --model "$DIGEST_MODEL" \
       --workdir "$HOME/.config/fazuh-agent/digest/mail-digest"
