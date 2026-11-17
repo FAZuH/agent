@@ -364,6 +364,14 @@ on screen instead of waiting behind it. The prompts themselves stay unanswered.
 The session bar names the session and counts prompts; it does not repeat the
 selected prompt's title, which sits in the detail header instead.
 
+Two toolbar buttons work on the family as loaded. **Only awaiting** filters the
+list to prompts with questions and no answer or dismissal; it is a view filter,
+so the records stay. **Dismiss all** asks for confirmation, then calls
+`prompt.dismissAll({sessionIDs})` to mark every awaiting prompt in the family as
+dismissed. The bulk handler reads each session's prompts before settling any of
+them, so one pass cannot dismiss a prompt twice. It closes any card those
+prompts had open and leaves answered and already-dismissed records untouched.
+
 The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
 session and each subagent that has a record). OpenCode Desktop's
 `./gui-experimental` half adds **Prompts** to the session panel menu. It lists
