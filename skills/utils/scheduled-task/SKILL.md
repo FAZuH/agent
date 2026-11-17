@@ -45,13 +45,18 @@ Everything this skill manages uses the shared prefix **`octask-`**:
              [--credential NAME:PATH | --clear-credentials]
              [--delay "<span>" | --no-delay] [--persistent | --no-persistent]
              [--dry-run]
-  octask show <name>
+  octask                       # interactive TUI dashboard (alias: octask tui)
+  octask show <name> [--json]
   octask remove <name> [--dry-run]
-  octask list
+  octask list [--json]
   octask export [name ...] [--file <path>]
   octask import [--file <path>] [--force] [--no-enable]
   octask enable <name> | disable <name>
-  octask status <name> | logs <name> [-n <lines>]
+  octask enable --all [--dry-run] | disable --all [--dry-run]
+  octask pause | resume
+  octask run <name>
+  octask status <name> [--json] | logs <name> [-n <lines>] [-f]
+  octask cleanup [--dry-run] [--include-history]
   ```
 
   Without `--model`, agent runs use the `model:` field from the agent's
@@ -125,9 +130,34 @@ every N hours). For "once per 12 hours with a stagger" use
   all validation still applies, refuses to overwrite without `--force`, and
   preserves the exported enabled state unless `--no-enable`.
 
+## UI and bulk control
+
+- No arguments opens the TUI. Keys: `j/k` move, `/` filter, `e/d` enable or
+  disable the selected timer, `a/A` enable or disable all, `p/P` pause or
+  resume, `r` run the selected service now, `x` then `y` remove, `?` help, `q`
+  quit. The right pane shows the selected task and its last journal lines.
+- `octask list` is a colored table with status glyphs: `[+]` enabled, `[-]`
+  disabled, `[!]` failed. `octask list --json`, `show --json` and `status
+  --json` are for scripts and agents.
+- `octask pause` saves the currently enabled set to
+  `~/.config/octask/pause.json`, disables every managed timer, and `resume`
+  restores exactly that set. Use it instead of toggling tasks one by one.
+- `octask enable --all` / `disable --all` are the blunt form; both accept
+  `--dry-run`. `octask run <name>` starts a service without waiting for its
+  timer. `octask cleanup` removes orphaned units and state artifacts.
+
+## Agent tools
+
+The `fazuh.octask` OpenCode plugin (`plugins/octask/`) exposes `octask_list`,
+`octask_show`, `octask_status`, `octask_logs`, `octask_schedule`,
+`octask_update`, `octask_delete`, `octask_run`, `octask_enable`,
+`octask_disable`, `octask_pause` and `octask_resume`. Agents can therefore
+create and manage timers from a conversation. The plugin shells out to the
+`octask` binary; set `OCTASK_BIN` to override its path.
+
 ## Troubleshooting
 
-- Did it run? `octask logs <name>` (or `octask logs <name> -n 200`)
+- Did it run? `octask logs <name>` (or `octask logs <name> -n 200 -f` to follow)
 - Why failed? `octask status <name>` (timer + service status)
 - Not firing? Check the timer is loaded and enabled: `octask list`; check the
   service is not in `systemctl --user --failed`; remember `Persistent=true`
