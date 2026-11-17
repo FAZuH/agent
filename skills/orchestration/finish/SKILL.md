@@ -11,8 +11,7 @@ description: >-
 End the session, in order: docs, commit, archive, summary, next steps,
 self-improvement.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report.
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report.
 
 Gates live in the loaded skills: GATE `commit-approval` in @commit and GATE
 `offer-sweep` in @self-improve (vocabulary: the @gate skill). `/finish auto`

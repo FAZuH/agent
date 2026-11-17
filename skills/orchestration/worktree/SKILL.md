@@ -16,7 +16,7 @@ One branch, one git worktree. The main tree keeps all untracked project state, s
 
 A worktree sees tracked files only. A task needing `.scratch/` state belongs to the main-tree session, not the branch.
 
-> **Load @following-procedures skill first.** It owns procedure narration, deviation logging, post-run report. Always follow the rules in the *Safety rules* section at the bottom.
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report. Always follow the rules in the *Safety rules* section at the bottom.
 
 ## When to use
 

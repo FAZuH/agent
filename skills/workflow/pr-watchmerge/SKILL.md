@@ -9,8 +9,7 @@ description: >-
 # PR watch-and-merge
 
 > **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Safety rules* section
+> numbered procedure: live deviation logging and a fixed post-run report. Always follow the rules in the *Safety rules* section
 > at the bottom.
 
 ## Workflow

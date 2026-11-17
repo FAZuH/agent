@@ -11,8 +11,7 @@ description: >-
 Every non-trivial feature gets a `.scratch/` workspace. The spec doc inside it
 is the single source of truth.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report. The `## Interrupted procedures` section
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report. The `## Interrupted procedures` section
 > it defines lives in this workspace's `spec.md`.
 >
 > **Load @scratch skill first.** It owns the workspace layout, slug format, and

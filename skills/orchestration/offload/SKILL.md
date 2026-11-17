@@ -11,8 +11,7 @@ description: >-
 Delegate builds, checks, or agent runs to a remote host over ssh. The local
 tree is the single writer for commits; the remote never commits.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, and the post-run report.
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report.
 >
 > **Load @gate skill when you reach the `GATE` tag.** It owns gate classes and
 > the ask protocol. (Vocabulary: the @gate skill.)

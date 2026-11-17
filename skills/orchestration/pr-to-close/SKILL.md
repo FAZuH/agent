@@ -11,8 +11,7 @@ description: >-
 Finished worktree branch end to end: open a pull request, watch CI, merge when
 green, close the worktree. Three skills in order. Never skip or reorder.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report. Always follow the rules in the
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report. Always follow the rules in the
 > *Safety rules* section at the bottom.
 
 ## Workflow

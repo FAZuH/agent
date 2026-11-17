@@ -14,8 +14,7 @@ the service restarts. An idle LLM session does not keep running, and goal
 auto-continue is untrustworthy for long runs. Move liveness **outside** the
 session.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report.
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report.
 
 Follow the *Rules* section below.
 

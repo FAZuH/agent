@@ -11,8 +11,7 @@ description: >-
 Single home for the completion checklist and the archive steps. `finish`,
 @session, and @scratch reference it instead of restating the steps.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report. Always follow the gate in the
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report. Always follow the gate in the
 > *Completion checklist* section below.
 >
 > **Load @scratch skill first** for the workspace mechanics: verifying the repo

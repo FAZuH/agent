@@ -14,8 +14,7 @@ and operate the repo. This skill establishes, maintains, and repairs it. Task
 facts stay in `.scratch/`, decisions in `docs/adr/`, vocabulary in `CONTEXT.md`.
 
 > **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report.
+> numbered procedure: live deviation logging and a fixed post-run report.
 
 ## Invocation
 

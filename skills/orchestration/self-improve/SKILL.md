@@ -12,8 +12,7 @@ Run the collect + validate check, then offer the sweep. This skill collects
 proposals and validates them; the friction loop below applies what the user
 approves.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report.
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report.
 
 Follow the *Rules* section below.
 
