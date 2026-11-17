@@ -673,17 +673,31 @@ nothing is vendored.
 ## The Desktop panel
 
 On OpenCode Desktop the `./gui-experimental` half adds a **Jev** tab to the
-session side panel (also in the `+` menu). It reads and writes through the
-same state files as the TUI, so the two views never diverge. The default view
-is **Blocked calls**: pending permissions with Approve once and Reject. **More**
-swaps to the feature switches and the last 15 calls; a call row expands to its
-redacted detail, and Back returns. The header's on/off button is the master
-switch. The bundle is built with `bun run --cwd plugins/jev build:gui`.
+session side panel, also in the `+` menu. The tab reads and writes through the
+same state files as the TUI, so the two views do not diverge. The bundle is
+built with `bun run --cwd plugins/jev build:gui`.
+
+The panel shows one section at a time in three tabs: **Blocked · N**,
+**Features**, **Calls**. A compact on/off button in the header is the master
+switch.
+
+**Blocked** shows each pending permission as a card with **Approve once** and
+**Reject**. When calls are held, a bulk bar reads "N calls need you" and offers
+**Approve all** and **Reject all**. Both bulk actions ask for confirmation
+first. Approve all grants a one-time approval to every held call. Reject all
+dismisses every held call.
+
+**Features** shows the feature switches.
+
+**Calls** shows the last 15 logged calls with an **All sessions / This session**
+scope toggle. A call row expands to its redacted detail. The detail includes
+the session id and the resolved title. The time is local HH:MM. Every
+successful Jev log write emits a `changed("log")` RPC event. The panel
+subscribes to `changed` and reloads the list. No manual reload is needed.
 
 Nothing secret crosses the panel's RPC: log rows are an explicit field
 allowlist (no `sent`, `received`, endpoint or webhook), and the key is reported
-as present/from only, never by value. The Desktop renderer caches the bundle
-at window startup, so a rebuilt bundle needs one Desktop restart to show.
+as present/from only, never by value.
 
 ## Call toasts
 
