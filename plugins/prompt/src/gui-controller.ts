@@ -5,6 +5,7 @@ const MAX_SESSION_IDS = 200
 export interface PromptRPC {
   list(input: { sessionIDs: string[] }): Promise<{ prompts: Prompt[] }>
   reopen(input: { sessionID: string; promptID?: string }): Promise<{ ok: boolean; reason?: string }>
+  dismissAll(input: { sessionIDs: string[] }): Promise<{ ok: boolean; count: number }>
   subscribe(listener: (event: { sessionID: string; prompt: Prompt }) => void): () => void
 }
 
@@ -90,6 +91,22 @@ export function createPromptView(rpc: PromptRPC, dialogs: PromptDialogs) {
         if (family.length) await load(family)
       } catch (error) {
         dialogs.error(errorText(error))
+      }
+    },
+    /** Dismiss every awaiting prompt in the family and refresh once. */
+    async dismissAll(sessionIDs: string[]): Promise<number> {
+      try {
+        const ids = [...new Set(sessionIDs)]
+        let count = 0
+        for (let at = 0; at < ids.length; at += MAX_SESSION_IDS) {
+          const result = await rpc.dismissAll({ sessionIDs: ids.slice(at, at + MAX_SESSION_IDS) })
+          count += result.count
+        }
+        if (family.length) await load(family)
+        return count
+      } catch (error) {
+        dialogs.error(errorText(error))
+        return 0
       }
     },
     dispose() {

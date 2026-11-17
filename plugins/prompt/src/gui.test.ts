@@ -22,6 +22,7 @@ function harness(overrides: Partial<PromptRPC> = {}, dialogOverrides: Partial<Pr
   const rpc: PromptRPC = {
     list: async () => ({ prompts: [prompt] }),
     reopen: async () => ({ ok: true }),
+    dismissAll: async () => ({ ok: true, count: 0 }),
     subscribe: () => () => {},
     ...overrides,
   }
@@ -130,6 +131,51 @@ test.each([
   await view.reopen("ses_child", "desktop-check")
 
   expect(errors).toEqual([expected])
+  view.dispose()
+})
+
+test("dismissAll batches a family larger than the contract limit", async () => {
+  const sizes: number[] = []
+  const { view } = harness({
+    dismissAll: async ({ sessionIDs }) => {
+      sizes.push(sessionIDs.length)
+      return { ok: true, count: 1 }
+    },
+  })
+
+  const count = await view.dismissAll(Array.from({ length: 250 }, (_, i) => `ses_${i}`))
+
+  expect(sizes).toEqual([200, 50])
+  expect(count).toBe(2)
+  view.dispose()
+})
+
+test("dismissAll reloads the family once after dismissing", async () => {
+  let lists = 0
+  const { view } = harness({
+    list: async () => {
+      lists++
+      return { prompts: [] }
+    },
+  })
+  await view.load(["ses_child"])
+  expect(lists).toBe(1)
+
+  await view.dismissAll(["ses_child"])
+
+  expect(lists).toBe(2)
+  view.dispose()
+})
+
+test("dismissAll reports a plain-object failure without changing state", async () => {
+  const { view, errors } = harness({
+    dismissAll: async () => {
+      throw { message: "Server unreachable" }
+    },
+  })
+
+  expect(await view.dismissAll(["ses_child"])).toBe(0)
+  expect(errors).toEqual(["Server unreachable"])
   view.dispose()
 })
 

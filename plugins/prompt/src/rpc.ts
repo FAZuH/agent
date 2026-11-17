@@ -112,6 +112,30 @@ export const Contract = {
         additionalProperties: false,
       },
     },
+    dismissAll: {
+      input: {
+        type: "object",
+        properties: {
+          sessionIDs: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 1,
+            maxItems: 200,
+          },
+        },
+        required: ["sessionIDs"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          count: { type: "number" },
+        },
+        required: ["ok", "count"],
+        additionalProperties: false,
+      },
+    },
   },
   events: {
     changed: {

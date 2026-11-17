@@ -7,6 +7,7 @@ import {
   answerText,
   answersOfForm,
   isEmpty,
+  needsAnswer,
   promptsOf,
   promptID,
   promptIDOfForm,
@@ -267,6 +268,20 @@ export default {
               String(input?.sessionID ?? ""),
               typeof input?.promptID === "string" ? input.promptID : undefined,
             ),
+          dismissAll: async (input: any) => {
+            const ids = Array.isArray(input?.sessionIDs)
+              ? input.sessionIDs.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+              : []
+            let count = 0
+            for (const sessionID of ids.slice(0, 200)) {
+              // Read first: settleDismiss emits a changed event and closes any
+              // open card, so the snapshot keeps this pass to its own prompts.
+              for (const prompt of readPrompts(sessionID)) {
+                if (needsAnswer(prompt) && settleDismiss(sessionID, prompt.id).ok) count++
+              }
+            }
+            return { ok: true, count }
+          },
         })
         runtime.emit = (event) => registration.events.emit("changed", event)
       } catch (error) {

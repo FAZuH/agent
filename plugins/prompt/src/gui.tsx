@@ -13,6 +13,11 @@ const CSS = `
 .fazuh-prompts-head { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .fazuh-prompts-head strong { font-size: 13px; }
 .fazuh-prompts-head span { opacity: .65; font-size: 12px; }
+.fazuh-prompts-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+.fazuh-prompts-toolbar button { font-size: 12px; padding: 4px 9px; border: 1px solid var(--border-weak-base); border-radius: 999px; background: transparent; color: inherit; }
+.fazuh-prompts-toolbar button:hover { background: var(--surface-base-hover); }
+.fazuh-prompts-toolbar button[aria-pressed=true] { border-color: currentColor; background: var(--surface-base-hover); }
+.fazuh-prompts-toolbar button:disabled { opacity: .5; cursor: not-allowed; }
 .fazuh-prompts-tabs { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
 .fazuh-prompts-tab { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border-weak-base); border-radius: 999px; background: transparent; color: inherit; font-size: 12px; }
 .fazuh-prompts-tab[aria-pressed=true] { border-color: currentColor; background: var(--surface-base-hover); }
@@ -49,6 +54,7 @@ function PromptsView(props: { ctx: any; session: any; server: any }) {
   const [state, setState] = createSignal<PromptViewState>({ prompts: [], loading: true })
   const [active, setActive] = createSignal<string>()
   const [selected, setSelected] = createSignal<string>()
+  const [unansweredOnly, setUnansweredOnly] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
   const rpc = props.server.client.rpc(Contract)
   const view = createPromptView(
@@ -81,7 +87,12 @@ function PromptsView(props: { ctx: any; session: any; server: any }) {
         (b.prompts.at(-1)?.at ?? 0) - (a.prompts.at(-1)?.at ?? 0),
     )
   const group = () => groups().find((item) => item.sessionID === active()) ?? groups()[0]
-  const prompts = () => (group()?.prompts ?? []).slice().sort((a, b) => b.at - a.at)
+  const prompts = () =>
+    (group()?.prompts ?? [])
+      .filter((prompt) => !unansweredOnly() || needsAnswer(prompt))
+      .slice()
+      .sort((a, b) => b.at - a.at)
+  const awaitingCount = () => state().prompts.filter(needsAnswer).length
 
   createEffect(() => {
     const chosen = selected()
@@ -121,6 +132,30 @@ function PromptsView(props: { ctx: any; session: any; server: any }) {
           </span>
         </div>
 
+        <div class="fazuh-prompts-toolbar">
+          <button aria-pressed={unansweredOnly()} onClick={() => setUnansweredOnly(!unansweredOnly())}>
+            Only awaiting
+          </button>
+          <button
+            disabled={busy() || awaitingCount() === 0}
+            onClick={() =>
+              void act(async () => {
+                const confirmed = await props.ctx.dialogs.confirm({
+                  title: "Dismiss all awaiting prompts?",
+                  description:
+                    "Every unanswered prompt in this session family is marked dismissed. The records stay.",
+                  confirm: "Dismiss all",
+                  cancel: "Cancel",
+                  danger: true,
+                })
+                if (confirmed) await view.dismissAll(family())
+              })
+            }
+          >
+            Dismiss all
+          </button>
+        </div>
+
         <Show when={groups().length > 1}>
           <div class="fazuh-prompts-tabs" role="group" aria-label="Sessions">
             <For each={groups()}>
@@ -144,6 +179,9 @@ function PromptsView(props: { ctx: any; session: any; server: any }) {
         </Show>
 
         <div class="fazuh-prompts-list" aria-label="Prompt history">
+          <Show when={!prompts().length}>
+            <p role="status">No awaiting prompts.</p>
+          </Show>
           <For each={prompts()}>
             {(prompt) => (
               <button

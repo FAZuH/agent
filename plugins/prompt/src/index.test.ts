@@ -402,6 +402,33 @@ describe("tools", () => {
     }
   })
 
+  test("dismissAll clears only awaiting prompts and reports the count", async () => {
+    const sid = "ses_dismiss_all"
+    for (const [id, patch] of [
+      ["da-open", {}],
+      ["da-answered", { answeredAt: 1 }],
+      ["da-dismissed", { dismissedAt: 1 }],
+    ] as const) {
+      store.appendPrompt({
+        id,
+        sessionID: sid,
+        at: 1,
+        title: id,
+        description: id,
+        prompts: { questions: [{ title: `${id} q`, body: "", recommendation: "ok" }] },
+        ...patch,
+      })
+    }
+
+    const result = await handlers.dismissAll({ sessionIDs: [sid] })
+
+    expect(result).toEqual({ ok: true, count: 1 })
+    const records = store.readPrompts(sid)
+    expect(records.find((record) => record.id === "da-open")?.dismissedAt).toBeGreaterThan(0)
+    expect(records.find((record) => record.id === "da-answered")?.dismissedAt).toBeUndefined()
+    expect(records.find((record) => record.id === "da-dismissed")?.dismissedAt).toBe(1)
+  })
+
   test("an empty native-card answer takes the recommendation", async () => {
     const prompt = tools.find((tool) => tool.name === "prompt_user")
     const pending = prompt.execute(
