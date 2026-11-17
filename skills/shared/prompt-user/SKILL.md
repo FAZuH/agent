@@ -10,9 +10,10 @@ description: >-
 # prompt-user
 
 Anything the user must decide or run goes in a `prompt_user` tool call. The
-tool stores it and the Prompts view renders it: the sidebar section in the
-TUI, the Prompts panel in Desktop. The reply carries the answer, not the
-prompts.
+tool stores it, opens it as a native question card on every client (TUI,
+Desktop, mobile web), and lists it in the Prompts view: the sidebar section in
+the TUI, the Prompts panel in Desktop. The reply carries the answer, not the
+prompts. `/prompt-latest` reopens the latest unanswered card on any client.
 
 Two kinds:
 
