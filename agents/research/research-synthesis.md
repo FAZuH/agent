@@ -1,7 +1,8 @@
 ---
 description: "Web research synthesis: searches multiple sources and returns a focused, cited brief in chat. Use for broad or comparative questions that need a synthesized answer, not repository mapping or a findings file."
 mode: subagent
-# Ask by default; last matching rule wins, so allows come after the wildcard.
+# Last matching rule wins: the trailing wildcard allow overrides the ask above
+# and any global ask rules.
 permissions:
   - action: "*"
     resource: "*"
@@ -10,6 +11,9 @@ permissions:
     resource: "*"
     effect: allow
   - action: webfetch
+    resource: "*"
+    effect: allow
+  - action: "*"
     resource: "*"
     effect: allow
 ---

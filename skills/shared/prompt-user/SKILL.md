@@ -2,17 +2,18 @@
 name: prompt-user
 description: >-
   Anything the user must read or act on goes in a `prompt_user` tool call:
-  numbered ❓ questions and 🏁 procedures, one divider. The Reports view
+  numbered ❓ questions and 🏁 procedures, one divider. The Prompts view
   renders it; the reply does not repeat it. Triggers: asking the user,
-  sign-off, closing a post-task report.
+  sign-off.
 ---
 
 # prompt-user
 
 Anything the user must decide or run goes in a `prompt_user` tool call. The
-tool stores it and the Reports view renders it: the sidebar section in the
-TUI, the side panel in the desktop app. The reply carries the answer, not the
-prompts.
+tool stores it, opens it as a native question card on every client (TUI,
+Desktop, mobile web), and lists it in the Prompts view: the sidebar section in
+the TUI, the Prompts panel in Desktop. The reply carries the answer, not the
+prompts. `/prompt-latest` reopens the latest unanswered card on any client.
 
 Two kinds:
 
@@ -42,11 +43,9 @@ Two kinds:
   at least one question. Without it the call returns immediately and the
   answer arrives as a new message.
 - Call `prompt_user` with only the kind you have. Empty fields are omitted.
-- Inside a finished task, call `prompt_user` right after `post_task`. The
-  report carries no prompts; this section owns them.
 - A simple question whose answer is prose: answer it, and call `prompt_user`
   only for what the user must act on.
-- The user answers in the Reports view; Enter steers the answer, Ctrl+Enter
+- The user answers in the Prompts view; Enter steers the answer, Ctrl+Enter
   queues it, and an empty answer takes the recommendation. Without `block`
   the answer arrives as a new message; with `block` it returns as the tool
   result in the same turn and steer/queue does not apply. Do not ask which
@@ -60,8 +59,8 @@ Two kinds:
 - Procedures first, questions last, in the order they appear in the view.
 - Numbering runs across the call (`P1`, `P2`, `Q1`, `Q2`); the view numbers
   them for you.
-- Never decide for the user. A `question` they must answer is not a `next`
-  item, and not a choice you write into the reply.
+- Never decide for the user. A question they must answer is not a choice you
+  write into the reply.
 
 ## Fallback
 

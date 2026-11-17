@@ -91,6 +91,9 @@ Gotchas 1 to 3 (service vs plain serve, project discovery and location, the plug
 2. **Model ref:** `{"model":{"providerID":"opencode","id":"…"}}`: `variant` optional, `id`+`providerID` required.
 3. **No curl-style flags:** `opencode2 api` rejects `-w`/`-o` (`Unrecognized flag`) and has no timeout flag. Redirect the body to a file and parse it (`> out.json`); wrap poll loops in `timeout N opencode2 api …` (a hung child once blocked a poll loop for 15.5 minutes).
 4. **Interactive commands need a subcommand:** bare `opencode` (or its `opencode2` compatibility wrapper) launches the TUI and blocks until timeout. Call the v2 binary with an explicit subcommand such as `api`, `models`, `auth list`, or `run`.
+5. **Permission reply uses `decision: once`.** `POST /api/session/{id}/permission/{permissionID}/reply` needs body `{"decision":"once"}`. `approve`/`allow` and a `reply` key return HTTP 400. On v2.3.0, rejecting one pending permission rejects every other pending permission in that session; deny one only when that side effect is acceptable.
+6. **`/api/provider` echoes the live API key.** Never persist that response to disk. A model-free readiness check uses plugin state plus session model instead.
+7. **List query params are ignored.** `GET /api/session` ignores `limit` and `cursor` (`--param …` on `opencode2 api` does nothing); it returns the default page. Fork bodies use `boundary` (gotcha 1), not a top-level `before`.
 
 ## Related
 
@@ -100,4 +103,4 @@ Gotchas 1 to 3 (service vs plain serve, project discovery and location, the plug
 
 ## Memory
 
-The OptMem memory contract lives in the umbrella SKILL.md, Shared facts.
+The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.

@@ -8,18 +8,46 @@
 
 import { describe, expect, test } from "bun:test"
 
-import { askText, forkedNotice, questionBlock, readMarker, reportTags } from "./branch.ts"
+import { askText, forkedNotice, promptBlock, readMarker, reportTags } from "./branch.ts"
 
 describe("readMarker", () => {
   test("reads a forked marker", () => {
     const marker = readMarker({ branch: { status: "forked", parentID: "ses_parent", sessionID: "ses_fork" } })
     expect(marker?.status).toBe("forked")
     expect(marker?.sessionID).toBe("ses_fork")
+    expect(marker?.kind).toBe("ask")
   })
 
-  test("reads the legacy aside marker", () => {
-    const marker = readMarker({ aside: { status: "forked", parentID: "ses_parent" } })
+  test("reads a subagent fork with its source and prompt", () => {
+    const marker = readMarker({
+      branch: {
+        status: "forked",
+        kind: "subagent",
+        parentID: "ses_parent",
+        sessionID: "ses_fork",
+        sourceID: "ses_source",
+        prompt: "ticket B",
+        reportedAt: 42,
+      },
+    })
+    expect(marker?.kind).toBe("subagent")
+    expect(marker?.sourceID).toBe("ses_source")
+    expect(marker?.prompt).toBe("ticket B")
+    expect(marker?.reportedAt).toBe(42)
+  })
+
+  test("reads the legacy aside marker, and its question field", () => {
+    const marker = readMarker({ aside: { status: "forked", parentID: "ses_parent", question: "old" } })
     expect(marker?.status).toBe("forked")
+    expect(marker?.kind).toBe("ask")
+    expect(marker?.prompt).toBe("old")
+  })
+
+  test("reads a background fork, and defaults to foreground", () => {
+    expect(
+      readMarker({ branch: { status: "forked", parentID: "ses_parent", background: true } })?.background,
+    ).toBe(true)
+    expect(readMarker({ branch: { status: "forked", parentID: "ses_parent" } })?.background).toBe(false)
   })
 
   test("rejects foreign metadata", () => {
@@ -30,9 +58,9 @@ describe("readMarker", () => {
   })
 })
 
-describe("question block", () => {
+describe("prompt block", () => {
   test("fences the user's words in a tag", () => {
-    expect(questionBlock("what is up")).toBe("<question>\nwhat is up\n</question>")
+    expect(promptBlock("what is up")).toBe("<prompt>\nwhat is up\n</prompt>")
   })
 })
 
@@ -45,10 +73,17 @@ describe("report tags", () => {
 })
 
 describe("notices", () => {
-  test("the fork notice hands the question over as the fork's task", () => {
+  test("the fork notice hands the prompt over as the fork's task", () => {
     const notice = forkedNotice("ses_fork", "ses_parent", "1. do this\n2. do that")
     expect(notice).toContain("not an instruction for this session")
-    expect(notice).toContain("<question>\n1. do this\n2. do that\n</question>")
+    expect(notice).toContain("<prompt>\n1. do this\n2. do that\n</prompt>")
+  })
+
+  test("names the source when the fork copied a subagent", () => {
+    const notice = forkedNotice("ses_fork", "ses_parent", "ticket B", {
+      sourceID: "ses_source",
+    })
+    expect(notice).toContain("The fork ses_fork of ses_source")
   })
 })
 
@@ -60,22 +95,39 @@ describe("ask text", () => {
     expect(text).toContain('<branch sessionID="ses_fork" state="completed" parent="ses_parent">')
   })
 
-  test("report mode wraps the question in a tag", () => {
+  test("report mode wraps the prompt in a tag", () => {
     const text = askText("what is up", "ses_parent", "ses_fork")
-    expect(text).toContain("<question>\nwhat is up\n</question>")
+    expect(text).toContain("<prompt>\nwhat is up\n</prompt>")
+  })
+
+  test("a subagent fork names the tool and the copied session", () => {
+    const text = askText("ticket B", "ses_parent", "ses_fork", true, {
+      via: "branch_subagent",
+      sourceID: "ses_source",
+    })
+    expect(text).toContain("forked via branch_subagent from ses_source")
+    expect(text).toContain("branch_report")
+    expect(text).toContain('<branch sessionID="ses_fork" state="completed" parent="ses_parent">')
   })
 
   test("silent mode asks for no report", () => {
     const text = askText("what is up", "ses_parent", "ses_fork", false)
-    expect(text).toContain("/branch-silent")
+    expect(text).toContain("branch_ask")
     expect(text).toContain("do not call branch_report")
+    expect(text).toContain("do the work here")
+    expect(text).toContain("expects no report")
     expect(text).not.toContain("opencode2 api")
     expect(text).not.toContain("state=\"completed\"")
   })
 
-  test("keeps the question as the fork's only task", () => {
+  test("the silent command names itself", () => {
+    const text = askText("what is up", "ses_parent", "ses_fork", false, { via: "branch-silent" })
+    expect(text).toContain("/branch-silent")
+  })
+
+  test("keeps the prompt as the fork's only task", () => {
     const text = askText("what is up", "ses_parent", "ses_fork")
-    expect(text).toContain("The user only wants you to answer this question")
-    expect(text).toContain("<question>\nwhat is up\n</question>")
+    expect(text).toContain("The asking session only wants you to address the following prompt/instruction")
+    expect(text).toContain("<prompt>\nwhat is up\n</prompt>")
   })
 })

@@ -13,13 +13,14 @@ OpenCode config.
 Bounded decisions from [Jev](https://typesafe.ai), TypeSafe's System One decision
 model, over any provider exposing a `/systemone` endpoint. Jev answers typed
 questions (`choice`, `noul`, `score`) with probabilities. Hooks only, no tools:
-the plugin's power is automatic. Every hook fails open — a Jev outage never
-blocks work — and the two tool hooks are off until you turn them on.
+the plugin's power is automatic. Every Jev decision hook fails open, so a Jev
+outage never blocks work, except the no-respawn admission path, which denies
+when it cannot decide. All five switches are off until you turn them on.
 
 The provider is a setting, not an assumption: the wire model id and the endpoint
 path are provider-specific and neither has a portable default. `/jev-settings`
 edits the endpoint, model, key source, and the per-feature config;
-`/jev-features` flips the three feature switches. Both stay open (arrows move,
+`/jev-features` flips the five feature switches. Both stay open (arrows move,
 enter changes one value, esc closes), so they read like OpenCode's own settings
 panel. They are TUI commands, since the desktop app loads no TUI module.
 `/jev-model <id>`, `/jev-endpoint <url>` do the same as text and work in any
@@ -33,7 +34,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   scans). A confident pick is injected into the next context build as one
   system line: `Jev routing: consider loading skill @<name> (P=…)`. One Jev
   call per prompt (cached across the agentic loop's turns), awaited with a
-  configurable timeout (default 2000ms); a timeout or low-confidence answer
+  configurable timeout (default 5000ms); a timeout or low-confidence answer
   injects nothing. Subagent sessions are skipped.
 - **`hook_tool_risk`** (off by default): every tool call the host checks for
   permission, inside `hook_tool_risk.actions`, is sent to Jev, which answers
@@ -49,23 +50,49 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   file with `{file:<path>}`, and a rule may override the global action and
   threshold. A file that cannot be parsed changes nothing and says so in the
   log.
+- **`hook_no_respawn`** (off by default): stops an aborted task from being
+  replaced automatically in the same turn. Admission runs before the wrapped
+  `subagent` call; a replacement holds as the host's own permission prompt,
+  where `once` grants that call, `reject` denies it, and `always` grants that
+  call only, because the plugin passes no `save` array. An unanswered hold
+  denies after 60 seconds when it is the session's only pending prompt. State
+  under `~/.local/state/opencode/jev/nospawn/`; see [jev.md](jev.md).
+- **`hook_supervisor`** (off by default): resolves a Jev `ask` through a
+  separate supervisor model before the human prompt. It stays off until its own
+  model and endpoint are configured, and adds no second permission hook: the
+  native hold stays open while a bounded investigation runs in the background.
+  The four verdicts are `allow`, `deny`, `abort` and `ask_user`. In trial mode
+  (the default) an `allow` still needs the human's `once`; `ask_user`, failure
+  and budget exhaustion leave the native prompt in place. There is no silent
+  allow. Evidence is read-only project files, search and constrained Git inside
+  the configured root, bounded by 30 seconds, three model rounds and six
+  evidence calls. This is a workflow guardrail, not a security sandbox; see
+  [jev.md](jev.md#the-hooks).
 - **Sidebar section**: the plugin adds a `Jev` section to the TUI sidebar with
   the recent hook calls, one terse line each. `sidebar`, `sidebarCount` and
   `sidebarSubject` in `/jev-settings` control it.
 - **`/jev-features`**: the panel. **Plugin** at the top is the master switch:
-  on or off, and it does not touch the three below it. Off means no hook runs
-  and nothing is sent, so nothing is spent, while the three keep their values,
+  on or off, and it does not touch the five below it. Off means no hook runs
+  and nothing is sent, so nothing is spent, while the five keep their values,
   so you can configure with the plugin disabled and get your setup back when
   you re-enable it. Below it: `hook_skill_pick`, `hook_tool_risk`,
-  `hook_tool_standard`.
+  `hook_tool_standard`, `hook_no_respawn`, `hook_supervisor`.
 - **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
   `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
-  own numbers; there are no global thresholds.
+  own numbers; there are no global thresholds. The `hook_supervisor` rows hold
+  its separate model, endpoint, protocol, key, evidence root, budget and trial
+  mode.
 - **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
   one through once. The grant is spent by the server, so the approved call
   costs no model call and no tokens. The picker is not filtered by the
   session on screen, because a blocked call often ran in a subagent session.
   TUI only: the picker needs a dialog, and one name has one owner.
+- **`/jev-abort [prefix] | session`**: stop a task of this session by
+  fingerprint prefix, or the whole session. It seals the tombstone before
+  revoking, interrupts the bound children, and fences each one. It refuses with
+  a named reason when no host is registered, the switch is off, nothing matches,
+  a prefix is ambiguous, the store is unreadable, or the task already ended, and
+  it reports `NOT DURABLE` and `NOT FENCED` rather than implying either.
 - **`/jev-optimize-skills`**: rewrite every unoptimized skill description into a
   terse choice criterion via the host LLM (`<id>` refreshes one). The criteria
   live in `skillCriteria` in `~/.local/state/opencode/jev/jev-data.json`, keyed
@@ -97,39 +124,65 @@ it. Rebuild with `bun run build:gui` (or `./dev.sh gui`); tests:
 
 ## branch (`fazuh.branch`)
 
-`/branch <question>` forks the current session at its latest state, asks the
-question in the fork, and reports back to the session that asked. The fork
-keeps full history and stays open for follow-ups, unlike `/btw` which answers
-once in place. In the TUI the view moves to the fork; on hosts with no TUI
-module (desktop, API, mini) the fork id is in the reply. One name, one
-owner: the server plugin owns the command and both tools, so they work on
-every host.
+The plugin forks a session, sends it a prompt, and lets the fork report back to
+the session that asked. Two sources:
 
-The question reaches the fork inside `<question>` tags, so the fork can tell
-the user's words from the plugin's own instructions around them. The session
-that asked hears about the fork once, when the fork starts. That notice
-labels the question as the fork's task, so the asking session does not read
-it as its own instructions.
+- `/branch <prompt>` and `branch_ask` fork the current primary session. The
+  fork keeps that session's agent and full history, so it needs no brief.
+- `branch_subagent` forks a finished subagent below the caller in the session
+  tree. The fork keeps that subagent's agent, model, and history, so follow-on
+  work starts from what that subagent already did.
+
+`/branch-silent` and `silent: true` skip both the notice and the report. A fork
+stays open for follow-ups, unlike `/btw` which answers once in place. The fork
+id is in the reply; the TUI and desktop open the fork when the asking session
+is on screen, unless `background` is set. One name, one owner: the server owns
+the commands and the three tools, so they work on every host.
+
+The prompt reaches the fork inside `<prompt>` tags, so the fork can tell the
+user's words from the plugin's own instructions around them. The session that
+asked hears about the fork once, when the fork starts. That notice labels the
+prompt as the fork's task, so the asking session does not read it as its own
+instructions.
 
 The answer comes back on the fork's own initiative through the `branch_report`
-tool: the fork calls it once the question is answered, and it arrives here
-wrapped in `<branch state="completed">` tags, so the fork curates what that
-session gets to read. `/branch-silent` never asks for a report.
+tool: the fork calls it when the work is done, and it arrives here wrapped in
+`<branch state="completed">` tags, so the fork curates what that session gets
+to read. A fork reports once; a second call is refused. A silent fork never
+asks for a report.
 
-- **`/branch <question>`**: fork, ask, and tell this session the fork exists.
-- **`/branch-silent <question>`**: fork and ask, with no notice and no report.
-- **`branch_ask`** (`question`, `silent?`): the same fork from an agent turn,
-  so the agent does not block while the fork works.
+- **`/branch <prompt>`**: primary session only. Fork, send the prompt, and tell
+  this session the fork exists.
+- **`/branch-silent <prompt>`**: primary session only. Fork with no notice and
+  no report.
+- **`branch_ask`** (`prompt`, `agent?`, `silent?`, `background?`): primary
+  session only. The same fork from an agent turn, so the turn does not block.
+- **`branch_subagent`** (`sessionID`, `prompt`, `agent?`, `silent?`,
+  `background?`): any agent. Fork a finished subagent in this session's tree.
+  The target must be a child or deeper descendant with a parent and a completed
+  turn; a running target is refused so the fork copies a whole turn, and a
+  target outside the tree is refused.
 - **`branch_report`** (`text`): send the answer back. Only works inside a fork
-  this plugin made.
+  this plugin made, once.
 
-On OpenCode Desktop its `./gui-experimental` half reads the same markers:
-a fork of the session on screen opens its tab (a failure toasts instead),
-a fork's composer shows a back-link pill to the session that asked, a side
-panel lists the forks of the session on screen, and **Ask in a fork**
-(`mod+shift+a`) opens a dialog and forks through the `branch.start` RPC,
-whose contract is `rpc.ts`. Rebuild with `bun run build:gui` (or
-`./dev.sh gui`); tests: `bun test plugins/branch`.
+`agent` switches the fork's role before it starts. The switch rewrites the
+system prompt, so the shared prefix is no longer cached; omit it to keep the
+source's role and the cache. A fork of a subagent is a root session, so the
+caller collects through `branch_report`, not OpenCode's automatic subagent
+report.
+
+`/branch-settings` sets `maxForks`, the reporting forks in flight per caller
+(0 = unlimited), and `reportBatchMs`, which batches reports to one prompt
+(0 = off). Silent forks are not counted, and `branch_ask` and `branch_subagent`
+share the cap.
+
+On OpenCode Desktop its `./gui-experimental` half reads the same markers: a
+fork of the session on screen opens its tab (a failure toasts instead), a
+fork's composer shows a back-link pill to the session that asked, a side panel
+lists the forks of the session on screen, and **Ask in a fork**
+(`mod+shift+a`) opens a dialog and forks through the `branch.start` RPC, whose
+contract is `rpc.ts`. The command is disabled in a subagent session. Rebuild
+with `bun run build:gui` (or `./dev.sh gui`); tests: `bun test plugins/branch`.
 
 
 ## tell (`fazuh.tell`)
@@ -145,7 +198,8 @@ the id belongs, esc closes. The message is typed after the id. One name, one
 owner: the server owns the command, so the text form works in every host,
 including the ones that load no TUI module.
 
-- **enter**: send, and steer the target, which interrupts a turn in progress.
+- **enter**: send, and steer the target. Steer runs after the target's current
+  turn ends; measured on 2.2.7, it aborts nothing.
 - **ctrl+enter**: send queued. The message waits for the target's current turn
   to finish.
 - **`--queue` / `--steer`**: the same two modes as a flag in the text, for the
@@ -225,73 +279,6 @@ opens `http://127.0.0.1:47821/?session=<current session>`.
 - No dependencies. `web/cytoscape.min.js` is vendored (MIT, 3.34.4).
   Tests: `bun test plugins/tree`.
 
-## desktop-control (`fazuh.desktop`)
-
-Screen, window, pointer, and keyboard control for this Wayland/Hyprland
-desktop. It exists because the `computer-use` server drives Linux through
-AT-SPI2 only: on Hyprland the a11y bus carries no real apps (no kitty, Brave,
-Steam, or Wine window) and no `org.a11y.atspi.DeviceEventController` exists, so
-neither its app list nor its input can work here.
-
-Backends, chosen per action:
-
-| Action | Backend | Reaches |
-|---|---|---|
-| screenshots | `grim` | every window, every monitor; `-T` captures a toplevel by its handle |
-| windows, focus | `hyprctl` | every window |
-| pointer | `ydotool`, closed loop | every window; needs `ydotoold` |
-| keyboard | `wtype` then XTest | every window |
-
-Nine tools: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
-`desktop_click`, `desktop_move`, `desktop_drag`, `desktop_scroll`,
-`desktop_type`, `desktop_key`. `desktop_click` takes image pixels, the same
-coordinates `desktop_screenshot` returns. A full-screen shot needs no offset;
-a region or window shot reports the offset to add. Capture is independent of
-workspace, focus and stacking. Input is not: the target window must be on the
-active workspace, mapped and uncovered, or the click lands on whatever is on
-top. `desktop_screenshot window` captures by foreign-toplevel handle even on
-another workspace or behind another window, and a partly off-screen window is
-captured only where it exists. `desktop_focus` cannot raise a window that a
-special workspace is covering.
-
-Hyprland has no pointer-button dispatcher. `sendshortcut` accepts `mouse:272`
-and a window target, but its `pass` path puts pointer focus at surface-local
-`(1,1)` before pressing, so it clicks only the window's top-left corner. That
-is not a coordinate click; the visibility requirement stands.
-
-Pointer input needs `ydotool` and a running `ydotoold`; `/dev/uinput` must be
-writable by the user. XTest is not a pointer backend: it moves XWayland's own
-pointer, which the compositor ignores, so a click lands wherever the real
-cursor already was. That is how a click aimed at a tab strip once landed on a
-video in another window.
-
-`ydotoold`'s virtual device advertises `EV_REL` only, so `ydotool mousemove
---absolute` does not work either — it warps. And the gain is not 1:1: on this
-machine 100 units move 200 layout pixels. So `desktop_move`, `desktop_click`,
-`desktop_drag`, and `desktop_scroll` close the loop against `hyprctl
-cursorpos`, stepping until the pointer is within 2 px, then re-reading to
-confirm the move was not still in flight. A click is only issued after that
-confirmation; if the pointer does not arrive, the call reports where it
-stopped and presses nothing.
-
-Captures ask grim for layout-scale pixels (`-s`), so an image pixel is the
-coordinate `desktop_click` takes. Hyprland's layout origin is not the image
-origin (this monitor sits at `332,-68`); the plugin adds that offset for grim
-internally and reports it for region and window captures. The caller never adds
-it.
-
-None of this makes a coordinate meaningful. The screen can change between the
-screenshot that suggested a point and the click — an app going fullscreen
-hides the bar — so take a fresh screenshot immediately before clicking and
-check that the thing under the point is still the thing meant.
-
-Hyprland's client list marks XWayland clients directly (`xwayland`), so no
-extra X11 query is needed. `src/xtest.py` is only the keyboard fallback for
-those clients; pointer input always goes through ydotool.
-
-No dependencies beyond the system binaries. Tests: `bun test
-plugins/desktop-control`.
-
 ## desktop-ask (`fazuh.desktop-ask`)
 
 Sends a screenshot from a keybind to one armed session and asks the
@@ -305,16 +292,17 @@ makes the current session the target; `/desktop-ask off` or
 `~/.local/bin/desktop-ask trigger`, which captures with `grim` and prompts the
 target with the image attached.
 
-- Delivery defaults to `queue`; `--steer` interrupts the target mid-turn.
+- Delivery defaults to `queue`; `--steer` wakes an idle target and otherwise
+  runs after the current turn.
 - Full screen by default; `--window` captures the focused window.
 - `--region` takes image pixels, `WxH` or `X,Y WxH`, and is converted to layout
-  coordinates before grim runs. Shots are captured at layout scale, the same
-  pixels desktop-control reports.
+  coordinates before grim runs. Shots are captured at layout scale, so each
+  image pixel matches a desktop coordinate.
 - `--ask TEXT` overrides the instruction for one trigger.
 - When the turn ends, the answer is copied to the clipboard with `wl-copy`
   (`xclip`/`xsel` fallback). `--no-copy` skips it for one trigger.
 - The trigger prompt asks for the text to paste inside `<copy>` and `</copy>`
-  so the post-task report stays out of the clipboard; the tags are stripped.
+  so the rest of the reply stays out of the clipboard; the tags are stripped.
   A reply without them is copied whole.
 - The copy runs in the plugin after the trigger returns. Its outcome lands in
   `.../desktop-ask/last-copy.json`, and `desktop-ask status` prints it.
@@ -327,85 +315,105 @@ target with the image attached.
 
 Tests: `bun test plugins/desktop-ask`.
 
-## report (`fazuh.report`)
+## prompt (`fazuh.prompt`)
 
-`post_task` and `prompt_user` replace the two skill blocks at the end of a
-reply. The tool stores a record; the reply carries only the answer. The
-skills in `skills/shared/post-task` and `skills/shared/prompt-user` call the
-tools and keep the printed block as a fallback for hosts without the plugin.
+`prompt_user` replaces the prompt-user block at the end of a reply. The tool
+stores a record; the reply carries only the answer. The skill in
+`skills/shared/prompt-user` calls the tool and keeps the printed block as a
+fallback for hosts without the plugin.
 
-- **`post_task`** (`description`, `completed`, `deviations`, `hiccups`,
-  `failed`, `next`): the @post-task report. `description` is required and at
-  most 35 characters; it is the slot label. Decisions go in a separate
-  `prompt_user` call.
-- **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`):
-  the @prompt-user block for a standalone ask. `description` is required and
-  at most 35 characters. `block: true` waits for the answer in the same turn
-  and returns it as the tool result; it needs at least one question. A
-  dismissed blocking prompt returns as dismissed, and a deferred one returns
-  as deferred and stays unanswered. Without `block` the call returns
-  immediately and the answer arrives as a new message.
-- **`report_update`** (`id?`, the same section fields): patches one record in
-  place, keeping every field the call omits, and bumps its revision. `id`
-  defaults to the session's latest report. Use it to revise a section instead
-  of writing a second report that repeats the first.
+- **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`): the
+  @prompt-user block for a standalone ask. `description` is required and at
+  most 35 characters. `block: true` waits for the answer in the same turn and
+  returns it as the tool result; it needs at least one question. A dismissed
+  blocking prompt returns as dismissed, and a deferred one returns as deferred
+  and stays unanswered. Without `block` the call returns immediately and the
+  answer arrives as a new message.
 
 Records are one JSON file per session under
-`${XDG_STATE_HOME:-~/.local/state}/opencode/report/reports/`, newest last,
-capped at 50; `OPENCODE_REPORT_STATE_HOME` overrides the root (the older
-`REPORT_STATE_HOME` still works). Reports move there from the old
-`fazuh-agent/reports/` on the first load. The server writes them
-atomically and exposes `report.list({sessionIDs})`, `report.read`,
-`report.answer`, `report.dismiss`, `report.defer`, and a `changed` event over
-RPC. Views pass the routed session's family
-(`data.session.family`), so a subagent's reports appear in the parent's view.
-Forks stay out of the family.
+`${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
+capped at 50; `OPENCODE_PROMPT_STATE_HOME` overrides the root. The server
+writes them atomically and exposes `prompt.list({sessionIDs})`,
+`prompt.answer`, `prompt.dismiss`, `prompt.defer`,
+`prompt.reopen({sessionID, promptID?})`, and a `changed` event over RPC. The
+view passes the routed session's family (`data.session.family`), so a
+subagent's prompts appear in the parent's view. Forks stay out of the family.
 
-The TUI half (`./tui`) adds three sidebar sections, each a slot per agent
-(the routed session and each subagent that has a record). **Reports** holds
-post-task records, **Prompts** holds prompt-user records. The dot is yellow
-while a record has questions without answers, green while unread, and gray
-once read; an unread slot's name blinks. Clicking a slot opens that agent's
-history for the section: `←`/`→` move through it, `Ctrl+↑`/`Ctrl+↓`
-switch to the previous/next session in the list the history was opened from
-(wrapping at the ends; with the attention filter on, sessions with nothing
-matching are skipped), and `enter` on an open prompt walks the questions and
-sends the answers to the agent. Opening a
-record marks it read (`report.read`); reading never bumps its revision.
-Answering uses **Enter** to steer the answer (interrupt and deliver now) or
-**Ctrl+Enter** to queue it behind the agent's current turn; an empty answer
-takes the question's recommendation. The answers reach the agent as a
-`# Prompt: <description>` block with each question and its answer under it,
-like the host's question card. The dialog renders the record
-as Markdown with padding, shows the reporting session's title, its 35-character
-description, and its relative age (the update age when revised), colors keybinds
-apart from their descriptions,
-and grows with `↑/↓`, `PgUp/PgDn`, and `Home/End` scrolling up to about half
-the terminal height; the scroll hint appears only when the record overflows.
-A fresh prompt also opens as the host's inline form. The plugin caps that
-form's question body at 12 lines and 1,200 characters and appends a pointer
-to the Prompts section, because the host card has no height cap or scroll.
-The answer dialog centers vertically and bounds the question body to about a
-quarter of the terminal height, with `PgUp`/`PgDn` scrolling, so the answer
-field and key hints stay visible under a long question.
-Each section shows at most five slots: slots needing attention first
-(unread reports, unanswered prompts), then the rest, each group newest first.
-The pickers list every slot. The number beside a section header counts only
-the slots needing attention. `Ctrl+A` in either picker toggles that section
-between all entries and attention-only (default: all); inside a history it
-filters the entries to unread reports or unanswered prompts, using the state
-when the key was pressed so reading or dismissing the shown entry does not
-remove it, and `Ctrl+A` again shows all. `/reports` and `/prompts` open the
-same histories by picker; `/read-reports` marks every unread report in the
-session family read, and `/dismiss-prompts` dismisses every prompt still
-awaiting an answer. Context usage is not drawn here: the
-`opencode-context-watch` plugin renders its own sidebar section. `/report-settings`
-toggles the whole sidebar and each section (Reports, Prompts);
-the flags persist in the `report-view-v2` view store, and the existing
-collapse states stay separate. The GUI half
-mirrors the two sections, dots, blink, older/newer, and Answer buttons in a
-side panel, with a `+` menu row. Tests: `bun test plugins/report`; GUI
-bundle: `./dev.sh gui`.
+The server also opens each prompt as a native question card through
+`POST /api/session/{id}/form`, with `metadata.kind: "question"` because Desktop
+and the web client render only that kind (and `mcp-elicitation` and
+`websearch.provider`). Creating it server-side is what reaches the mobile web
+app, which loads no plugin UI half. Its fields are one per question, with the
+recommendation as the first option and free text still allowed. The server
+listens for `form.replied` and `form.cancelled` and settles the same record the
+RPC handles, so answering the card, the TUI section, or the Desktop panel all
+take one path. `/prompt-latest` reopens the latest unanswered prompt as a new
+card when the old one is still pending or has scrolled away. It is registered
+once, server-side, so TUI, Desktop, and mobile autocomplete each show a single
+entry. GUI errors are read from the object's `message` field so RPC failures do
+not render as `[object Object]`.
+
+The Desktop panel is a read-only history: a session bar, a prompt list with
+answered/awaiting dots and relative times, and the selected record's Markdown.
+It no longer answers or dismisses through its own dialogs, so the native card
+is the only answer surface. Its **Reopen card** button calls `prompt.reopen`
+with the selected prompt id. Because the host shows one card at a time and
+queues later ones, `prompt.reopen` cancels every card this plugin has open in
+that session before creating the new one: the selected prompt replaces the card
+on screen instead of waiting behind it. The prompts themselves stay unanswered.
+The session bar names the session and counts prompts; it does not repeat the
+selected prompt's title, which sits in the detail header instead.
+
+Two toolbar buttons work on the family as loaded. **Only awaiting** filters the
+list to prompts with questions and no answer or dismissal; it is a view filter,
+so the records stay. **Dismiss all** asks for confirmation, then calls
+`prompt.dismissAll({sessionIDs})` to mark every awaiting prompt in the family as
+dismissed. The bulk handler reads each session's prompts before settling any of
+them, so one pass cannot dismiss a prompt twice. It closes any card those
+prompts had open and leaves answered and already-dismissed records untouched.
+
+The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
+session and each subagent that has a record). OpenCode Desktop's
+`./gui-experimental` half adds **Prompts** to the session panel menu. It lists
+the same family, opens each agent's prompt history, and offers **Answer** and
+**Dismiss**. Answering walks the questions, then offers steer or queue;
+cancelling defers the prompt without answering. Both delivery modes wait for
+a running turn to end; steer also wakes an idle agent. Rebuild its shipped
+`dist/gui-experimental.cjs` with `bun run --cwd plugins/prompt build:gui` or
+`./dev.sh gui`. The TUI dot is yellow while a record has questions without
+answers, and muted once it is
+answered or dismissed. Clicking a slot opens that agent's history: `←`/`→`
+move through it, `Ctrl+↑`/`Ctrl+↓` switch to the previous/next session in the
+list the history was opened from (wrapping at the ends; with the attention
+filter on, sessions with nothing matching are skipped), and `enter` on an open
+prompt walks the questions and sends the answers to the agent. Answering uses
+**Enter** to steer the answer or **Ctrl+Enter** to queue it; both wait for the
+agent's current turn to end, and steer is the lane that wakes an idle session.
+An empty answer takes the question's recommendation. The answers reach the
+agent as a `# Prompt: <description>` block with each question and its answer
+under it, like the host's question card. The dialog renders the record as
+Markdown with padding, shows the reporting session's title, its 35-character
+description, and its relative age, colors keybinds apart from their
+descriptions, and grows with `↑/↓`, `PgUp`/`PgDn`, and `Home`/`End` scrolling
+up to about half the terminal height; the scroll hint appears only when the
+record overflows. The native card caps each question body at 12 lines and
+1,200 characters and appends a pointer to the Prompts section, because the
+host card has no height cap or scroll. The answer dialog centers vertically and bounds the question
+body to about a quarter of the terminal height, with `PgUp`/`PgDn` scrolling,
+so the answer field and key hints stay visible under a long question.
+
+The section shows at most five slots: unanswered first, then the rest, each
+group newest first. The picker lists every slot. The number beside the section
+header counts only the slots needing an answer. `Ctrl+A` in the picker toggles
+the section between all entries and unanswered-only (default: all); inside a
+history it filters the entries to unanswered prompts, using the state when the
+key was pressed so dismissing the shown entry does not remove it, and `Ctrl+A`
+again shows all. `/prompts` opens the same history by picker;
+`/dismiss-prompts` dismisses every prompt still awaiting an answer. Context
+usage is not drawn here: the `opencode-context-watch` plugin renders its own
+sidebar section. `/prompt-settings` toggles the whole sidebar and the Prompts
+section; the flags persist in the `prompt-view-v2` view store, and the
+existing collapse state stays separate. Tests: `bun test plugins/prompt`.
 
 ## Commands
 

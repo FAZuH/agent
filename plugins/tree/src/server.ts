@@ -145,10 +145,6 @@ export async function probeBase(base: string, now = Date.now()): Promise<boolean
   return reachable
 }
 
-export function resetProbe(): void {
-  probe = null
-}
-
 type Entry = {
   server: any
   port: number
@@ -182,10 +178,6 @@ export async function messagesFor(
   } catch {
     return cached?.messages ?? []
   }
-}
-
-export function resetMessageCache(): void {
-  messageCache.clear()
 }
 
 function isAddrInUse(error: unknown): boolean {

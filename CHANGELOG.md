@@ -11,7 +11,6 @@
 
 ### Bug Fixes
 
-* **desktop-control:** keep click coordinates in image pixels ([53887ce](https://github.com/FAZuH/agent/commit/53887ce3a038439cf0d4ef99816ce9a601bb8542))
 * drop the retired alias from the digest ([7f6f41c](https://github.com/FAZuH/agent/commit/7f6f41cff1c7cac79bc9cef046e2338e4b12d8e8))
 * **plugin:** bound long prompt bodies in forms and answers ([ddd0f65](https://github.com/FAZuH/agent/commit/ddd0f65430292f3d1b271ed6c4ba0b16044eab2e))
 * **plugin:** capture ask shots in image pixels ([9947275](https://github.com/FAZuH/agent/commit/99472750074683ba8c957d593680c2778ff94e83))
@@ -76,7 +75,6 @@
 
 ### Features
 
-* **plugin:** add closed-loop desktop control ([1461422](https://github.com/FAZuH/agent/commit/1461422ad737639256ee71140ce3589e4f315f50))
 * **plugin:** add the desktop-ask screenshot bridge ([669656c](https://github.com/FAZuH/agent/commit/669656c6dcb50ab335eeaae21fe6f1f9c5e0f397))
 * **plugin:** add the session tree viewer ([a179c6b](https://github.com/FAZuH/agent/commit/a179c6b124ef9e4ca712ca7e95a526649a6eae7b))
 * **script:** add the desktop-ask trigger helper ([500a659](https://github.com/FAZuH/agent/commit/500a65933e9aa623d2077469bd2d40d4236f8609))

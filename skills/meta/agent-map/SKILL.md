@@ -25,10 +25,10 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 3. **Check agent plugins first** — they need no skill load:
    - Jev: the `hook_skill_pick` picker hook (advises a skill per prompt) and the
      `hook_risk` gate on bash/edit/write. No jev tools exist.
-   - `branch_ask` forks this session to answer a side question; `branch_report`
-     sends the answer back.
-   - `post_task` and `prompt_user` record a task report or a user prompt.
-   - Desktop tools when the task acts on the screen; see Plugins below.
+   - `branch_ask` forks this session to answer a side question; `branch_subagent`
+     forks a finished subagent in this session's tree; `branch_report` sends the
+     answer back.
+   - `prompt_user` records a prompt in the Prompts view.
 4. **Delegation is its own decision.** `@orchestrate` and `@workflows` own
    subagent routing and workflow selection; load them when the task is control,
    tracking, or multi-agent work rather than doing.
@@ -39,7 +39,8 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 ### Repo skills (`~/.config/opencode/skills`)
 
 **Orchestration** — control, delegate, track, finish agent work:
-`orchestrate`, `workflows` (routing table and procedures), `agent-talk`
+`orchestrate`, `routing` (project/session router and dispatch),
+`workflows` (routing table and procedures), `agent-talk`
 (message a running agent session), `session`
 (spec, context packet, checkpoints in `.scratch/`), `finish`, `scratch-finish`,
 `self-improve` (retro and sweep), `long-horizon` (overnight runs), `offload`
@@ -64,11 +65,13 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 **Meta** — the agent system itself:
 `agent-map` (this skill), `update-fazuh-agent` (pull and redeploy),
 `external-skills` (manage upstream skills), `skill-doctor` (skill-graph
-drift), `review-agent` (two-axis review).
+drift), `review-agent` (three-axis review).
 
-**Shared** — loaded only when referenced: `global-instruction`,
-`post-task`, `prompt-user`, `presenting-latex`, `following-procedures`,
-`gate`, `scratch`.
+**Shared** — loaded only when referenced: `report-hygiene`,
+`prompt-user`, `presenting-latex`, `following-procedures`, `gate`, `scratch`.
+
+The global rules are not a skill: they sit in `instructions/` and the global
+config loads them in every session.
 
 **OpenCode v2**: `opencode-guideline` (the HTTP API, models, sessions, plugin
 authoring, plugin loading), `ocv2-compact` (compact a session).
@@ -84,36 +87,26 @@ Upstream-owned; install and update through `@external-skills`, never hand-edit.
   `wait-what` (re-pitch), `show-me` (visual explanation), `prototype`,
   `improve-codebase-architecture`, `setup-matt-pocock-skills`,
   `domain-modeling`, `codebase-design`.
-- **Matt Pocock productivity**: `writing-for-agents`, `pr`, `handoff`,
-  `writing-defect-reports`, `keeping-git-repos-clean`,
-  `guarding-destructive-operations`, `resolving-merge-conflicts`,
-  `concurrent-branches`, `managing-python-releases`, `reproducing-ci-locally`,
-  `running-github-actions-efficiently`, `shipping-across-surfaces`,
-  `shipping-build-artifacts`, `verifying-external-behavior`,
-  `diagnosing-bugs`, `diagnose-crash`, `building-python-mcp-servers`,
-  `ci-pipeline-synthesizer`, `find-skills`, `research`.
+- **Matt Pocock productivity**: `writing-for-agents`, `handoff`,
+  `resolving-merge-conflicts`, `diagnosing-bugs`, `diagnose-crash`,
+  `find-skills`, `research`.
 - **Anti-slop suite** (mandatory-adjacent): `antislop`, `antislop-code`,
-  `antislop-copywriting`, `antislop-human`, `antislop-layoutmobile`,
-  `antislop-ui`.
-- **Docker**: `docker-agent-config`, `docker-agent-deploy`, `docker-agent-run`,
-  `docker-build-strategies`, `docker-compose-patterns`,
-  `docker-destructive-guardrails`, `docker-project-foundations`,
-  `docker-sandboxes-env`, `docker-sandboxes-kits`,
-  `docker-sandboxes-lifecycle`, `docker-sandboxes-network-credentials`.
+  `antislop-copywriting`, `antislop-layoutmobile`.
 - **Media** (bonus): `ffmpeg-skill` (edit video/audio with ffmpeg),
   `fframes-video` (programmed motion graphics), `manim-composer` (video
   planning), `manimce-best-practices`, `manimgl-best-practices`,
   `mermaid-skill` (mmdc/Kroki diagrams).
 - **Other**: `reverse-engineer-anything` (REA, bonus — binaries, managed code,
-  browser targets), `security-audit` (bonus), `bgrun` (background systemd
-  jobs), `simple-english`, `gpui-kit`, `gpui-kit-design-guides` (Rust desktop
-  UI), `omarchy` (desktop config), `wizard` (human-in-loop setup),
+  browser targets), `security-audit` (bonus), `hindsight-docs` (memory-bank
+  docs), `bgrun` (background systemd jobs), `simple-english`,
+  `gpui-kit`, `gpui-kit-design-guides` (Rust desktop UI),
+  `omarchy` (desktop config), `wizard` (human-in-loop setup),
   `update-pins`, `fazuh-*` machine overlays where present.
 
 ### Agents (subagents)
 
-- **primary**: `orchestrator`, `chat`, `autocommit` — conversation,
-  delegation, unattended commits.
+- **primary**: `router` (project/session route and dispatch), `orchestrator`,
+  `chat`, `autocommit` — conversation, delegation, unattended commits.
 - **build**: `implement` — implementation and verification.
 - **review**: `review` (standards+spec), `malware-check`, `pii-check`.
 - **research**: `research-discovery` (codebase pointers),
@@ -131,14 +124,12 @@ agent tools and are not listed here.
 - **jev**: automatic Jev decisions — skill-picker hook (advises a skill per
   prompt) and risk hook (gates bash/edit/write, the only blocking path);
   settings in `jev-state.json`, logs in `jev-calls.jsonl`.
-- **branch**: `branch_ask` forks this session to answer a side question;
-  `branch_report` sends the answer back. A fork keeps the current agent and
-  model.
-- **report**: `post_task` and `prompt_user` tools; the reports render in the
-  TUI sidebar and the desktop Reports panel, not in the reply.
-- **desktop-control**: `desktop_windows`, `desktop_screenshot`, `desktop_focus`,
-  `desktop_click`, `desktop_type`, `desktop_key`, `desktop_move`,
-  `desktop_scroll`, `desktop_drag`.
+- **branch**: `branch_ask` forks this session for a side task (primary sessions
+  only); `branch_subagent` forks a finished subagent in this session's tree;
+  `branch_report` sends the answer back. A fork keeps the source's agent, model,
+  and history.
+- **prompt**: the `prompt_user` tool; a prompt renders in the TUI sidebar and
+  the Desktop Prompts panel, not in the reply.
 - **desktop-ask**: `desktop_ask_arm` and `desktop_ask_disarm` pick the session
   that receives the screenshot keybind.
 

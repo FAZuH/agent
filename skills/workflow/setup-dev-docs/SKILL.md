@@ -65,6 +65,9 @@ Done when: every fact you plan to write sits in the row that owns it.
 
 ## 3. Bootstrap
 
+Before you write or edit a doc under `docs/dev/`, load @report-hygiene and run
+its gate on the text.
+
 Create only what the evidence supports, never a fixed set:
 
 | Doc | Write it when the repo has |

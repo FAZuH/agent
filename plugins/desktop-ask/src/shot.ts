@@ -107,8 +107,8 @@ export function capture(opts: CaptureOptions): CaptureResult {
 
   const stamp = opts.now ?? Date.now()
   const path = join(dir, `${stamp}.png`)
-  // -s 1 makes image pixels layout pixels, matching desktop-control, so a shot
-  // is not 1.25x larger than the coordinates anything else reports.
+  // -s 1 keeps image pixels as layout pixels, so a shot is not 1.25x larger
+  // than the coordinates other desktop tools report.
   const args = ["grim", "-s", "1"]
   if (geometry) args.push("-g", geometry)
   args.push(path)

@@ -126,5 +126,9 @@ A half-installed TeX tree also shows up as missing `.sty`/`.tfm` files
 (`lmodern`, `psnfss`, `lualatex-math`): those are genuinely packages, so
 diagnose before assuming the format was the problem.
 
+If `latexmk` is absent (`exit 127`), do not install it. Run the configured
+engine twice instead (`pdflatex` twice resolves contents and cross-references),
+then verify with `pdfinfo` and `pdftotext`.
+
 Check before assuming: `command -v pandoc mmdc`, and read the actual error
 text. Never install TeX packages for an undiagnosed build.

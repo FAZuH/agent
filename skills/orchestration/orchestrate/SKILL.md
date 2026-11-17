@@ -41,7 +41,7 @@ never improvise a workflow.
 
 - Once a subagent owns a task, do not duplicate its work. Wait for its report
   and act on it.
-- Resume before spawning: answer the gate under Session reuse (`sessionID`).
+- Resume before spawning: answer the decision under Continuing a child's work.
   For a continuing unit the existing child's id is the default, not the
   exception.
 - A subagent reports a blocker (a broken dev server, or verification that
@@ -52,7 +52,7 @@ never improvise a workflow.
 - Pass only a child `sessionID` when resuming. Never pass the current session
   ID. Omit optional subagent fields, including `model`, unless the task
   requires them; empty strings are rejected. A resume after a model or
-  provider failure re-states the model (Session reuse).
+  provider failure re-states the model (Continuing a child's work).
 - Build manifests and lockfiles are SOURCE: `Cargo.toml`/`Cargo.lock`,
   `package.json`/`package-lock.json`, `pyproject.toml` + its lockfile. Route
   any edit to them to `implement`. Never hand-edit a manifest, even inside a
@@ -62,49 +62,30 @@ never improvise a workflow.
   the child's work as fact; the child falsifies any fact gating its work
   before acting on it.
 
-### Fork fan-out
+## Continuing a child's work (`sessionID`, forks)
 
-A fork (`branch_ask`) answers a question with this session's history. It keeps
-the current agent, so it never replaces a role handoff: `implement`, `review`,
-and `document` work still goes to a subagent.
+Every task result returns the child's `sessionID`. Three moves, warmest first:
 
-- One ledger row per fork in the session record: fork id, lane, file scope,
-  deadline, status.
-- Width follows `/branch-settings maxForks`. When it refuses, wait for a report
-  or raise the setting; never retry in a loop.
-- Keep working after dispatch. A `<branch sessionID=… parent=…>` prompt is that
-  lane's report: match the fork id, append it to the ledger, and read it as
-  findings for the lane you assigned.
-- No report at the deadline: poll `GET /api/session/<fork>`; null is busy,
-  `succeeded`/`failed` is terminal. Two missed deadlines is a failed lane:
-  record it, then resume or respawn.
-- Silent forks produce no report and hold no slot. Use them only when nothing
-  needs to come back.
+| Situation | Move |
+|---|---|
+| One session continues the unit | **Resume** it with its `sessionID`. The default. |
+| Two lanes need one finished session's warm context | **Fork** it with `branch_subagent`, once per lane. |
+| A lane needs this session's own history | **Fork** this session with `branch_ask`, primary sessions only. |
+| Unrelated work, a second role in parallel, or a dead id | **Spawn fresh**. |
 
-## Subagent session reuse (`sessionID`)
+A fork copies the source's transcript, agent, and model into a new session, so
+it needs no brief. Neither fork replaces a cold role handoff: `implement`,
+`review`, and `document` work still starts as a subagent when no session owns
+the context.
 
-Every task result returns the child's `sessionID`. Pass it back to resume that
-session instead of spawning cold: it keeps what the child already loaded
-(AGENTS.md, CONTEXT.md, ADRs, plan, codebase map).
+### Resume
 
-### Before any `subagent` call
+Resume when the next task is the same agent as a session you already spawned
+AND continues the same unit of work (next ticket/increment, a re-run, a
+re-review, or a follow-up on its own report).
 
-Answer this in one line, then act:
-
-> Does this task continue an artifact, lane, or review that an existing child
-> already owns?
-
-- **Yes → pass that child's `sessionID`.** Resuming is the default, not the
-  exception.
-- **No → spawn fresh** only for an independent parallel unit, a different
-  artifact, or the single deliberate cold read under *Review continuity*.
-
-If the answer is yes and the id is not to hand, read the registry before
-spawning. Losing the id is a lookup problem, not a reason for a cold start.
-
-RESUME (pass the child's `sessionID`) when the next task is the same agent as a
-session you already spawned AND continues the same unit of work (next
-ticket/increment, a re-run, a re-review, or a follow-up on its own report).
+If the id is not to hand, read the registry before spawning. Losing the id is a
+lookup problem, not a reason for a cold start.
 
 Resume eagerly: no hop limit. The `context-watch` plugin warns on usage and the
 child's own auto-compaction handles growth, so a long session is not a reason
@@ -114,30 +95,6 @@ If a foreground resume aborts (`subagent` tool error mid-call), relaunch the
 same resume with `background: true` — background launch survives; on
 2026-10-22 three foreground resumes aborted in a row where the background
 relaunch of the identical call succeeded.
-
-SPAWN FRESH (omit `sessionID`) only when the task calls for it:
-
-- unrelated work / a different feature where fresh context is cleaner, or
-- you need that agent running in parallel (one session cannot be two places), or
-- the session id no longer resolves and the work still needs doing.
-
-Keep the same `agent`: the session carries it. Tell the child it is
-continuing, reference its last report, and ask for a delta, not a full
-re-report.
-
-**Review continuity.** Iterative passes over one artifact — critic, review,
-audit — resume one reviewer session, with a delta brief: prior verdict, prior
-blockers, then "which are resolved and what is new". A cold reviewer cannot
-check whether its own earlier instruction was applied; in this workspace a
-fresh pass over one package found a fix applied to two files and missed a
-third, which a resumed reviewer would have checked by construction.
-
-Spawn exactly one fresh reviewer at a milestone — immediately before filing or
-disclosure — because a cold read is the closest approximation of the
-recipient. One cold pass, not one per iteration.
-
-A fork starts a fresh session, so it pays the learning again. **Fork when the
-role changes; resume when it does not.**
 
 A long-resumed child can come back as `Subagent completed without a text
 response`. **Check the tree before believing it**: `git diff --stat` against the
@@ -152,6 +109,53 @@ is the expensive part, and a spawn pays it again.
 free-tier error resumes cleanly on a different model; one carrying the failing
 model dies again. A cold spawn omits the model field; a resume re-states it.
 
+**Review continuity.** Iterative passes over one artifact — critic, review,
+audit — resume one reviewer session, with a delta brief: prior verdict, prior
+blockers, then "which are resolved and what is new". A cold reviewer cannot
+check whether its own earlier instruction was applied; in this workspace a
+fresh pass over one package found a fix applied to two files and missed a
+third, which a resumed reviewer would have checked by construction.
+
+Spawn exactly one fresh reviewer at a milestone — immediately before filing or
+disclosure — because a cold read is the closest approximation of the
+recipient. One cold pass, not one per iteration.
+
+### Spawn fresh
+
+Omit `sessionID` only when the task calls for it:
+
+- unrelated work / a different feature where fresh context is cleaner, or
+- you need that agent running in parallel (one session cannot be two places), or
+- the session id no longer resolves and the work still needs doing.
+
+Keep the same `agent`: the session carries it. Tell the child it is
+continuing, reference its last report, and ask for a delta, not a full
+re-report.
+
+### Fork
+
+- `branch_ask` forks this session for a lane that needs this session's history.
+  Primary sessions only: a subagent gets a refusal that points at
+  `branch_subagent`.
+- `branch_subagent` forks a finished subagent in this session's tree for a lane
+  that needs that subagent's role and context. The target is a descendant with
+  a `parentID` and an `outcome`; a running target or one outside the tree is
+  refused.
+- A fork keeps the source's agent unless `agent` switches it; the switch
+  rewrites the system prompt, so the shared prefix stops caching.
+- One ledger row per fork in the session record: fork id, source, lane, file
+  scope, deadline, status.
+- Width follows `/branch-settings maxForks`, shared by both tools. When it
+  refuses, wait for a report or raise the setting; never retry in a loop.
+- Keep working after dispatch. A `<branch sessionID=… parent=…>` prompt is that
+  lane's report: match the fork id, append it to the ledger, and read it as
+  findings for the lane you assigned.
+- No report at the deadline: poll `GET /api/session/<fork>`; null is busy,
+  `succeeded`/`failed` is terminal. Two missed deadlines is a failed lane:
+  record it, then resume or respawn.
+- Silent forks produce no report and hold no slot. Use them only when nothing
+  needs to come back.
+
 Persist live session ids in the active session doc (via @session): a
 `Subagent sessions` list keyed by **artifact and lane**, not by task title —
 `lane-a: implement ses_...`, `findings/02-verified/06: critic ses_...`.
@@ -165,7 +169,7 @@ When the work decomposes into independent units, run them as lanes.
 `reference/parallel-lanes.md` in @workflows holds the procedure: the write
 scopes, the chain for a shared file, the gate, and the merge. One writer per
 file. Each lane keeps one session for its whole life; the next ticket in a
-lane resumes it (Session reuse).
+lane resumes it (Continuing a child's work).
 
 ## Talking to a running worker
 

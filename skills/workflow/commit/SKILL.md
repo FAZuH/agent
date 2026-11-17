@@ -28,6 +28,10 @@ orchestrator.
 
 Your job is only to PLAN the grouping and PROPOSE one `type(scope): description` message per logical group. Return them to the orchestrator.
 
+Before you propose a group, load @report-hygiene and run its gate on the
+proposed message and the changed files. A message that names the session, the
+device, a stash, or the user's instruction fails the gate.
+
 The commit permission does not persist beyond the command invocation and does
 not pass to any other request or agent. When in doubt, do not commit; propose
 and hand off.

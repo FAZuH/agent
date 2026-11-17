@@ -127,7 +127,7 @@ ctx.ui.slot?.({
     ctx.keymap.layer(() => ({
       mode: "global",     // "modal" to sit above a dialog
       priority: 1,
-      enabled: true,       // the host's own layers pass a function here
+      enabled: true,       // keymap layers read a function here; command guards need a getter (see Things that bite 7)
       commands: [{ id, title, group, palette: true, slash: { name }, run }],
     }))
     return null
@@ -136,8 +136,10 @@ ctx.ui.slot?.({
 ```
 
 A layer command is bound by `bind: "left"` for a literal key, or by `id` when
-the host's keybind config should decide. `enabled` is read as a function by the
-host, so a predicate is the safe changing form.
+the host's keybind config should decide. A keymap layer's `enabled` is read as a
+function by the host, so a predicate is the safe changing form there. A
+command's `enabled` is a different field: it is typed boolean and the host never
+calls a function placed there, so use a getter (`get enabled() { … }`).
 
 ### Measuring instead of guessing
 
@@ -168,8 +170,9 @@ dialog need:
 - **Server-side**: anything that must work in every host, and anything that only
   reports state.
 
-One name, one owner, no exceptions. A server command duplicating a
-panel takes a different text-route name.
+One name, one owner, no exceptions. For a panel command, keep the slash name on
+the server entry and leave the TUI entry palette-only (no `slash` field), so
+both behaviours survive without a duplicate.
 
 ## Verify it works
 
@@ -204,7 +207,13 @@ dialog lifecycle without a TUI. It cannot check pixels, and any
 5. **Registration from a component body works; registration from `setup` alone
    does not** for keymap layers.
 6. **Trust the runtime over the types, and the log over both.**
+7. **A command guard is a getter, not a function.** `Command.enabled` is typed boolean, so `enabled: () => boolean` builds and ships but the host never calls it. Use `get enabled() { … }` on an object literal. `vite build` and `bun test` do not typecheck plugin sources, so this survives to a human read.
+8. **`writeFileSync` mode applies only at creation.** `{ mode: 0o600 }` on an existing 0644 file leaves it 0644. Call `chmodSync` after the write and test both fresh and pre-existing files.
+9. **A TUI setup must dispose what it starts.** `setup()` runs again on every
+   hot reload; an interval or slot claim from the old generation survives and
+   doubles the section or polls twice. Return a cleanup from `setup()` that
+   clears the interval and disposes the claim.
 
 ## Memory
 
-The OptMem memory contract lives in the umbrella SKILL.md, Shared facts.
+The Hindsight memory contract lives in the umbrella SKILL.md, Shared facts.

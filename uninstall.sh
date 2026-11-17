@@ -9,7 +9,7 @@ fi
 DRY_RUN=0
 REMOVE_EXTERNAL_PACKAGES=0
 REMOVE_EXTERNAL_SKILLS=0
-REMOVE_EMBEDDED_RULES=0
+REMOVE_INSTRUCTIONS=0
 
 EXTERNAL_SKILLS=(
   mermaid-skill
@@ -17,8 +17,9 @@ EXTERNAL_SKILLS=(
   grill-with-docs implement improve-codebase-architecture prototype research
   resolving-merge-conflicts setup-matt-pocock-skills tdd to-spec to-tickets
   triage wayfinder wizard
-  grill-me grilling handoff to-questionnaire wait-what writing-for-agents
+  grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
   simple-english
+  hindsight-docs
   bgrun
   antislop antislop-code antislop-copywriting antislop-human antislop-layoutmobile antislop-ui
   ffmpeg-skill
@@ -38,16 +39,18 @@ Remove this repository's installed files from the current user account.
 Default:
   - Remove sync-managed skills, agents, plugins, commands, and scripts.
   - Uninstall the local Cargo package 'agent'.
-  - Keep OpenCode, bgrun, OptMem, external skills, OS packages, and this
+  - Keep OpenCode, bgrun, external skills, OS packages, and this
     checkout.
 
 Options:
   --dry-run              Show what would be removed without changing files.
-  --external-packages    Also uninstall bgrun and OptMem from this installer.
+  --external-packages    Also uninstall bgrun from this installer.
   --external-skills      Also remove the external skills installed by install.sh,
                          including the REA registration and skill.
-  --embedded-rules       Also remove the rules this installer embedded in
-                         ~/.config/opencode/AGENTS.md; the default keeps them.
+  --instructions         Also stop the global OpenCode config from loading
+                         ~/.config/opencode/instructions/*.md. The default
+                         keeps the config entry and the instruction files, so
+                         a reinstall needs no re-wiring.
 EOF
 }
 
@@ -84,41 +87,27 @@ remove_digest() {
   fi
 }
 
-# The installer embeds the global-instruction rules in the host AGENTS.md
-# between these markers. install.sh is not sourceable (it installs as it reads),
-# so the markers and the strip are repeated here; keep the two in step.
-GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
-GI_START='<!-- global-instruction:start -->'
-GI_END='<!-- global-instruction:end -->'
+# The global OpenCode config loads instructions/ through this glob. install.sh
+# is not sourceable (it installs as it reads), so the glob is repeated here;
+# keep the two in step.
+GLOBAL_CONFIG="$HOME/.config/opencode/opencode.json"
+INSTRUCTIONS_GLOB='~/.config/opencode/instructions/*.md'
 
-remove_global_instruction_ref() {
-  if [[ ! -f "$GLOBAL_AGENTS_MD" ]]; then
-    return 0
-  fi
-  if ! grep -qF "$GI_START" "$GLOBAL_AGENTS_MD"; then
-    return 0
-  fi
+remove_instructions_config() {
+  [[ -f "$GLOBAL_CONFIG" ]] || return 0
+
   if ((DRY_RUN)); then
-    info "would remove the embedded rules from $GLOBAL_AGENTS_MD"
+    if python3 "$ROOT/scripts/opencode-instructions.py" check "$GLOBAL_CONFIG" "$INSTRUCTIONS_GLOB"; then
+      info "would stop $GLOBAL_CONFIG loading $INSTRUCTIONS_GLOB"
+    fi
     return 0
   fi
-  # Same hold-one-line rule as install.sh: drop the blank line with the block, or
-  # the file keeps a trailing one after every uninstall.
-  local tmp="$GLOBAL_AGENTS_MD.untmp"
-  awk -v s="$GI_START" -v e="$GI_END" '
-    function flush() { if (has) { print held; has = 0 } }
-    NR == 1 { held = $0; has = 1; next }
-    $0 == s { if (held ~ /^[[:space:]]*$/) has = 0; inblock = 1; next }
-    $0 == e { inblock = 0; next }
-    inblock { next }
-    { flush(); held = $0; has = 1 }
-    END { flush() }
-  ' "$GLOBAL_AGENTS_MD" >"$tmp" && mv "$tmp" "$GLOBAL_AGENTS_MD" || {
-    rm -f "$tmp"
-    info "could not rewrite $GLOBAL_AGENTS_MD; the embedded rules were kept"
-    return 0
-  }
-  info "removed the embedded rules from $GLOBAL_AGENTS_MD"
+
+  if python3 "$ROOT/scripts/opencode-instructions.py" remove "$GLOBAL_CONFIG" "$INSTRUCTIONS_GLOB"; then
+    info "stopped $GLOBAL_CONFIG loading $INSTRUCTIONS_GLOB"
+  else
+    info "could not edit $GLOBAL_CONFIG; it may still load $INSTRUCTIONS_GLOB"
+  fi
 }
 
 remove_agent_package() {
@@ -141,17 +130,15 @@ remove_external_packages() {
   if ! command -v cargo >/dev/null 2>&1; then
     die 'cargo is required for --external-packages'
   fi
-  local name repo listing
+  local name listing
   listing="$(cargo install --list 2>/dev/null || true)"
-  for spec in bgrun:FAZuH/bgrun optmem:FAZuH/optmem-rs optmem-mcp:FAZuH/optmem-rs; do
-    name="${spec%%:*}"
-    repo="${spec#*:}"
-    if ! grep -Eq "^$name v[^ ]+ \(https://github\.com/${repo}[^)]*\):" <<<"$listing"; then
-      info "$name is not installed from $repo; kept"
+  for name in bgrun; do
+    if ! grep -Eq "^$name v[^ ]+ \(https://github\.com/FAZuH/${name}[^)]*\):" <<<"$listing"; then
+      info "$name is not installed from FAZuH/$name; kept"
       continue
     fi
     if ((DRY_RUN)); then
-      info "would uninstall Cargo package $name from $repo"
+      info "would uninstall Cargo package $name from FAZuH/$name"
     else
       cargo uninstall "$name"
     fi
@@ -194,7 +181,7 @@ while (($#)); do
     --dry-run) DRY_RUN=1; shift ;;
     --external-packages) REMOVE_EXTERNAL_PACKAGES=1; shift ;;
     --external-skills) REMOVE_EXTERNAL_SKILLS=1; shift ;;
-    --embedded-rules) REMOVE_EMBEDDED_RULES=1; shift ;;
+    --instructions) REMOVE_INSTRUCTIONS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
   esac
@@ -218,8 +205,10 @@ fi
 
 remove_sync_files
 remove_digest
-if ((REMOVE_EMBEDDED_RULES)); then
-  remove_global_instruction_ref
+if ((REMOVE_INSTRUCTIONS)); then
+  remove_instructions_config
+else
+  info "kept the global config's instructions entry; pass --instructions to remove it"
 fi
 remove_agent_package
 if ((REMOVE_EXTERNAL_PACKAGES)); then

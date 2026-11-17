@@ -17,6 +17,7 @@ the category directory never reaches the installed name.
 ## Orchestration
 
 - ⭐ **[orchestrate](../skills/orchestration/orchestrate/SKILL.md)**: Manage tasks, delegation, permissions, run mode, and subagent session reuse.
+- ⭐ **[routing](../skills/orchestration/routing/SKILL.md)**: Route a prompt to the project and session that should own it, then dispatch an orchestrator.
 - ⭐ **[workflows](../skills/orchestration/workflows/SKILL.md)**: Select the concrete workflow and subagent route for a task.
 - **[agent-talk](../skills/orchestration/agent-talk/SKILL.md)**: Message another running agent session over the OpenCode v2 API and read its answer.
 - **[session](../skills/orchestration/session/SKILL.md)**: Manage the feature session workspace, spec, tickets, deviations, context packet, and compaction checkpoint.
@@ -73,16 +74,15 @@ the category directory never reaches the installed name.
 - **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` and `uninstall.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
 - ⭐ **[skill-doctor](../skills/meta/skill-doctor/SKILL.md)**: Audit skill references, names, collisions, and source drift.
-- **[review-agent](../skills/meta/review-agent/SKILL.md)**: Two-axis review of a diff, a file, or another agent definition, run inside the permission-scoped `review` subagent.
+- **[review-agent](../skills/meta/review-agent/SKILL.md)**: Three-axis review of a diff, a file, or another agent definition on Standards, Spec, and Publication, run inside the permission-scoped `review` subagent.
 
 ## Shared
 
 These skills are loaded only when another skill or agent references them.
 
-- ⭐ **[global-instruction](../skills/shared/global-instruction/SKILL.md)**: The common, machine-agnostic rules, and the skills every session must load.
 - **[presenting-latex](../skills/shared/presenting-latex/SKILL.md)**: Format math so chat and Obsidian render it: inline \(...\), display multiline $$ with blank line.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
-- **[post-task](../skills/shared/post-task/SKILL.md)**: Close finished work with the five-part report: Completed, Deviations, Hiccups, Failed/skipped, Next.
+- **[report-hygiene](../skills/shared/report-hygiene/SKILL.md)**: Keep published artifacts clear and free of private device, session, and instruction context.
 - **[prompt-user](../skills/shared/prompt-user/SKILL.md)**: The shape of the bottom-of-message prompts: 🏁 procedures with steps, ❓ questions with a recommended answer.
 - **[gate](../skills/shared/gate/SKILL.md)**: Define approval gates, run modes, and the `GATE` tag format.
 - **[scratch](../skills/shared/scratch/SKILL.md)**: Define the `.scratch/` workspace lifecycle and layout.

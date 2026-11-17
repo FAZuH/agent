@@ -46,6 +46,8 @@ Follow the docs for structure and wording:
 - One short, plain, past-tense statement per user-visible change. No commit
   hashes, no PR links, no implementation detail, unless the docs allow them.
 
+Before step 4, load @report-hygiene and run its gate on the drafted entries.
+
 ## 4. Verify
 
 Re-read `CHANGELOG.md` against the docs' rules and examples. Confirm version

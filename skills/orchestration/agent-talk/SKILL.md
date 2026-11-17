@@ -28,8 +28,11 @@ limit=2` returned the default 50 rows, `?limit=2` returned 2.
 opencode2 api post /api/session/ses_TARGET/prompt --data '{"text":"...","delivery":"steer"}'
 ```
 
-- `steer` (default): redirects the target's running turn now.
-- `queue`: runs after the target's current turn ends.
+- `steer` (default): runs after the target's current turn ends. Measured on
+  2.2.7: a steer sent 6.4s into an 8.7s turn let that turn finish before the
+  steer ran, so it does not abort anything.
+- `queue`: the same timing in the same probe. Neither mode cuts into a running
+  turn; only `POST /api/session/{id}/interrupt` aborts one.
 
 Answers `{"data":{"id":"msg_…","delivery":"steer"}}`.
 
@@ -68,7 +71,8 @@ in your next turn.
 - One writer per file, always. A second agent editing the same file is a
   conflict, not a channel.
 - Send a question, not a plan. The target owns its own task.
-- A queued message waits for the target's current turn; a steer cuts into it.
+- Both modes wait for the target's current turn; `steer` is the host default
+  and neither one interrupts. Abort with `/interrupt` instead.
   Pick by urgency, not by reflex.
 - Poll `GET /api/session/{id}` for `.data.outcome` (`succeeded` / `failed` /
   `interrupted`) instead of guessing whether the target finished.

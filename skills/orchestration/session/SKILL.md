@@ -56,6 +56,9 @@ How to verify (tests, lint, build); which subagents to delegate to
 ## Gate log
 - (none yet)
 
+## Forks
+- (none yet)
+
 ## Deviation log
 - (none yet)
 ```
@@ -67,12 +70,15 @@ silently overwrite an existing entry.
 
 ## Log sections
 
-Two more sections sit alongside the deviation log in the same `spec.md`. This
+Three more sections sit alongside the deviation log in the same `spec.md`. This
 skill owns where they go and the empty placeholder; each owning skill states
 its entry format.
 
 - `## Gate log`, approval-gate decisions and run-mode switches. The @gate
   skill owns the entry format; never fold these into the deviation log.
+- `## Forks`, one row per fork this session dispatched, from `branch_ask` or
+  `branch_subagent`. The @workflows skill owns the table format
+  (`reference/parallel-lanes.md`); append each report to the fork's row.
 - `## Interrupted procedures`, one entry per interrupted procedure, updated
   in place and never deleted until the procedure resumes and finishes. The
   @following-procedures skill owns the entry format.
@@ -358,8 +364,8 @@ Capture anything cheap to lose and expensive to rediscover:
 - **Commands**: exact verification commands (build, lint, test, typecheck) and
   any one-off commands that worked.
 - **Gotchas**: non-obvious findings, dead ends, API quirks, decisions and
-  their rationale. If a friction point was filed to OptMem, reference its slug;
-  do not duplicate it.
+  their rationale. If a friction point was filed to Hindsight, reference its
+  `document_id`; do not duplicate it.
 - **Secrets**: do NOT write credentials or tokens. Note where they live
   instead (env var, file path).
 
@@ -390,7 +396,7 @@ is lost by clearing it.
 Give the user a concise report:
 
 - Where each piece of state was persisted (session doc path, checkpoint, todo
-  list, memory; friction is already in OptMem).
+  list, memory; friction is already in Hindsight).
 - The goal that was cleared, and the objective they must re-create after
   compaction.
 - The single next step they can paste into a fresh session to continue.

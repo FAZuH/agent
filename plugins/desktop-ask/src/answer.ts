@@ -1,6 +1,6 @@
 /**
  * Picking the answer out of the transcript. The trigger prompt asks for the
- * text to copy inside <copy> tags so the post-task report stays out of the
+ * text to copy inside <copy> tags so the rest of the reply stays out of the
  * clipboard; a reply without the tags copies whole.
  */
 

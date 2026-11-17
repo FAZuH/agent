@@ -315,7 +315,7 @@ export default {
 
     /**
      * The feature panel. The master switch on top is the plugin's own on/off —
-     * it does not touch the six below, it just gates them, so the list reads
+     * it does not touch the three below, it just gates them, so the list reads
      * "on" even while the plugin is off. That is deliberate: you can configure
      * features with the plugin disabled, and turning it back on restores
      * exactly what you had.
@@ -496,7 +496,7 @@ export default {
                     value: String(current),
                     onConfirm: (v: string) =>
                       setFeatureConfig(
-                        FEATURES.find((f) => f.key === feature)?.label ?? feature,
+                        feature,
                         key,
                         clampNumber(v, typeof current === "number" ? current : Number(fields[key]), key),
                       ),
@@ -521,7 +521,7 @@ export default {
             }),
           "Plugin"),
           // The toast master switch. Per-feature opt-outs are the `toast` rows
-          // the FEATURE_DEFAULTS loop below generates.
+          // the FEATURE_DEFAULTS loop above generates.
           row("toast", "Toast calls", s.toast ? "on" : "off", () => {
             const next = !s.toast
             saveState({ toast: next })

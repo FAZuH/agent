@@ -13,7 +13,7 @@ The eight phases, in order:
 | [Isolate](#isolate) | Give the work its own branch, workspace, and context |
 | [Build](#build) | Write the thing |
 | [Verify](#verify) | Make the checks mean the same thing here and on the runner |
-| [Review](#review) | Standards and spec, read side by side |
+| [Review](#review) | Standards, spec, and publication, read side by side |
 | [Ship](#ship) | Branch to merged |
 | [Close](#close) | Commit, document, archive, improve |
 
@@ -114,9 +114,6 @@ flowchart LR
 - **rust-idioms**, **rust-tea**: type-driven Rust design, and TEA/MVU for Rust UIs.
 - **logging-guidelines**: canonical log lines, redaction, correlation, sampling.
 - **secrets-argv**: keep credentials out of argv, history, logs, and transcripts.
-- **guarding-destructive-operations**: refuse instead of warn on delete, reset, and history-rewrite paths.
-- **verifying-external-behavior**: probe the library or API before you depend on it.
-- **shipping-build-artifacts**: make the build step a real gate on what ships.
 - **terse**: terse docs and comments that earn their place.
 - **wizard**: a script that walks a human through the steps only they can do.
 - **ffmpeg-skill**: cut, caption, convert, and normalise local media.
@@ -129,14 +126,12 @@ Make the checks mean the same thing here and on the runner.
 ```mermaid
 flowchart LR
   B[Built change] --> T[test-guidelines, gui-test-guidelines]
-  T --> C[reproducing-ci-locally]
-  C --> G{Green where CI is green?}
+  T --> G{Green where CI is green?}
   G -->|no| B
   G -->|yes| R[Review]
 ```
 
 - **gui-test-guidelines**: selectors, synchronization, visual and accessibility checks.
-- **reproducing-ci-locally**: derive the exact CI command from the workflow file, then run that.
 - **diagnosing-bugs**: the loop for a hard bug or a performance regression.
 
 ### Review
@@ -146,16 +141,13 @@ Standards and spec, read side by side.
 ```mermaid
 flowchart LR
   D[Diff since a fixed point] --> S[code-review]
-  S --> W[writing-defect-reports]
-  W --> X[shipping-across-surfaces]
-  X --> A{Approved?}
+  S --> A{Approved?}
   A -->|no| B[Build]
   A -->|yes| S2[Ship]
 ```
 
 - **code-review**: the Standards axis and the Spec axis, side by side.
-- **writing-defect-reports**: establish a finding before you publish it, and correct it after.
-- **shipping-across-surfaces**: land the same fact everywhere it is stated.
+- **report-hygiene**: the Publication axis: comprehension gaps and provenance leaks.
 
 ### Ship
 
@@ -163,23 +155,22 @@ Branch to merged.
 
 ```mermaid
 flowchart LR
-  G[Approved diff] --> P[pr-creator]
+  G[Approved diff] --> H[report-hygiene]
+  H --> P[pr-creator]
   P --> W[pr-watchmerge]
   W --> C{Conflicts?}
-  C -->|yes| R[resolving-merge-conflicts, concurrent-branches]
+  C -->|yes| R[resolving-merge-conflicts]
   R --> W
   C -->|no| I[issue-closeout]
   I --> Cl[Close]
 ```
 
+- **report-hygiene**: the gate before any artifact here goes out: PR body, issue comment, merge text.
 - **pr-creator**: the pull request, using the repository's own template and checks.
 - **pr-watchmerge**: watch the checks and merge when they pass.
 - **pr-to-close**: the whole worktree lifecycle: create, merge, clean up.
 - **resolving-merge-conflicts**: the mechanics of an in-progress merge or rebase.
-- **concurrent-branches**: resolve several open branches against one repository.
 - **issue-closeout**: link the merge back to the issues it fixed, and close them.
-- **ci-pipeline-synthesizer**: author or update a GitHub Actions pipeline.
-- **running-github-actions-efficiently**: cut CI minutes and wall-clock time.
 
 ### Close
 
@@ -227,12 +218,13 @@ flowchart LR
 - **notes**: durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behaviour.
 - **skill-doctor**: audit skill links, name collisions, and drift from the source.
 - **external-skills**: install, update, or remove upstream-owned skills.
+- **hindsight-docs**: the memory system's documentation; the recall/retain habit lives in the global instructions (`instructions/global-instruction.md`).
 - **scheduled-task**, **scheduled-agent**: systemd user timers and the restricted agents they run.
 - **omarchy-plugin-install**: install an Omarchy shell plugin end to end.
 - **simple-english**: plain, layman-readable prose for readers outside the field.
 - **writing-for-agents**: structure for skills, agent definitions, and `AGENTS.md`.
-- **antislop** and **antislop-code**, **-copywriting**, **-human**, **-layoutmobile**, **-ui**: the anti-slop filter for generic AI output.
-- **show-me**, **mermaid-skill**: one correct visual when a picture carries the idea.
+- **antislop** and **antislop-code**, **-copywriting**, **-layoutmobile**: the anti-slop filter for generic AI output.
+- **show-me**: one correct visual when a picture carries the idea.
 - **handoff**, **wait-what**: compact the session for another agent, or re-pitch the last answer.
 - **opencode-guideline**: the OpenCode v2 operations: API, models, sessions, plugin authoring, plugin loading.
 - **ocv2-compact**: compact a v2 session and wait for its summary.
@@ -252,8 +244,7 @@ flowchart TD
   S[session] --> W[worktree]
   W --> X[session context packet]
   X --> B[tdd, implement]
-  B --> V[reproducing-ci-locally]
-  V --> R[code-review]
+  B --> R[code-review]
   R --> P[pr-creator, pr-watchmerge]
   P --> F[finish]
 ```

@@ -22,6 +22,7 @@ export default {
       const sessionID = String(event?.data?.sessionID ?? "")
       const marker = readMarker(event?.data?.metadata)
       if (!marker || !sessionID) return
+      if (marker.reportedAt) return
       const route = ctx.ui?.router?.current?.()
       if (route?.type !== "session") return
       if (marker.parentID !== route.sessionID) return
@@ -30,7 +31,7 @@ export default {
         return
       }
       if (marker.sessionID !== sessionID) return
-      ctx.ui.router.navigate({ type: "session", sessionID })
+      if (!marker.background) ctx.ui.router.navigate({ type: "session", sessionID })
       toast(`Forked to ${sessionID}`, "info")
     })
 

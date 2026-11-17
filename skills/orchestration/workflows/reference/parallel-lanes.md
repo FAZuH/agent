@@ -30,7 +30,7 @@ START (work decomposes into N independent units)
 |---|---|---|---|
 | 1 | SCOPE | you | Name each lane and the files it may write. |
 | 2 | SPLIT | you | A file two lanes need is a shared file: it leaves the lanes and becomes a chain. |
-| 3 | DISPATCH | you | One worker per lane, all in flight. Each brief names its scope, its deliverable, and its run mode. A lane that needs this session's history: `branch_ask` (`## Fork lanes`). |
+| 3 | DISPATCH | you | One worker per lane, all in flight. Each brief names its scope, its deliverable, and its run mode. A lane that needs warm context: `branch_ask` for this session, `branch_subagent` for a finished subagent (`## Fork lanes`). |
 | 4 | GATE | you | Hold a lane that needs a shared file until the predecessor's deliverable exists and the binding check passes. |
 | 5 | COLLECT | you | Read each lane's report. A lane whose scope narrowed stops and reports; you re-scope it. |
 | 6 | MERGE | you | Reconcile lanes that landed in one tree. |
@@ -72,17 +72,28 @@ zero. @orchestrate owns the resume rules.
 
 ## Fork lanes
 
-A lane whose work needs this session's history dispatches with `branch_ask`
-instead of a subagent. The fork inherits the transcript and the agent, so it
-needs no brief, and its report arrives as a separate prompt while the parent
-keeps working. A fork cannot change agent: role work (implement, review, docs)
-still goes to the matching subagent.
+A lane dispatches with a fork instead of a fresh subagent when it needs warm
+context: `branch_ask` for this session's history, `branch_subagent` for a
+finished subagent's role and context. A fork inherits the source's transcript,
+agent, and model, so it needs no brief, and its report arrives as a separate
+prompt while the parent keeps working.
+
+- `branch_ask` runs only in a primary session and forks the caller.
+- `branch_subagent` forks a descendant of the caller that has a `parentID` and
+  a finished turn. A running target or one outside the tree is refused.
+- `agent` switches the fork's role; the switch rewrites the system prompt, so
+  the shared prefix stops caching. Role work still needs the matching agent's
+  tools and permissions.
+
+Forking a subagent, its target rules, and the shared-prefix cache:
+[subagent-forks.md](subagent-forks.md).
 
 1. SCOPE and SPLIT as above. Forks share the working directory, so one writer
    per file still applies.
-2. `branch_ask` once per lane, with the ticket, the file scope, and the report
-   contract in the question. `silent: true` only when no report is wanted; a
-   silent fork is never counted or tracked.
+2. One fork call per lane, with the ticket, the file scope, and the report
+   contract in the prompt. `branch_ask` uses this session; `branch_subagent`
+   names the subagent's `sessionID`. `silent: true` only when no report is
+   wanted; a silent fork is never counted or tracked.
 3. Record each fork id in the session record under `## Forks`:
 
    | fork | lane | scope | mode | deadline | status |
@@ -97,7 +108,7 @@ still goes to the matching subagent.
    deadline; `failed`, or idle with no report, is a lane failure. Record it and
    decide between a resume prompt and a fresh subagent.
 
-Report contract, placed in the `branch_ask` question:
+Report contract, placed in the fork prompt:
 
 ```text
 Report with branch_report, in this form:
@@ -109,10 +120,10 @@ blockers: none | what stopped you
 If you cannot finish, still report with status: blocked.
 ```
 
-`/branch-settings` owns the limits: `maxForks` (0 = unlimited) caps reporting
-forks in flight per parent, and `reportBatchMs` (default 1500, 0 = off)
-delivers reports that arrive inside the window as one prompt. A reporting fork
-holds its slot until its report arrives.
+`/branch-settings` owns the limits. `maxForks` (0 = unlimited) caps reporting
+forks in flight per caller, shared by both fork tools; `reportBatchMs` (default
+1500, 0 = off) delivers reports that arrive inside the window as one prompt. A
+reporting fork holds its slot until its report arrives.
 
 ## Lanes in different trees
 

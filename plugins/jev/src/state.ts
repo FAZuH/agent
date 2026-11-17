@@ -56,6 +56,8 @@ export const FEATURES: Feature[] = [
   { key: "hook_skill_pick", label: "Skill picker", what: "Asks Jev which skill fits each prompt and advises it in context" },
   { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: allow, ask, deny, or alert" },
   { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
+  { key: "hook_no_respawn", label: "No respawn", what: "Holds a subagent replacement of an aborted task: once or reject, never always" },
+  { key: "hook_supervisor", label: "Supervisor", what: "Investigates a Jev ask inside the native hold with bounded read-only evidence" },
 ]
 
 /**
@@ -110,16 +112,44 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // defaultEffect and defaultThreshold are the global bar; a rule overrides
   // either. actions is the coarse gate: nothing outside it is examined.
   hook_tool_standard: { rulesFile: "~/.config/fazuh-agent/jev-rules.yaml", defaultEffect: "block", defaultThreshold: 0.7, minProbability: 0.7, timeout: 5000, actions: "shell,edit", fileMaxChars: 8000, toast: true, toastOutcomes: "deny" },
+  // The editable numbers: a hold waits 60 s for a human, and an unbound child
+  // is contained only inside the aborted call's window. The tombstone TTL and
+  // the repair delays are fixed decisions in `nospawn.ts` and
+  // `nospawn-frontier.ts`, so they are not settings.
+  hook_no_respawn: { holdMs: 60000, bindGraceMs: 2000, admissionWindowMs: 60000, toast: true, toastOutcomes: "deny" },
+  // The supervisor is opt-in and separate from the global Jev model: it gets its
+  // own endpoint/model/protocol/key so a review call can run against a different
+  // provider than the preliminary check. protocol is systemone, chat, or
+  // opencode; opencode uses the host's stateless generate.text and needs no
+  // endpoint or key. Empty key fields fall back to the global key settings.
+  // Empty root falls back to the session's working dir.
+  // trial keeps the human's `once` even on a supervisor allow.
+  hook_supervisor: {
+    model: "",
+    endpoint: "",
+    protocol: "systemone",
+    keyEnv: "",
+    keyFile: "",
+    root: "",
+    timeoutMs: 30000,
+    maxRounds: 3,
+    maxEvidence: 6,
+    trial: true,
+    askWaitMs: 5000,
+    toast: true,
+  },
 }
 
 export interface JevState {
   /**
    * The wire protocol. "systemone" posts state plus questions and reads an
-   * answers object. "chat" speaks an Ollama-style /api/chat, turns the same
-   * questions into a prompt, and parses the reply back into the same answers,
-   * so the validation and the confidence maths are unchanged.
+   * answers object. "chat" speaks an Ollama-style /api/chat, and "opencode"
+   * calls the host's stateless generate.text; both turn the same questions
+   * into a prompt and parse the reply back into the same answers, so the
+   * validation and the confidence maths are unchanged. Only "opencode" needs
+   * neither an endpoint nor a key.
    */
-  protocol: "systemone" | "chat"
+  protocol: "systemone" | "chat" | "opencode"
   /** Full URL of the decisions or chat endpoint. Empty until configured. */
   endpoint: string
   /** The provider's wire model id, which is not the host's namespaced id. */
@@ -190,7 +220,7 @@ export const DEFAULTS: JevState = {
   sidebar: true,
   sidebarCount: 5,
   sidebarSubject: true,
-  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false },
+  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_no_respawn: false, hook_supervisor: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
 }
@@ -355,7 +385,7 @@ export function loadState(): JevState {
     model: str(raw.model, DEFAULTS.model),
     keyEnv: str(raw.keyEnv, DEFAULTS.keyEnv),
     keyFile: str(raw.keyFile, DEFAULTS.keyFile),
-    protocol: raw.protocol === "chat" ? "chat" : "systemone",
+    protocol: raw.protocol === "chat" || raw.protocol === "opencode" ? raw.protocol : "systemone",
     think: raw.think === true,
     enabled: raw.enabled !== false,
     toast: raw.toast === true,
@@ -385,10 +415,19 @@ export function loadData(): JevData {
   }
 }
 
+/**
+ * Write a state or cache file at 0600. The mode option applies only when the
+ * file is created, so the chmod is what fixes an existing 0644 file.
+ */
+function writePrivate(path: string, text: string): void {
+  writeFileSync(path, text, { encoding: "utf8", mode: 0o600 })
+  chmodSync(path, 0o600)
+}
+
 export function saveData(patch: Partial<JevData>): JevData {
   const next = { ...loadData(), ...patch }
   mkdirSync(dirnameOf(DATA_FILE), { recursive: true })
-  writeFileSync(DATA_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
+  writePrivate(DATA_FILE, `${JSON.stringify(next, null, 2)}\n`)
   return next
 }
 
@@ -660,6 +699,7 @@ export const HOOK_SHORT: Record<string, string> = {
   hook_skill_pick: "pick",
   hook_tool_risk: "risk",
   hook_tool_standard: "rules",
+  hook_supervisor: "super",
 }
 
 /** One sidebar line: the hook, the verdict, the confidence. Terse on purpose. */
@@ -736,7 +776,7 @@ export function setFeature(key: string, on: boolean): boolean {
 export function saveState(patch: Partial<JevState>): JevState {
   const next = { ...loadState(), ...patch }
   mkdirSync(dirnameOf(STATE_FILE), { recursive: true })
-  writeFileSync(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8")
+  writePrivate(STATE_FILE, `${JSON.stringify(next, null, 2)}\n`)
   return next
 }
 
@@ -750,7 +790,7 @@ export function migrateStatePath(oldPath = join(CONFIG_DIR, "jev-state.json"), n
   try {
     const raw = readFileSync(oldPath, "utf8")
     mkdirSync(dirnameOf(newPath), { recursive: true })
-    writeFileSync(newPath, raw, "utf8")
+    writePrivate(newPath, raw)
     return "migrated"
   } catch {
     return "skipped"
@@ -771,8 +811,7 @@ export function keySource(): { present: boolean; from: string } {
   return { present: false, from: "none" }
 }
 
-export function resolveKey(): string | null {
-  const state = loadState()
+export function resolveKey(state: JevState = loadState()): string | null {
   for (const name of state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)) {
     const value = (process.env[name] ?? "").trim()
     if (value) return value
@@ -846,10 +885,13 @@ export function readLog(limit = 40): any[] {
   }
 }
 
+/** Jev bills input tokens only: $0.04 per million. */
+export const USD_PER_MILLION_TOKENS = 0.04
+
 export function spend(): { calls: number; tokens: number; usd: number } {
   const rows = readLog(1000)
   const tokens = rows.reduce((sum, row: any) => sum + (row.inputTokens ?? 0), 0)
-  return { calls: rows.length, tokens, usd: (tokens / 1_000_000) * 0.04 }
+  return { calls: rows.length, tokens, usd: (tokens / 1_000_000) * USD_PER_MILLION_TOKENS }
 }
 
 /**
@@ -883,9 +925,9 @@ export function migrateLegacyLayout(
   delete raw.skillCriteria
   delete raw.rosterHash
   mkdirSync(dirnameOf(target.state), { recursive: true })
-  writeFileSync(target.state, `${JSON.stringify(raw, null, 2)}\n`, "utf8")
+  writePrivate(target.state, `${JSON.stringify(raw, null, 2)}\n`)
   mkdirSync(dirnameOf(target.data), { recursive: true })
-  if (!existsSync(target.data)) writeFileSync(target.data, `${JSON.stringify(data, null, 2)}\n`, "utf8")
+  if (!existsSync(target.data)) writePrivate(target.data, `${JSON.stringify(data, null, 2)}\n`)
   // Move the log to the local home.
   if (existsSync(oldLog) && !existsSync(target.log)) {
     mkdirSync(dirnameOf(target.log), { recursive: true })
@@ -905,7 +947,7 @@ export function migrateDataFile(
   if (!existsSync(oldPath) || existsSync(newPath)) return "skipped"
   try {
     mkdirSync(dirnameOf(newPath), { recursive: true })
-    writeFileSync(newPath, readFileSync(oldPath, "utf8"), "utf8")
+    writePrivate(newPath, readFileSync(oldPath, "utf8"))
     return "migrated"
   } catch {
     return "skipped"

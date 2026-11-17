@@ -9,11 +9,18 @@
  * which is the one switch allowed to block.
  */
 
-import { ask, JevError } from "./jev.ts"
+import { ask, JevError, redact, signalFor } from "./jev.ts"
+import { snapshotFor, snapshotIsUsable } from "./context.ts"
+import { jevRpcHandlers, setJevEmitter } from "./gui-rpc.ts"
+import { Contract as JevContract } from "./rpc.ts"
 import { autoAccept } from "./autopermit.ts"
 import { callToken, consumeGrant, recordApproval } from "./approve.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
-import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES } from "./state.ts"
+import { start as startNoRespawn, type AbortReceipt, type AbortRequest, type NoRespawnHandle } from "./nospawn-host.ts"
+import { attachSupervisor, supervisorHandoff, type SupervisorCall, type SupervisorHostHandle } from "./supervisor-host.ts"
+import { readSnapshot, type SnapshotRead } from "./nospawn-state.ts"
+import type { AbortAuthority, TaskRecord } from "./nospawn.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "./state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { readFileSync, readdirSync } from "node:fs"
@@ -285,6 +292,9 @@ export function optimizerModel(override: string, session: unknown, hostDefault: 
   return ref(session) ?? ref(hostDefault)
 }
 
+/** Skills per optimizer call. The rest stay stale for the next run. */
+const OPTIMIZE_BATCH = 30
+
 /**
  * Optimize stale skill descriptions through the host LLM. One prompt, all
  * stale skills batched: N descriptions in, N terse criteria out as JSON.
@@ -307,10 +317,12 @@ export async function optimizeCriteria(
   opts: { manual?: boolean; sessionID?: string } = {},
 ): Promise<{ done: number; failed: number }> {
   const self = optimizeCriteria as any
+  // One call handles this many skills; the rest stay stale for the next run.
+  const batch = stale.slice(0, OPTIMIZE_BATCH)
   // Remember a missing generate.text per process: without this, every prompt
   // on such a host logs the same "unavailable" line and the log fills with it.
-  if (self._noGenerate) return { done: 0, failed: stale.length }
-  if (self._latched && !opts.manual) return { done: 0, failed: stale.length }
+  if (self._noGenerate) return { done: 0, failed: batch.length }
+  if (self._latched && !opts.manual) return { done: 0, failed: batch.length }
   let generate: any
   try {
     generate = ctx?.generate?.text
@@ -318,9 +330,8 @@ export async function optimizeCriteria(
   } catch (error) {
     self._noGenerate = true
     logCall({ hook: "hook_skill_pick", skipped: `optimizer unavailable: ${error instanceof Error ? error.message : String(error)}` })
-    return { done: 0, failed: stale.length }
+    return { done: 0, failed: batch.length }
   }
-  const batch = stale.slice(0, 30)
   const prompt = [
     "Rewrite each skill description below as ONE terse choice criterion, max 40 words: when the skill is the right pick AND when it is not. Start directly with the trigger; never open with \"Pick for/when/to\" or any label. Return JSON: { \"<id>\": \"<criterion>\" } and nothing else.",
     "",
@@ -449,8 +460,6 @@ export function actionsInScope(feature: string, action: string): boolean {
 /** What the model is asked to decide. */
 export type Verdict = "allow" | "ask" | "deny" | "alert"
 
-export const VERDICT_LABELS: Verdict[] = ["allow", "ask", "deny", "alert"]
-
 /**
  * The rubric. The four answers are a ladder: allow is routine, ask is "a human
  * should see this", deny is "this breaks something", alert is "this came from
@@ -513,6 +522,8 @@ interface CallInfo {
   dir: () => Promise<string>
   /** The tool's own arguments, fetched only when a model call is about to be made. */
   input: () => Promise<string | undefined>
+  /** The subject with those arguments, set by `withInput` before the handoff. */
+  enrichedSubject?: Record<string, unknown>
 }
 
 /** The tool's own arguments, when the host can hand them over. */
@@ -573,7 +584,8 @@ function callInfo(ctx: any, event: any): CallInfo | null {
 async function withInput(info: CallInfo): Promise<{ subject: Record<string, unknown>; text: string }> {
   const input = await info.input()
   if (!input) return { subject: info.subject, text: info.text }
-  return { subject: { ...info.subject, input }, text: `${info.text}\ninput: ${input}` }
+  info.enrichedSubject = { ...info.subject, input }
+  return { subject: info.enrichedSubject, text: `${info.text}\ninput: ${input}` }
 }
 
 /**
@@ -644,8 +656,15 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
   }
   const timeout = Math.round(cfgNum(F, "timeout"))
   const { subject, text } = await withInput(info)
+  let rawContext: unknown
+  try {
+    rawContext = ctx?.session?.context ? await ctx.session.context({ sessionID: info.sessionID }) : undefined
+  } catch {
+    rawContext = undefined
+  }
+  const context = snapshotFor(info.sessionID, rawContext)
   const result = await ask(
-    subject,
+    { call: subject, context },
     { verdict: { type: "choice", instructions: "How should this tool call be handled?", criteria: VERDICT_CRITERIA } },
     {
       log: false,
@@ -659,7 +678,11 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
   const verdict = String(d.value) as Verdict
   const confidence = Number(d.probability ?? 0)
   // A weak answer is never acted on: the call keeps the host's own effect.
-  const outcome = d.confident ? verdictOutcome(verdict, confidence, info) : undecidedOutcome(info)
+  const outcome = snapshotIsUsable(context)
+    ? d.confident
+      ? verdictOutcome(verdict, confidence, info)
+      : undecidedOutcome(info)
+    : askOutcome(info, "task history unavailable; a supervisor must investigate")
   if (cfgBool(F, "cache")) {
     if (verdictCache.size >= VERDICT_CACHE_MAX) verdictCache.clear()
     verdictCache.set(key, outcome)
@@ -810,7 +833,7 @@ function logDecision(
   logCall({
     hook,
     tool: info.action,
-    subject: info.text,
+    subject: redact(info.text),
     sent: result.sent,
     decisions: result.decisions,
     inputTokens: result.inputTokens,
@@ -825,24 +848,111 @@ function logDecision(
   })
 }
 
+/** Discord rejects a message whose `content` exceeds this many characters. */
+const DISCORD_CONTENT_LIMIT = 2000
+
+const ALERT_CONTENT = "Supervisor alert: a tool call was held and did not run."
+const ALERT_TITLE = "Jev Alert (hook_tool_risk)"
+const ALERT_NEXT_ACTION = "Check the prompt or tool result that led to this call. Nothing resumes automatically."
+const ALERT_COLOR = 15158332
+const ALERT_HOOK = "hook_tool_risk"
+
+/** The parts of a held call the v02 alert actually renders. */
+export interface AlertCall {
+  sessionID: string
+  action: string
+  text: string
+}
+
+export interface AlertFormat {
+  body: Record<string, unknown>
+  /** Set only when the redacted call did not fit the embed. */
+  attachment?: { filename: string; callText: string }
+}
+
+/** Local wall-clock time as `YYYY-MM-DD HH:mm:ss +ZZZZ`. */
+function alertTime(now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const offset = -now.getTimezoneOffset()
+  const sign = offset >= 0 ? "+" : "-"
+  const zone = `${sign}${pad(Math.floor(Math.abs(offset) / 60))}${pad(Math.abs(offset) % 60)}`
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${zone}`
+}
+
+/**
+ * Build the v02 webhook payload. A call that would breach Discord's content
+ * cap is not clipped: its full redacted text moves to an attachment and the
+ * embed carries a pointer instead.
+ */
+export function formatAlert(call: AlertCall, outcome: Outcome, now: Date): AlertFormat {
+  const callText = String(redact(call.text))
+  const shortSession = call.sessionID.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 8) || "session"
+  const filename = `jev-held-call-${shortSession}.txt`
+  const fence = callText.includes("```") ? "````" : "```"
+  const overLimit = callText.length > DISCORD_CONTENT_LIMIT
+  const held = overLimit ? `Full redacted call attached as ${filename}.` : `${fence}\n${callText}\n${fence}`
+  const confidence = outcome.reason?.match(/P=\d+\.\d+/)?.[0] ?? "unknown"
+  const body: Record<string, unknown> = {
+    content: ALERT_CONTENT,
+    embeds: [
+      {
+        title: ALERT_TITLE,
+        color: ALERT_COLOR,
+        description: String(redact(outcome.message ?? "")),
+        fields: [
+          { name: "Verdict", value: "alert", inline: true },
+          { name: "Confidence", value: confidence, inline: true },
+          { name: "Session", value: call.sessionID, inline: true },
+          { name: "Action", value: call.action, inline: true },
+          { name: "Time", value: alertTime(now), inline: false },
+          { name: "Next action", value: ALERT_NEXT_ACTION, inline: false },
+          { name: "Held call (redacted)", value: held, inline: false },
+        ],
+        footer: { text: ALERT_HOOK },
+      },
+    ],
+  }
+  if (overLimit) {
+    body.attachments = [{ id: "0", filename }]
+    return { body, attachment: { filename, callText } }
+  }
+  return { body }
+}
+
+/** Discord keys multipart files as `files[n]` and matches `attachments[].id` to n. */
+export function buildAlertForm(alert: AlertFormat): FormData {
+  const form = new FormData()
+  form.append("payload_json", JSON.stringify(alert.body))
+  if (alert.attachment) {
+    form.append("files[0]", new Blob([alert.attachment.callText], { type: "text/plain" }), alert.attachment.filename)
+  }
+  return form
+}
+
 /**
  * The alert: stop the agent, and tell the user. The TUI toast reads the log
  * line this call already wrote; a webhook covers a session with no TUI.
  * The webhook carries the tool call in a code block, because one long line
  * of a shell command is unreadable.
  */
-async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<void> {
+export async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<void> {
   const webhook = cfgStr("hook_tool_risk", "alertWebhook").trim()
   if (webhook) {
     try {
-      const fence = info.text.includes("```") ? "````" : "```"
-      await fetch(webhook, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: `# Jev Alert (hook_tool_risk)\n${fence}\n${info.text}\n${fence}` }),
-        signal: signalFor(5000),
-      })
-    } catch {}
+      const alert = formatAlert(info, outcome, new Date())
+      if (alert.attachment) {
+        await fetch(webhook, { method: "POST", body: buildAlertForm(alert), signal: signalFor(5000) })
+      } else {
+        await fetch(webhook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(alert.body),
+          signal: signalFor(5000),
+        })
+      }
+    } catch {
+      logCall({ hook: ALERT_HOOK, error: "alert webhook POST failed" })
+    }
   }
   try {
     await ctx.session.interrupt?.({ sessionID: info.sessionID })
@@ -854,6 +964,31 @@ async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<vo
       delivery: "queue",
     })
   } catch {}
+}
+
+/** The supervisor is ready when its separate model is set, and its endpoint
+ *  only for the HTTP transports. opencode runs through the host instead. */
+export function supervisorConfigured(): boolean {
+  if (!cfgStr("hook_supervisor", "model").trim()) return false
+  if (cfgStr("hook_supervisor", "protocol") === "opencode") return true
+  return Boolean(cfgStr("hook_supervisor", "endpoint").trim())
+}
+
+/** Build the supervisor model state from its own config, falling back to the
+ *  global key settings when it has none of its own. */
+export function supervisorState(): JevState {
+  const F = "hook_supervisor"
+  const base = loadState()
+  const configured = cfgStr(F, "protocol")
+  const protocol = configured === "chat" || configured === "opencode" ? configured : "systemone"
+  return {
+    ...base,
+    endpoint: cfgStr(F, "endpoint").trim(),
+    model: cfgStr(F, "model").trim(),
+    protocol,
+    keyEnv: cfgStr(F, "keyEnv").trim() || base.keyEnv,
+    keyFile: cfgStr(F, "keyFile").trim() || base.keyFile,
+  }
 }
 
 /**
@@ -889,9 +1024,172 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
   if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
   if (!outcome) return
+  // A Jev ask with the supervisor enabled keeps the native hold open while the
+  // supervisor investigates in the background. The marker is the correlation
+  // name for `permission.asked`; the hook returns without waiting for the run.
+  const handoff: SupervisorCall = { ...info, subject: info.enrichedSubject ?? info.subject }
+  const marker = supervisorHandoff(
+    handoff,
+    outcome.effect,
+    Boolean(supervisorHost),
+    featureOn("hook_supervisor") && supervisorConfigured(),
+  )
+  if (marker && supervisorHost) {
+    event.effect = "ask"
+    event.message = marker
+    supervisorHost.begin(handoff, marker)
+    return
+  }
+  if (featureOn("hook_supervisor") && !supervisorHost) {
+    logCall({ hook: "hook_supervisor", detail: "enabled but no host attached; the hold stays with the human" })
+  }
   event.effect = outcome.effect
   if (outcome.message) event.message = outcome.message
   if (outcome.alert) void alertUser(ctx, info, outcome)
+}
+
+/**
+ * The `/jev-*` commands. Hoisted so the tests can read the registered names
+ * without running `setup`; the server owns these, and the TUI owns the panel
+ * names (`tui.ts`).
+ */
+export const JEV_COMMANDS: Record<string, string> = {
+  "jev-status": "Jev endpoint, model, key source, which features are on, thresholds, and spend",
+  "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
+  "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
+  "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
+  "jev-abort": "Stop a task of this session by fingerprint prefix, or the whole session: /jev-abort <prefix> | session",
+  "jev-optimize-skills": "Rewrite every unoptimized skill description into a terse choice criterion via the host LLM; /jev-optimize-skills <id> refreshes one skill",
+}
+
+/**
+ * The no-respawn handle `setup` keeps. Module state because a command closure is
+ * created at setup time and there is nowhere else to put it: the plugin context
+ * has no registry.
+ */
+let noRespawn: NoRespawnHandle | null = null
+
+/** The supervisor host owns the only extra evaluate-time behavior; it never
+ *  registers a second permission hook. Set in `setup` when configured. */
+let supervisorHost: SupervisorHostHandle | null = null
+
+export interface AbortCommandHost {
+  abort(request: AbortRequest): Promise<AbortReceipt>
+  abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
+}
+
+export interface AbortCommandDeps {
+  /** The feature switch, re-read per command like every other Jev setting. */
+  enabled: () => boolean
+  /** The per-parent snapshot read. Injected so a test needs no state directory. */
+  read: (parentID: string) => SnapshotRead
+  /** The registered host, or null when `setup` could not register one. */
+  host: AbortCommandHost | null
+}
+
+const shortKey = (key: string) => key.slice(0, 12)
+
+const many = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`
+
+/**
+ * The one durability sentence. Every success message carries it exactly as the
+ * receipt reports it, including the already-aborted branch: a memory-only seal
+ * that is not named reads like a durable one.
+ */
+const durability = (receipt: AbortReceipt): string =>
+  receipt.durable ? "" : " NOT DURABLE: held in memory only, a restart loses it."
+
+/** One receipt as one line: what stopped, what did not, and what to do next. */
+function receiptLine(what: string, receipt: AbortReceipt): string {
+  const counts = [
+    `${many(receipt.revoked.length, "call")} settled deny`,
+    `${many(receipt.interrupted.length, "session")} interrupted`,
+    ...(receipt.fenced ? [`${many(receipt.fenced, "child session")} fenced`] : []),
+    ...(receipt.preserved.length ? [`${many(receipt.preserved.length, "child")} preserved`] : []),
+  ].join(", ")
+  const unfenced = receipt.fenceFailures.length ? fenceFailureClause(receipt.fenceFailures) : ""
+  return `jev-abort: ${what} stopped (${counts}). Unrelated work continues; a replacement is held until your next message.${unfenced}${durability(receipt)}`
+}
+
+/**
+ * The failure the audit also records, in the place a user reads. Row 6 does not
+ * hold for these children, so the line must not read like a clean fence.
+ */
+function fenceFailureClause(failures: string[]): string {
+  const ids = failures.map(shortKey).join(", ")
+  const them = failures.length === 1 ? "it" : "them"
+  return ` NOT FENCED: ${many(failures.length, "child session")} refused the subtree fence (${ids}), so a new subagent call inside ${them} is not denied.`
+}
+
+function taskListing(rows: TaskRecord[]): string {
+  if (rows.length === 0) return "no task records in this session."
+  const state = (rec: TaskRecord) =>
+    rec.abortedAt == null ? "admitted" : typeof rec.retiredAt === "number" ? "retired" : "aborted"
+  return [
+    "tasks:",
+    ...rows.map(
+      (rec) =>
+        `  ${shortKey(rec.fingerprint)}  ${rec.agent || "?"}  gen ${rec.generation}  ${state(rec)}  ${many(rec.childIDs.length, "child")}`,
+    ),
+  ].join("\n")
+}
+
+/**
+ * `/jev-abort`. The only route from a decision to a stopped task, so every
+ * refusal is explicit: a prefix that names nothing, two rows, an unreadable
+ * store, or a feature that is off never aborts anything.
+ */
+export async function runAbort(
+  parentID: string,
+  arg: string,
+  deps: AbortCommandDeps,
+  /** The receipt behind the text, so the command can tell whether the host spoke. */
+  seen?: (receipt: AbortReceipt) => void,
+): Promise<string> {
+  if (!deps.enabled()) return "jev-abort: hook_no_respawn is off, so nothing is recorded and nothing can be stopped."
+  if (!parentID) return "jev-abort: this command needs a session."
+  const read = deps.read(parentID)
+  if (!read.ok && read.reason !== "missing") {
+    return `jev-abort: cannot read this session's tasks (${read.reason}); nothing was aborted.`
+  }
+  const rows: TaskRecord[] = read.ok && read.snap ? Object.values(read.snap.tasks) : []
+  const target = arg.trim().split(/\s+/)[0] ?? ""
+
+  if (target === "session") {
+    if (!deps.host) return "jev-abort: the no-respawn host is not registered in this process."
+    const receipt = await deps.host.abortSession(parentID, "user", "user command")
+    seen?.(receipt)
+    return receiptLine(`session ${shortKey(parentID)}`, receipt)
+  }
+  if (!target) return taskListing(rows)
+
+  const matches = rows.filter((rec) => rec.fingerprint.startsWith(target))
+  if (matches.length === 0) return `jev-abort: no task with that prefix in this session.\n${taskListing(rows)}`
+  if (matches.length > 1) return `jev-abort: ambiguous prefix; nothing was aborted.\n${taskListing(rows)}`
+  const rec = matches[0]
+  if (!deps.host) return "jev-abort: the no-respawn host is not registered in this process."
+
+  const receipt = await deps.host.abort({
+    parentID,
+    fingerprint: rec.fingerprint,
+    scope: "task",
+    by: "user",
+    cause: "user command",
+  })
+  seen?.(receipt)
+  // A sealed task stays stopped. A second abort re-seals nothing: it names the
+  // seal's durability exactly as the receipt does, and cancels only calls this
+  // record owns. A retired or expired tombstone is refused, never re-sealed.
+  if (receipt.reason === "already aborted") {
+    const cancelled = receipt.revoked.length ? `; cancelled ${many(receipt.revoked.length, "held call")}` : ""
+    return `jev-abort: task ${shortKey(rec.fingerprint)} was already aborted${cancelled}.${durability(receipt)}`
+  }
+  if (receipt.reason === "already_retired" || receipt.reason === "already_expired") {
+    const spent = receipt.reason === "already_retired" ? "retired" : "expired"
+    return `jev-abort: task ${shortKey(rec.fingerprint)} is already ${spent}; nothing was sealed.`
+  }
+  if (!receipt.sealed) return `jev-abort: nothing was aborted (${receipt.reason ?? "the store refused"}).`
+  return receiptLine(`task ${shortKey(rec.fingerprint)}${rec.agent ? ` (${rec.agent})` : ""}`, receipt)
 }
 
 export default {
@@ -899,6 +1197,18 @@ export default {
   tui: true,
 
   setup: async (ctx: any) => {
+    // Desktop panel RPC. The GUI half calls these handlers; they read state
+    // from disk server-side and return only allowlisted fields. A host with no
+    // rpc.register simply has no Desktop panel, as before.
+    if (typeof ctx?.rpc?.register === "function") {
+      try {
+        const registration = await ctx.rpc.register(JevContract, jevRpcHandlers())
+        setJevEmitter((event) => registration.events.emit("changed", event))
+      } catch (error) {
+        logCall({ hook: "rpc", error: error instanceof JevError ? error.message : String(error) })
+      }
+    }
+
     // The routing hook. `session.hook("prompt")` fires once per admitted user
     // input — exactly "every time the user prompts". The host may reject the
     // hook name (it is the least-documented of the session hooks), so
@@ -986,6 +1296,52 @@ export default {
       })
     }
 
+    // The no-respawn admission path, behind its own switch. It is the one hook
+    // in the plugin that fails closed, so an off flag must leave exactly
+    // today's plugin: no wrapper, no subscription, no state file. `start`
+    // checks the flag before it touches the context for that reason.
+    try {
+      // The handle is what `/jev-abort` reaches: a disposer alone leaves no
+      // route from a decision to a stopped task.
+      noRespawn = await startNoRespawn(ctx, () => featureOn("hook_no_respawn"), {
+        holdMs: Math.max(1, Math.round(cfgNum("hook_no_respawn", "holdMs"))),
+        graceMs: Math.max(0, Math.round(cfgNum("hook_no_respawn", "bindGraceMs"))),
+        capMs: Math.max(1, Math.round(cfgNum("hook_no_respawn", "admissionWindowMs"))),
+      })
+    } catch (error) {
+      logCall({ hook: "hook_no_respawn", error: error instanceof JevError ? error.message : String(error) })
+    }
+
+    // The supervisor runs only with its own model configured and the feature
+    // on. It adds no permission hook: it reuses the ask effect the risk hook
+    // already sets and resolves that hold through the permission surface.
+    try {
+      if (featureOn("hook_supervisor") && supervisorConfigured()) {
+        const F = "hook_supervisor"
+        supervisorHost = attachSupervisor({
+          ctx,
+          config: {
+            state: supervisorState,
+            limits: () => ({
+              timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeoutMs"))),
+              maxRounds: Math.max(1, Math.round(cfgNum(F, "maxRounds"))),
+              maxEvidenceCalls: Math.max(0, Math.round(cfgNum(F, "maxEvidence"))),
+            }),
+            trial: () => cfgBool(F, "trial"),
+            evidenceRoot: () => cfgStr(F, "root").trim() || ctx?.location?.directory || process.cwd(),
+            askWaitMs: () => Math.max(1, Math.round(cfgNum(F, "askWaitMs"))),
+          },
+          isEnabled: () => featureOn("hook_supervisor") && supervisorConfigured(),
+          abortSession: (sessionID, by, cause) =>
+            noRespawn
+              ? noRespawn.abortSession(sessionID, by as AbortAuthority, cause)
+              : Promise.resolve({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], fenced: 0, fenceFailures: [], notified: false, reason: "no no-respawn host" }),
+        })
+      }
+    } catch (error) {
+      logCall({ hook: "hook_supervisor", error: error instanceof JevError ? error.message : String(error) })
+    }
+
     // /jev commands. Every field the client reads at call time is a setting,
     // not a constant: the wire model id and the endpoint path are
     // provider-specific and neither has a portable default. The same settings
@@ -998,17 +1354,10 @@ export default {
     // duplicated the panel badly enough to be more confusing than missing.
     // /jev-gate and /jev-on are gone for the same reason: the risk hook is the
     // hook_risk feature switch, and two names for one switch is one too many.
-    // /jev-status, /jev-model, /jev-endpoint and /jev-log remain the text route.
+    // /jev-status, /jev-model, /jev-endpoint, /jev-log and /jev-abort remain
+    // the text route.
     // See tui.ts.
-    const COMMANDS: Record<string, string> = {
-      "jev-status": "Jev endpoint, model, key source, which features are on, thresholds, and spend",
-      "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
-      "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
-      "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
-      "jev-optimize-skills": "Rewrite every unoptimized skill description into a terse choice criterion via the host LLM; /jev-optimize-skills <id> refreshes one skill",
-    }
-
-    for (const [name, description] of Object.entries(COMMANDS)) {
+    for (const [name, description] of Object.entries(JEV_COMMANDS)) {
       await ctx.command.transform((draft: any) => {
         draft.add({
           name,
@@ -1016,37 +1365,68 @@ export default {
           execute: async (input: any) => {
             const arg = String(input?.prompt?.text ?? "").trim()
             const state = loadState()
+            // opencode v2.3.0's command route returns void and drops `content`,
+            // so the same text also goes out as a synthetic message. `resume:
+            // false` is what keeps it from starting a model turn.
+            const respond = async (text: string) => {
+              if (typeof ctx?.session?.synthetic === "function") {
+                try {
+                  await ctx.session.synthetic({ sessionID: input.sessionID, text, resume: false })
+                } catch (error) {
+                  logCall({ hook: name, error: error instanceof JevError ? error.message : String(error) })
+                }
+              }
+              return { content: text }
+            }
 
             if (name === "jev-model") {
-              if (!arg) return { content: `Model: ${state.model}` }
+              if (!arg) return respond(`Model: ${state.model}`)
               saveState({ model: arg })
-              return { content: `Model set to ${arg}.` }
+              return respond(`Model set to ${arg}.`)
             }
             if (name === "jev-endpoint") {
-              if (!arg) return { content: `Endpoint: ${state.endpoint}` }
+              if (!arg) return respond(`Endpoint: ${state.endpoint}`)
               saveState({ endpoint: arg })
-              return { content: `Endpoint set to ${arg}.` }
+              return respond(`Endpoint set to ${arg}.`)
             }
             if (name === "jev-log") {
               const rows = readLog(20)
-              if (rows.length === 0) return { content: "No Jev calls logged yet." }
-              return {
-                content: rows
-                  .map((r) => {
-                    // A skipped or failed entry names the feature in `hook` and
-                    // the reason in `skipped`/`error`; the risk hook adds the
-                    // tool it judged. A regular call logs its decisions instead.
-                    if (r.skipped || r.error) {
-                      const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
-                      return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
-                    }
-                    const answers = (r.decisions ?? [])
-                      .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
-                      .join(" ")
-                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * 0.04).toFixed(6)}`
-                  })
-                  .join("\n"),
-              }
+              if (rows.length === 0) return respond("No Jev calls logged yet.")
+              const text = rows
+                .map((r) => {
+                  // A skipped or failed entry names the feature in `hook` and
+                  // the reason in `skipped`/`error`; the risk hook adds the
+                  // tool it judged. A regular call logs its decisions instead.
+                  if (r.skipped || r.error) {
+                    const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
+                    return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
+                  }
+                  const answers = (r.decisions ?? [])
+                    .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
+                    .join(" ")
+                  return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
+                })
+                .join("\n")
+              return respond(text)
+            }
+            if (name === "jev-abort") {
+              const parentID = String(input?.sessionID ?? input?.invocation?.sessionID ?? "")
+              // A real abort posts its own notice through the host; only a
+              // path that never notified needs the command to speak.
+              let notified = false
+              const text = await runAbort(
+                parentID,
+                arg,
+                {
+                  enabled: () => featureOn("hook_no_respawn"),
+                  read: readSnapshot,
+                  host: noRespawn,
+                },
+                (receipt) => {
+                  notified = receipt.notified
+                },
+              )
+              return notified ? { content: text } : respond(text)
             }
             if (name === "jev-optimize-skills") {
               const roster = await skillRoster(ctx, ROSTER_ROOTS)
@@ -1058,7 +1438,7 @@ export default {
                 const known = roster.some((s) => s.id === arg)
                 return { content: known ? `@${arg} is already optimized.` : `No installed skill @${arg}.` }
               }
-              if (targets.length === 0) return { content: `All ${roster.length} skill criteria are current.` }
+              if (targets.length === 0) return respond(`All ${roster.length} skill criteria are current.`)
               // Awaited, not background: the user asked for this explicitly
               // and wants the result, unlike the hook's silent warm-up. Manual
               // bypasses the failure latch; a success clears it.
@@ -1066,30 +1446,31 @@ export default {
                 manual: true,
                 sessionID: String(input?.sessionID ?? input?.invocation?.sessionID ?? "") || undefined,
               })
-              return { content: `Optimized ${done} of ${targets.length} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}.` }
+              const attempted = Math.min(targets.length, OPTIMIZE_BATCH)
+              const left = targets.length - attempted
+              return respond(`Optimized ${done} of ${attempted} criteria${failed ? `, ${failed} failed (see /jev-log)` : ""}${left ? `, ${left} left for a follow-up run` : ""}.`)
             }
             const key = keySource()
             const money = spend()
-            return {
-              content: [
-                `endpoint  ${state.endpoint}`,
-                `model     ${state.model}`,
-                `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
-                `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
-                `toast     ${state.toast ? "on" : "off"}`,
-                `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-                `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-                ...FEATURES.map(
-                  (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
-                    .map(([k, v]) => `${k}=${v}`)
-                    .join(" ")}`,
-                ),
-                `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
-                `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
-                "",
-                "Edit any of it with /jev-settings.",
-              ].join("\n"),
-            }
+            const text = [
+              `endpoint  ${state.endpoint}`,
+              `model     ${state.model}`,
+              `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
+              `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
+              `toast     ${state.toast ? "on" : "off"}`,
+              `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+              `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+              ...FEATURES.map(
+                (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(" ")}`,
+              ),
+              `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
+              `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
+              "",
+              "Edit any of it with /jev-settings.",
+            ].join("\n")
+            return respond(text)
           },
         })
       })

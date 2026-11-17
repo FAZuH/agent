@@ -30,16 +30,20 @@ Nothing needs a change: say so and skip.
 
 ## 2. File session friction
 
-Anything noticed during the session that was never filed goes to OptMem now,
-per the friction contract in @global-instruction and the entry format in
+Anything noticed during the session that was never filed goes to Hindsight now,
+per the friction contract in the global instructions and the entry format in
 @self-improve. Nothing carries past this step unfiled, and it is not a bug
 tracker: one or two sentences each.
 
-The `/finish` invocation is the approval to file: note these directly, with
+The `/finish` invocation is the approval to file: retain these directly, with
 no further gate. GATE `friction-file` in @self-improve covers only a
 standalone retro, where no `/finish` preceded it.
 
 ## 3. Commit changes
+
+Before loading @commit, load @report-hygiene and run its gate on the session's
+artifacts: proposed commit messages, docs, the summary, and any PR or issue
+text.
 
 Load the @commit skill and follow it exactly. Return its proposed groups
 unchanged. Do not duplicate its steps here.
@@ -53,8 +57,8 @@ workspace in place and note it in the summary.
 ## 5. Summarize the session
 
 Review the conversation. Concise summary: files changed or created, problems
-solved or features added, decisions made. `memo note` the summary if OptMem is
-available; absent → skip.
+solved or features added, decisions made. If the hindsight MCP tools are
+present, `retain` the summary; absent → skip.
 
 ## 6. Suggest next steps
 

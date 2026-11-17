@@ -25,13 +25,13 @@ TMP_DIR=""
 SKILLS_CLI_VERSION="1.7.0"
 BGRUN_REV="2d2c81818a6afeb1091c993b06f630b7727737b1"
 FFMPEG_SKILL_REV="df5d2736b171473742b86789e5179bdfb0976373"
-OPTMEM_REV="cd6e32e75eaf98694c26f5d51459925536d11a61"
 REA_AGENTS_VERSION="6.4.0"
 
-GLOBAL_AGENTS_MD="$HOME/.config/opencode/AGENTS.md"
-GLOBAL_INSTRUCTION_SKILL="skills/shared/global-instruction/SKILL.md"
-GI_START="<!-- global-instruction:start -->"
-GI_END="<!-- global-instruction:end -->"
+GLOBAL_CONFIG="$HOME/.config/opencode/opencode.json"
+# The global config loads every instruction file through this glob, so adding a
+# file to instructions/ needs no config edit. ~/ resolves from the home dir.
+INSTRUCTIONS_GLOB='~/.config/opencode/instructions/*.md'
+INSTRUCTIONS_HELPER="$ROOT/scripts/opencode-instructions.py"
 
 usage() {
   cat <<EOF
@@ -63,95 +63,76 @@ check_opencode() {
   info "opencode $version"
 }
 
-# Print the global-instruction skill's body: everything after the YAML
-# frontmatter, without its surrounding blank lines. The frontmatter is
-# skill-loader metadata, not instructions, and `---` inside AGENTS.md would
-# read as a horizontal rule at worst.
-skill_body() { # <path>
-  awk '
-    NR==1 && $0=="---" {fm=1; next}
-    fm && $0=="---" {fm=0; body=1; next}
-    body {print}
-  ' "$1" | sed '/./,$!d' | tac | sed '/./,$!d' | tac
-}
-
-# Embed the common rules straight into the host AGENTS.md, at the bottom, once.
-# A pointer to the skill cannot do this: the rules are only read when something
-# makes the agent load it, and "NEVER SKIP" has to not depend on that.
+# Point the global config at instructions/ so every .md there loads in every
+# session, on any project. The rules have to load without something making the
+# agent open a file first.
 #
-# The block is delimited by markers and rewritten from the skill every run, so
-# editing the skill updates AGENTS.md on the next install instead of leaving a
-# stale copy to drift. `check` reports drift without writing; --check installs
-# nothing.
-ensure_global_instruction_ref() { # [check]
-  local skill="$ROOT/$GLOBAL_INSTRUCTION_SKILL"
-  local body
-  local drifted=0
+# The glob entry means a new instruction file needs no config change. The edit
+# is textual (see scripts/opencode-instructions.py) because the config is
+# hand-formatted and a json.dump round-trip would reflow every model entry.
+ensure_instructions_config() { # [check]
+  local rc=0
 
-  if [[ ! -f "$GLOBAL_AGENTS_MD" ]]; then
-    info "note: $GLOBAL_AGENTS_MD does not exist, so no rules were embedded"
+  if [[ ! -f "$GLOBAL_CONFIG" ]]; then
+    info "note: $GLOBAL_CONFIG does not exist, so no instructions were wired"
     return 0
   fi
-  if [[ ! -f "$skill" ]]; then
-    info "note: $skill is missing, so no rules were embedded"
-    return 0
-  fi
-  body="$(skill_body "$skill")"
-  if [[ -z "$body" ]]; then
-    info "note: $skill has no body after its frontmatter"
-    return 0
-  fi
-
-  # Drop any existing block, then re-append one at the bottom, so editing the
-  # skill updates AGENTS.md on the next install instead of leaving a stale copy
-  # to drift. This also migrates a file written by the older two-copy installer:
-  # both its blocks are removed here and only the bottom one comes back.
-  #
-  # One line is held back so the blank line before a block is dropped with it.
-  # Printing them makes the file grow by a blank line per run, so the comparison
-  # below never matches and every install rewrites. Holding a line does not
-  # collapse runs of blank lines, so untouched parts of the file come out
-  # byte-identical.
-  # A blank line is the empty string in awk, so "is there a held line" needs its
-  # own flag: testing `held != ""` would drop every blank line in the file.
-  awk -v s="$GI_START" -v e="$GI_END" '
-    function flush() { if (has) { print held; has = 0 } }
-    NR == 1 { held = $0; has = 1; next }
-    $0 == s { if (held ~ /^[[:space:]]*$/) has = 0; inblock = 1; next }
-    $0 == e { inblock = 0; next }
-    inblock { next }
-    { flush(); held = $0; has = 1 }
-    END { flush() }
-  ' "$GLOBAL_AGENTS_MD" >"$GLOBAL_AGENTS_MD.tmp" || return 1
-
-  {
-    cat "$GLOBAL_AGENTS_MD.tmp"
-    printf '\n%s\n\n%s\n%s\n' "$GI_START" "$body" "$GI_END"
-  } >"$GLOBAL_AGENTS_MD.tmp2" || return 1
 
   if [[ "${1:-}" == check ]]; then
-    if cmp -s "$GLOBAL_AGENTS_MD.tmp2" "$GLOBAL_AGENTS_MD"; then
-      info "global AGENTS.md embeds the current $GLOBAL_INSTRUCTION_SKILL"
-    else
-      info "note: $GLOBAL_AGENTS_MD is stale or missing the embedded rules"
-    fi
-    rm -f "$GLOBAL_AGENTS_MD.tmp" "$GLOBAL_AGENTS_MD.tmp2"
+    python3 "$INSTRUCTIONS_HELPER" check "$GLOBAL_CONFIG" "$INSTRUCTIONS_GLOB" || rc=$?
+    case "$rc" in
+    0) info "$GLOBAL_CONFIG loads $INSTRUCTIONS_GLOB" ;;
+    1) info "note: $GLOBAL_CONFIG does not load $INSTRUCTIONS_GLOB" ;;
+    *) info "note: could not read $GLOBAL_CONFIG" ;;
+    esac
     return 0
   fi
 
-  if cmp -s "$GLOBAL_AGENTS_MD.tmp2" "$GLOBAL_AGENTS_MD"; then
-    drifted=0
-  else
-    mv "$GLOBAL_AGENTS_MD.tmp2" "$GLOBAL_AGENTS_MD" && drifted=1
-  fi
-  rm -f "$GLOBAL_AGENTS_MD.tmp" "$GLOBAL_AGENTS_MD.tmp2"
+  python3 "$INSTRUCTIONS_HELPER" ensure "$GLOBAL_CONFIG" "$INSTRUCTIONS_GLOB" || {
+    info "note: could not wire $GLOBAL_CONFIG to $INSTRUCTIONS_GLOB"
+    return 0
+  }
+  info "$GLOBAL_CONFIG loads every file in $INSTRUCTIONS_GLOB"
+}
 
-  if ((drifted)); then
-    info "embedded the $GLOBAL_INSTRUCTION_SKILL rules at the bottom of $GLOBAL_AGENTS_MD"
-  else
-    info "global AGENTS.md already embeds the current rules"
-  fi
-  return 0
+# Preload terse and antislop-copywriting as instructions: a link in
+# instructions/ loads the skill body with the config, and it points at the
+# deployed skill, so a skill update lands with no second step.
+SKILL_INSTRUCTION_LINKS=(
+  "terse=$HOME/.config/opencode/skills/terse/SKILL.md"
+  "antislop-copywriting=$HOME/.agents/skills/antislop-copywriting/SKILL.md"
+)
+ensure_skill_instructions() { # [check]
+  local pair name src dir tgt
+  dir="$HOME/.config/opencode/instructions"
+
+  for pair in "${SKILL_INSTRUCTION_LINKS[@]}"; do
+    name="${pair%%=*}"
+    src="${pair#*=}"
+    tgt="$dir/$name.md"
+
+    if [[ ! -f "$src" ]]; then
+      info "note: $name is not deployed, so no instruction link"
+      continue
+    fi
+
+    if [[ "${1:-}" == check ]]; then
+      if [[ -L "$tgt" && "$(readlink -f "$tgt")" == "$(readlink -f "$src")" ]]; then
+        printf '  [ok]      %-36s %s\n' "instructions/$name.md" "$src"
+      else
+        printf '  [MISSING] %-36s %s\n' "instructions/$name.md" "link to $src"
+      fi
+      continue
+    fi
+
+    mkdir -p "$dir"
+    if [[ -e "$tgt" && ! -L "$tgt" ]]; then
+      info "note: $tgt is a real file, left alone"
+      continue
+    fi
+    ln -sfn "$src" "$tgt"
+    info "linked $tgt -> $src"
+  done
 }
 
 # mermaid-cli v12 dropped -w/--width for --size, and pdf-build passes --size,
@@ -304,12 +285,11 @@ installed_items() {
   cat <<ITEMS
 octask:scheduled-task
 bgrun:the bgrun skill and CLI
-memo:the OptMem memory CLI
-optmem-mcp:the OptMem MCP server
 skills:$HOME/.config/opencode/skills
 agents:$HOME/.config/opencode/agents
 plugins:$HOME/.config/opencode/plugins
 commands:$HOME/.config/opencode/commands
+instructions:$HOME/.config/opencode/instructions
 digest-mail:$HOME/.config/fazuh-agent/digest/mail-digest/.opencode/agents/mail-digest.md
 digest-phone:$HOME/.config/fazuh-agent/digest/phone-digest/.opencode/agents/phone-digest.md
 values:$ROOT/.agent-values
@@ -355,7 +335,8 @@ checklist() {
   check_mmdc
 
   printf '\nHost configuration\n'
-  ensure_global_instruction_ref check
+  ensure_instructions_config check
+  ensure_skill_instructions check
 
   printf '\nInstalled by this script\n'
   while IFS=: read -r name path; do
@@ -427,28 +408,26 @@ done < <(optional_packages)
 check_mmdc
 
 step "Installing required skills"
-install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering --skill '*'
-install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity --skill '*'
+# Explicit names, never --skill '*': the wildcard follows upstream HEAD, so a
+# new upstream skill lands unlisted and unremovable. Add a name here, in
+# uninstall.sh EXTERNAL_SKILLS, and in the README together. `pr` is excluded on
+# purpose: this repo's pr-creator owns PR bodies.
+install_skill https://github.com/mattpocock/skills/tree/main/skills/engineering \
+  --skill ask-matt code-review codebase-design diagnosing-bugs domain-modeling \
+  grill-with-docs implement improve-codebase-architecture prototype research \
+  resolving-merge-conflicts setup-matt-pocock-skills tdd to-spec to-tickets \
+  triage wayfinder wizard
+install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity \
+  --skill grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
-# Not bonus: global-instruction makes @antislop a mandatory load
-# every session, and a default install that omits it leaves that dangling.
+# Not bonus: the install links @antislop-copywriting into the instructions, so a
+# default install that omits it leaves that link dangling.
 install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
+# The hindsight repo carries a full docs site; its clone blows past the skills
+# CLI's 300s default on a slow link and aborts the whole run, so raise the cap.
+SKILLS_CLONE_TIMEOUT_MS=900000 install_skill https://github.com/vectorize-io/hindsight --skill hindsight-docs
 cargo install --git https://github.com/FAZuH/bgrun --rev "$BGRUN_REV"
-
-step "Installing OptMem memory"
-# The fork ships the memo CLI and the optmem-mcp server. Both are installed here;
-# only the CLI is called at startup, and a host that serves MCP runs the server
-# from ~/.cargo/bin. The repo is a workspace, so both packages are named. --force
-# keeps the pin authoritative over binaries installed some other way.
-cargo install --git https://github.com/FAZuH/optmem-rs optmem optmem-mcp \
-  --rev "$OPTMEM_REV" --locked --force
-export PATH="$HOME/.cargo/bin:$PATH"
-if [[ ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/optmem/config.toml" ]]; then
-  memo init >/dev/null
-  info "initialized the OptMem store"
-fi
-info "$(memo --version)"
 
 step "Installing repository packages"
 ensure_agent_values
@@ -476,7 +455,8 @@ fi
 
 step "Pushing OpenCode configuration"
 "$ROOT/sync.sh" push -g
-ensure_global_instruction_ref
+ensure_instructions_config
+ensure_skill_instructions
 
 if ((BONUS == 1)); then
   step "Installing bonus skills"

@@ -34,9 +34,9 @@ Running list, entries written immediately, never reconstructed:
 
 - `[date] step N: what happened, why`
 
-Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction: OptMem (`friction[...]` notes, per @global-instruction). Else: working notes.
+Session record with a deviation log (e.g. `.scratch/` workspace): log there. Friction: Hindsight (`type:friction`, per the global instructions). Else: working notes.
 
-Hiccups (tool failures, dead ends, environment friction) are noted to OptMem as friction entries.
+Hiccups (tool failures, dead ends, environment friction) are retained to Hindsight as friction entries wherever one exists.
 
 ## Interruption
 
@@ -60,7 +60,8 @@ One entry per interruption, updated in place, deleted only when resumed and fini
 
 ## After finishing: the run report
 
-Hand the report to @post-task. It owns the format.
+Answer the user with what the procedure produced, in the reply. Anything they
+must decide or run goes in a separate `prompt_user` call (@prompt-user).
 
 ## Authoring convention (for procedure authors)
 

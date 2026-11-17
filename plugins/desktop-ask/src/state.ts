@@ -2,7 +2,7 @@
  * The one target. A single file, shared by every plugin instance, so the
  * session that armed last is the session every trigger goes to.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -64,7 +64,7 @@ export function writeTarget(target: Target, root = stateRoot()): void {
   mkdirSync(root, { recursive: true })
   const path = targetPath(root)
   const tmp = `${path}.${process.pid}.tmp`
-  writeFileSync(tmp, `${JSON.stringify(target, null, 2)}\n`)
+  writeFileSync(tmp, `${JSON.stringify(target, null, 2)}\n`, { mode: 0o600 })
   renameSync(tmp, path)
 }
 
@@ -93,7 +93,9 @@ export function lastCopyPath(root = stateRoot()): string {
 
 export function writeLastCopy(record: CopyRecord, root = stateRoot()): void {
   mkdirSync(root, { recursive: true })
-  writeFileSync(lastCopyPath(root), `${JSON.stringify(record, null, 2)}\n`)
+  const path = lastCopyPath(root)
+  writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
+  chmodSync(path, 0o600)
 }
 
 export function readLastCopy(root = stateRoot()): CopyRecord | undefined {
