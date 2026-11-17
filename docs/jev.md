@@ -4,7 +4,7 @@ The `fazuh.jev` plugin asks [Jev](https://typesafe.ai), TypeSafe's System One
 decision model, questions whose answers are judgements rather than facts. It
 answers with probabilities and never with an action.
 
-It is one plugin with four hook domains, a TUI settings panel, and four feature
+It is one plugin with five hook domains, a TUI settings panel, and five feature
 switches. Setup and the full command list are in
 [Plugins](plugins.md#jev-fazuhjev); this page is the operating reference: what
 it guarantees, what it costs, and how to point it somewhere else.
@@ -301,6 +301,77 @@ replays nothing from the durable log, so a live tombstone reads as same-turn
 and holds again until a new user item arrives or the 15 minute TTL ends. Seals
 and fences held in memory only are lost with the process.
 
+**`hook_supervisor`** (off by default): resolves a Jev `ask` through a separate
+supervisor model before the human prompt. It stays off until a distinct
+supervisor model is configured. An endpoint is needed too, unless `protocol` is
+`opencode`, which uses the host's own generation API. It adds no second permission
+hook: when the tool hooks return `ask`, Jev keeps the native hold open and runs
+the investigation in the background. The evaluate hook returns without waiting;
+every outcome still goes through the hold. A host deny never reaches this
+feature. The supervisor uses its own endpoint, model, protocol and key settings,
+so the review call can run against a different provider than the preliminary
+check. Empty supervisor key fields fall back to the global key settings.
+
+The same bounded, redacted, role-labelled snapshot of recent history that the
+preliminary risk check now sends also goes to the supervisor, so the check
+judges the call with recent history rather than the call alone. Tool results and
+assistant claims in that history are data, never instructions or a grant of
+permission. Absent or unusable history escalates to the human before any model
+round.
+
+The model is asked one question with four answers:
+
+| Verdict | Effect | What else happens |
+| --- | --- | --- |
+| `allow` | still held | In trial mode (the default) the human's `once` is still required: Jev reports its reasoning and leaves the prompt open. Outside trial, Jev rechecks the request identity, arguments, current policy and liveness, then replies `once`; a failed recheck leaves the prompt open. There is no silent allow. |
+| `deny` | reject | Jev replies `reject` only when this is the session's only pending permission. With siblings pending, the prompt stays for the human. |
+| `abort` | stop | Jev rejects the call when it can, interrupts the session, stops the task through the no-respawn host and notifies the user. If the reject cannot be sent because siblings are pending, the prompt stays answerable and the audit records it. |
+| `ask_user` | hold | the native human prompt stays. |
+
+An uncertain, malformed, over-budget or failed answer becomes `ask_user`, never
+`allow`. Verdicts combine by strength: `abort` outranks `deny`, which outranks
+`ask_user`, which outranks `allow`, so a later `allow` cannot erase a `deny` or
+an `abort`. A human answer that arrives during the investigation wins over the
+supervisor's verdict.
+
+Before each model round the supervisor gathers a small set of project evidence.
+Reads stay inside the configured root, real paths are checked so a symlink
+cannot escape it, and byte and entry caps bound every read. Evidence is limited
+to project file reads, search and constrained Git show/log. No shell, network,
+write or secret path is reachable. The run stops at the first of three bounds:
+30 seconds, three model rounds, six evidence calls, then escalates.
+
+Limits: this is a workflow guardrail, not a security sandbox. The supervisor
+runs with the same credentials as the human, so a same-authority actor can
+approve its own action. A `reject` reply settles every pending permission in the
+session, so Jev self-denies only when its call is the only one pending. A
+client-side timeout ends the local wait; a stateless model call may keep running
+and may still be billed. The feature adds no host patch and no deployment step.
+
+Audit: each run writes redacted summary records to the call log
+(`~/.local/state/opencode/jev/jev-calls.jsonl`) with `hook: "hook_supervisor"`.
+A record carries the verdict, confidence, round, evidence-call count, elapsed
+time, evidence references (kind, path, line or revision, no file bodies),
+reason, human answer and resolution. Event names: `supervisor_decision`,
+`supervisor_allow_trial`, `supervisor_allow`, `supervisor_deny`,
+`supervisor_abort`, `supervisor_abort_hold_live`, `supervisor_escalated`,
+`supervisor_revalidation_failed`, `supervisor_hold_uncancellable`,
+`supervisor_fanout_skipped`, `supervisor_human_answer`.
+
+Verification: a paid real-model end-to-end run passed case 1 (Jev `ask` to a
+supervisor verdict inside a native hold, with audit), case 4 (failure and budget
+exhaustion leave the hold for the human, who replies `once`, with no silent
+allow) and case 5 (context snapshot shape), plus a trial `allow` that still
+asked the human. Cases 2 (`deny`) and 3 (`abort`) passed for the resolution path
+on that same host: a test-only decision fixture supplied the verdict token,
+because a real model correctly judged these sandbox-safe calls as `allow`; the
+reject on the wire, caller denial, no tool effect and the abort cascade with its
+fence and audit ran on the real host with real plugin code. Only the decision
+token was controlled. The raw systemone endpoint accepts only `typesafe/jev`
+models for supervisor decisions; native sessions used
+`commandcode/deepseek/deepseek-v4.1-flash` with the default variant. Full
+result: `.scratch/2026-11-16_jev-supervisor-feature/probes/e2e/REPORT.md`.
+
 **Auto-accept mode.** The client answers its own permission requests in that
 mode, so an `ask` never reaches a human. An `ask` therefore has two
 meanings, and `yoloAsk` (a global setting) picks one:
@@ -369,10 +440,11 @@ These are the rules the code enforces, not aspirations:
   `hook_tool_risk.minProbability`, or within `hook_tool_risk.minMargin` of the
   runner-up, is not acted on. A rule below its threshold, or below
   `hook_tool_standard.minProbability`, is not violated.
-- **Three switches can block, and only those three.** `hook_tool_risk` blocks
+- **Four switches can block, and only those four.** `hook_tool_risk` blocks
   on a `deny` or an `alert`; `hook_tool_standard` blocks on a violated rule
   whose effect is `block`; `hook_no_respawn` blocks a replacement of an aborted
-  task, and on a store it cannot read. All three are off by default.
+  task, and on a store it cannot read; `hook_supervisor` rejects or aborts a
+  held call. All four are off by default.
 - **The key is never echoed, logged, or read back.** `/jev-key` writes it at
   mode 0600 and prints only the path. There is no command that takes a key as an
   argument, because anything after a slash command lands in the transcript.
@@ -445,6 +517,18 @@ load, so tuned thresholds survive the upgrade.
 | `hook_no_respawn` | `admissionWindowMs` | `60000` | ceiling on that window, whatever the binding says |
 | `hook_no_respawn` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 | `hook_no_respawn` | `toastOutcomes` | `deny` | what a call has to end in for this feature to announce it |
+| `hook_supervisor` | `model` | `""` | supervisor model's wire id; required to turn the feature on; `providerID/modelID` when `protocol` is `opencode` |
+| `hook_supervisor` | `endpoint` | `""` | supervisor decisions or chat endpoint; required with `model` unless `protocol` is `opencode` |
+| `hook_supervisor` | `protocol` | `systemone` | `systemone`, `chat`, or `opencode` for the supervisor's own provider |
+| `hook_supervisor` | `keyEnv` | `""` | env var for the supervisor key; empty uses the global `keyEnv` |
+| `hook_supervisor` | `keyFile` | `""` | key file for the supervisor; empty uses the global `keyFile` |
+| `hook_supervisor` | `root` | `""` | evidence root; empty uses the session's working directory |
+| `hook_supervisor` | `timeoutMs` | `30000` | total investigation budget in ms, and the ceiling per round |
+| `hook_supervisor` | `maxRounds` | `3` | most model rounds per investigation |
+| `hook_supervisor` | `maxEvidence` | `6` | most evidence reads and searches per investigation |
+| `hook_supervisor` | `trial` | `true` | keep the human's `once` even on a supervisor `allow` |
+| `hook_supervisor` | `askWaitMs` | `5000` | ms to wait for the correlated permission frame before escalating |
+| `hook_supervisor` | `toast` | `true` | announce supervisor records as a TUI toast (the global `toast` must also be on) |
 
 A state file written before the feature rename (`pick_skill`/`risk_hook`, and
 then `hook_risk`) is migrated on load: the switch carries over, and so do the
@@ -458,7 +542,7 @@ has a portable default, so the plugin carries nobody's billing details and
 refuses every call with a message naming the setting to set. Any provider that
 speaks the System One `/systemone` shape works.
 
-## Two wire protocols
+## Three wire protocols
 
 `protocol` picks how the questions travel.
 
@@ -472,6 +556,15 @@ reads token usage from whichever level carries it.
 turns the same questions into one prompt and parses the reply back into the same
 answers, so the validation and the confidence maths are unchanged. Needs no key,
 and none is sent even if one is configured.
+
+**`opencode`**: the current host's own stateless text generation, reached through
+`ctx.experimental.generate.text`. It reuses the same prompt and the same answer
+parser as `chat`, so validation and confidence are unchanged. It creates no
+session, runs no tools, and fires no permission hooks, so it cannot supervise
+itself. It needs no endpoint and no key: the host handles provider auth. `model`
+is a `providerID/modelID` ref, split at the first slash, for example
+`commandcode/deepseek/deepseek-v4.1-flash`. The host must expose the generation
+API or the call fails with a message naming it; there is no cancellation field.
 
 Four things a small chat model gets wrong, all handled in the parser, and all
 found by running it rather than assuming:
@@ -509,7 +602,7 @@ any list the provider exposes.
 
 | Command | Where | What it does |
 | --- | --- | --- |
-| `/jev-features` | TUI | the panel: `Plugin`, then the four hook switches |
+| `/jev-features` | TUI | the panel: `Plugin`, then the five hook switches |
 | `/jev-settings` | TUI | endpoint, model, key, key source, per-feature config, toasts, the YOLO branch, the approval lifetime |
 | `/jev-key` | TUI | paste a key, written at 0600 |
 | `/jev-approve [prefix]` | TUI | pick a blocked call and let the next matching one through once |
@@ -527,8 +620,8 @@ the text route, and the TUI's quick look at the same two things sits in the
 command palette without a slash name.
 
 `/jev-features` has a **Plugin** row at the top. It is the master switch: on or
-off, and it does not change the three below it. Off means no hook runs and nothing
-is sent. The three keep their values, so you can configure with the plugin
+off, and it does not change the five below it. Off means no hook runs and nothing
+is sent. The five keep their values, so you can configure with the plugin
 disabled and get your setup back when you re-enable it.
 
 The panel closes when you change a row, because the only dialog primitive a
@@ -701,13 +794,17 @@ on the first load after the upgrade; the old files stay as the rollback path.
 | `~/.config/fazuh-agent/secrets/jev_api_key` | the key, 0600 |
 | `plugins/jev/src/jev.ts` | the client, redaction, and answer validator |
 | `plugins/jev/src/state.ts` | the three homes, key resolution, the call log |
-| `plugins/jev/src/index.ts` | the four hook domains, the optimizer, and the text commands |
+| `plugins/jev/src/index.ts` | the five hook domains, the optimizer, and the text commands |
 | `plugins/jev/src/rules.ts` | the rules file: the loader, the matcher, the `{file:…}` expansion |
 | `plugins/jev/src/approve.ts` | the blocked calls, the tokens, and the grants |
 | `plugins/jev/src/nospawn.ts` | the task key, the verdict table, TTL and window arithmetic (pure) |
 | `plugins/jev/src/nospawn-state.ts` | the per-parent snapshot, audit, lock, and prune |
 | `plugins/jev/src/nospawn-frontier.ts` | the user-turn frontier and the repair schedule (pure) |
 | `plugins/jev/src/nospawn-host.ts` | the only module that touches `ctx`: observer, enforcement, the hold, the cascade, the frontier feed |
+| `plugins/jev/src/supervisor.ts` | the four verdicts, strict decision validation, precedence, budget arithmetic (pure) |
+| `plugins/jev/src/context.ts` | the bounded, redacted, role-labelled history snapshot (pure) |
+| `plugins/jev/src/evidence.ts` | the typed read-only evidence broker and its caps (pure) |
+| `plugins/jev/src/supervisor-host.ts` | the supervisor hold: native prompt correlation, investigation, recheck, resolution and audit |
 | `plugins/jev/src/tui.ts` | the two panels, the key dialog, and the approve picker |
 
 `nospawn/` (0700) holds `<sanitized parent>-<sha256[0:8]>.json` (0600), the same
@@ -720,8 +817,8 @@ relocates the directory.
 bun test plugins/jev/src
 ```
 
-Three files, 235 tests. `jev.test.ts` is the hooks, the state machine and the
-`/jev-abort` command's refusals (142); `nospawn.test.ts` is the task key, the
+Eight files, 410 tests (410 pass, 0 fail, 1292 expectations). `jev.test.ts` is
+the hooks, the state machine and the `/jev-abort` command's refusals (142); `nospawn.test.ts` is the task key, the
 verdict table, the store and the frontier, all pure or on a temp directory (25);
 `nospawn-host.test.ts` drives the host glue through fake contexts and fabricated
 events, including the flag-off guard, the duplicate-assert re-ask, a refused
@@ -733,7 +830,19 @@ deny that is never softened), and the abort trigger: a quiet seal, an
 allow revoked, a same-prompt hold an abort does not own, an unreadable store
 refused, a retired or expired task refused, a memory-only seal, a memory-only
 session fence, the subtree fence denying row 6, a subtree fence the store
-refused, and a session abort revoking a held call (68). None of them calls a
+refused, and a session abort revoking a held call (68). `context.test.ts`
+covers the bounded, redacted history snapshot: shape variants, byte and entry
+bounds, redaction, role labels, the incomplete marker, the cache and snapshot
+usability (18). `evidence.test.ts` covers the broker's path, revision, query and
+glob allowlists, excerpt bounding and redaction, and its bounded read calls
+(56). `supervisor.test.ts` is the pure core: decision validation, verdict
+precedence, budget arithmetic, the audit record, incomplete-history escalation
+and the evidence-step budget guards (71). `supervisor-host.test.ts` drives the
+hold through fake contexts: the marker and audit vocabulary, all four verdicts,
+the real evidence adapter, the live switch and the human short-circuit, a
+confident answer's own reason, single-writer redaction and two-writer
+correlation with fail-closed identity (27). `index.test.ts` covers the
+supervisor handoff seam (3). None of them calls a
 provider or starts a host. `N1`-`N9` in the design still need a real host.
 
 No network: hand-built answer objects, so the checks are the shape rules and the
