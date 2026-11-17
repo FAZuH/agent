@@ -15,12 +15,12 @@ model, over any provider exposing a `/systemone` endpoint. Jev answers typed
 questions (`choice`, `noul`, `score`) with probabilities. Hooks only, no tools:
 the plugin's power is automatic. Every Jev decision hook fails open, so a Jev
 outage never blocks work, except the no-respawn admission path, which denies
-when it cannot decide. All four switches are off until you turn them on.
+when it cannot decide. All five switches are off until you turn them on.
 
 The provider is a setting, not an assumption: the wire model id and the endpoint
 path are provider-specific and neither has a portable default. `/jev-settings`
 edits the endpoint, model, key source, and the per-feature config;
-`/jev-features` flips the four feature switches. Both stay open (arrows move,
+`/jev-features` flips the five feature switches. Both stay open (arrows move,
 enter changes one value, esc closes), so they read like OpenCode's own settings
 panel. They are TUI commands, since the desktop app loads no TUI module.
 `/jev-model <id>`, `/jev-endpoint <url>` do the same as text and work in any
@@ -57,18 +57,31 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   call only, because the plugin passes no `save` array. An unanswered hold
   denies after 60 seconds when it is the session's only pending prompt. State
   under `~/.local/state/opencode/jev/nospawn/`; see [jev.md](jev.md).
+- **`hook_supervisor`** (off by default): resolves a Jev `ask` through a
+  separate supervisor model before the human prompt. It stays off until its own
+  model and endpoint are configured, and adds no second permission hook: the
+  native hold stays open while a bounded investigation runs in the background.
+  The four verdicts are `allow`, `deny`, `abort` and `ask_user`. In trial mode
+  (the default) an `allow` still needs the human's `once`; `ask_user`, failure
+  and budget exhaustion leave the native prompt in place. There is no silent
+  allow. Evidence is read-only project files, search and constrained Git inside
+  the configured root, bounded by 30 seconds, three model rounds and six
+  evidence calls. This is a workflow guardrail, not a security sandbox; see
+  [jev.md](jev.md#the-hooks).
 - **Sidebar section**: the plugin adds a `Jev` section to the TUI sidebar with
   the recent hook calls, one terse line each. `sidebar`, `sidebarCount` and
   `sidebarSubject` in `/jev-settings` control it.
 - **`/jev-features`**: the panel. **Plugin** at the top is the master switch:
-  on or off, and it does not touch the four below it. Off means no hook runs
-  and nothing is sent, so nothing is spent, while the four keep their values,
+  on or off, and it does not touch the five below it. Off means no hook runs
+  and nothing is sent, so nothing is spent, while the five keep their values,
   so you can configure with the plugin disabled and get your setup back when
   you re-enable it. Below it: `hook_skill_pick`, `hook_tool_risk`,
-  `hook_tool_standard`, `hook_no_respawn`.
+  `hook_tool_standard`, `hook_no_respawn`, `hook_supervisor`.
 - **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
   `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
-  own numbers; there are no global thresholds.
+  own numbers; there are no global thresholds. The `hook_supervisor` rows hold
+  its separate model, endpoint, protocol, key, evidence root, budget and trial
+  mode.
 - **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
   one through once. The grant is spent by the server, so the approved call
   costs no model call and no tokens. The picker is not filtered by the
@@ -321,9 +334,35 @@ Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
 capped at 50; `OPENCODE_PROMPT_STATE_HOME` overrides the root. The server
 writes them atomically and exposes `prompt.list({sessionIDs})`,
-`prompt.answer`, `prompt.dismiss`, `prompt.defer`, and a `changed` event over
-RPC. The view passes the routed session's family (`data.session.family`), so a
+`prompt.answer`, `prompt.dismiss`, `prompt.defer`,
+`prompt.reopen({sessionID, promptID?})`, and a `changed` event over RPC. The
+view passes the routed session's family (`data.session.family`), so a
 subagent's prompts appear in the parent's view. Forks stay out of the family.
+
+The server also opens each prompt as a native question card through
+`POST /api/session/{id}/form`, with `metadata.kind: "question"` because Desktop
+and the web client render only that kind (and `mcp-elicitation` and
+`websearch.provider`). Creating it server-side is what reaches the mobile web
+app, which loads no plugin UI half. Its fields are one per question, with the
+recommendation as the first option and free text still allowed. The server
+listens for `form.replied` and `form.cancelled` and settles the same record the
+RPC handles, so answering the card, the TUI section, or the Desktop panel all
+take one path. `/prompt-latest` reopens the latest unanswered prompt as a new
+card when the old one is still pending or has scrolled away. It is registered
+once, server-side, so TUI, Desktop, and mobile autocomplete each show a single
+entry. GUI errors are read from the object's `message` field so RPC failures do
+not render as `[object Object]`.
+
+The Desktop panel is a read-only history: a session bar, a prompt list with
+answered/awaiting dots and relative times, and the selected record's Markdown.
+It no longer answers or dismisses through its own dialogs, so the native card
+is the only answer surface. Its **Reopen card** button calls `prompt.reopen`
+with the selected prompt id. Because the host shows one card at a time and
+queues later ones, `prompt.reopen` cancels every card this plugin has open in
+that session before creating the new one: the selected prompt replaces the card
+on screen instead of waiting behind it. The prompts themselves stay unanswered.
+The session bar names the session and counts prompts; it does not repeat the
+selected prompt's title, which sits in the detail header instead.
 
 The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
 session and each subagent that has a record). OpenCode Desktop's
@@ -349,10 +388,9 @@ Markdown with padding, shows the reporting session's title, its 35-character
 description, and its relative age, colors keybinds apart from their
 descriptions, and grows with `↑/↓`, `PgUp`/`PgDn`, and `Home`/`End` scrolling
 up to about half the terminal height; the scroll hint appears only when the
-record overflows. A fresh prompt also opens as the host's inline form. The
-plugin caps that form's question body at 12 lines and 1,200 characters and
-appends a pointer to the Prompts section, because the host card has no height
-cap or scroll. The answer dialog centers vertically and bounds the question
+record overflows. The native card caps each question body at 12 lines and
+1,200 characters and appends a pointer to the Prompts section, because the
+host card has no height cap or scroll. The answer dialog centers vertically and bounds the question
 body to about a quarter of the terminal height, with `PgUp`/`PgDn` scrolling,
 so the answer field and key hints stay visible under a long question.
 
