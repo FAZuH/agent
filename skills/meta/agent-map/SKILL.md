@@ -87,22 +87,11 @@ Upstream-owned; install and update through `@external-skills`, never hand-edit.
   `wait-what` (re-pitch), `show-me` (visual explanation), `prototype`,
   `improve-codebase-architecture`, `setup-matt-pocock-skills`,
   `domain-modeling`, `codebase-design`.
-- **Matt Pocock productivity**: `writing-for-agents`, `pr`, `handoff`,
-  `writing-defect-reports`, `keeping-git-repos-clean`,
-  `guarding-destructive-operations`, `resolving-merge-conflicts`,
-  `concurrent-branches`, `managing-python-releases`, `reproducing-ci-locally`,
-  `running-github-actions-efficiently`, `shipping-across-surfaces`,
-  `shipping-build-artifacts`, `verifying-external-behavior`,
-  `diagnosing-bugs`, `diagnose-crash`, `building-python-mcp-servers`,
-  `ci-pipeline-synthesizer`, `find-skills`, `research`.
+- **Matt Pocock productivity**: `writing-for-agents`, `handoff`,
+  `resolving-merge-conflicts`, `diagnosing-bugs`, `diagnose-crash`,
+  `find-skills`, `research`.
 - **Anti-slop suite** (mandatory-adjacent): `antislop`, `antislop-code`,
-  `antislop-copywriting`, `antislop-human`, `antislop-layoutmobile`,
-  `antislop-ui`.
-- **Docker**: `docker-agent-config`, `docker-agent-deploy`, `docker-agent-run`,
-  `docker-build-strategies`, `docker-compose-patterns`,
-  `docker-destructive-guardrails`, `docker-project-foundations`,
-  `docker-sandboxes-env`, `docker-sandboxes-kits`,
-  `docker-sandboxes-lifecycle`, `docker-sandboxes-network-credentials`.
+  `antislop-copywriting`, `antislop-layoutmobile`.
 - **Media** (bonus): `ffmpeg-skill` (edit video/audio with ffmpeg),
   `fframes-video` (programmed motion graphics), `manim-composer` (video
   planning), `manimce-best-practices`, `manimgl-best-practices`,
