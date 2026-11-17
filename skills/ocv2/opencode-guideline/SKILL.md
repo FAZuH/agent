@@ -46,6 +46,10 @@ These facts show up in more than one reference. They live here once, and the ref
 3. **Project discovery needs git.** Without a `.git` at/above the working directory, opencode2 resolves to `project: global` and skips project-local config and `.opencode/` dirs silently.
 4. **Config key is `plugins`.** New entries use `"plugins": [{ "package": "..." }]` (strings also work).
 5. **Memory.** OpenCode v2 findings live in Hindsight bank `agent::fazuh`, tagged `topic:opencode-v2`. `recall` a quirk before answering from scratch; `retain` a new finding after it live-verifies. If the hindsight tools are absent, continue without memory.
+6. **Instructions loading.** A symlinked instruction file loads like a regular
+   one. A fresh server picks up a new glob match; a running server picks it up
+   only after the config next changes. Probe on a live server instead of
+   trusting a model-based check, which can return a false negative.
 
 ## Read a reference
 

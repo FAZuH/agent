@@ -121,6 +121,14 @@ comment.
 4. After fixing, re-run step 1 (service mode) or verify via `/api/command`,
    remembering both see only the global location.
 
+## Feature flags are cached at start
+
+The server derives a plugin's `features` (server/tui) from the entry it loaded
+and caches the result. Editing an existing plugin entry to add `tui: true` does
+not re-derive them, so the TUI never loads its `./tui` entry. Give the plugin a
+new id or restart the client. File hot-reloads do land, but the plugin set is
+fixed at start.
+
 ## Writing one instead
 
 This skill diagnoses loading. To author one, read
