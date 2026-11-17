@@ -2,9 +2,18 @@ import type { Prompt } from "./shared.ts"
 
 const MAX_SESSION_IDS = 200
 
+export type PromptTab = "awaiting" | "answered" | "dismissed"
+
+export function tabOf(prompt: Prompt): PromptTab {
+  if (prompt.answeredAt != null) return "answered"
+  if (prompt.dismissedAt != null) return "dismissed"
+  return "awaiting"
+}
+
 export interface PromptRPC {
   list(input: { sessionIDs: string[] }): Promise<{ prompts: Prompt[] }>
   reopen(input: { sessionID: string; promptID?: string }): Promise<{ ok: boolean; reason?: string }>
+  dismiss(input: { sessionID: string; promptID: string }): Promise<{ ok: boolean }>
   dismissAll(input: { sessionIDs: string[] }): Promise<{ ok: boolean; count: number }>
   subscribe(listener: (event: { sessionID: string; prompt: Prompt }) => void): () => void
 }
@@ -86,6 +95,19 @@ export function createPromptView(rpc: PromptRPC, dialogs: PromptDialogs) {
         const result = await rpc.reopen({ sessionID, promptID })
         if (!result.ok) {
           dialogs.error(result.reason || "Could not reopen the question card")
+          return
+        }
+        if (family.length) await load(family)
+      } catch (error) {
+        dialogs.error(errorText(error))
+      }
+    },
+    /** Dismiss one prompt and refresh the family. */
+    async dismiss(sessionID: string, promptID: string) {
+      try {
+        const result = await rpc.dismiss({ sessionID, promptID })
+        if (!result.ok) {
+          dialogs.error("Could not dismiss the prompt")
           return
         }
         if (family.length) await load(family)

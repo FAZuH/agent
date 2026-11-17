@@ -429,6 +429,48 @@ describe("tools", () => {
     expect(records.find((record) => record.id === "da-dismissed")?.dismissedAt).toBe(1)
   })
 
+  test("dismissAll dismisses a procedure-only prompt with no questions", async () => {
+    const sid = "ses_dismiss_all_procedure"
+    store.appendPrompt({
+      id: "da-procedure",
+      sessionID: sid,
+      at: 1,
+      title: "Procedure only",
+      description: "Procedure only",
+      prompts: { procedures: [{ title: "run", description: undefined, steps: ["one"] }] },
+    })
+
+    const result = await handlers.dismissAll({ sessionIDs: [sid] })
+
+    expect(result).toEqual({ ok: true, count: 1 })
+    expect(store.readPrompts(sid)[0]?.dismissedAt).toBeGreaterThan(0)
+  })
+
+  test("dismissAll counts unresolved prompts across every session in the family", async () => {
+    store.appendPrompt({
+      id: "bulk-a",
+      sessionID: "ses_bulk_a",
+      at: 1,
+      title: "Bulk A",
+      description: "Bulk A",
+      prompts: { questions: [{ title: "A question", body: "" }] },
+    })
+    store.appendPrompt({
+      id: "bulk-b",
+      sessionID: "ses_bulk_b",
+      at: 1,
+      title: "Bulk B",
+      description: "Bulk B",
+      prompts: { questions: [{ title: "B question", body: "" }] },
+    })
+
+    const result = await handlers.dismissAll({ sessionIDs: ["ses_bulk_a", "ses_bulk_b"] })
+
+    expect(result).toEqual({ ok: true, count: 2 })
+    expect(store.readPrompts("ses_bulk_a")[0]?.dismissedAt).toBeGreaterThan(0)
+    expect(store.readPrompts("ses_bulk_b")[0]?.dismissedAt).toBeGreaterThan(0)
+  })
+
   test("an empty native-card answer takes the recommendation", async () => {
     const prompt = tools.find((tool) => tool.name === "prompt_user")
     const pending = prompt.execute(

@@ -7,7 +7,6 @@ import {
   answerText,
   answersOfForm,
   isEmpty,
-  needsAnswer,
   promptsOf,
   promptID,
   promptIDOfForm,
@@ -277,7 +276,7 @@ export default {
               // Read first: settleDismiss emits a changed event and closes any
               // open card, so the snapshot keeps this pass to its own prompts.
               for (const prompt of readPrompts(sessionID)) {
-                if (needsAnswer(prompt) && settleDismiss(sessionID, prompt.id).ok) count++
+                if (!prompt.answeredAt && !prompt.dismissedAt && settleDismiss(sessionID, prompt.id).ok) count++
               }
             }
             return { ok: true, count }

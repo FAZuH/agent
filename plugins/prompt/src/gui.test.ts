@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import {
   createPromptView,
+  tabOf,
   type PromptDialogs,
   type PromptRPC,
   type PromptViewState,
@@ -22,6 +23,7 @@ function harness(overrides: Partial<PromptRPC> = {}, dialogOverrides: Partial<Pr
   const rpc: PromptRPC = {
     list: async () => ({ prompts: [prompt] }),
     reopen: async () => ({ ok: true }),
+    dismiss: async () => ({ ok: true }),
     dismissAll: async () => ({ ok: true, count: 0 }),
     subscribe: () => () => {},
     ...overrides,
@@ -33,6 +35,18 @@ function harness(overrides: Partial<PromptRPC> = {}, dialogOverrides: Partial<Pr
   }
   return { view: createPromptView(rpc, dialogs), states, errors }
 }
+
+describe("tabOf", () => {
+  test("counts a procedure-only unresolved prompt as awaiting", () => {
+    const procedureOnly: Prompt = { ...prompt, prompts: { procedures: [{ title: "run", steps: ["one"] }] } }
+
+    expect(tabOf(procedureOnly)).toBe("awaiting")
+  })
+
+  test("counts a prompt with both timestamps as answered", () => {
+    expect(tabOf({ ...prompt, answeredAt: 2, dismissedAt: 3 })).toBe("answered")
+  })
+})
 
 test("loads the routed family and exposes loading then its prompts", async () => {
   const requests: string[][] = []
