@@ -19,7 +19,7 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { actionsInScope, firstSentence, hashDescription, normalizeAction, optimizeCriteria, optimizerModel, askOutcome, renderAdvice, resolveCriteria, rosterHash, runAbort, JEV_COMMANDS, stronger, stripCriterionPreamble, verdictOutcome } = await import("./index.ts")
 const jevPlugin = (await import("./index.ts")).default
-const { answersOf, JevError, normalize, redact, signalFor } = await import("./jev.ts")
+const { ask, answersOf, JevError, normalize, redact, signalFor } = await import("./jev.ts")
 const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await import("./approve.ts")
 const { expandFileRefs, matchesPattern, parseRules, ruleApplies } = await import("./rules.ts")
 type Rule = import("./rules.ts").Rule
@@ -1585,5 +1585,98 @@ describe("state file modes", () => {
     expect(modeOf(DATA_FILE)).toBe(0o600)
     clearState()
     rmSync(DATA_FILE, { force: true })
+  })
+})
+
+describe("opencode protocol", () => {
+  const MODEL = "commandcode/deepseek/deepseek-v4.1-flash"
+
+  const openState = (over: Partial<JevState> = {}): JevState => ({
+    ...DEFAULTS,
+    protocol: "opencode",
+    model: MODEL,
+    endpoint: "",
+    ...over,
+  })
+
+  const host = (answers: Record<string, any>) => {
+    const calls: any[] = []
+    const ctx: any = {
+      experimental: {
+        generate: {
+          text: async (payload: any) => {
+            calls.push(payload)
+            return { text: JSON.stringify({ answers, prompt_eval_count: 42 }) }
+          },
+        },
+      },
+    }
+    return { ctx, calls }
+  }
+
+  test("loadState preserves opencode and known values, defaulting the rest", () => {
+    writeState({ protocol: "opencode" })
+    expect(loadState().protocol).toBe("opencode")
+    writeState({ protocol: "chat" })
+    expect(loadState().protocol).toBe("chat")
+    writeState({ protocol: "bogus" })
+    expect(loadState().protocol).toBe("systemone")
+    clearState()
+  })
+
+  test("calls generate.text with a parsed Model.Ref and reuses answer validation", async () => {
+    const { ctx, calls } = host({
+      pick: { type: "choice", choice: "b", probabilities: { a: 0.09, b: 0.85, c: 0.06 } },
+    })
+    const result = await ask({ task: "which skill fits" }, { pick: choice }, { ctx, state: openState(), log: false, thresholds })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].model).toEqual({ providerID: "commandcode", id: "deepseek/deepseek-v4.1-flash" })
+    expect(calls[0].prompt).toContain("- pick:")
+    expect(calls[0].prompt).toContain('"task":"which skill fits"')
+    expect(result.decisions[0].value).toBe("b")
+    expect(result.decisions[0].confident).toBe(true)
+    expect(result.inputTokens).toBe(42)
+  })
+
+  test("accepts a host that returns the generated text directly", async () => {
+    const ctx: any = {
+      experimental: {
+        generate: {
+          text: async () =>
+            JSON.stringify({ answers: { pick: { type: "choice", choice: "b", probabilities: { a: 0.09, b: 0.85, c: 0.06 } } } }),
+        },
+      },
+    }
+    const result = await ask({ task: "x" }, { pick: choice }, { ctx, state: openState(), log: false, thresholds })
+    expect(result.decisions[0].value).toBe("b")
+  })
+
+  test("synthesizes a score legend and reads the token count", async () => {
+    const { ctx } = host({ level: { type: "score", score: 2, probabilities: { "0": 0.1, "1": 0.2, "2": 0.7 } } })
+    const result = await ask({ task: "how much" }, { level: score }, { ctx, state: openState(), log: false, thresholds })
+    expect(result.decisions[0].kind).toBe("score")
+    expect(result.decisions[0].value).toBe(2)
+    expect(result.inputTokens).toBe(42)
+  })
+
+  test("refuses a malformed model ref with a /jev-settings hint before calling the host", async () => {
+    const { ctx, calls } = host({})
+    await expect(
+      ask({ task: "x" }, { pick: choice }, { ctx, state: openState({ model: "no-slash" }), log: false }),
+    ).rejects.toThrow(/providerID\/modelID/)
+    expect(calls).toHaveLength(0)
+  })
+
+  test("fails closed with a clear JevError when the generate.text API is missing", async () => {
+    const partial: any = { experimental: {} }
+    await expect(ask({ task: "x" }, { pick: choice }, { ctx: partial, state: openState(), log: false })).rejects.toThrow(JevError)
+    await expect(ask({ task: "x" }, { pick: choice }, { state: openState(), log: false })).rejects.toThrow(/generate\.text/)
+  })
+
+  test("requires a model but not an endpoint", async () => {
+    const { ctx } = host({ pick: { type: "choice", choice: "b", probabilities: { a: 0.09, b: 0.85, c: 0.06 } } })
+    await expect(
+      ask({ task: "x" }, { pick: choice }, { ctx, state: openState({ model: "" }), log: false }),
+    ).rejects.toThrow(/\/jev-model/)
   })
 })

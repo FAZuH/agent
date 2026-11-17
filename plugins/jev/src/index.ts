@@ -10,13 +10,17 @@
  */
 
 import { ask, JevError, redact, signalFor } from "./jev.ts"
+import { snapshotFor, snapshotIsUsable } from "./context.ts"
+import { jevRpcHandlers, setJevEmitter } from "./gui-rpc.ts"
+import { Contract as JevContract } from "./rpc.ts"
 import { autoAccept } from "./autopermit.ts"
 import { callToken, consumeGrant, recordApproval } from "./approve.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
 import { start as startNoRespawn, type AbortReceipt, type AbortRequest, type NoRespawnHandle } from "./nospawn-host.ts"
+import { attachSupervisor, supervisorHandoff, type SupervisorCall, type SupervisorHostHandle } from "./supervisor-host.ts"
 import { readSnapshot, type SnapshotRead } from "./nospawn-state.ts"
 import type { AbortAuthority, TaskRecord } from "./nospawn.ts"
-import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES, USD_PER_MILLION_TOKENS } from "./state.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadData, loadState, logCall, pluginEnabled, readLog, saveData, saveState, setSkillCriterion, spend, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "./state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { readFileSync, readdirSync } from "node:fs"
@@ -518,6 +522,8 @@ interface CallInfo {
   dir: () => Promise<string>
   /** The tool's own arguments, fetched only when a model call is about to be made. */
   input: () => Promise<string | undefined>
+  /** The subject with those arguments, set by `withInput` before the handoff. */
+  enrichedSubject?: Record<string, unknown>
 }
 
 /** The tool's own arguments, when the host can hand them over. */
@@ -578,7 +584,8 @@ function callInfo(ctx: any, event: any): CallInfo | null {
 async function withInput(info: CallInfo): Promise<{ subject: Record<string, unknown>; text: string }> {
   const input = await info.input()
   if (!input) return { subject: info.subject, text: info.text }
-  return { subject: { ...info.subject, input }, text: `${info.text}\ninput: ${input}` }
+  info.enrichedSubject = { ...info.subject, input }
+  return { subject: info.enrichedSubject, text: `${info.text}\ninput: ${input}` }
 }
 
 /**
@@ -649,8 +656,15 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
   }
   const timeout = Math.round(cfgNum(F, "timeout"))
   const { subject, text } = await withInput(info)
+  let rawContext: unknown
+  try {
+    rawContext = ctx?.session?.context ? await ctx.session.context({ sessionID: info.sessionID }) : undefined
+  } catch {
+    rawContext = undefined
+  }
+  const context = snapshotFor(info.sessionID, rawContext)
   const result = await ask(
-    subject,
+    { call: subject, context },
     { verdict: { type: "choice", instructions: "How should this tool call be handled?", criteria: VERDICT_CRITERIA } },
     {
       log: false,
@@ -664,7 +678,11 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
   const verdict = String(d.value) as Verdict
   const confidence = Number(d.probability ?? 0)
   // A weak answer is never acted on: the call keeps the host's own effect.
-  const outcome = d.confident ? verdictOutcome(verdict, confidence, info) : undecidedOutcome(info)
+  const outcome = snapshotIsUsable(context)
+    ? d.confident
+      ? verdictOutcome(verdict, confidence, info)
+      : undecidedOutcome(info)
+    : askOutcome(info, "task history unavailable; a supervisor must investigate")
   if (cfgBool(F, "cache")) {
     if (verdictCache.size >= VERDICT_CACHE_MAX) verdictCache.clear()
     verdictCache.set(key, outcome)
@@ -830,24 +848,111 @@ function logDecision(
   })
 }
 
+/** Discord rejects a message whose `content` exceeds this many characters. */
+const DISCORD_CONTENT_LIMIT = 2000
+
+const ALERT_CONTENT = "Supervisor alert: a tool call was held and did not run."
+const ALERT_TITLE = "Jev Alert (hook_tool_risk)"
+const ALERT_NEXT_ACTION = "Check the prompt or tool result that led to this call. Nothing resumes automatically."
+const ALERT_COLOR = 15158332
+const ALERT_HOOK = "hook_tool_risk"
+
+/** The parts of a held call the v02 alert actually renders. */
+export interface AlertCall {
+  sessionID: string
+  action: string
+  text: string
+}
+
+export interface AlertFormat {
+  body: Record<string, unknown>
+  /** Set only when the redacted call did not fit the embed. */
+  attachment?: { filename: string; callText: string }
+}
+
+/** Local wall-clock time as `YYYY-MM-DD HH:mm:ss +ZZZZ`. */
+function alertTime(now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const offset = -now.getTimezoneOffset()
+  const sign = offset >= 0 ? "+" : "-"
+  const zone = `${sign}${pad(Math.floor(Math.abs(offset) / 60))}${pad(Math.abs(offset) % 60)}`
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${zone}`
+}
+
+/**
+ * Build the v02 webhook payload. A call that would breach Discord's content
+ * cap is not clipped: its full redacted text moves to an attachment and the
+ * embed carries a pointer instead.
+ */
+export function formatAlert(call: AlertCall, outcome: Outcome, now: Date): AlertFormat {
+  const callText = String(redact(call.text))
+  const shortSession = call.sessionID.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 8) || "session"
+  const filename = `jev-held-call-${shortSession}.txt`
+  const fence = callText.includes("```") ? "````" : "```"
+  const overLimit = callText.length > DISCORD_CONTENT_LIMIT
+  const held = overLimit ? `Full redacted call attached as ${filename}.` : `${fence}\n${callText}\n${fence}`
+  const confidence = outcome.reason?.match(/P=\d+\.\d+/)?.[0] ?? "unknown"
+  const body: Record<string, unknown> = {
+    content: ALERT_CONTENT,
+    embeds: [
+      {
+        title: ALERT_TITLE,
+        color: ALERT_COLOR,
+        description: String(redact(outcome.message ?? "")),
+        fields: [
+          { name: "Verdict", value: "alert", inline: true },
+          { name: "Confidence", value: confidence, inline: true },
+          { name: "Session", value: call.sessionID, inline: true },
+          { name: "Action", value: call.action, inline: true },
+          { name: "Time", value: alertTime(now), inline: false },
+          { name: "Next action", value: ALERT_NEXT_ACTION, inline: false },
+          { name: "Held call (redacted)", value: held, inline: false },
+        ],
+        footer: { text: ALERT_HOOK },
+      },
+    ],
+  }
+  if (overLimit) {
+    body.attachments = [{ id: "0", filename }]
+    return { body, attachment: { filename, callText } }
+  }
+  return { body }
+}
+
+/** Discord keys multipart files as `files[n]` and matches `attachments[].id` to n. */
+export function buildAlertForm(alert: AlertFormat): FormData {
+  const form = new FormData()
+  form.append("payload_json", JSON.stringify(alert.body))
+  if (alert.attachment) {
+    form.append("files[0]", new Blob([alert.attachment.callText], { type: "text/plain" }), alert.attachment.filename)
+  }
+  return form
+}
+
 /**
  * The alert: stop the agent, and tell the user. The TUI toast reads the log
  * line this call already wrote; a webhook covers a session with no TUI.
  * The webhook carries the tool call in a code block, because one long line
  * of a shell command is unreadable.
  */
-async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<void> {
+export async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<void> {
   const webhook = cfgStr("hook_tool_risk", "alertWebhook").trim()
   if (webhook) {
     try {
-      const fence = info.text.includes("```") ? "````" : "```"
-      await fetch(webhook, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: `# Jev Alert (hook_tool_risk)\n${fence}\n${String(redact(info.text))}\n${fence}` }),
-        signal: signalFor(5000),
-      })
-    } catch {}
+      const alert = formatAlert(info, outcome, new Date())
+      if (alert.attachment) {
+        await fetch(webhook, { method: "POST", body: buildAlertForm(alert), signal: signalFor(5000) })
+      } else {
+        await fetch(webhook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(alert.body),
+          signal: signalFor(5000),
+        })
+      }
+    } catch {
+      logCall({ hook: ALERT_HOOK, error: "alert webhook POST failed" })
+    }
   }
   try {
     await ctx.session.interrupt?.({ sessionID: info.sessionID })
@@ -859,6 +964,31 @@ async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<vo
       delivery: "queue",
     })
   } catch {}
+}
+
+/** The supervisor is ready when its separate model is set, and its endpoint
+ *  only for the HTTP transports. opencode runs through the host instead. */
+export function supervisorConfigured(): boolean {
+  if (!cfgStr("hook_supervisor", "model").trim()) return false
+  if (cfgStr("hook_supervisor", "protocol") === "opencode") return true
+  return Boolean(cfgStr("hook_supervisor", "endpoint").trim())
+}
+
+/** Build the supervisor model state from its own config, falling back to the
+ *  global key settings when it has none of its own. */
+export function supervisorState(): JevState {
+  const F = "hook_supervisor"
+  const base = loadState()
+  const configured = cfgStr(F, "protocol")
+  const protocol = configured === "chat" || configured === "opencode" ? configured : "systemone"
+  return {
+    ...base,
+    endpoint: cfgStr(F, "endpoint").trim(),
+    model: cfgStr(F, "model").trim(),
+    protocol,
+    keyEnv: cfgStr(F, "keyEnv").trim() || base.keyEnv,
+    keyFile: cfgStr(F, "keyFile").trim() || base.keyFile,
+  }
 }
 
 /**
@@ -894,6 +1024,25 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
   if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
   if (!outcome) return
+  // A Jev ask with the supervisor enabled keeps the native hold open while the
+  // supervisor investigates in the background. The marker is the correlation
+  // name for `permission.asked`; the hook returns without waiting for the run.
+  const handoff: SupervisorCall = { ...info, subject: info.enrichedSubject ?? info.subject }
+  const marker = supervisorHandoff(
+    handoff,
+    outcome.effect,
+    Boolean(supervisorHost),
+    featureOn("hook_supervisor") && supervisorConfigured(),
+  )
+  if (marker && supervisorHost) {
+    event.effect = "ask"
+    event.message = marker
+    supervisorHost.begin(handoff, marker)
+    return
+  }
+  if (featureOn("hook_supervisor") && !supervisorHost) {
+    logCall({ hook: "hook_supervisor", detail: "enabled but no host attached; the hold stays with the human" })
+  }
   event.effect = outcome.effect
   if (outcome.message) event.message = outcome.message
   if (outcome.alert) void alertUser(ctx, info, outcome)
@@ -919,6 +1068,10 @@ export const JEV_COMMANDS: Record<string, string> = {
  * has no registry.
  */
 let noRespawn: NoRespawnHandle | null = null
+
+/** The supervisor host owns the only extra evaluate-time behavior; it never
+ *  registers a second permission hook. Set in `setup` when configured. */
+let supervisorHost: SupervisorHostHandle | null = null
 
 export interface AbortCommandHost {
   abort(request: AbortRequest): Promise<AbortReceipt>
@@ -1044,6 +1197,18 @@ export default {
   tui: true,
 
   setup: async (ctx: any) => {
+    // Desktop panel RPC. The GUI half calls these handlers; they read state
+    // from disk server-side and return only allowlisted fields. A host with no
+    // rpc.register simply has no Desktop panel, as before.
+    if (typeof ctx?.rpc?.register === "function") {
+      try {
+        const registration = await ctx.rpc.register(JevContract, jevRpcHandlers())
+        setJevEmitter((event) => registration.events.emit("changed", event))
+      } catch (error) {
+        logCall({ hook: "rpc", error: error instanceof JevError ? error.message : String(error) })
+      }
+    }
+
     // The routing hook. `session.hook("prompt")` fires once per admitted user
     // input — exactly "every time the user prompts". The host may reject the
     // hook name (it is the least-documented of the session hooks), so
@@ -1145,6 +1310,36 @@ export default {
       })
     } catch (error) {
       logCall({ hook: "hook_no_respawn", error: error instanceof JevError ? error.message : String(error) })
+    }
+
+    // The supervisor runs only with its own model configured and the feature
+    // on. It adds no permission hook: it reuses the ask effect the risk hook
+    // already sets and resolves that hold through the permission surface.
+    try {
+      if (featureOn("hook_supervisor") && supervisorConfigured()) {
+        const F = "hook_supervisor"
+        supervisorHost = attachSupervisor({
+          ctx,
+          config: {
+            state: supervisorState,
+            limits: () => ({
+              timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeoutMs"))),
+              maxRounds: Math.max(1, Math.round(cfgNum(F, "maxRounds"))),
+              maxEvidenceCalls: Math.max(0, Math.round(cfgNum(F, "maxEvidence"))),
+            }),
+            trial: () => cfgBool(F, "trial"),
+            evidenceRoot: () => cfgStr(F, "root").trim() || ctx?.location?.directory || process.cwd(),
+            askWaitMs: () => Math.max(1, Math.round(cfgNum(F, "askWaitMs"))),
+          },
+          isEnabled: () => featureOn("hook_supervisor") && supervisorConfigured(),
+          abortSession: (sessionID, by, cause) =>
+            noRespawn
+              ? noRespawn.abortSession(sessionID, by as AbortAuthority, cause)
+              : Promise.resolve({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], fenced: 0, fenceFailures: [], notified: false, reason: "no no-respawn host" }),
+        })
+      }
+    } catch (error) {
+      logCall({ hook: "hook_supervisor", error: error instanceof JevError ? error.message : String(error) })
     }
 
     // /jev commands. Every field the client reads at call time is a setting,

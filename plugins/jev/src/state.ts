@@ -57,6 +57,7 @@ export const FEATURES: Feature[] = [
   { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: allow, ask, deny, or alert" },
   { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
   { key: "hook_no_respawn", label: "No respawn", what: "Holds a subagent replacement of an aborted task: once or reject, never always" },
+  { key: "hook_supervisor", label: "Supervisor", what: "Investigates a Jev ask inside the native hold with bounded read-only evidence" },
 ]
 
 /**
@@ -116,16 +117,39 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   // the repair delays are fixed decisions in `nospawn.ts` and
   // `nospawn-frontier.ts`, so they are not settings.
   hook_no_respawn: { holdMs: 60000, bindGraceMs: 2000, admissionWindowMs: 60000, toast: true, toastOutcomes: "deny" },
+  // The supervisor is opt-in and separate from the global Jev model: it gets its
+  // own endpoint/model/protocol/key so a review call can run against a different
+  // provider than the preliminary check. protocol is systemone, chat, or
+  // opencode; opencode uses the host's stateless generate.text and needs no
+  // endpoint or key. Empty key fields fall back to the global key settings.
+  // Empty root falls back to the session's working dir.
+  // trial keeps the human's `once` even on a supervisor allow.
+  hook_supervisor: {
+    model: "",
+    endpoint: "",
+    protocol: "systemone",
+    keyEnv: "",
+    keyFile: "",
+    root: "",
+    timeoutMs: 30000,
+    maxRounds: 3,
+    maxEvidence: 6,
+    trial: true,
+    askWaitMs: 5000,
+    toast: true,
+  },
 }
 
 export interface JevState {
   /**
    * The wire protocol. "systemone" posts state plus questions and reads an
-   * answers object. "chat" speaks an Ollama-style /api/chat, turns the same
-   * questions into a prompt, and parses the reply back into the same answers,
-   * so the validation and the confidence maths are unchanged.
+   * answers object. "chat" speaks an Ollama-style /api/chat, and "opencode"
+   * calls the host's stateless generate.text; both turn the same questions
+   * into a prompt and parse the reply back into the same answers, so the
+   * validation and the confidence maths are unchanged. Only "opencode" needs
+   * neither an endpoint nor a key.
    */
-  protocol: "systemone" | "chat"
+  protocol: "systemone" | "chat" | "opencode"
   /** Full URL of the decisions or chat endpoint. Empty until configured. */
   endpoint: string
   /** The provider's wire model id, which is not the host's namespaced id. */
@@ -196,7 +220,7 @@ export const DEFAULTS: JevState = {
   sidebar: true,
   sidebarCount: 5,
   sidebarSubject: true,
-  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_no_respawn: false },
+  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_no_respawn: false, hook_supervisor: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
 }
@@ -361,7 +385,7 @@ export function loadState(): JevState {
     model: str(raw.model, DEFAULTS.model),
     keyEnv: str(raw.keyEnv, DEFAULTS.keyEnv),
     keyFile: str(raw.keyFile, DEFAULTS.keyFile),
-    protocol: raw.protocol === "chat" ? "chat" : "systemone",
+    protocol: raw.protocol === "chat" || raw.protocol === "opencode" ? raw.protocol : "systemone",
     think: raw.think === true,
     enabled: raw.enabled !== false,
     toast: raw.toast === true,
@@ -675,6 +699,7 @@ export const HOOK_SHORT: Record<string, string> = {
   hook_skill_pick: "pick",
   hook_tool_risk: "risk",
   hook_tool_standard: "rules",
+  hook_supervisor: "super",
 }
 
 /** One sidebar line: the hook, the verdict, the confidence. Terse on purpose. */
@@ -786,8 +811,7 @@ export function keySource(): { present: boolean; from: string } {
   return { present: false, from: "none" }
 }
 
-export function resolveKey(): string | null {
-  const state = loadState()
+export function resolveKey(state: JevState = loadState()): string | null {
   for (const name of state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)) {
     const value = (process.env[name] ?? "").trim()
     if (value) return value

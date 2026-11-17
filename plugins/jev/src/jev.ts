@@ -253,6 +253,59 @@ async function postChat(state: JevState, prompt: string, timeoutMs: number): Pro
   return content
 }
 
+/** Split a `providerID/modelID` value into the Model.Ref generate.text needs.
+ *  Model ids contain slashes, so only the first one separates the provider. */
+function parseModelRef(ref: string): { providerID: string; id: string } {
+  const text = String(ref ?? "").trim()
+  const slash = text.indexOf("/")
+  if (slash <= 0 || slash === text.length - 1) {
+    throw new JevError(
+      `Jev opencode model must be providerID/modelID (for example commandcode/deepseek/deepseek-v4.1-flash), got ${JSON.stringify(text)}. Set /jev-model in /jev-settings.`,
+      "shape",
+    )
+  }
+  return { providerID: text.slice(0, slash), id: text.slice(slash + 1) }
+}
+
+/** The host returns the generated text directly, under `text`, or under the
+ *  `data.text` envelope the API route uses. All three are the same reply. */
+function replyText(raw: any): string {
+  const text = typeof raw === "string" ? raw : (raw?.text ?? raw?.data?.text)
+  if (typeof text !== "string" || !text.trim()) throw new JevError("Jev generate.text returned no text", "shape")
+  return text
+}
+
+/** The prompt-shaped transports share one reply parse: fence stripping,
+ *  rekey, score-legend synthesis and token accounting. */
+function parseAnswersReply(
+  content: string,
+  questions: Record<string, JevQuestion>,
+  protocol: "chat" | "opencode",
+): { answers: Record<string, any>; inputTokens: number } {
+  const stripped = unfence(content)
+  let parsed: any
+  try {
+    parsed = JSON.parse(stripped)
+  } catch {
+    throw new JevError(`Jev ${protocol} reply was not JSON: ${stripped.slice(0, 200)}`, "shape")
+  }
+  if (!parsed?.answers || typeof parsed.answers !== "object") {
+    throw new JevError(`Jev ${protocol} reply had no answers object`, "shape")
+  }
+  const answers = rekey(parsed.answers, questions)
+  // A score's legend is the question's own criteria restated, so a model that
+  // omits it loses nothing. Synthesizing it here keeps the validation that
+  // catches a mangled legend on the systemone transport, where the provider
+  // returns one and it is not redundant.
+  for (const [id, q] of Object.entries(questions)) {
+    const a = answers[id]
+    if (q.type === "score" && a && !a.legend && Array.isArray(q.criteria)) {
+      a.legend = q.criteria
+    }
+  }
+  return { answers, inputTokens: Number(parsed?.prompt_eval_count ?? 0) }
+}
+
 export function normalize(id: string, question: JevQuestion, answer: any, thresholds: Thresholds): Decision {
   if (!answer || typeof answer !== "object") throw new JevError(`${id}: no answer object`, "bad-answer")
   if (answer.type !== question.type) {
@@ -330,6 +383,15 @@ export function normalize(id: string, question: JevQuestion, answer: any, thresh
   }
   const top = table[choice]
   const confidence = Number.isFinite(Number(answer.confidence)) ? Number(answer.confidence) : undefined
+  // A confident answer still carries the model's own rationale when the
+  // provider returns one. The supervisor needs that text for its audit line
+  // and the human notice; without it the reason would be synthesized.
+  const explanation =
+    typeof answer.reason === "string" && answer.reason.trim()
+      ? answer.reason.trim()
+      : typeof answer.explanation === "string" && answer.explanation.trim()
+        ? answer.explanation.trim()
+        : ""
   const reasons: string[] = []
   if (top < thresholds.minProbability) reasons.push(`top probability ${top.toFixed(2)} < ${thresholds.minProbability}`)
   if (margin < thresholds.minMargin) reasons.push(`margin ${margin.toFixed(2)} < ${thresholds.minMargin}`)
@@ -343,7 +405,7 @@ export function normalize(id: string, question: JevQuestion, answer: any, thresh
     margin,
     distribution: Object.fromEntries(ranked),
     confident: reasons.length === 0,
-    note: reasons.length ? reasons.join("; ") : undefined,
+    note: reasons.length ? reasons.join("; ") : explanation ? explanation.slice(0, 400) : undefined,
   }
 }
 
@@ -352,10 +414,9 @@ export function normalize(id: string, question: JevQuestion, answer: any, thresh
  * needs no auth at all. Split out so the protocol branch reads as intent
  * rather than as a missing check.
  */
-function require_key(): string {
-  const key = resolveKey()
+function require_key(state: JevState): string {
+  const key = resolveKey(state)
   if (key) return key
-  const state = loadState()
   const names = state.keyEnv.split(",").map((s) => s.trim()).filter(Boolean)
   throw new JevError(
     `No Jev key found. Set $${names[0] ?? "JEV_API_KEY"}, or run /jev-key to write ${state.keyFile}.`,
@@ -373,24 +434,25 @@ function require_key(): string {
 export async function ask(
   stateBody: JevStateBody,
   questions: Record<string, JevQuestion>,
-  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds; hook?: string; subject?: string } = {},
+  opts: { timeoutMs?: number; log?: boolean; thresholds?: Thresholds; hook?: string; subject?: string; state?: JevState; ctx?: any } = {},
 ): Promise<JevResult> {
-  const state = loadState()
+  const state = opts.state ?? loadState()
+  const ctx = opts.ctx
   const thresholds: Thresholds = opts.thresholds ?? {
     minProbability: FEATURE_DEFAULTS.hook_skill_pick.minProbability,
     minMargin: FEATURE_DEFAULTS.hook_skill_pick.minMargin,
   }
   // Unconfigured is a state, not a bug: say which setting is missing rather
-  // than posting an empty URL or letting the model see a bare TypeError.
-  if (!state.endpoint || !state.model) {
-    const missing = [!state.endpoint && "endpoint", !state.model && "model"].filter(Boolean).join(" and ")
-    throw new JevError(
-      `Jev is not configured: no ${missing}. Set ${!state.endpoint ? "/jev-endpoint" : "/jev-model"} in /jev-settings.`,
-      "no-key",
-    )
+  // than posting an empty URL or letting the model see a bare TypeError. Only
+  // the HTTP transports need an endpoint; opencode calls the host instead.
+  const missingEndpoint = state.protocol !== "opencode" && !state.endpoint
+  if (missingEndpoint || !state.model) {
+    const missing = [missingEndpoint && "endpoint", !state.model && "model"].filter(Boolean).join(" and ")
+    const fix = missingEndpoint ? "/jev-endpoint" : "/jev-model"
+    throw new JevError(`Jev is not configured: no ${missing}. Set ${fix} in /jev-settings.`, "no-key")
   }
-  // The chat transport needs no key, so the check is protocol-conditional.
-  const key = state.protocol === "chat" ? resolveKey() : require_key()
+  // chat needs no key; opencode leaves key resolution to the host entirely.
+  const key = state.protocol === "chat" ? resolveKey(state) : state.protocol === "opencode" ? null : require_key(state)
   const payload = buildPayload(state, stateBody, questions)
   const started = Date.now()
   // A local model spends 8-13s a call where a hosted one spends 1-2s, and the
@@ -402,31 +464,32 @@ export async function ask(
   let inputTokens = 0
   let sent: unknown = payload
 
-  if (state.protocol === "chat") {
+  if (state.protocol === "chat" || state.protocol === "opencode") {
     // Same questions, a different wire. The prompt carries the redacted state,
     // so what leaves the machine is what the log records.
     const prompt = chatPrompt(stateBody, questions)
-    sent = { protocol: "chat", model: state.model, think: state.think, prompt }
-    const content = await postChat(state, prompt, timeoutMs)
-    let parsed: any
-    try {
-      parsed = JSON.parse(unfence(content))
-    } catch {
-      throw new JevError(`Jev chat reply was not JSON: ${unfence(content).slice(0, 200)}`, "shape")
-    }
-    if (!parsed?.answers || typeof parsed.answers !== "object") throw new JevError("Jev chat reply had no answers object", "shape")
-    answers = rekey(parsed.answers, questions)
-    // A score's legend is the question's own criteria restated, so a chat model
-    // that omits it loses nothing. Synthesizing it here keeps the validation
-    // that catches a mangled legend on the systemone transport, where the
-    // provider returns one and it is not redundant.
-    for (const [id, q] of Object.entries(questions)) {
-      const a = answers[id]
-      if (q.type === "score" && a && !a.legend && Array.isArray(q.criteria)) {
-        a.legend = q.criteria
+    let content: string
+    if (state.protocol === "opencode") {
+      const generate = ctx?.experimental?.generate?.text
+      if (typeof generate !== "function") {
+        throw new JevError("Jev opencode needs ctx.experimental.generate.text; this host does not expose it", "shape")
       }
+      const model = parseModelRef(state.model)
+      sent = { protocol: "opencode", model, prompt }
+      let raw: any
+      try {
+        raw = await generate.call(ctx.experimental.generate, { model, prompt })
+      } catch (error) {
+        throw new JevError(`Jev generate.text failed: ${error instanceof Error ? error.message : String(error)}`, "network")
+      }
+      content = replyText(raw)
+    } else {
+      sent = { protocol: "chat", model: state.model, think: state.think, prompt }
+      content = await postChat(state, prompt, timeoutMs)
     }
-    inputTokens = Number(parsed?.prompt_eval_count ?? 0)
+    const parsed = parseAnswersReply(content, questions, state.protocol)
+    answers = parsed.answers
+    inputTokens = parsed.inputTokens
   } else {
     let response: Response
     try {
