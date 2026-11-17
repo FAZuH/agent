@@ -6,6 +6,7 @@ Rules for every session, on any machine. The host AGENTS.md keeps host-only fact
 
 These are items you must do in specific situations.
 
+- OpenCode hot-reloads most components. Do not tell the user to restart OpenCode Desktop or the service after a change; assume edits are already live. Restart only for a component known not to reload (verify first).
 - Check the current working directory first.
 - @agent-map: Skill routing. Load it when the skill catalog does not disambiguate.
 - @presenting-latex: For presenting latex equations to user.
