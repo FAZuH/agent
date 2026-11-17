@@ -670,6 +670,21 @@ node, and the host's tree walk treats that as a crash. The element runtime
 comes from the host — a plugin imports `@opentui/solid/jsx-runtime` and
 nothing is vendored.
 
+## The Desktop panel
+
+On OpenCode Desktop the `./gui-experimental` half adds a **Jev** tab to the
+session side panel (also in the `+` menu). It reads and writes through the
+same state files as the TUI, so the two views never diverge. The default view
+is **Blocked calls**: pending permissions with Approve once and Reject. **More**
+swaps to the feature switches and the last 15 calls; a call row expands to its
+redacted detail, and Back returns. The header's on/off button is the master
+switch. The bundle is built with `bun run --cwd plugins/jev build:gui`.
+
+Nothing secret crosses the panel's RPC: log rows are an explicit field
+allowlist (no `sent`, `received`, endpoint or webhook), and the key is reported
+as present/from only, never by value. The Desktop renderer caches the bundle
+at window startup, so a rebuilt bundle needs one Desktop restart to show.
+
 ## Call toasts
 
 `toast` in `/jev-settings` turns on a TUI toast per Jev call. Each feature's own
@@ -806,6 +821,11 @@ on the first load after the upgrade; the old files stay as the rollback path.
 | `plugins/jev/src/evidence.ts` | the typed read-only evidence broker and its caps (pure) |
 | `plugins/jev/src/supervisor-host.ts` | the supervisor hold: native prompt correlation, investigation, recheck, resolution and audit |
 | `plugins/jev/src/tui.ts` | the two panels, the key dialog, and the approve picker |
+| `plugins/jev/src/rpc.ts` | the shared JSON-Schema RPC contract (status, log, approvals, approve, reject, switches) |
+| `plugins/jev/src/gui-rpc.ts` | server RPC handlers; allowlisted state and log projections, never secrets |
+| `plugins/jev/src/gui-controller.ts` | Desktop load/subscribe/mutate with RPC error unwrapping |
+| `plugins/jev/src/gui.tsx` | the Desktop Jev side panel and menu launcher |
+| `plugins/jev/dist/gui-experimental.cjs` | the built Desktop GUI bundle |
 
 `nospawn/` (0700) holds `<sanitized parent>-<sha256[0:8]>.json` (0600), the same
 name `.audit.jsonl`, and a transient `.json.lock`; `OPENCODE_JEV_NOSPAWN_DIR`
