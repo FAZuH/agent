@@ -31,10 +31,11 @@ The plan is a Mermaid state machine. Publish it to the user at the plan step, be
 
 ### Shape
 
-One state per task, one per review step. Chain them in execution order from `[*]` to `[*]`. Use an alias for labels with spaces:
+One state per task, one per review step. Set `direction TB` so the chain reads top down, from `[*]` to `[*]`. Use an alias for labels with spaces:
 
 ```mermaid
 stateDiagram-v2
+    direction TB
     state "Task X" as TX
     state "Review X" as RX
     [*] --> TX
@@ -48,6 +49,7 @@ Set a color on every state each time you publish. Use `classDef` and `class`:
 
 ```mermaid
 stateDiagram-v2
+    direction TB
     state "Task X" as TX
     state "Review X" as RX
     [*] --> TX
