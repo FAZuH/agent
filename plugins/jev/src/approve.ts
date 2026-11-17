@@ -112,6 +112,15 @@ export function grant(token: string, sessionID: string): void {
   writeJSON(GRANTS_FILE, stored)
 }
 
+/** Dismiss a blocked call. It stays denied and drops out of the pending list. */
+export function rejectApproval(token: string): boolean {
+  const stored = readJSON(APPROVALS_FILE)
+  if (!(token in stored)) return false
+  delete stored[token]
+  writeJSON(APPROVALS_FILE, stored)
+  return true
+}
+
 /**
  * Spend a grant. Returns true when the token was granted, in which case the
  * grant is gone: it allows one call, not a policy.
