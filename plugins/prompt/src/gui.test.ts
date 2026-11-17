@@ -21,16 +21,12 @@ function harness(overrides: Partial<PromptRPC> = {}, dialogOverrides: Partial<Pr
   const errors: string[] = []
   const rpc: PromptRPC = {
     list: async () => ({ prompts: [prompt] }),
-    answer: async () => ({ ok: true, delivered: true }),
-    dismiss: async () => ({ ok: true }),
-    defer: async () => ({ ok: true }),
+    reopen: async () => ({ ok: true }),
     subscribe: () => () => {},
     ...overrides,
   }
   const dialogs: PromptDialogs = {
     update: (state) => states.push(state),
-    question: async () => "Use queue",
-    delivery: async () => "steer",
     error: (message) => errors.push(message),
     ...dialogOverrides,
   }
@@ -73,102 +69,50 @@ test("a failed list exposes an error and a later load can recover", async () => 
   view.dispose()
 })
 
-test.each(["steer", "queue"] as const)(
-  "sends a blank answer's recommendation with %s delivery",
-  async (mode) => {
-    const sent: unknown[] = []
-    const { view } = harness(
-      {
-        answer: async (input) => {
-          sent.push(input)
-          return { ok: true, delivered: true }
-        },
-      },
-      { question: async () => "  ", delivery: async () => mode },
-    )
-
-    await view.answer(prompt)
-
-    expect(sent).toEqual([
-      {
-        sessionID: "ses_child",
-        promptID: "desktop-check",
-        answers: { "0": "Queue" },
-        mode,
-      },
-    ])
-    view.dispose()
-  },
-)
-
-test.each(["question", "delivery"] as const)(
-  "cancelling the %s defers without answering",
-  async (cancelled) => {
-    const sent: unknown[] = []
-    const deferred: unknown[] = []
-    const { view } = harness(
-      {
-        answer: async (input) => {
-          sent.push(input)
-          return { ok: true, delivered: true }
-        },
-        defer: async (input) => {
-          deferred.push(input)
-          return { ok: true }
-        },
-      },
-      {
-        question: async () => (cancelled === "question" ? undefined : "Queue"),
-        delivery: async () => (cancelled === "delivery" ? undefined : "steer"),
-      },
-    )
-
-    await view.answer(prompt)
-
-    expect(sent).toEqual([])
-    expect(deferred).toEqual([{ sessionID: "ses_child", promptID: "desktop-check" }])
-    view.dispose()
-  },
-)
-
-test.each(["answer", "dismiss", "defer"] as const)(
-  "reports a failed %s without hiding it",
-  async (action) => {
-    const { view, errors } = harness(
-      {
-        answer: async () => ({ ok: true, delivered: false, error: "Delivery unavailable" }),
-        dismiss: async () => ({ ok: false }),
-        defer: async () => {
-          throw new Error("Delivery unavailable")
-        },
-      },
-      { question: async () => (action === "defer" ? undefined : "Queue") },
-    )
-
-    await (action === "dismiss" ? view.dismiss(prompt) : view.answer(prompt))
-
-    expect(errors).toEqual([action === "dismiss" ? "Could not dismiss prompt" : "Delivery unavailable"])
-    view.dispose()
-  },
-)
-
-test("dismisses the selected prompt and refreshes its family", async () => {
-  const dismissed: unknown[] = []
+test("reopen sends the selected prompt id and refreshes the family", async () => {
+  const sent: unknown[] = []
   let records = [prompt]
   const { view, states } = harness({
     list: async () => ({ prompts: records }),
-    dismiss: async (input) => {
-      dismissed.push(input)
-      records = [{ ...prompt, dismissedAt: 2 }]
+    reopen: async (input) => {
+      sent.push(input)
+      records = [{ ...prompt, answeredAt: 2 }]
       return { ok: true }
     },
   })
   await view.load(["ses_child"])
 
-  await view.dismiss(prompt)
+  await view.reopen("ses_child", "desktop-check")
 
-  expect(dismissed).toEqual([{ sessionID: "ses_child", promptID: "desktop-check" }])
-  expect(states.at(-1)?.prompts[0]?.dismissedAt).toBe(2)
+  expect(sent).toEqual([{ sessionID: "ses_child", promptID: "desktop-check" }])
+  expect(states.at(-1)?.prompts[0]?.answeredAt).toBe(2)
+  view.dispose()
+})
+
+test("reopen without a prompt id asks the server for the latest", async () => {
+  const sent: unknown[] = []
+  const { view } = harness({
+    reopen: async (input) => {
+      sent.push(input)
+      return { ok: true }
+    },
+  })
+
+  await view.reopen("ses_child")
+
+  expect(sent).toEqual([{ sessionID: "ses_child", promptID: undefined }])
+  view.dispose()
+})
+
+test.each([
+  ["a returned reason", async () => ({ ok: false as const, reason: "Already answered" }), "Already answered"],
+  ["a thrown object", async () => { throw { message: "Server unreachable" } }, "Server unreachable"],
+] as const)("reopen reports %s", async (_name, reopen, expected) => {
+  const { view, errors } = harness({ reopen })
+
+  await view.reopen("ses_child", "desktop-check")
+
+  expect(errors).toEqual([expected])
   view.dispose()
 })
 

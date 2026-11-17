@@ -215,11 +215,16 @@ export function formIDOf(promptID: string): string {
   return `${FORM_PREFIX}${promptID}`
 }
 
+/** A fresh card for the same record, used when the last form is still pending. */
+export function reopenFormIDOf(promptID: string, nonce: number): string {
+  return `${FORM_PREFIX}${promptID}_r${Math.trunc(nonce).toString(36)}`
+}
+
 /** The prompt a native form belongs to, or nothing when the form is not ours. */
 export function promptIDOfForm(formID: string): string | undefined {
   const id = String(formID ?? "")
   if (!id.startsWith(FORM_PREFIX)) return undefined
-  const promptID = id.slice(FORM_PREFIX.length)
+  const promptID = id.slice(FORM_PREFIX.length).replace(/_r[0-9a-z]+$/, "")
   return promptID || undefined
 }
 

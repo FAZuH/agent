@@ -14,8 +14,6 @@ import {
   answersOfForm,
   attentionOf,
   descriptionOf,
-  formFieldsOf,
-  formIDOf,
   groupBySession,
   markdownOf,
   needsAnswer,
@@ -735,61 +733,16 @@ export default {
         .catch(() => {})
     }
 
-    // A prompt or answer written anywhere in the family refetches the view,
-    // and a fresh prompt opens as the host's inline form.
+    // A prompt or answer written anywhere in the family refetches the view.
+    // The server opens the native question card on every client.
     stops.push(
       rpc.events.on("changed", (event: any) => {
         const sessionID = routedID()
         if (sessionID) reload(sessionID)
-        const prompt = event?.data?.prompt
-        if (prompt) void showForm(prompt)
       }),
     )
 
-    /** Prompts already offered as an inline form, by id. Process-global: a
-     * stale instance left by a failed teardown must not create the same form
-     * a second time. */
-    const formsKey = Symbol.for("fazuh.prompt.forms")
-    const shownForms: Set<string> = ((globalThis as any)[formsKey] ??= new Set())
-    let warnedNoForm = false
-
-    /**
-     * Offer a prompt as the inline form the question tool uses. The record is
-     * already saved, so the card is only an offer: it can be filled now, or
-     * dismissed with esc to defer it to the Prompts list. A blocking
-     * prompt_user waits for the answer; a normal call keeps the agent working.
-     */
-    async function showForm(prompt: Prompt) {
-      if (!prompt.prompts?.questions?.length) return
-      if (prompt.answeredAt || prompt.dismissedAt) return
-      if (shownForms.has(prompt.id)) return
-      // An answer on an old record also emits changed; do not pop a form for
-      // a prompt that was written long before this event.
-      if (Date.now() - prompt.at > 15_000) return
-      const create = ctx.client?.session?.form?.create
-      if (typeof create !== "function") {
-        if (!warnedNoForm) {
-          warnedNoForm = true
-          console.error("[prompt] the host has no session.form.create; prompts stay in the sidebar")
-        }
-        return
-      }
-      shownForms.add(prompt.id)
-      try {
-        await create.call(ctx.client.session.form, {
-          sessionID: prompt.sessionID,
-          id: formIDOf(prompt.id),
-          title: descriptionOf(prompt),
-          metadata: { kind: "prompt", promptID: prompt.id },
-          fields: formFieldsOf(prompt),
-        })
-      } catch (error: any) {
-        shownForms.delete(prompt.id)
-        console.error(`[prompt] could not show the prompt form: ${error?.message ?? error}`)
-      }
-    }
-
-    // The form is a second way into the same answer path. Dismissing it with
+    // The native card is a second way into the same answer path. Dismissing it with
     // esc is the defer action: the record stays unanswered in the list.
     stops.push(
       ctx.data?.on?.("form.replied", (event: any) => {

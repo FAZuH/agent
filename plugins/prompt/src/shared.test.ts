@@ -24,6 +24,7 @@ import {
   promptMarkdown,
   promptsOf,
   promptIDOfForm,
+  reopenFormIDOf,
   titleOf,
   type Prompt,
   type PromptGroup,
@@ -186,6 +187,11 @@ describe("form ids", () => {
     const form = formIDOf("mht2x1-abc123")
     expect(form.startsWith("frm_")).toBe(true)
     expect(promptIDOfForm(form)).toBe("mht2x1-abc123")
+  })
+
+  test("a reopened card still points at its prompt", () => {
+    expect(promptIDOfForm(reopenFormIDOf("mht2x1-abc123", 1794880000000))).toBe("mht2x1-abc123")
+    expect(reopenFormIDOf("p1", 1000)).not.toBe(reopenFormIDOf("p1", 2000))
   })
 
   test("another plugin's form is not ours", () => {

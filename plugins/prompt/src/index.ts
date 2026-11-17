@@ -1,12 +1,18 @@
 // fazuh.prompt — the prompt-user prompts as records, not as plain text at the
-// end of a reply.
-//
-// The tool replaces the skill block: the agent calls `prompt_user`, the user
-// answers in the Prompts view, and the reply keeps only the answer. One name,
-// one owner: the server owns the tool and the file store; the TUI (./tui)
-// half only reads and answers through the RPC.
+// end of a reply. The server owns the tool, the record store, and the native
+// question card; the TUI and Desktop halves only read and answer through RPC.
+import { cancelNativeForm, openNativeForm } from "./form.ts"
 import { Contract } from "./rpc.ts"
-import { answerText, isEmpty, promptsOf, promptID, type Prompt, type Prompts } from "./shared.ts"
+import {
+  answerText,
+  answersOfForm,
+  isEmpty,
+  promptsOf,
+  promptID,
+  promptIDOfForm,
+  type Prompt,
+  type Prompts,
+} from "./shared.ts"
 import { appendPrompt, claimPrompt, readMany, readPrompts, updatePrompt } from "./store.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -20,17 +26,24 @@ type BlockOutcome =
 /**
  * Host state that must outlive one plugin setup. The server loads the plugin
  * per location, so a `prompt_user` call can run in one instance while its
- * answer RPC lands on another; the waiter would then never resolve and the
- * session would stay blocked. The same registry also lets whichever instance
- * registered last emit the `changed` event.
+ * answer RPC or form event lands on another. The waiter would then never
+ * resolve and the session would stay blocked.
  */
 interface PromptRuntime {
   blocked: Map<string, (outcome: BlockOutcome) => void>
+  forms: Map<string, string>
   emit?: (event: { sessionID: string; prompt: Prompt }) => Promise<void>
 }
 
 const runtimeKey = Symbol.for("fazuh.prompt.runtime")
-const runtime: PromptRuntime = ((globalThis as any)[runtimeKey] ??= { blocked: new Map() })
+// A hot reload keeps the old global object on globalThis. Fill missing fields
+// instead of replacing it, so pending waiters from the previous code survive.
+const previous: Partial<PromptRuntime> = (globalThis as any)[runtimeKey] ?? {}
+const runtime: PromptRuntime = ((globalThis as any)[runtimeKey] = {
+  blocked: previous.blocked ?? new Map(),
+  forms: previous.forms ?? new Map(),
+  emit: previous.emit,
+})
 
 const promptInput = {
   type: "object",
@@ -81,6 +94,149 @@ function shortDescription(value: unknown): string | undefined {
 export default {
   id: "fazuh.prompt",
   setup: async (ctx: any) => {
+    function emitChanged(prompt: Prompt): void {
+      if (!runtime.emit) return
+      void runtime.emit({ sessionID: prompt.sessionID, prompt }).catch((cause) =>
+        console.error(`[prompt] emit failed: ${message(cause)}`),
+      )
+    }
+
+    function dropForm(sessionID: string, promptID: string): void {
+      const formID = runtime.forms.get(promptID)
+      if (formID) void cancelNativeForm(sessionID, formID)
+      runtime.forms.delete(promptID)
+    }
+
+    /**
+     * The host shows one question card at a time and queues the rest. Reopening
+     * a card means replacing the one on screen, so close every card this plugin
+     * opened in the session before showing the new one. A prompt's record stays
+     * unanswered; only its card goes away.
+     */
+    async function closeSessionForms(sessionID: string): Promise<void> {
+      const owned = new Set(readPrompts(sessionID).map((prompt) => prompt.id))
+      const pending: Promise<void>[] = []
+      for (const [promptID, formID] of runtime.forms) {
+        if (!owned.has(promptID)) continue
+        pending.push(cancelNativeForm(sessionID, formID))
+        runtime.forms.delete(promptID)
+      }
+      await Promise.all(pending)
+    }
+
+    function withRecommendations(prompt: Prompt, answers: Record<string, string>): Record<string, string> {
+      const resolved = { ...answers }
+      for (const [index, question] of (prompt.prompts?.questions ?? []).entries()) {
+        const key = String(index)
+        if (!resolved[key]?.trim() && question.recommendation?.trim()) {
+          resolved[key] = question.recommendation.trim()
+        }
+      }
+      return resolved
+    }
+
+    /** One answer per record, then either the waiter or the reporting session. */
+    async function settleAnswer(
+      sessionID: string,
+      promptID: string,
+      answers: Record<string, string>,
+      mode: "steer" | "queue",
+      fill = false,
+    ) {
+      const prompt = readPrompts(sessionID).find((item) => item.id === promptID)
+      if (!prompt) return { ok: false, delivered: false, error: "prompt not found" }
+      const resolved = fill ? withRecommendations(prompt, answers) : answers
+      // One answer per record. A second call comes from a repeated keybind, a
+      // leaked handler, or the native card and the panel being answered both.
+      const claimed = claimPrompt(
+        sessionID,
+        promptID,
+        (current) => Boolean(current.answeredAt),
+        (current) => ({
+          ...current,
+          answers: { ...(current.answers ?? {}), ...resolved },
+          answeredAt: Date.now(),
+        }),
+      )
+      if (!claimed) return { ok: true, delivered: false, duplicate: true }
+      runtime.forms.delete(promptID)
+      emitChanged(claimed)
+      const waiter = runtime.blocked.get(promptID)
+      if (waiter) {
+        runtime.blocked.delete(promptID)
+        waiter({ type: "answered", answers: resolved })
+        return { ok: true, delivered: true }
+      }
+      let delivered = false
+      let error: string | undefined
+      try {
+        await ctx.session.prompt({ sessionID, text: answerText(claimed, resolved), delivery: mode })
+        delivered = true
+      } catch (cause) {
+        error = message(cause)
+        // Nothing reached the agent, so release the claim and let the next
+        // answer try again.
+        const released = updatePrompt(sessionID, promptID, (current) => ({
+          ...current,
+          answeredAt: undefined,
+        }))
+        if (released) emitChanged(released)
+      }
+      return { ok: true, delivered, ...(error ? { error } : {}) }
+    }
+
+    function settleDismiss(sessionID: string, promptID: string) {
+      const waiter = runtime.blocked.get(promptID)
+      runtime.blocked.delete(promptID)
+      dropForm(sessionID, promptID)
+      const updated = updatePrompt(sessionID, promptID, (current) => ({
+        ...current,
+        dismissedAt: Date.now(),
+      }))
+      if (updated) emitChanged(updated)
+      waiter?.({ type: "dismissed" })
+      return { ok: Boolean(updated) }
+    }
+
+    function settleDefer(sessionID: string, promptID: string) {
+      const waiter = runtime.blocked.get(promptID)
+      runtime.blocked.delete(promptID)
+      dropForm(sessionID, promptID)
+      waiter?.({ type: "deferred" })
+      return { ok: true }
+    }
+
+    /** Reopen one prompt, or the newest unanswered one, as a fresh card. */
+    async function reopenLatest(sessionID: string, promptID?: string): Promise<{ ok: boolean; reason?: string }> {
+      if (!sessionID) return { ok: false, reason: "no session" }
+      const prompts = readPrompts(sessionID)
+      const target = promptID
+        ? prompts.find((item) => item.id === promptID)
+        : prompts
+            .slice()
+            .reverse()
+            .find(
+              (prompt) =>
+                !prompt.answeredAt &&
+                !prompt.dismissedAt &&
+                (prompt.prompts?.questions?.length ?? 0) > 0,
+            )
+      if (!target) {
+        return {
+          ok: false,
+          reason: promptID ? "That prompt is no longer available." : "No unanswered prompts in this session.",
+        }
+      }
+      if (!(target.prompts?.questions?.length ?? 0)) {
+        return { ok: false, reason: "That prompt has no questions to show as a card." }
+      }
+      await closeSessionForms(sessionID)
+      const opened = await openNativeForm(target, true)
+      if (!opened?.created) return { ok: false, reason: "Could not reopen the prompt as a question card." }
+      runtime.forms.set(target.id, opened.id)
+      return { ok: true }
+    }
+
     if (typeof ctx.rpc?.register !== "function") {
       console.error("[prompt] ctx.rpc.register is unavailable; the view cannot list prompts")
     } else {
@@ -101,87 +257,16 @@ export default {
             for (const [key, value] of Object.entries(raw)) {
               if (typeof value === "string" && value.trim()) answers[key] = value.trim()
             }
-            const prompt = readPrompts(sessionID).find((item) => item.id === promptID)
-            if (!prompt) return { ok: false, delivered: false, error: "prompt not found" }
-            // One answer per record. A second call comes from a repeated
-            // keybind or a leaked handler, and each prompt call posts its own
-            // message, so without this claim the same text lands in the chat
-            // twice. A blocking prompt_user resolves through the waiter below
-            // and never posts the text at all.
-            const claimed = claimPrompt(
-              sessionID,
-              promptID,
-              (current) => Boolean(current.answeredAt),
-              (current) => ({
-                ...current,
-                answers: { ...(current.answers ?? {}), ...answers },
-                answeredAt: Date.now(),
-              }),
-            )
-            if (!claimed) return { ok: true, delivered: false, duplicate: true }
-            if (runtime.emit) {
-              void runtime.emit({ sessionID, prompt: claimed }).catch((cause) =>
-                console.error(`[prompt] emit failed: ${message(cause)}`),
-              )
-            }
-            const waiter = runtime.blocked.get(promptID)
-            if (waiter) {
-              runtime.blocked.delete(promptID)
-              waiter({ type: "answered", answers })
-              return { ok: true, delivered: true }
-            }
-            let delivered = false
-            let error: string | undefined
-            try {
-              await ctx.session.prompt({
-                sessionID,
-                text: answerText(claimed, answers),
-                delivery: mode,
-              })
-              delivered = true
-            } catch (cause) {
-              error = message(cause)
-              // Nothing reached the agent, so release the claim and let the
-              // next answer try again.
-              const released = updatePrompt(sessionID, promptID, (current) => ({
-                ...current,
-                answeredAt: undefined,
-              }))
-              if (released && runtime.emit) {
-                void runtime.emit({ sessionID, prompt: released }).catch((cause) =>
-                  console.error(`[prompt] emit failed: ${message(cause)}`),
-                )
-              }
-            }
-            return { ok: true, delivered, ...(error ? { error } : {}) }
+            return settleAnswer(sessionID, promptID, answers, mode)
           },
-          dismiss: async (input: any) => {
-            const sessionID = String(input?.sessionID ?? "")
-            const promptID = String(input?.promptID ?? "")
-            const waiter = runtime.blocked.get(promptID)
-            runtime.blocked.delete(promptID)
-            try {
-              const updated = updatePrompt(sessionID, promptID, (current) => ({
-                ...current,
-                dismissedAt: Date.now(),
-              }))
-              if (updated && runtime.emit) {
-                void runtime.emit({ sessionID, prompt: updated }).catch((cause) =>
-                  console.error(`[prompt] emit failed: ${message(cause)}`),
-                )
-              }
-              return { ok: Boolean(updated) }
-            } finally {
-              waiter?.({ type: "dismissed" })
-            }
-          },
-          defer: async (input: any) => {
-            const promptID = String(input?.promptID ?? "")
-            const waiter = runtime.blocked.get(promptID)
-            runtime.blocked.delete(promptID)
-            waiter?.({ type: "deferred" })
-            return { ok: true }
-          },
+          dismiss: async (input: any) =>
+            settleDismiss(String(input?.sessionID ?? ""), String(input?.promptID ?? "")),
+          defer: async (input: any) => settleDefer(String(input?.sessionID ?? ""), String(input?.promptID ?? "")),
+          reopen: async (input: any) =>
+            reopenLatest(
+              String(input?.sessionID ?? ""),
+              typeof input?.promptID === "string" ? input.promptID : undefined,
+            ),
         })
         runtime.emit = (event) => registration.events.emit("changed", event)
       } catch (error) {
@@ -189,30 +274,55 @@ export default {
       }
     }
 
+    // The native card is answered on any client, including ones with no
+    // plugin UI half. Settle the same record the RPC handlers settle.
+    try {
+      if (typeof ctx?.event?.subscribe === "function") {
+        const stream = ctx.event.subscribe({ types: ["form.replied", "form.cancelled"] })
+        if (stream) {
+          void (async () => {
+            for await (const event of stream) {
+              const promptID = promptIDOfForm(String(event?.data?.id ?? ""))
+              if (!promptID) continue
+              const sessionID = String(event?.data?.sessionID ?? "")
+              if (!sessionID) continue
+              if (event.type === "form.replied") {
+                await settleAnswer(sessionID, promptID, answersOfForm(event?.data?.answer), "steer", true)
+              } else if (event.type === "form.cancelled") {
+                settleDefer(sessionID, promptID)
+              }
+            }
+          })()
+        }
+      }
+    } catch (error) {
+      console.error(`[prompt] form event subscription failed: ${message(error)}`)
+    }
+
     function save(sessionID: string, description: string, prompts: Prompts): Prompt {
-      const at = Date.now()
       const prompt: Prompt = {
         id: promptID(),
         sessionID,
-        at,
+        at: Date.now(),
         title: "",
         description,
         prompts,
       }
       prompt.title = prompts.questions?.[0]?.title ?? prompts.procedures?.[0]?.title ?? "Prompts"
       appendPrompt(prompt)
-      if (runtime.emit)
-        void runtime.emit({ sessionID, prompt }).catch((error) =>
-          console.error(`[prompt] emit failed: ${message(error)}`),
-        )
       return prompt
+    }
+
+    async function openCard(prompt: Prompt, reopen = false): Promise<void> {
+      const opened = await openNativeForm(prompt, reopen)
+      if (opened) runtime.forms.set(prompt.id, opened.id)
     }
 
     await ctx.tool.transform((tools: any) => {
       tools.add({
         name: "prompt_user",
         description:
-          "Call this instead of printing the prompt-user block in your reply. It stores the procedures and questions in the session's Prompts view (TUI sidebar), where the user can answer them. `description` is required: the short slot label, at most 35 characters. Do not repeat them in the reply. Set `block: true` to wait for an answer in this turn; the tool result carries it. Blocking needs at least one question. Use when the user must decide something or run steps, per the @prompt-user skill.",
+          "Call this instead of printing the prompt-user block in your reply. It stores the procedures and questions, opens them as a native question card on every client, and lists them in the Prompts view. `description` is required: the short slot label, at most 35 characters. Do not repeat them in the reply. Set `block: true` to wait for an answer in this turn; the tool result carries it. Blocking needs at least one question. Use when the user must decide something or run steps, per the @prompt-user skill.",
         input: promptInput,
         execute: async (input: any, tctx: any) => {
           const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
@@ -229,24 +339,34 @@ export default {
           }
           try {
             const prompt = save(sessionID, description, prompts)
-            if (!block) {
-              return { content: `Saved as prompt ${prompt.id}; it is in the Prompts view. Do not repeat it here.` }
-            }
-            const outcome = await new Promise<BlockOutcome>((resolve) => {
-              runtime.blocked.set(prompt.id, resolve)
-              // The turn can be interrupted while the prompt waits. Drop the
-              // waiter so a later answer falls back to a normal user message
-              // instead of resolving a tool call that no longer exists.
-              const signal = tctx?.abort
-              if (!signal || typeof signal.addEventListener !== "function") return
-              const onAbort = () => {
-                if (runtime.blocked.get(prompt.id) !== resolve) return
-                runtime.blocked.delete(prompt.id)
-                resolve({ type: "aborted" })
+            // Register the waiter before any await: an answer can land the
+            // moment the record reaches the store.
+            const waiting = block
+              ? new Promise<BlockOutcome>((resolve) => {
+                  runtime.blocked.set(prompt.id, resolve)
+                  // The turn can be interrupted while the prompt waits. Drop
+                  // the waiter and the card so a late answer falls back to a
+                  // message.
+                  const signal = tctx?.abort
+                  if (!signal || typeof signal.addEventListener !== "function") return
+                  const onAbort = () => {
+                    if (runtime.blocked.get(prompt.id) !== resolve) return
+                    runtime.blocked.delete(prompt.id)
+                    dropForm(sessionID, prompt.id)
+                    resolve({ type: "aborted" })
+                  }
+                  if (signal.aborted) onAbort()
+                  else signal.addEventListener("abort", onAbort, { once: true })
+                })
+              : undefined
+            await openCard(prompt)
+            emitChanged(prompt)
+            if (!waiting) {
+              return {
+                content: `Saved as prompt ${prompt.id}; it is in the Prompts view and open as a question card. Do not repeat it here.`,
               }
-              if (signal.aborted) onAbort()
-              else signal.addEventListener("abort", onAbort, { once: true })
-            })
+            }
+            const outcome = await waiting
             if (outcome.type === "answered") {
               const latest = readPrompts(sessionID).find((item) => item.id === prompt.id) ?? prompt
               return { content: answerText(latest, outcome.answers) }
@@ -264,6 +384,20 @@ export default {
             }
           } catch (error) {
             return { content: `prompt_user failed: ${message(error)}` }
+          }
+        },
+      })
+    })
+
+    await ctx.command.transform((draft: any) => {
+      draft.add({
+        name: "prompt-latest",
+        description: "Reopen the latest unanswered prompt as a question card.",
+        execute: async (input: any) => {
+          const sessionID = String(input?.sessionID ?? "")
+          const result = await reopenLatest(sessionID)
+          if (!result.ok && result.reason && sessionID) {
+            await ctx.session.synthetic({ sessionID, text: result.reason, resume: false })
           }
         },
       })

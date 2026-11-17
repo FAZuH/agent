@@ -2,65 +2,69 @@ import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { MenuItem, Panel, Plugin, Style } from "@opencode/plugin/gui"
 import { createPromptView, type PromptViewState } from "./gui-controller.ts"
 import { Contract } from "./rpc.ts"
-import { ago, descriptionOf, groupBySession, markdownOf, needsAnswer } from "./shared.ts"
+import { ago, descriptionOf, groupBySession, markdownOf, needsAnswer, titleOf, type Prompt } from "./shared.ts"
 
 const TAB = { id: "prompt-view-v2", title: "Prompts", closable: "compact" as const }
 const CSS = `
-.fazuh-prompts { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; min-width: 0; padding: 12px; overflow-wrap: anywhere; }
-.fazuh-prompts button { cursor: pointer; min-height: 44px; }
-.fazuh-prompts button:disabled { cursor: not-allowed; }
+.fazuh-prompts { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; min-width: 0; padding: 12px; overflow-wrap: anywhere; }
+.fazuh-prompts button { cursor: pointer; }
 .fazuh-prompts button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.fazuh-prompts-agents { display: flex; flex-direction: column; gap: 4px; max-height: 35%; overflow-y: auto; flex-shrink: 0; }
-.fazuh-prompts-agent { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: start; padding: 8px; border: 1px solid var(--border-weak-base); border-radius: 4px; background: transparent; color: inherit; }
-.fazuh-prompts-agent:hover { background: var(--surface-base-hover); }
-.fazuh-prompts-agent:active { transform: translateY(1px); }
-.fazuh-prompts-agent[aria-pressed=true] { border-color: currentColor; }
-.fazuh-prompts-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.fazuh-prompts-content { flex: 1; min-height: 0; overflow: auto; }
+.fazuh-prompts-alert { display: flex; gap: 8px; align-items: center; }
+.fazuh-prompts-head { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.fazuh-prompts-head strong { font-size: 13px; }
+.fazuh-prompts-head span { opacity: .65; font-size: 12px; }
+.fazuh-prompts-tabs { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.fazuh-prompts-tab { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border-weak-base); border-radius: 999px; background: transparent; color: inherit; font-size: 12px; }
+.fazuh-prompts-tab[aria-pressed=true] { border-color: currentColor; background: var(--surface-base-hover); }
+.fazuh-prompts-tab i { font-style: normal; opacity: .7; font-size: 11px; }
+.fazuh-prompts-list { display: flex; flex-direction: column; gap: 2px; max-height: 34%; overflow-y: auto; flex-shrink: 0; border: 1px solid var(--border-weak-base); border-radius: 6px; padding: 4px; }
+.fazuh-prompts-row { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 8px; width: 100%; text-align: start; padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font-size: 13px; }
+.fazuh-prompts-row:hover { background: var(--surface-base-hover); }
+.fazuh-prompts-row[aria-current=true] { background: var(--surface-base-hover); box-shadow: inset 2px 0 currentColor; }
+.fazuh-prompts-row > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fazuh-prompts-dot { width: 6px; height: 6px; border-radius: 50%; border: 1px solid currentColor; }
+.fazuh-prompts-dot[data-open=true] { background: #e0a458; border-color: #e0a458; }
+.fazuh-prompts-row small { opacity: .6; font-size: 11px; white-space: nowrap; }
+.fazuh-prompts-detail { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.fazuh-prompts-detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-shrink: 0; }
+.fazuh-prompts-detail-head strong { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fazuh-prompts-state { font-size: 11px; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--border-weak-base); opacity: .8; white-space: nowrap; flex-shrink: 0; }
+.fazuh-prompts-content { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--border-weak-base); border-radius: 6px; padding: 8px 10px; }
+.fazuh-prompts-actions { display: flex; justify-content: flex-end; flex-shrink: 0; }
 `
+
+/** One line for a session chip. */
+function shortTitle(value: string): string {
+  return value.length > 28 ? `${value.slice(0, 27)}…` : value
+}
+
+function statusOf(prompt: Prompt): string {
+  if (prompt.answeredAt) return "Answered"
+  if (prompt.dismissedAt) return "Dismissed"
+  return "Awaiting answer"
+}
 
 function PromptsView(props: { ctx: any; session: any; server: any }) {
   const ui = props.ctx.ui
   const [state, setState] = createSignal<PromptViewState>({ prompts: [], loading: true })
   const [active, setActive] = createSignal<string>()
-  const [index, setIndex] = createSignal<number>()
+  const [selected, setSelected] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
   const rpc = props.server.client.rpc(Contract)
   const view = createPromptView(
     {
       list: (input) => rpc.list(input),
-      answer: (input) => rpc.answer(input),
-      dismiss: (input) => rpc.dismiss(input),
-      defer: (input) => rpc.defer(input),
+      reopen: (input) => rpc.reopen(input),
       subscribe: (listener) => rpc.events.on("changed", (event: any) => listener(event.data)),
     },
     {
       update: setState,
-      question: (question, value) =>
-        props.ctx.dialogs.prompt({
-          title: question.title,
-          description: question.body,
-          placeholder: question.recommendation ?? "Your answer",
-          value: value || question.recommendation || "",
-          submit: "Continue",
-        }),
-      delivery: () =>
-        props.ctx.dialogs.select({
-          title: "Send answers",
-          options: [
-            {
-              title: "Steer",
-              description: "Wake an idle agent, or wait for its running turn to end",
-              value: "steer",
-            },
-            { title: "Queue", description: "Deliver after the agent's current turn", value: "queue" },
-          ],
-        }),
       error: (description) =>
-        props.ctx.toast.show({ title: "Prompt action failed", description, variant: "error" }),
+        props.ctx.toast.show({ title: "Prompt", description, variant: "error" }),
     },
   )
   onCleanup(view.dispose)
+
   const family = () => {
     const id = props.session.id
     const ids = props.server.data.session.family(id)
@@ -69,24 +73,23 @@ function PromptsView(props: { ctx: any; session: any; server: any }) {
   createEffect(() => {
     void view.load(family())
   })
-  createEffect(() => {
-    props.session.id
-    setActive(undefined)
-    setIndex(undefined)
-  })
+
   const groups = () =>
     groupBySession(state().prompts).sort(
       (a, b) =>
         Number(b.prompts.some(needsAnswer)) - Number(a.prompts.some(needsAnswer)) ||
         (b.prompts.at(-1)?.at ?? 0) - (a.prompts.at(-1)?.at ?? 0),
     )
-  const selected = () => groups().find((group) => group.sessionID === active()) ?? groups()[0]
-  const position = () =>
-    Math.max(
-      0,
-      Math.min(index() ?? (selected()?.prompts.length ?? 1) - 1, (selected()?.prompts.length ?? 1) - 1),
-    )
-  const current = () => selected()?.prompts[position()]
+  const group = () => groups().find((item) => item.sessionID === active()) ?? groups()[0]
+  const prompts = () => (group()?.prompts ?? []).slice().sort((a, b) => b.at - a.at)
+
+  createEffect(() => {
+    const chosen = selected()
+    if (chosen && prompts().some((prompt) => prompt.id === chosen)) return
+    setSelected(prompts().find(needsAnswer)?.id ?? prompts()[0]?.id)
+  })
+
+  const current = () => prompts().find((prompt) => prompt.id === selected()) ?? prompts()[0]
   const title = (id: string) => props.server.data.session.get(id)?.title || id
   const act = async (action: () => Promise<void>) => {
     if (busy()) return
@@ -97,78 +100,90 @@ function PromptsView(props: { ctx: any; session: any; server: any }) {
       setBusy(false)
     }
   }
+
   return (
     <section class="fazuh-prompts" aria-label="Prompts">
       <Show when={state().loading}>
         <p role="status">Loading prompts…</p>
       </Show>
       <Show when={state().error}>
-        <div role="alert">
-          <p>{state().error}</p>
+        <div class="fazuh-prompts-alert" role="alert">
+          <span>{state().error}</span>
           <ui.Button onClick={() => void view.load(family())}>Retry</ui.Button>
         </div>
       </Show>
-      <Show when={!state().loading && !state().error && !groups().length}>
-        <p>No prompts yet.</p>
-      </Show>
-      <div class="fazuh-prompts-agents" aria-label="Agents">
-        <For each={groups()}>
-          {(group) => (
-            <button
-              class="fazuh-prompts-agent"
-              aria-pressed={selected()?.sessionID === group.sessionID}
-              onClick={() => {
-                setActive(group.sessionID)
-                setIndex(undefined)
-              }}
-            >
-              <strong>{title(group.sessionID)}</strong>
-              <span>
-                {descriptionOf(group.prompts.at(-1)!)} · {ago(group.prompts.at(-1)!.at)}
-              </span>
-              <span>{group.prompts.some(needsAnswer) ? "Awaiting answer" : "No unanswered questions"}</span>
-            </button>
-          )}
-        </For>
-      </div>
-      <Show when={current()}>
-        {(prompt) => (
-          <>
-            <div class="fazuh-prompts-toolbar">
-              <ui.Button disabled={position() === 0} onClick={() => setIndex(position() - 1)}>
-                Older
-              </ui.Button>
-              <span>
-                {position() + 1}/{selected()?.prompts.length}
-              </span>
-              <ui.Button
-                disabled={position() >= (selected()?.prompts.length ?? 1) - 1}
-                onClick={() => setIndex(position() + 1)}
-              >
-                Newer
-              </ui.Button>
-              <Show when={needsAnswer(prompt())}>
-                <ui.Button
-                  variant="contrast"
-                  busy={busy()}
-                  onClick={() => void act(() => view.answer(prompt()))}
+
+      <Show when={groups().length > 0} fallback={<p>No prompts yet.</p>}>
+        <div class="fazuh-prompts-head">
+          <strong>{title(group()?.sessionID ?? "")}</strong>
+          <span>
+            {group()?.prompts.length} prompts · {group()?.prompts.filter(needsAnswer).length} awaiting
+          </span>
+        </div>
+
+        <Show when={groups().length > 1}>
+          <div class="fazuh-prompts-tabs" role="group" aria-label="Sessions">
+            <For each={groups()}>
+              {(item) => (
+                <button
+                  class="fazuh-prompts-tab"
+                  aria-pressed={group()?.sessionID === item.sessionID}
+                  onClick={() => {
+                    setActive(item.sessionID)
+                    setSelected(undefined)
+                  }}
                 >
-                  Answer
-                </ui.Button>
-                <ui.Button disabled={busy()} onClick={() => void act(() => view.dismiss(prompt()))}>
-                  Dismiss
-                </ui.Button>
+                  {shortTitle(title(item.sessionID))}
+                  <Show when={item.prompts.some(needsAnswer)}>
+                    <i>{item.prompts.filter(needsAnswer).length}</i>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+
+        <div class="fazuh-prompts-list" aria-label="Prompt history">
+          <For each={prompts()}>
+            {(prompt) => (
+              <button
+                class="fazuh-prompts-row"
+                aria-current={current()?.id === prompt.id}
+                aria-label={`${titleOf(prompt)} — ${statusOf(prompt)}, ${ago(prompt.at)}`}
+                onClick={() => setSelected(prompt.id)}
+              >
+                <span class="fazuh-prompts-dot" data-open={needsAnswer(prompt)} />
+                <span>{titleOf(prompt)}</span>
+                <small>{ago(prompt.at)}</small>
+              </button>
+            )}
+          </For>
+        </div>
+
+        <Show when={current()}>
+          {(prompt) => (
+            <div class="fazuh-prompts-detail">
+              <div class="fazuh-prompts-detail-head">
+                <strong>{descriptionOf(prompt())}</strong>
+                <span class="fazuh-prompts-state">{statusOf(prompt())}</span>
+              </div>
+              <div class="fazuh-prompts-content">
+                <ui.Markdown text={markdownOf(prompt())} />
+              </div>
+              <Show when={needsAnswer(prompt())}>
+                <div class="fazuh-prompts-actions">
+                  <ui.Button
+                    variant="contrast"
+                    busy={busy()}
+                    onClick={() => void act(() => view.reopen(prompt().sessionID, prompt().id))}
+                  >
+                    Reopen card
+                  </ui.Button>
+                </div>
               </Show>
             </div>
-            <strong>{descriptionOf(prompt())}</strong>
-            <Show when={prompt().answeredAt || prompt().dismissedAt}>
-              <p role="status">{prompt().answeredAt ? "Answered" : "Dismissed"}</p>
-            </Show>
-            <div class="fazuh-prompts-content">
-              <ui.Markdown text={markdownOf(prompt())} />
-            </div>
-          </>
-        )}
+          )}
+        </Show>
       </Show>
     </section>
   )

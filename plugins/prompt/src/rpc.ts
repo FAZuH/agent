@@ -92,6 +92,26 @@ export const Contract = {
         additionalProperties: false,
       },
     },
+    reopen: {
+      input: {
+        type: "object",
+        properties: {
+          sessionID: { type: "string" },
+          promptID: { type: "string" },
+        },
+        required: ["sessionID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          reason: { type: "string" },
+        },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
   },
   events: {
     changed: {

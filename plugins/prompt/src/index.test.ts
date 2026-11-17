@@ -7,7 +7,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -18,13 +18,29 @@ let handlers: Record<string, any>
 let prompts: string[]
 let deliveries: string[]
 let store: typeof import("./store.ts")
+let formEmit: (event: any) => void
 
 /** One plugin setup, as the host does per location. */
 async function setupHost() {
+  const waiters: ((result: IteratorResult<any>) => void)[] = []
+  const stream = {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    next() {
+      return new Promise<IteratorResult<any>>((resolve) => waiters.push(resolve))
+    },
+  }
+  formEmit = (event: any) => {
+    const waiter = waiters.shift()
+    if (waiter) waiter({ value: event, done: false })
+  }
   const localTools: any[] = []
   const localHandlers: Record<string, any> = {}
   await plugin.setup({
     tool: { transform: async (fn: any) => fn({ add: (tool: any) => localTools.push(tool) }) },
+    command: { transform: async (fn: any) => fn({ add: (_command: any) => {} }) },
+    event: { subscribe: () => stream },
     session: {
       prompt: async (input: any) => {
         prompts.push(String(input?.text ?? ""))
@@ -44,6 +60,7 @@ async function setupHost() {
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "prompt-plugin-"))
   process.env.OPENCODE_PROMPT_STATE_HOME = dir
+  process.env.OPENCODE_PROMPT_NO_NATIVE_FORM = "1"
   tools = []
   handlers = {}
   prompts = []
@@ -57,6 +74,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   delete process.env.OPENCODE_PROMPT_STATE_HOME
+  delete process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -331,5 +349,76 @@ describe("tools", () => {
     )
     expect(result.content).toContain("block requires at least one question")
     expect(store.readPrompts("ses_block_procedure")).toHaveLength(0)
+  })
+
+  test("reopen refuses a prompt that does not exist", async () => {
+    const result = await handlers.reopen({ sessionID: "ses_missing", promptID: "no-such-prompt" })
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain("no longer available")
+  })
+
+  test("reopening another card closes the one on screen first", async () => {
+    const priorState = process.env.XDG_STATE_HOME
+    const priorOff = process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
+    const tmp = mkdtempSync(join(tmpdir(), "prompt-reopen-"))
+    mkdirSync(join(tmp, "opencode"), { recursive: true })
+    writeFileSync(
+      join(tmp, "opencode", "service.json"),
+      JSON.stringify({ url: "http://127.0.0.1:4199", password: "x" }),
+    )
+    process.env.XDG_STATE_HOME = tmp
+    delete process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
+    const originalFetch = globalThis.fetch
+    const calls: { method: string; url: string }[] = []
+    globalThis.fetch = (async (input: any, init: any) => {
+      calls.push({ method: String(init?.method), url: String(input) })
+      return new Response("", { status: 200 })
+    }) as typeof globalThis.fetch
+    try {
+      const sid = "ses_reopen_swap"
+      for (const id of ["pA", "pB"]) {
+        store.appendPrompt({
+          id,
+          sessionID: sid,
+          at: 1,
+          title: id,
+          description: id,
+          prompts: { questions: [{ title: `${id} q`, body: "", recommendation: id }] },
+        })
+      }
+      expect((await handlers.reopen({ sessionID: sid, promptID: "pA" })).ok).toBe(true)
+      calls.length = 0
+      expect((await handlers.reopen({ sessionID: sid, promptID: "pB" })).ok).toBe(true)
+      expect(calls.map((call) => call.method)).toEqual(["DELETE", "POST"])
+      expect(calls[0]!.url).toContain("/form/frm_prompt_pA")
+      expect(calls[1]!.url).toContain(`/api/session/${sid}/form`)
+    } finally {
+      globalThis.fetch = originalFetch
+      if (priorState === undefined) delete process.env.XDG_STATE_HOME
+      else process.env.XDG_STATE_HOME = priorState
+      if (priorOff === undefined) delete process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
+      else process.env.OPENCODE_PROMPT_NO_NATIVE_FORM = priorOff
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test("an empty native-card answer takes the recommendation", async () => {
+    const prompt = tools.find((tool) => tool.name === "prompt_user")
+    const pending = prompt.execute(
+      {
+        description: "Card fallback",
+        block: true,
+        questions: [{ title: "card q", body: "wait", recommendation: "the recommendation" }],
+      },
+      { sessionID: "ses_card" },
+    )
+    const id = store.readPrompts("ses_card")[0]!.id
+    formEmit({
+      type: "form.replied",
+      data: { id: `frm_prompt_${id}`, sessionID: "ses_card", answer: {} },
+    })
+    const result = await pending
+    expect(result.content).toContain("card q\nthe recommendation")
+    expect(store.readPrompts("ses_card")[0]?.answers?.["0"]).toBe("the recommendation")
   })
 })
