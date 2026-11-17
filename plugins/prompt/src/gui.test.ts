@@ -52,6 +52,23 @@ test("loads the routed family and exposes loading then its prompts", async () =>
   view.dispose()
 })
 
+test("a family larger than the contract limit is loaded in batches", async () => {
+  const sizes: number[] = []
+  const { view, states } = harness({
+    list: async ({ sessionIDs }) => {
+      sizes.push(sessionIDs.length)
+      return { prompts: [] }
+    },
+  })
+  const ids = Array.from({ length: 250 }, (_, i) => `ses_${i}`).concat("ses_0")
+
+  await view.load(ids)
+
+  expect(sizes).toEqual([200, 50])
+  expect(states.at(-1)).toEqual({ prompts: [], loading: false })
+  view.dispose()
+})
+
 test("a failed list exposes an error and a later load can recover", async () => {
   let unavailable = true
   const { view, states } = harness({

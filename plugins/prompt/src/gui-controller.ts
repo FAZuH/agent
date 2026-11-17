@@ -1,5 +1,7 @@
 import type { Prompt } from "./shared.ts"
 
+const MAX_SESSION_IDS = 200
+
 export interface PromptRPC {
   list(input: { sessionIDs: string[] }): Promise<{ prompts: Prompt[] }>
   reopen(input: { sessionID: string; promptID?: string }): Promise<{ ok: boolean; reason?: string }>
@@ -55,9 +57,16 @@ export function createPromptView(rpc: PromptRPC, dialogs: PromptDialogs) {
     family = sessionIDs.slice()
     update({ prompts: same ? state.prompts : [], loading: true })
     try {
-      const result = await rpc.list({ sessionIDs })
+      // The list contract accepts at most 200 session ids per call. A large
+      // session family would otherwise fail validation and blank the panel.
+      const ids = [...new Set(sessionIDs)]
+      const batches: string[][] = []
+      for (let at = 0; at < ids.length; at += MAX_SESSION_IDS) {
+        batches.push(ids.slice(at, at + MAX_SESSION_IDS))
+      }
+      const results = await Promise.all(batches.map((batch) => rpc.list({ sessionIDs: batch })))
       if (disposed || request !== generation) return
-      update({ prompts: result.prompts, loading: false })
+      update({ prompts: results.flatMap((result) => result.prompts), loading: false })
     } catch (error) {
       if (disposed || request !== generation) return
       update({ prompts: state.prompts, loading: false, error: errorText(error) })
