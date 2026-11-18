@@ -8,7 +8,7 @@ entry as `<plugin-dir>/tui` and loads nothing otherwise.
 Plugin IDs are `fazuh.<name>`. `sync.sh` copies the plugin directory into the
 OpenCode config.
 
-## jev (`fazuh.jev`)
+## jev (`fazuh.watchdog`)
 
 Bounded decisions from [Jev](https://typesafe.ai), TypeSafe's System One decision
 model, over any provider exposing a `/systemone` endpoint. Jev answers typed
@@ -39,13 +39,12 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
 - **`hook_tool_risk`** (off by default): every tool call the host checks for
   permission, inside `hook_tool_risk.actions`, is sent to Jev, which answers
   one of four things — `allow` (the call runs, and the prompt never appears),
-  `ask` (the user is asked), `deny` (the call is blocked and the agent
-  reads the reason), `alert` (the call is blocked, the session is interrupted,
-  and the user is notified). A weak answer changes nothing. A repeated call
-  reuses the first verdict.
+  `propagate` (the user is asked), `deny` (the call is blocked and the agent
+  reads the reason), `abort` (the session stops and the user is notified).
+  A weak answer changes nothing. A repeated call reuses the first verdict.
 - **`hook_tool_standard`** (off by default): the rules file. Every rule that
   matches the call is scored in one call, and a rule over its threshold is
-  violated: `block` denies the call, `ask` asks the user. The file is
+  violated: `block` denies the call, `propagate` routes it to the user. The file is
   YAML (and YAML reads JSON, so a `.json` file works too), a rule may quote a
   file with `{file:<path>}`, and a rule may override the global action and
   threshold. A file that cannot be parsed changes nothing and says so in the
@@ -57,14 +56,14 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   call only, because the plugin passes no `save` array. An unanswered hold
   denies after 60 seconds when it is the session's only pending prompt. State
   under `~/.local/state/opencode/jev/nospawn/`; see [jev.md](jev.md).
-- **`hook_supervisor`** (off by default): resolves a Jev `ask` through a
-  separate supervisor model before the human prompt. It stays off until its own
-  model and endpoint are configured, and adds no second permission hook: the
-  native hold stays open while a bounded investigation runs in the background.
-  The four verdicts are `allow`, `deny`, `abort` and `ask_user`. In trial mode
-  (the default) an `allow` still needs the human's `once`; `ask_user`, failure
-  and budget exhaustion leave the native prompt in place. There is no silent
-  allow. Evidence is read-only project files, search and constrained Git inside
+- **`hook_supervisor`** (off by default): resolves a Jev `propagate`, `deny`, or
+  `abort` through a separate supervisor model before the human prompt. It stays
+  off until its own model and endpoint are configured, and adds no second
+  permission hook: the native hold stays open while a bounded investigation
+  runs in the background. The four verdicts are `allow`, `deny`, `abort` and
+  `propagate`. An `allow` releases the call; a `deny` hands it back to the user;
+  an `abort` stops the session. Failure and budget exhaustion become `propagate`.
+  There is no silent allow. Evidence is read-only project files, search and constrained Git inside
   the configured root, bounded by 30 seconds, three model rounds and six
   evidence calls. This is a workflow guardrail, not a security sandbox; see
   [jev.md](jev.md#the-hooks).
@@ -80,8 +79,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
 - **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
   `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
   own numbers; there are no global thresholds. The `hook_supervisor` rows hold
-  its separate model, endpoint, protocol, key, evidence root, budget and trial
-  mode.
+  its separate model, endpoint, protocol, key, evidence root and budget.
 - **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
   one through once. The grant is spent by the server, so the approved call
   costs no model call and no tokens. The picker is not filtered by the
@@ -324,11 +322,11 @@ fallback for hosts without the plugin.
 
 - **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`): the
   @prompt-user block for a standalone ask. `description` is required and at
-  most 35 characters. `block: true` waits for the answer in the same turn and
-  returns it as the tool result; it needs at least one question. A dismissed
-  blocking prompt returns as dismissed, and a deferred one returns as deferred
-  and stays unanswered. Without `block` the call returns immediately and the
-  answer arrives as a new message.
+  most 35 characters. Calls are non-blocking by default: the tool returns
+  immediately and the answer arrives as a new message. Set `block: true` only
+  when the user explicitly asks to wait for the answer in the same turn; it
+  needs at least one question. A dismissed blocking prompt returns as
+  dismissed, and a deferred one returns as deferred and stays unanswered.
 
 Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
@@ -344,7 +342,10 @@ The server also opens each prompt as a native question card through
 and the web client render only that kind (and `mcp-elicitation` and
 `websearch.provider`). Creating it server-side is what reaches the mobile web
 app, which loads no plugin UI half. Its fields are one per question, with the
-recommendation as the first option and free text still allowed. The server
+recommendation as the first option and free text still allowed. The host paints
+`description ?? title` as the card's question text and never shows `title` on
+its own, and newlines collapse, so each description leads with a bracketed
+title to keep it distinct from the body. The server
 listens for `form.replied` and `form.cancelled` and settles the same record the
 RPC handles, so answering the card, the TUI section, or the Desktop panel all
 take one path. `/prompt-latest` reopens the latest unanswered prompt as a new
@@ -356,17 +357,17 @@ not render as `[object Object]`.
 The Desktop panel is read-only history in three tabs: **Awaiting**, **Answered**
 and **Dismissed**, each with a count. One tab shows at a time; the session bar
 switches sessions when the family has more than one. A card shows the title, a
-one-line preview and the session with a relative time. **View full prompt**
-replaces the list with the whole prompt: a state badge, the session line, the
-Markdown, and **Reopen card** and **Dismiss** for an awaiting record. A single
-`← Prompts` button returns to the tabbed list. The panel does not answer through
+one-line preview and the session with a relative time, plus **Reopen card** and
+**Dismiss** for an awaiting record. **View full prompt** replaces the list with
+the whole prompt: a state badge, the session line, the Markdown, and the same
+two actions. A single `← Prompts` button returns to the tabbed list. The panel does not answer through
 its own dialogs, so the native card is the only answer surface. **Reopen card**
 calls `prompt.reopen` with the prompt id. Because the host shows one card at a
 time and queues later ones, `prompt.reopen` cancels every card this plugin has
 open in that session before creating the new one: the selected prompt replaces
 the card on screen instead of waiting behind it. The prompts themselves stay
-unanswered. **Dismiss** in the full view asks for confirmation, then calls
-`prompt.dismiss` with the session and prompt id.
+unanswered. **Dismiss** asks for confirmation in both the card and the full
+view, then calls `prompt.dismiss` with the session and prompt id.
 
 The Awaiting tab has a bulk bar with the family-wide awaiting count and
 **Dismiss all**. It asks for confirmation, then calls
