@@ -57,6 +57,8 @@ describe("openNativeForm", () => {
     expect(calls[0]!.body.id).toBe("frm_prompt_pw1-abc123")
     expect(calls[0]!.body.metadata.kind).toBe("question")
     expect(calls[0]!.body.fields[0]).toMatchObject({ key: "q0", type: "string" })
+    expect(calls[0]!.body.fields[0].title).toBe("Pick one")
+    expect(calls[0]!.body.fields[0].description).toBe("[Pick one]\n\nwhy")
     expect(calls[0]!.body.fields[0].options[0].value).toBe("first")
   })
 

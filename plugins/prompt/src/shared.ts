@@ -272,11 +272,16 @@ export function formDescription(body: string | undefined): string | undefined {
 export function formFieldsOf(prompt: Prompt): FormField[] {
   return (prompt.prompts?.questions ?? []).map((question, index) => {
     const recommendation = question.recommendation?.trim()
-    const description = formDescription(question.body)
+    const title = question.title?.trim() || `Question ${index + 1}`
+    const body = formDescription(question.body)
+    // The host renders `description ?? title` as plain text and never shows
+    // `title` on its own; newlines collapse, so bracket the title to keep it
+    // distinct from the body on the one line the card actually paints.
+    const description = body ? `[${title}]\n\n${body}` : `[${title}]`
     return {
       key: `q${index}`,
-      title: question.title || `Question ${index + 1}`,
-      ...(description ? { description } : {}),
+      title,
+      description,
       type: "string" as const,
       custom: true,
       ...(recommendation

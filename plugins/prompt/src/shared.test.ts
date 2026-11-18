@@ -222,7 +222,18 @@ describe("formFieldsOf", () => {
     const [field] = formFieldsOf(prompt)
     expect(field?.options).toEqual([{ value: "the first", label: "the first (Recommended)" }])
     expect(field?.placeholder).toBe("the first")
-    expect(field?.description).toBe("why")
+    expect(field?.description).toBe("[Pick one]\n\nwhy")
+  })
+
+  test("the card text brackets the title so it reads apart from the body", () => {
+    const [field] = formFieldsOf(prompt)
+    expect(field?.title).toBe("Pick one")
+    expect(field?.description).toBe("[Pick one]\n\nwhy")
+  })
+
+  test("a question without a body still shows its title", () => {
+    const field = formFieldsOf({ ...base, prompts: { questions: [{ title: "Only title" }] } })[0]
+    expect(field?.description).toBe("[Only title]")
   })
 
   test("a question without a recommendation stays free text", () => {
@@ -251,7 +262,7 @@ describe("formFieldsOf", () => {
     expect(description).toEndWith("… full text in the Prompts section")
     expect(
       formFieldsOf({ ...base, prompts: { questions: [{ title: "tall", body }] } })[0]?.description,
-    ).toBe(description)
+    ).toBe(`[tall]\n\n${description}`)
   })
 })
 
