@@ -16,6 +16,15 @@ permissions:
   - action: "*"
     resource: "*"
     effect: allow
+  - action: external_directory
+    resource: "/tmp/opencode/**"
+    effect: allow
+  - action: edit
+    resource: "/tmp/opencode/**"
+    effect: allow
+  - action: write
+    resource: "/tmp/opencode/**"
+    effect: allow
 ---
 
 Research specialist. Given a question, research the web and return a focused, well-sourced brief.

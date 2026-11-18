@@ -14,6 +14,15 @@ permissions:
   - action: "*"
     resource: "*"
     effect: allow
+  - action: external_directory
+    resource: "/tmp/opencode/**"
+    effect: allow
+  - action: edit
+    resource: "/tmp/opencode/**"
+    effect: allow
+  - action: write
+    resource: "/tmp/opencode/**"
+    effect: allow
 ---
 
 Implement from a spec, ticket, or plan. Follow @implement; drive @tdd (red-green, one vertical slice at a time) at pre-agreed seams where possible. Adding, modifying, or removing tests: load @test-guidelines first (@gui-test-guidelines for UI suites) and follow it.
