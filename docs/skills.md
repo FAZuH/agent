@@ -92,6 +92,7 @@ These skills are loaded only when another skill or agent references them.
 - **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, plugin authoring, plugin loading health, and session forking. Model choice follows the host `AGENTS.md`.
 - **[ocv2-compact](../skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session and wait for its summary.
 - **[opencode-plugin-gui](../skills/ocv2/opencode-plugin-gui/SKILL.md)**: Build plugin Desktop panels that match OpenCode's Preferences UI: settings layout, tokens, row structure, and build/deploy.
+- **[opencode-plugin-gui-verify](../skills/ocv2/opencode-plugin-gui-verify/SKILL.md)**: Verify plugin GUI changes visually: browser check, static renders, headless screenshots, and evidence hand-off.
 
 Run `./sync.sh list` to see the deployed skills, and
 [agent-map](../skills/meta/agent-map/SKILL.md) for what is installed and how to
