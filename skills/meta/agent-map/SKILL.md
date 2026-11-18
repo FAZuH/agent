@@ -19,7 +19,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
    your loaded skill catalog. The narrowest matching skill wins; load it with
    the `skill` tool.
 2. **The jev hook advises on every prompt.** When the `hook_skill_pick` feature is
-   on, the fazuh.jev plugin asks Jev which skill fits and injects one advisory
+   on, the fazuh.jev-skillpick plugin asks Jev which skill fits and injects one advisory
    system line (`Jev routing: consider loading skill @…`). Weigh it, load the
    skill if it fits, ignore it when your own reading disagrees.
 3. **Check agent plugins first** — they need no skill load:
