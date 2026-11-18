@@ -18,7 +18,7 @@ AGENTS_SKILLS="$HOME/.agents/skills"
 REPO_POINTER=".agent-repo"
 # Machine-global install root for repo scripts/ (overridable for tests).
 BIN_DIR="${AGENT_BIN_DIR:-$HOME/.local/bin}"
-TOPS=(skills agents plugins commands instructions)
+TOPS=(skills agents plugins commands instructions lib)
 
 DRY=0
 FORCE=0
@@ -311,6 +311,12 @@ enumerate_items() {
           [[ "$name" == "node_modules" || "$name" == "package.json" || "$name" == "bun.lock" ]] && continue
           [[ -e "$child" ]] || continue
           emit_item "plugins/$name" "plugins/$name"
+        done ;;
+      lib)
+        for child in "$REPO/lib"/*; do
+          name="$(basename "$child")"
+          [[ -d "$child" ]] || continue
+          emit_item "lib/$name" "lib/$name"
         done ;;
       commands)
         while IFS= read -r -d '' child; do
