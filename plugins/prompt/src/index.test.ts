@@ -6,8 +6,8 @@
  *   bun test src/index.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -19,6 +19,7 @@ let prompts: string[]
 let deliveries: string[]
 let store: typeof import("./store.ts")
 let formEmit: (event: any) => void
+let emits: { topic: string; payload: any }[]
 
 /** One plugin setup, as the host does per location. */
 async function setupHost() {
@@ -50,7 +51,13 @@ async function setupHost() {
     rpc: {
       register: async (_contract: any, registered: Record<string, any>) => {
         Object.assign(localHandlers, registered)
-        return { events: { emit: async () => {} } }
+        return {
+          events: {
+            emit: async (topic: string, payload: any) => {
+              emits.push({ topic, payload })
+            },
+          },
+        }
       },
     },
   })
@@ -65,6 +72,7 @@ beforeAll(async () => {
   handlers = {}
   prompts = []
   deliveries = []
+  emits = []
   plugin = (await import("./index.ts")).default
   store = await import("./store.ts")
   const host = await setupHost()
@@ -79,6 +87,12 @@ afterAll(() => {
 })
 
 describe("tools", () => {
+  test("prompt_user is non-blocking by default", () => {
+    const tool = tools.find((item) => item.name === "prompt_user")
+    expect(tool?.input.properties.block.default).toBe(false)
+    expect(tool?.description).toContain("non-blocking by default")
+  })
+
   test("prompt_user saves the procedures and questions the RPC lists", async () => {
     const prompt = tools.find((tool) => tool.name === "prompt_user")
     const result = await prompt.execute(
@@ -489,5 +503,47 @@ describe("tools", () => {
     const result = await pending
     expect(result.content).toContain("card q\nthe recommendation")
     expect(store.readPrompts("ses_card")[0]?.answers?.["0"]).toBe("the recommendation")
+  })
+})
+
+describe("settings RPC", () => {
+  const file = () => join(dir, "settings.json")
+
+  // Each test owns the settings file: the store is one JSON in the state home.
+  beforeEach(() => rmSync(file(), { force: true }))
+
+  test("getSettings returns both visibility defaults when no file exists", async () => {
+    expect(await handlers.getSettings({})).toEqual({ sidebar: true, showPrompts: true })
+  })
+
+  test("setSetting persists one toggle and getSettings reads it back", async () => {
+    expect(await handlers.setSetting({ key: "showPrompts", value: false })).toEqual({ ok: true })
+    expect(await handlers.getSettings({})).toEqual({ sidebar: true, showPrompts: false })
+    expect(JSON.parse(readFileSync(file(), "utf8"))).toEqual({ sidebar: true, showPrompts: false })
+  })
+
+  test("setSetting refuses a key outside the two real settings", async () => {
+    const result = await handlers.setSetting({ key: "theme", value: true })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("key")
+    expect(existsSync(file())).toBe(false)
+  })
+
+  test("setSetting refuses a non-boolean value", async () => {
+    const result = await handlers.setSetting({ key: "sidebar", value: "yes" })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("boolean")
+  })
+
+  test("a successful mutation emits changed with the settings topic", async () => {
+    emits.length = 0
+    await handlers.setSetting({ key: "sidebar", value: false })
+    expect(emits).toContainEqual({ topic: "changed", payload: { topic: "settings" } })
+  })
+
+  test("a rejected mutation emits nothing", async () => {
+    emits.length = 0
+    await handlers.setSetting({ key: "sidebar", value: 1 })
+    expect(emits).toEqual([])
   })
 })

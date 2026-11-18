@@ -1,8 +1,17 @@
 // fazuh.prompt — the prompt-user prompts as records, not as plain text at the
 // end of a reply. The server owns the tool, the record store, and the native
 // question card; the TUI and Desktop halves only read and answer through RPC.
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+
 import { cancelNativeForm, openNativeForm } from "./form.ts"
-import { Contract } from "./rpc.ts"
+import {
+  Contract,
+  DEFAULT_SETTINGS,
+  SETTING_KEYS,
+  type SettingKey,
+  type SettingsInfo,
+} from "./rpc.ts"
 import {
   answerText,
   answersOfForm,
@@ -13,15 +22,45 @@ import {
   type Prompt,
   type Prompts,
 } from "./shared.ts"
-import { appendPrompt, claimPrompt, readMany, readPrompts, updatePrompt } from "./store.ts"
+import { appendPrompt, claimPrompt, PROMPTS_DIR, readMany, readPrompts, updatePrompt } from "./store.ts"
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** The visibility toggles live beside the prompt records, in one state home. */
+const SETTINGS_FILE = join(dirname(PROMPTS_DIR), "settings.json")
+
+/** Missing, partial, or broken settings fall back to the shipped defaults. */
+export function readSettings(): SettingsInfo {
+  try {
+    const row = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")) as Record<string, unknown> | null
+    return {
+      sidebar: row?.sidebar !== false,
+      showPrompts: row?.showPrompts !== false,
+    }
+  } catch {
+    return { ...DEFAULT_SETTINGS }
+  }
+}
+
+/** Validate one toggle and persist it atomically. No fields beyond the two keys. */
+export function writeSetting(key: unknown, value: unknown): { ok: boolean; error?: string } {
+  if (!SETTING_KEYS.includes(key as SettingKey)) return { ok: false, error: "invalid setting key" }
+  if (typeof value !== "boolean") return { ok: false, error: "value must be a boolean" }
+  const next = { ...readSettings(), [key as SettingKey]: value }
+  mkdirSync(dirname(SETTINGS_FILE), { recursive: true })
+  const temp = `${SETTINGS_FILE}.${process.pid}.tmp`
+  writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8", mode: 0o600 })
+  renameSync(temp, SETTINGS_FILE)
+  return { ok: true }
+}
 
 type BlockOutcome =
   | { type: "answered"; answers: Record<string, string> }
   | { type: "dismissed" }
   | { type: "deferred" }
   | { type: "aborted" }
+
+type ChangedEvent = { topic: "prompt"; sessionID: string; prompt: Prompt } | { topic: "settings" }
 
 /**
  * Host state that must outlive one plugin setup. The server loads the plugin
@@ -32,7 +71,7 @@ type BlockOutcome =
 interface PromptRuntime {
   blocked: Map<string, (outcome: BlockOutcome) => void>
   forms: Map<string, string>
-  emit?: (event: { sessionID: string; prompt: Prompt }) => Promise<void>
+  emit?: (event: ChangedEvent) => Promise<void>
 }
 
 const runtimeKey = Symbol.for("fazuh.prompt.runtime")
@@ -51,8 +90,9 @@ const promptInput = {
     description: { type: "string", minLength: 1, maxLength: 35 },
     block: {
       type: "boolean",
+      default: false,
       description:
-        "Wait for the user to answer before returning. Requires at least one question. The tool result carries the answers, or says the user dismissed or deferred the prompt.",
+        "Wait for the answer in this turn. Off by default: omit it so the call returns immediately and the answer arrives as a new message. Set it only when the user explicitly asks to wait. Requires at least one question; the tool result then carries the answer, dismissal, or deferral.",
     },
     procedures: {
       type: "array",
@@ -96,7 +136,7 @@ export default {
   setup: async (ctx: any) => {
     function emitChanged(prompt: Prompt): void {
       if (!runtime.emit) return
-      void runtime.emit({ sessionID: prompt.sessionID, prompt }).catch((cause) =>
+      void runtime.emit({ topic: "prompt", sessionID: prompt.sessionID, prompt }).catch((cause) =>
         console.error(`[prompt] emit failed: ${message(cause)}`),
       )
     }
@@ -281,6 +321,16 @@ export default {
             }
             return { ok: true, count }
           },
+          getSettings: async () => readSettings(),
+          setSetting: async (input: any) => {
+            const result = writeSetting(input?.key, input?.value)
+            if (result.ok) {
+              void registration.events.emit("changed", { topic: "settings" }).catch((cause: unknown) =>
+                console.error(`[prompt] settings emit failed: ${message(cause)}`),
+              )
+            }
+            return result
+          },
         })
         runtime.emit = (event) => registration.events.emit("changed", event)
       } catch (error) {
@@ -336,7 +386,7 @@ export default {
       tools.add({
         name: "prompt_user",
         description:
-          "Call this instead of printing the prompt-user block in your reply. It stores the procedures and questions, opens them as a native question card on every client, and lists them in the Prompts view. `description` is required: the short slot label, at most 35 characters. Do not repeat them in the reply. Set `block: true` to wait for an answer in this turn; the tool result carries it. Blocking needs at least one question. Use when the user must decide something or run steps, per the @prompt-user skill.",
+          "Call this instead of printing the prompt-user block in your reply. It stores the procedures and questions, opens them as a native question card on every client, and lists them in the Prompts view. `description` is required: the short slot label, at most 35 characters. Do not repeat them in the reply. Calls are non-blocking by default: the tool returns immediately and the answer arrives as a new message. Set `block: true` only when the user explicitly asks to wait for the answer in this turn; blocking needs at least one question. Use when the user must decide something or run steps, per the @prompt-user skill.",
         input: promptInput,
         execute: async (input: any, tctx: any) => {
           const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
