@@ -1,8 +1,10 @@
+import { DEFAULT_SETTINGS, type SettingKey, type SettingsInfo } from "./rpc.ts"
 import type { Prompt } from "./shared.ts"
 
 const MAX_SESSION_IDS = 200
 
-export type PromptTab = "awaiting" | "answered" | "dismissed"
+export type PromptTab = "awaiting" | "answered" | "dismissed" | "settings"
+export { type SettingsInfo } from "./rpc.ts"
 
 export function tabOf(prompt: Prompt): PromptTab {
   if (prompt.answeredAt != null) return "answered"
@@ -10,18 +12,27 @@ export function tabOf(prompt: Prompt): PromptTab {
   return "awaiting"
 }
 
+export interface PromptChangedEvent {
+  topic?: string
+  sessionID?: string
+  prompt?: Prompt
+}
+
 export interface PromptRPC {
   list(input: { sessionIDs: string[] }): Promise<{ prompts: Prompt[] }>
   reopen(input: { sessionID: string; promptID?: string }): Promise<{ ok: boolean; reason?: string }>
   dismiss(input: { sessionID: string; promptID: string }): Promise<{ ok: boolean }>
   dismissAll(input: { sessionIDs: string[] }): Promise<{ ok: boolean; count: number }>
-  subscribe(listener: (event: { sessionID: string; prompt: Prompt }) => void): () => void
+  getSettings(): Promise<SettingsInfo>
+  setSetting(input: { key: SettingKey; value: boolean }): Promise<{ ok: boolean; error?: string }>
+  subscribe(listener: (event: PromptChangedEvent) => void): () => void
 }
 
 export interface PromptViewState {
   prompts: Prompt[]
   loading: boolean
   error?: string
+  settings?: SettingsInfo
 }
 
 export interface PromptDialogs {
@@ -65,7 +76,7 @@ export function createPromptView(rpc: PromptRPC, dialogs: PromptDialogs) {
     const request = ++generation
     const same = family.join("\0") === sessionIDs.join("\0")
     family = sessionIDs.slice()
-    update({ prompts: same ? state.prompts : [], loading: true })
+    update({ ...state, prompts: same ? state.prompts : [], loading: true, error: undefined })
     try {
       // The list contract accepts at most 200 session ids per call. A large
       // session family would otherwise fail validation and blank the panel.
@@ -76,19 +87,47 @@ export function createPromptView(rpc: PromptRPC, dialogs: PromptDialogs) {
       }
       const results = await Promise.all(batches.map((batch) => rpc.list({ sessionIDs: batch })))
       if (disposed || request !== generation) return
-      update({ prompts: results.flatMap((result) => result.prompts), loading: false })
+      update({ ...state, prompts: results.flatMap((result) => result.prompts), loading: false, error: undefined })
     } catch (error) {
       if (disposed || request !== generation) return
-      update({ prompts: state.prompts, loading: false, error: errorText(error) })
+      update({ ...state, prompts: state.prompts, loading: false, error: errorText(error) })
+    }
+  }
+
+  async function loadSettings() {
+    if (disposed) return
+    try {
+      const settings = await rpc.getSettings()
+      update({ ...state, settings })
+    } catch (error) {
+      dialogs.error(errorText(error))
     }
   }
 
   const unsubscribe = rpc.subscribe((event) => {
-    if (!disposed && family.includes(event.sessionID)) void load(family)
+    if (disposed) return
+    if (event.topic === "settings") {
+      void loadSettings()
+      return
+    }
+    if (event.sessionID && family.includes(event.sessionID)) void load(family)
   })
 
   return {
     load,
+    loadSettings,
+    async setSetting(key: SettingKey, value: boolean) {
+      try {
+        const result = await rpc.setSetting({ key, value })
+        if (!result.ok) {
+          dialogs.error(result.error || "Could not save the setting")
+          return
+        }
+        update({ ...state, settings: { ...(state.settings ?? DEFAULT_SETTINGS), [key]: value } })
+      } catch (error) {
+        dialogs.error(errorText(error))
+      }
+    },
     /** Reopen one prompt or the latest in the family as a native question card. */
     async reopen(sessionID: string, promptID?: string) {
       try {

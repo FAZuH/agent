@@ -100,3 +100,68 @@ describe("dismiss", () => {
     view.dispose()
   })
 })
+
+describe("settings", () => {
+  test("loadSettings puts the fetched values into view state", async () => {
+    const { view, states } = harness({
+      getSettings: async () => ({ sidebar: false, showPrompts: true }),
+    })
+    await view.loadSettings()
+    expect(states.at(-1)?.settings).toEqual({ sidebar: false, showPrompts: true })
+    view.dispose()
+  })
+
+  test("setSetting forwards the key and value and updates only that field", async () => {
+    const sent: unknown[] = []
+    const { view, states } = harness({
+      getSettings: async () => ({ sidebar: true, showPrompts: true }),
+      setSetting: async (input) => {
+        sent.push(input)
+        return { ok: true }
+      },
+    })
+    await view.loadSettings()
+    await view.setSetting("showPrompts", false)
+    expect(sent).toEqual([{ key: "showPrompts", value: false }])
+    expect(states.at(-1)?.settings).toEqual({ sidebar: true, showPrompts: false })
+    view.dispose()
+  })
+
+  test("setSetting reports a rejected write without changing state", async () => {
+    const { view, errors, states } = harness({
+      getSettings: async () => ({ sidebar: true, showPrompts: true }),
+      setSetting: async () => ({ ok: false, error: "invalid setting key" }),
+    })
+    await view.loadSettings()
+    await view.setSetting("sidebar", false)
+    expect(errors).toEqual(["invalid setting key"])
+    expect(states.at(-1)?.settings).toEqual({ sidebar: true, showPrompts: true })
+    view.dispose()
+  })
+
+  test("a settings changed event reloads settings without refetching prompts", async () => {
+    let listener: ((event: any) => void) | undefined
+    let lists = 0
+    let loads = 0
+    const { view } = harness({
+      list: async () => {
+        lists++
+        return { prompts: [] }
+      },
+      getSettings: async () => {
+        loads++
+        return { sidebar: false, showPrompts: false }
+      },
+      subscribe: (fn) => {
+        listener = fn
+        return () => {}
+      },
+    })
+    await view.load(["ses_child"])
+    expect(lists).toBe(1)
+    listener?.({ topic: "settings" })
+    expect(loads).toBe(1)
+    expect(lists).toBe(1)
+    view.dispose()
+  })
+})

@@ -737,6 +737,18 @@ export default {
     // The server opens the native question card on every client.
     stops.push(
       rpc.events.on("changed", (event: any) => {
+        if (event?.data?.topic === "settings") {
+          void rpc
+            .getSettings()
+            .then((settings: any) => {
+              void setView((draft: any) => {
+                draft.sidebar = settings?.sidebar !== false
+                draft.showPrompts = settings?.showPrompts !== false
+              })
+            })
+            .catch(() => {})
+          return
+        }
         const sessionID = routedID()
         if (sessionID) reload(sessionID)
       }),
@@ -933,20 +945,43 @@ export default {
         { key: "showPrompts", title: "Prompts", note: "section" },
       ] as const
       for (;;) {
+        let settings: any = {
+          sidebar: view.sidebar !== false,
+          showPrompts: view.showPrompts !== false,
+        }
+        try {
+          settings = await rpc.getSettings()
+        } catch {}
         const picked = await ctx.ui.dialog
           .select({
             title: "Prompt settings",
             footerHints: [{ title: "toggle", label: "enter" }],
             options: rows.map((row) => ({
               title: row.title,
-              description: `${row.note} · ${view[row.key] !== false ? "shown" : "hidden"}`,
+              description: `${row.note} · ${settings?.[row.key] !== false ? "shown" : "hidden"}`,
               value: row.key,
             })),
           })
           .catch(() => undefined)
         if (!picked) return
+        const value = settings?.[picked] === false
+        try {
+          const result: any = await rpc.setSetting({ key: picked, value })
+          if (result && result.ok === false) {
+            ctx.ui.toast.show({ message: result.error || "Could not save the setting.", variant: "error" })
+            continue
+          }
+        } catch (error: any) {
+          ctx.ui.toast.show({
+            message: `Could not save the setting: ${error?.message ?? error}`,
+            variant: "error",
+          })
+          continue
+        }
+        // The sidebar renders from this store, so mirror the shared setting
+        // into it after the server has accepted the change.
         await setView((draft: any) => {
-          draft[picked] = draft[picked] === false
+          draft[picked] = value
         })
       }
     }

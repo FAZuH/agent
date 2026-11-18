@@ -48,3 +48,11 @@ test("the shipped GUI registers prompt-view-v2 and its session panel launcher", 
   menu.run()
   expect(opened).toEqual([["fazuh.prompt:prompt-view-v2", session]])
 })
+
+test("the shipped GUI renders OpenCode-style settings rows", () => {
+  const code = readFileSync(join(import.meta.dir, "../dist/gui-experimental.cjs"), "utf8")
+  expect(code).toContain("Panel visibility")
+  expect(code).toContain("Control which prompt sections appear.")
+  expect(code).toContain("data-component=settings-list")
+  expect(code).toContain("data-slot=settings-row-description")
+})
