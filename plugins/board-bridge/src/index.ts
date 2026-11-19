@@ -1,7 +1,9 @@
 import { discoverToken, makeClient } from "./client.ts"
+import { cursorKey, decodeCursorRecord, encodeCursorRecord, hydrateState } from "./persistence.ts"
 import { DEFAULT_CONFIG, emptyState, planWake, readConfig, type WakeState } from "./shared.ts"
 
 export { discoverToken, makeClient } from "./client.ts"
+export { cursorKey, decodeCursorRecord, encodeCursorRecord, hydrateState } from "./persistence.ts"
 export { DEFAULT_CONFIG, emptyState, formatWakePrompt, planWake, readConfig, wakeTarget } from "./shared.ts"
 export type { BoardEvent, BridgeConfig, WakePlan, WakeState } from "./shared.ts"
 
@@ -51,7 +53,30 @@ export default {
     const state = holder[LOOP_KEY]?.state ?? emptyState()
     const controller = new AbortController()
     holder[LOOP_KEY] = { controller, state }
+
+    const storage = ctx.storage
+    const key = cursorKey(url, config.channel)
     let cursor: string | undefined
+    if (storage?.get) {
+      try {
+        const saved = decodeCursorRecord(await storage.get(key))
+        if (saved) {
+          cursor = saved.cursor
+          hydrateState(state, saved)
+        }
+      } catch (error) {
+        console.warn(`[board-bridge] cursor load failed: ${message(error)}`)
+      }
+    }
+
+    const saveCursor = async () => {
+      if (!cursor || !storage?.set || controller.signal.aborted) return
+      try {
+        await storage.set(key, encodeCursorRecord(cursor, state, Date.now()))
+      } catch (error) {
+        console.warn(`[board-bridge] cursor save failed: ${message(error)}`)
+      }
+    }
 
     const loop = async () => {
       while (!controller.signal.aborted) {
@@ -83,6 +108,7 @@ export default {
               console.warn(`[board-bridge] wake failed for ${plan.delivery.sessionID}: ${message(error)}`)
             }
           }
+          await saveCursor()
         } catch (error) {
           if (controller.signal.aborted) break
           console.warn(`[board-bridge] poll failed: ${message(error)}`)
