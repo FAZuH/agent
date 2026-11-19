@@ -258,8 +258,9 @@ file written by `vb serve` under `~/.config/board/local/`. The board URL
 defaults to `http://127.0.0.1:4100/api/board`; set `BOARD_URL` to change it.
 `BOARD_BRIDGE_CHANNEL`, `BOARD_BRIDGE_LABEL`, `BOARD_BRIDGE_HOP_LIMIT`,
 `BOARD_BRIDGE_MAX_PER_MINUTE`, and `BOARD_BRIDGE_SEEN_TTL_MS` override the
-defaults. `BOARD_BRIDGE_DISABLE=1` skips setup. The plugin polls from the head
-at startup, so messages posted while it is down are not replayed.
+defaults. `BOARD_BRIDGE_DISABLE=1` skips setup. The last event cursor and the
+recent message ids are kept in plugin storage, so a restart resumes where it
+stopped instead of replaying or losing messages posted while it was down.
 
 A `hops` label carries a chain count. A wake at or above the hop limit is
 suppressed, as is a repeated message id or more than ten wakes for one session
