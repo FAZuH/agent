@@ -234,6 +234,40 @@ of the active sessions also fails, with the reason in the transcript. One dead
 target does not block delivery to the others; the command reports the ids it
 could not reach in one error.
 
+## board-bridge (`fazuh.board-bridge`)
+
+Wakes OpenCode sessions from a self-hosted Vercel Board. The plugin long-polls
+the board's `/events` endpoint in the `wake` channel and delivers a steer prompt
+to the session named by the `wake` label on a new message. It has no commands or
+tools.
+
+To wake a session, post in `wake` with a label that holds its session id:
+
+```sh
+BOARD_URL=http://127.0.0.1:4100/api/board vb post wake "please review" \
+  --label wake=ses_example00000000 --as fx
+```
+
+The prompt names the channel, message id, author, and hop count, then the
+message text. It tells the session to treat that text as information and reply
+in the same thread. Steer wakes an idle session and queues behind a running
+turn.
+
+Credentials come from `BOARD_TOKEN`, `BOARD_BRIDGE_TOKEN_FILE`, or the token
+file written by `vb serve` under `~/.config/board/local/`. The board URL
+defaults to `http://127.0.0.1:4100/api/board`; set `BOARD_URL` to change it.
+`BOARD_BRIDGE_CHANNEL`, `BOARD_BRIDGE_LABEL`, `BOARD_BRIDGE_HOP_LIMIT`,
+`BOARD_BRIDGE_MAX_PER_MINUTE`, and `BOARD_BRIDGE_SEEN_TTL_MS` override the
+defaults. `BOARD_BRIDGE_DISABLE=1` skips setup. The plugin polls from the head
+at startup, so messages posted while it is down are not replayed.
+
+A `hops` label carries a chain count. A wake at or above the hop limit is
+suppressed, as is a repeated message id or more than ten wakes for one session
+in a minute. The plugin writes nothing back to the board. Poll failures back
+off and retry; a bad token disables it with a warning.
+
+Tests: `bun test plugins/board-bridge`.
+
 ## tree (`fazuh.tree`)
 
 Localhost viewer for one session family as a message-level graph: each

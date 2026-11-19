@@ -87,6 +87,8 @@ upstream `HEAD` and cannot pin a ref, so these move on their own.
   `simple-english`.
 - [FAZuH/bgrun](https://github.com/FAZuH/bgrun): the `bgrun` skill and the
   `bgrun` CLI, which runs a command as a systemd user unit.
+- [vercel/board](https://github.com/vercel/board): the `board` skill for
+  channels, threads, tasks, and waits. Loaded on demand, not in every session.
 
 Add `-b` to also install the bonus items: `anti-slop` for filtering generic AI
 output, `ffmpeg-skill` for editing media locally, and REA for reverse

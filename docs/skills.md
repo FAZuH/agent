@@ -80,7 +80,6 @@ the category directory never reaches the installed name.
 
 These skills are loaded only when another skill or agent references them.
 
-- **[presenting-latex](../skills/shared/presenting-latex/SKILL.md)**: Format math so chat and Obsidian render it: inline \(...\), display multiline $$ with blank line.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
 - **[report-hygiene](../skills/shared/report-hygiene/SKILL.md)**: Keep published artifacts clear and free of private device, session, and instruction context.
 - **[prompt-user](../skills/shared/prompt-user/SKILL.md)**: The shape of the bottom-of-message prompts: 🏁 procedures with steps, ❓ questions with a recommended answer.
