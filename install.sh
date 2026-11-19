@@ -421,6 +421,7 @@ install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity
   --skill grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
+install_skill vercel/board --skill board
 # Not bonus: the install links @antislop-copywriting into the instructions, so a
 # default install that omits it leaves that link dangling.
 install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
