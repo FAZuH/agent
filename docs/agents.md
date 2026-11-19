@@ -30,6 +30,8 @@ octask timer or edits the model on the existing one.
 - ⭐ **[review](../agents/review/review.md)**: the permission scope for the [review-agent](../skills/meta/review-agent/SKILL.md) skill, which supplies the method. Reads everything, writes only the handoff.
 - **[malware-check](../agents/review/malware-check.md)**: scans repositories for malware and malicious code patterns.
 - **[pii-check](../agents/review/pii-check.md)**: scans repositories for PII, leaked secrets, and provenance leaks.
+- **[advisor](../agents/review/advisor.md)**: strong-model design advisor for direction, ideas, and UI prototypes. Direction, not a plan; never edits repo files. Its model comes from the `advisor` entry in live `opencode.json`, not from frontmatter.
+- **[critique](../agents/review/critique.md)**: fresh-context critic that applies a brief's checklist to an artifact. Findings only, no fixes; no model override, so it inherits the session model.
 
 ## Research
 
