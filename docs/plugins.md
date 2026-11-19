@@ -327,6 +327,10 @@ fallback for hosts without the plugin.
   when the user explicitly asks to wait for the answer in the same turn; it
   needs at least one question. A dismissed blocking prompt returns as
   dismissed, and a deferred one returns as deferred and stays unanswered.
+- A question left blank, on a card submitted with no field values or in the TUI,
+  is recorded with no answer and shown as "Not answered" in the agent's text
+  and the views. The recommendation stays a hint on the card and is never used
+  as an answer.
 
 Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
