@@ -207,6 +207,33 @@ including the ones that load no TUI module.
 
 A refused target fails the command, and the TUI says why.
 
+## announce (`fazuh.announce`)
+
+`/announce-global <message>` sends the message to every currently running
+OpenCode session, subagents included. `/announce-session <message>` sends it
+to the calling session and its running descendants. The server owns both
+commands. They have no TUI half and take no flags in v1.
+
+The target set comes from `GET /api/session/active`. "Active" means running,
+not merely alive or idle. A session that is open but not running a turn is not
+a target. For a session announcement, the command maps each session to its
+children, then walks down from the caller to its descendants and keeps only
+those that are running.
+
+Each delivery is a steer prompt. It wakes an idle target and runs after any
+current turn, so it never interrupts work already in progress. Every target
+runs a new turn on receipt. A global broadcast reaches many sessions and so
+costs many turns.
+
+The message is framed with an `[announce ...]` prefix that names the scope and
+the calling session. The message text is unchanged apart from trimmed outer
+whitespace.
+
+An empty message fails with a usage error in the transcript. A failed lookup
+of the active sessions also fails, with the reason in the transcript. One dead
+target does not block delivery to the others; the command reports the ids it
+could not reach in one error.
+
 ## tree (`fazuh.tree`)
 
 Localhost viewer for one session family as a message-level graph: each
