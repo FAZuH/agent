@@ -68,7 +68,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 drift), `review-agent` (three-axis review).
 
 **Shared** — loaded only when referenced: `report-hygiene`,
-`prompt-user`, `presenting-latex`, `following-procedures`, `gate`, `scratch`.
+`prompt-user`, `following-procedures`, `gate`, `scratch`.
 
 The global rules are not a skill: they sit in `instructions/` and the global
 config loads them in every session.
