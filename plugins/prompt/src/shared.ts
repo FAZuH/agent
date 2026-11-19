@@ -56,6 +56,8 @@ export interface Prompt {
   dismissedAt?: number
 }
 
+const NOT_ANSWERED = "Not answered"
+
 const text = (value: unknown): string => (typeof value === "string" ? value.trim() : "")
 
 function list(value: unknown): string[] {
@@ -128,8 +130,8 @@ export function promptMarkdown(prompts: Prompts | undefined, answers: Record<str
       parts.push(`**Q${index + 1}: ${question.title}**`)
       if (question.body) parts.push(question.body)
       if (question.recommendation) parts.push(`> ➡️ ${question.recommendation}`)
-      const answer = answers[String(index)]
-      if (answer) parts.push(`> **Answer:** ${answer}`)
+      const answer = answers[String(index)]?.trim()
+      parts.push(`> **Answer:** ${answer || NOT_ANSWERED}`)
       parts.push("")
     }
   }
@@ -201,8 +203,8 @@ export function groupBySession(prompts: readonly Prompt[]): PromptGroup[] {
 export function answerText(prompt: Prompt, answers: Record<string, string>): string {
   const pairs: string[] = []
   for (const [index, question] of (prompt.prompts?.questions ?? []).entries()) {
-    const answer = answers[String(index)]?.trim()
-    if (answer) pairs.push(`${question.title.trim()}\n${answer}`)
+    const answer = answers[String(index)]?.trim() || NOT_ANSWERED
+    pairs.push(`${question.title.trim()}\n${answer}`)
   }
   return [`# Prompt: ${descriptionOf(prompt)}`, ...pairs].join("\n\n").trimEnd()
 }

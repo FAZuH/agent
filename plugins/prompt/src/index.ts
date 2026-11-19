@@ -164,28 +164,15 @@ export default {
       await Promise.all(pending)
     }
 
-    function withRecommendations(prompt: Prompt, answers: Record<string, string>): Record<string, string> {
-      const resolved = { ...answers }
-      for (const [index, question] of (prompt.prompts?.questions ?? []).entries()) {
-        const key = String(index)
-        if (!resolved[key]?.trim() && question.recommendation?.trim()) {
-          resolved[key] = question.recommendation.trim()
-        }
-      }
-      return resolved
-    }
-
     /** One answer per record, then either the waiter or the reporting session. */
     async function settleAnswer(
       sessionID: string,
       promptID: string,
       answers: Record<string, string>,
       mode: "steer" | "queue",
-      fill = false,
     ) {
       const prompt = readPrompts(sessionID).find((item) => item.id === promptID)
       if (!prompt) return { ok: false, delivered: false, error: "prompt not found" }
-      const resolved = fill ? withRecommendations(prompt, answers) : answers
       // One answer per record. A second call comes from a repeated keybind, a
       // leaked handler, or the native card and the panel being answered both.
       const claimed = claimPrompt(
@@ -194,7 +181,7 @@ export default {
         (current) => Boolean(current.answeredAt),
         (current) => ({
           ...current,
-          answers: { ...(current.answers ?? {}), ...resolved },
+          answers: { ...(current.answers ?? {}), ...answers },
           answeredAt: Date.now(),
         }),
       )
@@ -204,13 +191,13 @@ export default {
       const waiter = runtime.blocked.get(promptID)
       if (waiter) {
         runtime.blocked.delete(promptID)
-        waiter({ type: "answered", answers: resolved })
+        waiter({ type: "answered", answers })
         return { ok: true, delivered: true }
       }
       let delivered = false
       let error: string | undefined
       try {
-        await ctx.session.prompt({ sessionID, text: answerText(claimed, resolved), delivery: mode })
+        await ctx.session.prompt({ sessionID, text: answerText(claimed, answers), delivery: mode })
         delivered = true
       } catch (cause) {
         error = message(cause)
@@ -351,7 +338,7 @@ export default {
               const sessionID = String(event?.data?.sessionID ?? "")
               if (!sessionID) continue
               if (event.type === "form.replied") {
-                await settleAnswer(sessionID, promptID, answersOfForm(event?.data?.answer), "steer", true)
+                await settleAnswer(sessionID, promptID, answersOfForm(event?.data?.answer), "steer")
               } else if (event.type === "form.cancelled") {
                 settleDefer(sessionID, promptID)
               }

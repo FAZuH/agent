@@ -96,6 +96,15 @@ describe("markdownOf", () => {
     expect(text).toContain("> **Answer:** the first")
   })
 
+  test("an unanswered question keeps its recommendation hint and shows no answer", () => {
+    const text = markdownOf({
+      ...base,
+      prompts: { questions: [{ title: "Pick", body: "", recommendation: "this" }] },
+    })
+    expect(text).toContain("> ➡️ this")
+    expect(text).toContain("> **Answer:** Not answered")
+  })
+
   test("a record with no content is just the heading", () => {
     expect(markdownOf({ ...base })).toBe("## Prompts")
   })
@@ -178,7 +187,15 @@ describe("answerText", () => {
 
   test("falls back to the first question when there is no description", () => {
     const text = answerText({ ...base, prompts: { questions: [{ title: "First?", body: "" }] } }, {})
-    expect(text).toBe("# Prompt: First?")
+    expect(text).toBe("# Prompt: First?\n\nFirst?\nNot answered")
+  })
+
+  test("a skipped question is shown as not answered beside the answered ones", () => {
+    const text = answerText(
+      { ...base, prompts: { questions: [{ title: "First?", body: "" }, { title: "Second?", body: "" }] } },
+      { "0": "one" },
+    )
+    expect(text).toBe("# Prompt: First?\n\nFirst?\none\n\nSecond?\nNot answered")
   })
 })
 

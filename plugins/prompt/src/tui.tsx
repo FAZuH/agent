@@ -159,9 +159,7 @@ function AnswerDialog(props: {
 
   const submit = (mode: "steer" | "queue") => {
     const typed = typeof textarea?.plainText === "string" ? textarea.plainText : props.initial
-    const answer = typed.trim() || props.question.recommendation?.trim() || ""
-    if (!answer) return
-    props.onDone(answer, mode)
+    props.onDone(typed.trim(), mode)
   }
 
   // The textarea consumes Enter itself, so the dialog owns the keys through a

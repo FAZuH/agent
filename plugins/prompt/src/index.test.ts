@@ -485,7 +485,7 @@ describe("tools", () => {
     expect(store.readPrompts("ses_bulk_b")[0]?.dismissedAt).toBeGreaterThan(0)
   })
 
-  test("an empty native-card answer takes the recommendation", async () => {
+  test("an empty native-card answer stays unanswered", async () => {
     const prompt = tools.find((tool) => tool.name === "prompt_user")
     const pending = prompt.execute(
       {
@@ -501,8 +501,11 @@ describe("tools", () => {
       data: { id: `frm_prompt_${id}`, sessionID: "ses_card", answer: {} },
     })
     const result = await pending
-    expect(result.content).toContain("card q\nthe recommendation")
-    expect(store.readPrompts("ses_card")[0]?.answers?.["0"]).toBe("the recommendation")
+    expect(result.content).toContain("card q\nNot answered")
+    expect(result.content).not.toContain("the recommendation")
+    const answered = store.readPrompts("ses_card")[0]
+    expect(answered?.answers?.["0"]).toBeUndefined()
+    expect(answered?.answeredAt).toBeGreaterThan(0)
   })
 })
 
