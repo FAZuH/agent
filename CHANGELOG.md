@@ -1,3 +1,33 @@
+## [0.16.1](https://github.com/FAZuH/agent/compare/v0.16.0...v0.16.1) (2026-11-20)
+
+
+### Features
+
+* **agent:** add advisor and critique review agents ([d773786](https://github.com/FAZuH/agent/commit/d773786b133cffe31793867cf54f0423bda58bc8))
+* **ocv2:** add opencode-plugin-gui skill ([1cc26f1](https://github.com/FAZuH/agent/commit/1cc26f17adfd87694f2c162d5d4f1c3dfa637306))
+* **ocv2:** add plugin GUI verification skill ([de882fb](https://github.com/FAZuH/agent/commit/de882fb73144b1a66939436b2149599202ad793d))
+* **plugin:** add announce plugin for session broadcasts ([6ec0c01](https://github.com/FAZuH/agent/commit/6ec0c01584d45b18224e3ef666fef686bda05a2a))
+* **plugin:** add board bridge for session wakes ([f8081c8](https://github.com/FAZuH/agent/commit/f8081c8ca37028c7d135839ba4acc67fd915061c))
+* **plugin:** add OpenCode-style Settings tab to Prompt panel ([dd03533](https://github.com/FAZuH/agent/commit/dd03533b9f8622da352778892b2dec19773e93de))
+* **plugin:** add session bans, tool bans, and batch supervisor ([f3156cf](https://github.com/FAZuH/agent/commit/f3156cf6ee28f428720b098a252e53d0769b76c2))
+* **plugin:** dismiss prompts from cards and default calls to non-blocking ([88101bb](https://github.com/FAZuH/agent/commit/88101bbd0c8ff89bf704bed4d2f82b630675bc0c))
+* **plugin:** expose octask scheduling as agent tools ([928a707](https://github.com/FAZuH/agent/commit/928a707fbdbfc0943b37c27ae069c354d0b355d9))
+* **plugin:** persist board cursor across restarts ([972ee03](https://github.com/FAZuH/agent/commit/972ee031700fd7dd1d43a9d8f62942b7c800e84e))
+* **plugin:** revamp Jev Desktop panel with tabs and bulk actions ([e553eae](https://github.com/FAZuH/agent/commit/e553eae192f6af2d98a9a81198285f9d58b14815))
+* **plugin:** revamp Prompts panel with tabs and full-prompt view ([99d7018](https://github.com/FAZuH/agent/commit/99d7018d3fea69e98e4f06fdf87d2bdf0ea46983))
+* **script:** add octask TUI, bulk toggles and JSON output ([3d28513](https://github.com/FAZuH/agent/commit/3d28513bd037837d7f603ee295108b5f792c9275))
+* **script:** install board skill with external skills ([4a68405](https://github.com/FAZuH/agent/commit/4a684051bce26961c8a93ad6ebce1ea387a98dd6))
+* **skill:** publish plan and progress as a state diagram ([1f5f7b9](https://github.com/FAZuH/agent/commit/1f5f7b9b69f97a72318a5b9af1baddfaeea5c2f0))
+* **skill:** render plan diagrams top down ([270e03a](https://github.com/FAZuH/agent/commit/270e03a00ab930592d16551bc7d5d030c09b735f))
+* **skill:** wire issue closeout into the merge flow ([cd53ac5](https://github.com/FAZuH/agent/commit/cd53ac58fdf1d27f0fa6426e9660af24de99c945))
+* stage new mail for the digest gate and post idempotently ([614184c](https://github.com/FAZuH/agent/commit/614184c4fe40e28c886c17075e94ab0fd544f070))
+
+
+### Bug Fixes
+
+* **plugin:** show "Not answered" instead of taking the recommendation ([2f620cb](https://github.com/FAZuH/agent/commit/2f620cb024014b5fb7847817eb508ad6c8384fba))
+* **plugin:** show the question title on the native question card ([5776133](https://github.com/FAZuH/agent/commit/577613349407bd3210ecfde424145ca5289485c4))
+
 ## [0.16.0](https://github.com/FAZuH/agent/compare/v0.15.4...v0.16.0) (2026-11-17)
 
 
@@ -87,30 +117,4 @@
 * **plugin:** align the context watch line and poll its status ([d73691d](https://github.com/FAZuH/agent/commit/d73691de913f31b7c943bb7e0b69c05ea5cf60e4))
 * **plugin:** read fork markers written under the old aside key ([d211e7d](https://github.com/FAZuH/agent/commit/d211e7dd82cc7e5daff606f5ad4947509eea1e21))
 * **plugin:** title the context section Context Watch ([d2a9b79](https://github.com/FAZuH/agent/commit/d2a9b79e0983ee6824f680afd007602f37a11ceb))
-
-## [0.15.1](https://github.com/FAZuH/agent/compare/v0.15.0...v0.15.1) (2026-11-08)
-
-
-### Features
-
-* **plugin:** add desktop GUI views for aside and dispatch ([4069d37](https://github.com/FAZuH/agent/commit/4069d3731e1c32563d21766d5ef71e577ae5faf4))
-* **plugin:** add the report plugin ([1cf43c3](https://github.com/FAZuH/agent/commit/1cf43c3a5e8924b3a9b1784bb87d1230fbafbbae))
-* **plugin:** bind ctrl+a to the attention-only view ([192a21a](https://github.com/FAZuH/agent/commit/192a21a125426912b755407d123f6830388c8c34))
-* **plugin:** dismiss a prompt without answering it ([366cb5d](https://github.com/FAZuH/agent/commit/366cb5ddaa22dbf94ddd9ef12056d309e15ee0a8))
-* **plugin:** filter a history to what needs attention ([0f4ffad](https://github.com/FAZuH/agent/commit/0f4ffade706a33fd709baa25b0bd459f34857c67))
-* **plugin:** offer prompts as an inline form ([9d1304b](https://github.com/FAZuH/agent/commit/9d1304b5ca863d03cf6fe75ac8a293e4a4750f0c))
-* **plugin:** rule the record dialog above and below its content ([5a63b21](https://github.com/FAZuH/agent/commit/5a63b21455dbb1166bd6f936ba672ab311b3f24e))
-* **plugin:** show relative ages in the record dialogs ([fdc1923](https://github.com/FAZuH/agent/commit/fdc1923580f8ef5fd219ddfbd38cbc2f6b3ecf1a))
-* **plugin:** switch history sessions with ctrl+up/down ([307a871](https://github.com/FAZuH/agent/commit/307a871a2a1da5fe41ce6fcce02f94f6dd555a44))
-* **skill:** route reports through the report plugin ([581557f](https://github.com/FAZuH/agent/commit/581557f5c13534494770b1d0df2c4f824629bc5d))
-* **tell:** sort the picker by most recent session ([07797de](https://github.com/FAZuH/agent/commit/07797de5288967237bb619273b3dec439eb4e45f))
-
-
-### Bug Fixes
-
-* **plugin:** center the record dialog vertically ([6ee5f2b](https://github.com/FAZuH/agent/commit/6ee5f2b8cfc47ea7bf4115cdee26e9340f3c5790))
-* **plugin:** keep a slot lit while its history has open items ([d1319a9](https://github.com/FAZuH/agent/commit/d1319a9d5b7e977b587d31b758cffbe430c100d6))
-* **plugin:** keep the attention toggle off the global keymap ([1b430d4](https://github.com/FAZuH/agent/commit/1b430d4b64918ea3549349024a288a901f3aa89d))
-* **plugin:** keep the prompt dialog open when dismissing ([8f6f5c7](https://github.com/FAZuH/agent/commit/8f6f5c74f61f154be4df685c23610dbe9d902d33))
-* **plugin:** read reports while the attention filter is on ([c778581](https://github.com/FAZuH/agent/commit/c7785813aa9782151bfa95e5d1e5e02a03ccde13))
 
