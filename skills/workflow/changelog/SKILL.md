@@ -10,8 +10,7 @@ description: >-
 # Create the next version's changelog
 
 > **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report.
+> numbered procedure: live deviation logging and a fixed post-run report.
 
 ## 1. Check changelog support
 

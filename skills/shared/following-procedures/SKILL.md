@@ -1,9 +1,9 @@
 ---
 name: following-procedures
 description: >-
-  How to run a numbered procedure: read it whole first, point-and-call
-  narration, live deviation logging, interruption and resume, fixed post-run
-  report. Load only when a procedure tells you to.
+  How to run a numbered procedure: read it whole first, live deviation
+  logging, interruption and resume, fixed post-run report. Load only when a
+  procedure tells you to.
 ---
 
 # following-procedures
@@ -15,12 +15,6 @@ How to run a numbered procedure. Only a procedure that says to load it gets this
 1. Read the whole procedure, every step, top to bottom, before step 1.
 2. Note the dependency graph: which steps need which.
 3. Note the rules at the bottom; the header points at them. They bind from the start.
-
-## While running: point and call
-
-Per step, one terse line at step boundaries only:
-
-- `STEP n/N: <action>; next: <step n+1 name>`
 
 ## If a step fails
 

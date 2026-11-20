@@ -9,6 +9,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use serde_json::Value;
@@ -159,6 +160,124 @@ impl Posted {
     }
 }
 
+/// Result of an idempotent post. `duplicate` means a receipt for the same run
+/// or the same content already exists, so no request was sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PostOutcome {
+    pub duplicate: bool,
+    pub posted: Option<Posted>,
+}
+
+impl PostOutcome {
+    pub fn log_line(&self) -> String {
+        match self.posted {
+            Some(posted) => posted.log_line(),
+            None => "duplicate run, skipped (already posted)".to_owned(),
+        }
+    }
+}
+
+/// Stable content key for a digest payload. FNV-1a keeps this dependency-free.
+pub fn content_hash(text: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Receipt ledger, shared by digest binaries. `DIGEST_STATE_DIR` overrides the
+/// location for tests and alternate installs.
+pub fn receipts_path() -> Result<PathBuf> {
+    let root = env::var_os("DIGEST_STATE_DIR")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            home_dir()
+                .unwrap_or_else(|_| PathBuf::from("/"))
+                .join(".config/fazuh-agent/digest")
+        });
+    Ok(root.join("deliveries.jsonl"))
+}
+
+fn read_receipts(path: &Path) -> Vec<Value> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .collect()
+}
+
+fn record_receipt(path: &Path, run_id: Option<&str>, hash: &str, posted: &Posted) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    let (status, chars, kind) = match posted {
+        Posted::Inline { chars, status } => (*status, *chars, "inline"),
+        Posted::File { chars, status } => (*status, *chars, "file"),
+    };
+    let entry = serde_json::json!({
+        "run_id": run_id,
+        "content_hash": hash,
+        "at": chrono::Utc::now().to_rfc3339(),
+        "kind": kind,
+        "chars": chars,
+        "status": status,
+    });
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+    writeln!(file, "{entry}").with_context(|| format!("write {}", path.display()))?;
+    Ok(())
+}
+
+fn is_duplicate(receipts: &[Value], run_id: Option<&str>, hash: &str) -> bool {
+    receipts.iter().any(|entry| {
+        entry.get("content_hash").and_then(Value::as_str) == Some(hash)
+            || run_id.is_some_and(|id| entry.get("run_id").and_then(Value::as_str) == Some(id))
+    })
+}
+
+/// Whether a run id or the exact content was already delivered.
+pub fn already_delivered(run_id: Option<&str>, hash: &str) -> Result<bool> {
+    Ok(is_duplicate(
+        &read_receipts(&receipts_path()?),
+        run_id,
+        hash,
+    ))
+}
+
+/// Post once for a run. Repeated calls with the same run id or content are
+/// no-ops. The receipt is written only after a successful HTTP response.
+pub fn post_idempotent(
+    webhook: &str,
+    rendered: &Rendered,
+    ping_id: Option<&str>,
+    user_agent: &str,
+    run_id: Option<&str>,
+    hash: &str,
+) -> Result<PostOutcome> {
+    let path = receipts_path()?;
+    let receipts = read_receipts(&path);
+    if is_duplicate(&receipts, run_id, hash) {
+        return Ok(PostOutcome {
+            duplicate: true,
+            posted: None,
+        });
+    }
+    let posted = post(webhook, rendered, ping_id, user_agent)?;
+    record_receipt(&path, run_id, hash, &posted)?;
+    Ok(PostOutcome {
+        duplicate: false,
+        posted: Some(posted),
+    })
+}
+
 /// Post a rendered digest, prepending the `<@id>` mention when `ping_id` is
 /// set. `user_agent` identifies the calling digest binary.
 pub fn post(
@@ -254,5 +373,36 @@ pub fn field_str(value: &Value) -> String {
         Value::Bool(false) => "False".to_string(),
         Value::String(s) => s.clone(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Posted;
+    use super::content_hash;
+    use super::is_duplicate;
+    use super::read_receipts;
+    use super::record_receipt;
+
+    #[test]
+    fn content_hash_is_stable_and_ordered_input_matters() {
+        assert_eq!(content_hash("abc"), content_hash("abc"));
+        assert_ne!(content_hash("abc"), content_hash("abd"));
+        assert_eq!(content_hash("abc").len(), 16);
+    }
+
+    #[test]
+    fn receipts_round_trip_and_detect_duplicates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("deliveries.jsonl");
+        let posted = Posted::Inline {
+            chars: 42,
+            status: 200,
+        };
+        record_receipt(&path, Some("run-1"), "deadbeef", &posted).unwrap();
+        let receipts = read_receipts(&path);
+        assert!(is_duplicate(&receipts, Some("run-1"), "other"));
+        assert!(is_duplicate(&receipts, Some("other"), "deadbeef"));
+        assert!(!is_duplicate(&receipts, Some("run-2"), "other"));
     }
 }

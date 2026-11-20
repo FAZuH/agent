@@ -167,8 +167,8 @@ flowchart LR
 
 - **report-hygiene**: the gate before any artifact here goes out: PR body, issue comment, merge text.
 - **pr-creator**: the pull request, using the repository's own template and checks.
-- **pr-watchmerge**: watch the checks and merge when they pass.
-- **pr-to-close**: the whole worktree lifecycle: create, merge, clean up.
+- **pr-watchmerge**: watch the checks, merge when they pass, then close out the issues the PR resolved.
+- **pr-to-close**: the whole worktree lifecycle: create, merge, close issues, clean up.
 - **resolving-merge-conflicts**: the mechanics of an in-progress merge or rebase.
 - **issue-closeout**: link the merge back to the issues it fixed, and close them.
 
@@ -209,13 +209,11 @@ flowchart LR
 
 - **orchestrate**: the orchestrator role: delegation, permissions, run mode, subagent reuse.
 - **workflows**: the routing table that turns a task into a workflow and a subagent.
-- **agent-talk**: message a running agent session and read its answer.
 - **gate**: approval gate classes and the `GATE` tag.
 - **following-procedures**: run a numbered procedure without skipping a step.
 - **session**: persists state before the context window runs out (the compaction checkpoint).
 - **offload**: move builds, checks, and agent batches to a remote machine.
 - **long-horizon**: supervisors and heartbeats that keep overnight work alive.
-- **notes**: durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behaviour.
 - **skill-doctor**: audit skill links, name collisions, and drift from the source.
 - **external-skills**: install, update, or remove upstream-owned skills.
 - **hindsight-docs**: the memory system's documentation; the recall/retain habit lives in the global instructions (`instructions/global-instruction.md`).
@@ -227,7 +225,6 @@ flowchart LR
 - **show-me**: one correct visual when a picture carries the idea.
 - **handoff**, **wait-what**: compact the session for another agent, or re-pitch the last answer.
 - **opencode-guideline**: the OpenCode v2 operations: API, models, sessions, plugin authoring, plugin loading.
-- **ocv2-compact**: compact a v2 session and wait for its summary.
 
 ## Common workflows
 

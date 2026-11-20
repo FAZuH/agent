@@ -1,0 +1,14 @@
+{
+  "name": "fazuh-watchdog",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.ts",
+    "./rpc": "../../lib/jev/rpc.ts",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "scripts": {
+    "build:gui": "vite build"
+  }
+}

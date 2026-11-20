@@ -19,7 +19,6 @@ the category directory never reaches the installed name.
 - ⭐ **[orchestrate](../skills/orchestration/orchestrate/SKILL.md)**: Manage tasks, delegation, permissions, run mode, and subagent session reuse.
 - ⭐ **[routing](../skills/orchestration/routing/SKILL.md)**: Route a prompt to the project and session that should own it, then dispatch an orchestrator.
 - ⭐ **[workflows](../skills/orchestration/workflows/SKILL.md)**: Select the concrete workflow and subagent route for a task.
-- **[agent-talk](../skills/orchestration/agent-talk/SKILL.md)**: Message another running agent session over the OpenCode v2 API and read its answer.
 - **[session](../skills/orchestration/session/SKILL.md)**: Manage the feature session workspace, spec, tickets, deviations, context packet, and compaction checkpoint.
 - ⭐ **[finish](../skills/orchestration/finish/SKILL.md)**: End a session, archive its workspace, summarize, and route closeout.
 - **[self-improve](../skills/orchestration/self-improve/SKILL.md)**: Run the gated retrospective, then sweep the approved improvement backlog.
@@ -27,7 +26,7 @@ the category directory never reaches the installed name.
 - **[offload](../skills/orchestration/offload/SKILL.md)**: Move builds, checks, and agent batches to remote machines.
 - **[scratch-finish](../skills/orchestration/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace.
 - **[worktree](../skills/orchestration/worktree/SKILL.md)**: Isolate work on a branch, then finish or close its worktree.
-- **[pr-to-close](../skills/orchestration/pr-to-close/SKILL.md)**: Take a finished worktree branch through PR creation, merge, and cleanup.
+- **[pr-to-close](../skills/orchestration/pr-to-close/SKILL.md)**: Take a finished worktree branch through PR creation, merge, issue closeout, and cleanup.
 
 ## Workflow
 
@@ -38,7 +37,7 @@ the category directory never reaches the installed name.
 - **[deep-research](../skills/workflow/deep-research/SKILL.md)**: Investigate a narrow external question and capture one cited findings file.
 - **[issue-closeout](../skills/workflow/issue-closeout/SKILL.md)**: Link merged pull requests to resolved issues and close them where needed.
 - **[pr-creator](../skills/workflow/pr-creator/SKILL.md)**: Create a pull request using the repository's standards and template.
-- **[pr-watchmerge](../skills/workflow/pr-watchmerge/SKILL.md)**: Watch pull request checks and merge once they pass.
+- **[pr-watchmerge](../skills/workflow/pr-watchmerge/SKILL.md)**: Watch pull request checks, merge once they pass, then close out the issues the PR resolved.
 - **[setup-dev-docs](../skills/workflow/setup-dev-docs/SKILL.md)**: Bootstrap, audit, or update durable `docs/dev/` documentation.
 
 ## Dev
@@ -59,7 +58,6 @@ the category directory never reaches the installed name.
 
 ## Utils
 
-- **[notes](../skills/utils/notes/SKILL.md)**: Read and maintain durable notes for tools, CLIs, APIs, scheduled agents, and OpenCode behavior.
 - **[omarchy-plugin-install](../skills/utils/omarchy-plugin-install/SKILL.md)**: Install an Omarchy shell plugin end to end, including malware review and dotfiles persistence.
 - **[plan-confirm](../skills/utils/plan-confirm/SKILL.md)**: Present large plans or audits for grouped confirmation.
 - **[pdf-read](../skills/utils/pdf-read/SKILL.md)**: Read PDFs and extract text, tables, images, and structured data.
@@ -80,7 +78,6 @@ the category directory never reaches the installed name.
 
 These skills are loaded only when another skill or agent references them.
 
-- **[presenting-latex](../skills/shared/presenting-latex/SKILL.md)**: Format math so chat and Obsidian render it: inline \(...\), display multiline $$ with blank line.
 - **[following-procedures](../skills/shared/following-procedures/SKILL.md)**: Run numbered procedures without skipping steps.
 - **[report-hygiene](../skills/shared/report-hygiene/SKILL.md)**: Keep published artifacts clear and free of private device, session, and instruction context.
 - **[prompt-user](../skills/shared/prompt-user/SKILL.md)**: The shape of the bottom-of-message prompts: 🏁 procedures with steps, ❓ questions with a recommended answer.
@@ -90,7 +87,8 @@ These skills are loaded only when another skill or agent references them.
 ## OpenCode v2
 
 - **[opencode-guideline](../skills/ocv2/opencode-guideline/SKILL.md)**: OpenCode v2 operations: the HTTP API, plugin authoring, plugin loading health, and session forking. Model choice follows the host `AGENTS.md`.
-- **[ocv2-compact](../skills/ocv2/ocv2-compact/SKILL.md)**: Compact a v2 session and wait for its summary.
+- **[opencode-plugin-gui](../skills/ocv2/opencode-plugin-gui/SKILL.md)**: Build plugin Desktop panels that match OpenCode's Preferences UI: settings layout, tokens, row structure, and build/deploy.
+- **[opencode-plugin-gui-verify](../skills/ocv2/opencode-plugin-gui-verify/SKILL.md)**: Verify plugin GUI changes visually: browser check, static renders, headless screenshots, and evidence hand-off.
 
 Run `./sync.sh list` to see the deployed skills, and
 [agent-map](../skills/meta/agent-map/SKILL.md) for what is installed and how to

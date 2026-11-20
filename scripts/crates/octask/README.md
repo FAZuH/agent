@@ -43,6 +43,16 @@ octask add autocommit --agent autocommit --prompt 'commit pending changes' \
   --workdir ~/Notes --model litellm/free-pro --dirty-only
 
 octask list
+octask list --json
 octask show backup
-octask logs backup -n 20
+octask logs backup -n 20 -f
 ```
+
+Running `octask` with no arguments opens the TUI. Its footer lists the keys.
+`octask run <name>` starts a service immediately; `octask enable --all` and
+`disable --all` toggle every timer. `octask pause` disables all timers and
+saves the enabled set to `~/.config/octask/pause.json`; `octask resume`
+restores it. `octask cleanup` removes orphaned units.
+
+The `fazuh.octask` OpenCode plugin wraps these commands as agent tools, so a
+conversation can list, create, update and run scheduled tasks.

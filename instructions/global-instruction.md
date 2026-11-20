@@ -6,9 +6,10 @@ Rules for every session, on any machine. The host AGENTS.md keeps host-only fact
 
 These are items you must do in specific situations.
 
+- OpenCode hot-reloads most components. Do not tell the user to restart OpenCode Desktop or the service after a change; assume edits are already live. Restart only for a component known not to reload (verify first).
 - Check the current working directory first.
 - @agent-map: Skill routing. Load it when the skill catalog does not disambiguate.
-- @presenting-latex: For presenting latex equations to user.
+- @board: Skill for Vercel Board work (channels, threads, tasks, waits). Load only when the task involves the board, not for simple sessions. This machine has no Vercel CLI; use `vb` with `BOARD_URL=http://127.0.0.1:4100/api/board` instead of `vercel board`.
 - @prompt-user : Asking follow-up questions or telling the user to do something. Prefer `prompt_user` tool over `question`; the Prompts view renders it. Never paste the prompts into the reply. Fall back to the printed block only when the tool is absent.
 - Publishing: any artifact that leaves the machine (commit, PR, issue, doc, comment, report, screenshot, log) loads @report-hygiene and runs its gate before it goes out.
 - Answer post-task: what the task produced, then a `---` horizontal rule, then `next` with what follows.

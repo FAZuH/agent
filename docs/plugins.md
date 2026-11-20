@@ -8,7 +8,7 @@ entry as `<plugin-dir>/tui` and loads nothing otherwise.
 Plugin IDs are `fazuh.<name>`. `sync.sh` copies the plugin directory into the
 OpenCode config.
 
-## jev (`fazuh.jev`)
+## jev (`fazuh.watchdog`)
 
 Bounded decisions from [Jev](https://typesafe.ai), TypeSafe's System One decision
 model, over any provider exposing a `/systemone` endpoint. Jev answers typed
@@ -39,13 +39,12 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
 - **`hook_tool_risk`** (off by default): every tool call the host checks for
   permission, inside `hook_tool_risk.actions`, is sent to Jev, which answers
   one of four things — `allow` (the call runs, and the prompt never appears),
-  `ask` (the user is asked), `deny` (the call is blocked and the agent
-  reads the reason), `alert` (the call is blocked, the session is interrupted,
-  and the user is notified). A weak answer changes nothing. A repeated call
-  reuses the first verdict.
+  `propagate` (the user is asked), `deny` (the call is blocked and the agent
+  reads the reason), `abort` (the session stops and the user is notified).
+  A weak answer changes nothing. A repeated call reuses the first verdict.
 - **`hook_tool_standard`** (off by default): the rules file. Every rule that
   matches the call is scored in one call, and a rule over its threshold is
-  violated: `block` denies the call, `ask` asks the user. The file is
+  violated: `block` denies the call, `propagate` routes it to the user. The file is
   YAML (and YAML reads JSON, so a `.json` file works too), a rule may quote a
   file with `{file:<path>}`, and a rule may override the global action and
   threshold. A file that cannot be parsed changes nothing and says so in the
@@ -57,14 +56,14 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
   call only, because the plugin passes no `save` array. An unanswered hold
   denies after 60 seconds when it is the session's only pending prompt. State
   under `~/.local/state/opencode/jev/nospawn/`; see [jev.md](jev.md).
-- **`hook_supervisor`** (off by default): resolves a Jev `ask` through a
-  separate supervisor model before the human prompt. It stays off until its own
-  model and endpoint are configured, and adds no second permission hook: the
-  native hold stays open while a bounded investigation runs in the background.
-  The four verdicts are `allow`, `deny`, `abort` and `ask_user`. In trial mode
-  (the default) an `allow` still needs the human's `once`; `ask_user`, failure
-  and budget exhaustion leave the native prompt in place. There is no silent
-  allow. Evidence is read-only project files, search and constrained Git inside
+- **`hook_supervisor`** (off by default): resolves a Jev `propagate`, `deny`, or
+  `abort` through a separate supervisor model before the human prompt. It stays
+  off until its own model and endpoint are configured, and adds no second
+  permission hook: the native hold stays open while a bounded investigation
+  runs in the background. The four verdicts are `allow`, `deny`, `abort` and
+  `propagate`. An `allow` releases the call; a `deny` hands it back to the user;
+  an `abort` stops the session. Failure and budget exhaustion become `propagate`.
+  There is no silent allow. Evidence is read-only project files, search and constrained Git inside
   the configured root, bounded by 30 seconds, three model rounds and six
   evidence calls. This is a workflow guardrail, not a security sandbox; see
   [jev.md](jev.md#the-hooks).
@@ -80,8 +79,7 @@ land in a transcript; `/jev-status` reports the path for hosts with no TUI.
 - **`/jev-settings`**: endpoint, model, key, per-feature config rows, the
   `yoloAsk` branch, the `undecided` answer, and the approval lifetime. Each feature carries its
   own numbers; there are no global thresholds. The `hook_supervisor` rows hold
-  its separate model, endpoint, protocol, key, evidence root, budget and trial
-  mode.
+  its separate model, endpoint, protocol, key, evidence root and budget.
 - **`/jev-approve [prefix]`**: pick a blocked call and let the next matching
   one through once. The grant is spent by the server, so the approved call
   costs no model call and no tokens. The picker is not filtered by the
@@ -209,6 +207,68 @@ including the ones that load no TUI module.
 
 A refused target fails the command, and the TUI says why.
 
+## announce (`fazuh.announce`)
+
+`/announce-global <message>` sends the message to every currently running
+OpenCode session, subagents included. `/announce-session <message>` sends it
+to the calling session and its running descendants. The server owns both
+commands. They have no TUI half and take no flags in v1.
+
+The target set comes from `GET /api/session/active`. "Active" means running,
+not merely alive or idle. A session that is open but not running a turn is not
+a target. For a session announcement, the command maps each session to its
+children, then walks down from the caller to its descendants and keeps only
+those that are running.
+
+Each delivery is a steer prompt. It wakes an idle target and runs after any
+current turn, so it never interrupts work already in progress. Every target
+runs a new turn on receipt. A global broadcast reaches many sessions and so
+costs many turns.
+
+The message is framed with an `[announce ...]` prefix that names the scope and
+the calling session. The message text is unchanged apart from trimmed outer
+whitespace.
+
+An empty message fails with a usage error in the transcript. A failed lookup
+of the active sessions also fails, with the reason in the transcript. One dead
+target does not block delivery to the others; the command reports the ids it
+could not reach in one error.
+
+## board-bridge (`fazuh.board-bridge`)
+
+Wakes OpenCode sessions from a self-hosted Vercel Board. The plugin long-polls
+the board's `/events` endpoint in the `wake` channel and delivers a steer prompt
+to the session named by the `wake` label on a new message. It has no commands or
+tools.
+
+To wake a session, post in `wake` with a label that holds its session id:
+
+```sh
+BOARD_URL=http://127.0.0.1:4100/api/board vb post wake "please review" \
+  --label wake=ses_example00000000 --as fx
+```
+
+The prompt names the channel, message id, author, and hop count, then the
+message text. It tells the session to treat that text as information and reply
+in the same thread. Steer wakes an idle session and queues behind a running
+turn.
+
+Credentials come from `BOARD_TOKEN`, `BOARD_BRIDGE_TOKEN_FILE`, or the token
+file written by `vb serve` under `~/.config/board/local/`. The board URL
+defaults to `http://127.0.0.1:4100/api/board`; set `BOARD_URL` to change it.
+`BOARD_BRIDGE_CHANNEL`, `BOARD_BRIDGE_LABEL`, `BOARD_BRIDGE_HOP_LIMIT`,
+`BOARD_BRIDGE_MAX_PER_MINUTE`, and `BOARD_BRIDGE_SEEN_TTL_MS` override the
+defaults. `BOARD_BRIDGE_DISABLE=1` skips setup. The last event cursor and the
+recent message ids are kept in plugin storage, so a restart resumes where it
+stopped instead of replaying or losing messages posted while it was down.
+
+A `hops` label carries a chain count. A wake at or above the hop limit is
+suppressed, as is a repeated message id or more than ten wakes for one session
+in a minute. The plugin writes nothing back to the board. Poll failures back
+off and retry; a bad token disables it with a warning.
+
+Tests: `bun test plugins/board-bridge`.
+
 ## tree (`fazuh.tree`)
 
 Localhost viewer for one session family as a message-level graph: each
@@ -324,11 +384,15 @@ fallback for hosts without the plugin.
 
 - **`prompt_user`** (`description`, `procedures?`, `questions?`, `block?`): the
   @prompt-user block for a standalone ask. `description` is required and at
-  most 35 characters. `block: true` waits for the answer in the same turn and
-  returns it as the tool result; it needs at least one question. A dismissed
-  blocking prompt returns as dismissed, and a deferred one returns as deferred
-  and stays unanswered. Without `block` the call returns immediately and the
-  answer arrives as a new message.
+  most 35 characters. Calls are non-blocking by default: the tool returns
+  immediately and the answer arrives as a new message. Set `block: true` only
+  when the user explicitly asks to wait for the answer in the same turn; it
+  needs at least one question. A dismissed blocking prompt returns as
+  dismissed, and a deferred one returns as deferred and stays unanswered.
+- A question left blank, on a card submitted with no field values or in the TUI,
+  is recorded with no answer and shown as "Not answered" in the agent's text
+  and the views. The recommendation stays a hint on the card and is never used
+  as an answer.
 
 Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
@@ -344,7 +408,10 @@ The server also opens each prompt as a native question card through
 and the web client render only that kind (and `mcp-elicitation` and
 `websearch.provider`). Creating it server-side is what reaches the mobile web
 app, which loads no plugin UI half. Its fields are one per question, with the
-recommendation as the first option and free text still allowed. The server
+recommendation as the first option and free text still allowed. The host paints
+`description ?? title` as the card's question text and never shows `title` on
+its own, and newlines collapse, so each description leads with a bracketed
+title to keep it distinct from the body. The server
 listens for `form.replied` and `form.cancelled` and settles the same record the
 RPC handles, so answering the card, the TUI section, or the Desktop panel all
 take one path. `/prompt-latest` reopens the latest unanswered prompt as a new
@@ -353,24 +420,28 @@ once, server-side, so TUI, Desktop, and mobile autocomplete each show a single
 entry. GUI errors are read from the object's `message` field so RPC failures do
 not render as `[object Object]`.
 
-The Desktop panel is a read-only history: a session bar, a prompt list with
-answered/awaiting dots and relative times, and the selected record's Markdown.
-It no longer answers or dismisses through its own dialogs, so the native card
-is the only answer surface. Its **Reopen card** button calls `prompt.reopen`
-with the selected prompt id. Because the host shows one card at a time and
-queues later ones, `prompt.reopen` cancels every card this plugin has open in
-that session before creating the new one: the selected prompt replaces the card
-on screen instead of waiting behind it. The prompts themselves stay unanswered.
-The session bar names the session and counts prompts; it does not repeat the
-selected prompt's title, which sits in the detail header instead.
+The Desktop panel is read-only history in three tabs: **Awaiting**, **Answered**
+and **Dismissed**, each with a count. One tab shows at a time; the session bar
+switches sessions when the family has more than one. A card shows the title, a
+one-line preview and the session with a relative time, plus **Reopen card** and
+**Dismiss** for an awaiting record. **View full prompt** replaces the list with
+the whole prompt: a state badge, the session line, the Markdown, and the same
+two actions. A single `← Prompts` button returns to the tabbed list. The panel does not answer through
+its own dialogs, so the native card is the only answer surface. **Reopen card**
+calls `prompt.reopen` with the prompt id. Because the host shows one card at a
+time and queues later ones, `prompt.reopen` cancels every card this plugin has
+open in that session before creating the new one: the selected prompt replaces
+the card on screen instead of waiting behind it. The prompts themselves stay
+unanswered. **Dismiss** asks for confirmation in both the card and the full
+view, then calls `prompt.dismiss` with the session and prompt id.
 
-Two toolbar buttons work on the family as loaded. **Only awaiting** filters the
-list to prompts with questions and no answer or dismissal; it is a view filter,
-so the records stay. **Dismiss all** asks for confirmation, then calls
-`prompt.dismissAll({sessionIDs})` to mark every awaiting prompt in the family as
-dismissed. The bulk handler reads each session's prompts before settling any of
-them, so one pass cannot dismiss a prompt twice. It closes any card those
-prompts had open and leaves answered and already-dismissed records untouched.
+The Awaiting tab has a bulk bar with the family-wide awaiting count and
+**Dismiss all**. It asks for confirmation, then calls
+`prompt.dismissAll({sessionIDs})` to mark every unresolved prompt in the family
+as dismissed, including prompts with no questions. The bulk handler reads each
+session's prompts before settling any of them, so one pass cannot dismiss a
+prompt twice. It closes any card those prompts had open and leaves answered and
+already-dismissed records untouched.
 
 The TUI half (`./tui`) adds one sidebar section, a slot per agent (the routed
 session and each subagent that has a record). OpenCode Desktop's

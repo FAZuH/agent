@@ -11,8 +11,7 @@ description: >-
 Every non-trivial feature gets a `.scratch/` workspace. The spec doc inside it
 is the single source of truth.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report. The `## Interrupted procedures` section
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report. The `## Interrupted procedures` section
 > it defines lives in this workspace's `spec.md`.
 >
 > **Load @scratch skill first.** It owns the workspace layout, slug format, and
@@ -405,29 +404,6 @@ Give the user a concise report:
 
 Do not commit or take any other side action. Step 9 offers the compaction
 itself; otherwise the user decides whether to compact or continue.
-
-#### 9. Offer compaction
-
-**GATE compact-offer (normal → compact immediately):** after the report, offer
-to compact this session now. Skip this step entirely when the agent is not
-running in OpenCode; the report in step 8 ends the procedure.
-
-Detect the OpenCode harness first:
-
-- The environment block carries
-  `Current conversation session ID: ses_…`. Compact with @ocv2-compact: from
-  that skill's directory run `scripts/oc-compact.sh ses_… --timeout 0`, then end
-  the turn.
-  The compaction is a steer: it queues behind the current turn and runs once
-  the session goes idle. Never wait synchronously inside the turn; it always
-  times out.
-
-When the gate fires (interactive mode), ask with the @gate mechanics: what
-was persisted and where (step 8), that compaction replaces the conversation
-with the summary, Approve / Abort. Approve → run the compaction for the
-detected harness. Abort → stop; the persisted state stands either way.
-
-In auto mode, do not ask; run the compaction immediately after the report.
 
 ### Dependency graph
 

@@ -2,6 +2,17 @@
  * The RPC contract the TUI reads prompts through. Rpc.define is an identity
  * function, so a plain JSON-Schema object works without the host package.
  */
+
+/** The two visibility toggles the TUI and Desktop panel both expose. */
+export type SettingKey = "sidebar" | "showPrompts"
+export interface SettingsInfo {
+  sidebar: boolean
+  showPrompts: boolean
+}
+
+export const SETTING_KEYS: readonly SettingKey[] = ["sidebar", "showPrompts"]
+export const DEFAULT_SETTINGS: SettingsInfo = { sidebar: true, showPrompts: true }
+
 export const Contract = {
   id: "prompt",
   methods: {
@@ -136,16 +147,49 @@ export const Contract = {
         additionalProperties: false,
       },
     },
+    getSettings: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          sidebar: { type: "boolean" },
+          showPrompts: { type: "boolean" },
+        },
+        required: ["sidebar", "showPrompts"],
+        additionalProperties: false,
+      },
+    },
+    setSetting: {
+      input: {
+        type: "object",
+        properties: {
+          key: { type: "string", enum: ["sidebar", "showPrompts"] },
+          value: { type: "boolean" },
+        },
+        required: ["key", "value"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          error: { type: "string" },
+        },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
   },
   events: {
     changed: {
       schema: {
         type: "object",
         properties: {
+          topic: { type: "string", enum: ["prompt", "settings"] },
           sessionID: { type: "string" },
           prompt: { type: "object", additionalProperties: true },
         },
-        required: ["sessionID", "prompt"],
+        required: ["topic"],
         additionalProperties: false,
       },
     },

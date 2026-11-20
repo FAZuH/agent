@@ -21,12 +21,12 @@ the way it is, what was checked with real requests, and what is still unproven.
 | OpenCode | v2.0.20 | `opencode --version` |
 | Plugin SDK | `@opencode-ai/plugin` 0.0.0-beta-17963 | `plugins/package.json` |
 | Plugin load | auto-discovered per `plugins/<name>/` by `sync.sh` | `sync.sh:307` |
-| TUI load | `<plugin-dir>/tui` resolved by the CLI | `plugins/jev/tui.ts:1` |
+| TUI load | `<plugin-dir>/tui` resolved by the CLI | `plugins/watchdog/tui.ts:1` |
 
 ## The v2 plugin contract (the published docs are wrong)
 
 `https://opencode.ai/docs/plugins` documents a v1 shape. v2.0.20 uses this
-instead, read off `plugins/jev/src/index.ts`:
+instead, read off `plugins/watchdog/src/index.ts`:
 
 | Concern | v1 (docs) | v2.0.20 (actual) |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ plugins, only for npm plugins. That is why `/jev-features` closes on every
 change, and it is tracked in
 [issue #3](https://github.com/FAZuH/agent/issues/3).
 
-`plugins/jev/src/tui.ts` dumps this shape to
+`plugins/watchdog/src/tui.ts` dumps this shape to
 `~/.config/fazuh-agent/data/jev-tui.log` on every panel open, because guessing
 from the type definitions wasted most of the debugging time.
 
@@ -90,7 +90,7 @@ the plugin has to name the model itself. `ctx.model.default()` returns
 `{ location, data }`, `ctx.session.get({ sessionID })` returns the session with
 its `model` ref, and `ctx.model.list()` is the whole available catalogue.
 
-`plugins/jev/src/index.ts` therefore resolves explicitly: the
+`plugins/watchdog/src/index.ts` therefore resolves explicitly: the
 `hook_skill_pick.optimizeModel` setting, then the session's own model, then the
 host default. Three failures in a row latch the optimizer's auto path off for
 the life of the process, which is what made a single bad default look like a
@@ -232,7 +232,7 @@ Tested live against 2.0.20, driven over the HTTP API so the session is
 independent of this one:
 
 1. `POST /api/session` created a fresh session; `GET /api/plugin` confirmed
-   `fazuh.jev` is `active` with `server` and `tui` both true.
+   `fazuh.watchdog` is `active` with `server` and `tui` both true.
 2. Model switched to `opencode/muse-spark-1.3-contributor-free` so the test
    costs nothing.
 3. The `risk_hook` feature turned on, then prompted the session to spawn a

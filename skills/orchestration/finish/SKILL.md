@@ -11,8 +11,7 @@ description: >-
 End the session, in order: docs, commit, archive, summary, next steps,
 self-improvement.
 
-> **Load @following-procedures skill first.** It owns procedure narration,
-> deviation logging, post-run report.
+> **Load @following-procedures skill first.** It owns deviation logging and the post-run report.
 
 Gates live in the loaded skills: GATE `commit-approval` in @commit and GATE
 `offer-sweep` in @self-improve (vocabulary: the @gate skill). `/finish auto`
@@ -47,6 +46,10 @@ text.
 
 Load the @commit skill and follow it exactly. Return its proposed groups
 unchanged. Do not duplicate its steps here.
+
+If a PR merged during this session and @issue-closeout has not run, run it here.
+@pr-watchmerge normally does this at merge time; this is the safety net for
+direct merges.
 
 ## 4. Archive a completed `.scratch/` workspace
 

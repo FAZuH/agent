@@ -21,6 +21,7 @@ EXTERNAL_SKILLS=(
   simple-english
   hindsight-docs
   bgrun
+  board
   antislop antislop-code antislop-copywriting antislop-human antislop-layoutmobile antislop-ui
   ffmpeg-skill
 )

@@ -1,16 +1,15 @@
 ---
 name: pr-watchmerge
 description: >-
-  Watch a PR's CI checks to completion and merge as soon as they pass.
-  Triggers: watch the PR and merge, merge once green, watch CI then merge. Not
-  PR creation or review.
+  Watch a PR's CI checks to completion, merge as soon as they pass, then close
+  out the issues the PR resolved. Triggers: watch the PR and merge, merge once
+  green, watch CI then merge. Not PR creation or review.
 ---
 
 # PR watch-and-merge
 
 > **Load the @following-procedures skill first.** It defines how you run this
-> numbered procedure: point-and-call narration, live deviation logging, and a
-> fixed post-run report. Always follow the rules in the *Safety rules* section
+> numbered procedure: live deviation logging and a fixed post-run report. Always follow the rules in the *Safety rules* section
 > at the bottom.
 
 ## Workflow
@@ -78,12 +77,24 @@ Usable PR title: let GitHub build the message and append the marker.
 
 Any check **failed**: do NOT merge. Report the failing run/check and let the user decide. Red CI merges only on explicit user override.
 
+### 5. Close out the issues it resolved
+
+A successful merge is not done until issue closeout runs. Load @issue-closeout
+and follow it on this PR: collect `Closes #N` and `Refs #N` from the PR body and
+the session, post one closeout comment per issue, and close only issues fully
+resolved by the merge. Reference-only issues get a comment, not a close.
+
+Record in the final report which issues were commented and which were closed.
+Never skip this step after a merge, even when the PR body names no issues:
+report "no issues to close" explicitly instead.
+
 ## Dependency graph
 
 - 1. identify the PR and its checks
 - 2. watch the runs to completion -> 1
 - 3. resolve conflicts (if any) -> 1
 - 4. merge if green -> 2, 3
+- 5. close out the issues it resolved -> 4
 
 ## Safety rules
 
@@ -91,4 +102,4 @@ Any check **failed**: do NOT merge. Report the failing run/check and let the use
 - Draft PR: stop and surface the blocker, never force-merge.
 - Conflicts: resolve only simple, behavior-preserving ones. Non-trivial or ambiguous: report and wait, never guess.
 - Respect branch protection and merge-queue semantics. Admin requirements or unmet conditions: surface them instead of `--admin`, unless explicitly authorized.
-- Report the result (PR number, merge commit, or failure reason) when done.
+- Report the result (PR number, merge commit, issues commented/closed, or failure reason) when done.

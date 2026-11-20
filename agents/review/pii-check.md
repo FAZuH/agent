@@ -32,6 +32,15 @@ permissions:
   - action: "*"
     resource: "*"
     effect: allow
+  - action: external_directory
+    resource: "/tmp/opencode/**"
+    effect: allow
+  - action: edit
+    resource: "/tmp/opencode/**"
+    effect: allow
+  - action: write
+    resource: "/tmp/opencode/**"
+    effect: allow
 ---
 
 Privacy auditor. Scan the repo/code for:

@@ -19,6 +19,59 @@ out of the context window.
 When the repo has a `docs/dev/README.md`, read it first: it indexes the
 durable developer docs and states their source-of-truth rules.
 
+## Plan and progress diagram
+
+The plan is a Mermaid state machine. Publish it to the user at the plan step, before any delegation. Publish it again on every status change, in the turn where the change happens. The diagram is the shared progress view.
+
+### When to publish
+
+- User asks to plan: build the plan, publish the diagram, wait for approval. Do not delegate or edit before approval.
+- User approves: start the work.
+- A task changes status: update the colors and republish in the same turn.
+
+### Shape
+
+One state per task, one per review step. Set `direction TB` so the chain reads top down, from `[*]` to `[*]`. Use an alias for labels with spaces:
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    state "Task X" as TX
+    state "Review X" as RX
+    [*] --> TX
+    TX --> RX
+    RX --> [*]
+```
+
+### Status colors
+
+Set a color on every state each time you publish. Use `classDef` and `class`:
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    state "Task X" as TX
+    state "Review X" as RX
+    [*] --> TX
+    TX --> RX
+    RX --> [*]
+
+    classDef pending fill:#f1f3f5,stroke:#adb5bd,color:#343a40
+    classDef active fill:#ffe066,stroke:#e67700,color:#343a40
+    classDef done fill:#8ce99a,stroke:#2f9e44,color:#343a40
+
+    class TX done
+    class RX active
+```
+
+Legend:
+
+- pending (gray): not started
+- active (yellow): running now, including a review in progress
+- done (green): finished and verified
+
+When a task finishes, mark it done and mark the next state active in the same publish, so the user sees the boundary cross.
+
 ## Permissions
 
 The agent definition is the enforcement; this skill states the policy. The
@@ -170,12 +223,6 @@ When the work decomposes into independent units, run them as lanes.
 scopes, the chain for a shared file, the gate, and the merge. One writer per
 file. Each lane keeps one session for its whole life; the next ticket in a
 lane resumes it (Continuing a child's work).
-
-## Talking to a running worker
-
-@agent-talk: prompt another agent session over the OpenCode v2 API, steer or
-queue the message, and read its answer. Use it when a worker must answer a
-question mid-task, or when its report would otherwise never reach you.
 
 ## Run mode
 

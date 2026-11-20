@@ -38,24 +38,24 @@ Two kinds:
 
 - `description` is required and at most 35 characters: the label the Prompts
   slot shows.
-- `block: true` waits for the answer in the same turn and returns it as the
-  tool result. Use it only when the next step depends on the answer. It needs
-  at least one question. Without it the call returns immediately and the
-  answer arrives as a new message.
+- Calls are non-blocking by default: the tool returns immediately and the
+  answer arrives as a new message. Set `block: true` only when the user
+  explicitly asks you to wait for the answer in the same turn. It needs at
+  least one question, and the tool result then carries the answer.
 - Call `prompt_user` with only the kind you have. Empty fields are omitted.
 - A simple question whose answer is prose: answer it, and call `prompt_user`
   only for what the user must act on.
 - The user answers in the Prompts view; Enter steers the answer, Ctrl+Enter
-  queues it, and an empty answer takes the recommendation. Without `block`
-  the answer arrives as a new message; with `block` it returns as the tool
-  result in the same turn and steer/queue does not apply. Do not ask which
-  one they picked or repeat the answers in chat.
+  queues it, and an empty answer takes the recommendation. The answer arrives
+  as a new message unless a blocking call was explicitly requested; with
+  `block` steer and queue do not apply. Do not ask which one they picked or
+  repeat the answers in chat.
 
 ## Rules
 
-- Without `block`, the call ends your turn for that ask. Do not repeat the
-  prompts in the reply, and do not announce that they were saved.
-- One pointed item per entry. A one-word question gets no block, just ask.
+- The call ends your turn for that ask. Do not repeat the prompts in the
+  reply, and do not announce that they were saved.
+- One pointed item per entry. A one-word question gets no tool call, just ask.
 - Procedures first, questions last, in the order they appear in the view.
 - Numbering runs across the call (`P1`, `P2`, `Q1`, `Q2`); the view numbers
   them for you.

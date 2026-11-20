@@ -1,27 +1,33 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use anyhow::bail;
+use owo_colors::OwoColorize;
 
 use crate::model::load_task;
 use crate::model::managed_names;
-use crate::model::property;
+use crate::state;
 use crate::sys::PREFIX;
-use crate::sys::home;
 use crate::sys::next_run;
 use crate::sys::norm_name;
 use crate::sys::ok;
 use crate::sys::require_name;
-use crate::sys::run;
+use crate::sys::run as sys_run;
 use crate::sys::stdout_soft;
 use crate::sys::tildify;
 use crate::sys::unit_dir;
 use crate::sys::unit_paths;
 use crate::sys::units_exist;
+use crate::view;
 
 fn timer_unit(name: &str) -> String {
     format!("{PREFIX}{name}.timer")
+}
+
+fn service_unit(name: &str) -> String {
+    format!("{PREFIX}{name}.service")
 }
 
 pub fn require_units(dir: &Path, verb: &str, name: &str) -> Result<()> {
@@ -35,6 +41,23 @@ fn one_name(name: &str) -> Result<String> {
     let name = norm_name(name);
     require_name(&name)?;
     Ok(name)
+}
+
+fn is_enabled(name: &str) -> bool {
+    ok("systemctl", &["--user", "is-enabled", &timer_unit(name)])
+}
+
+fn systemctl_show(unit: &str, prop: &str) -> String {
+    stdout_soft(
+        "systemctl",
+        &[
+            "--user",
+            "show",
+            &format!("{PREFIX}{unit}"),
+            &format!("--property={prop}"),
+            "--value",
+        ],
+    )
 }
 
 pub fn remove(name: &str, dry_run: bool) -> Result<()> {
@@ -65,146 +88,223 @@ pub fn remove(name: &str, dry_run: bool) -> Result<()> {
     for f in &units {
         let _ = std::fs::remove_file(f);
     }
-    run("systemctl", &["--user", "daemon-reload"]).ok();
+    sys_run("systemctl", &["--user", "daemon-reload"]).ok();
     ok(
         "systemctl",
-        &[
-            "--user",
-            "reset-failed",
-            &unit,
-            &format!("{PREFIX}{name}.service"),
-        ],
+        &["--user", "reset-failed", &unit, &service_unit(&name)],
     );
     println!("removed {PREFIX}{name} ({{timer,service}})");
     Ok(())
 }
 
-pub fn list() -> Result<()> {
-    let dir = unit_dir();
-    println!("== managed timers ({PREFIX}*) ==");
-    let timers = stdout_soft(
-        "systemctl",
-        &[
-            "--user",
-            "list-timers",
-            &format!("{PREFIX}*"),
-            "--all",
-            "--no-pager",
-        ],
-    );
-    if !timers.is_empty() {
-        println!("{timers}");
-    }
-
-    println!();
-    println!("== managed tasks ==");
-    let names = managed_names(&dir);
-    if names.is_empty() {
-        println!("  (none, nothing managed by octask yet)");
+pub fn list(json: bool) -> Result<()> {
+    let rows = view::collect();
+    if json {
+        println!("{}", serde_json::to_string_pretty(&view::to_json(&rows))?);
         return Ok(());
     }
-    let home_str = home().to_string_lossy().into_owned();
-    for name in names {
-        let (service, _) = unit_paths(&dir, &name);
-        let svc = std::fs::read_to_string(&service).unwrap_or_default();
-        let tag = if svc.contains("--agent") {
-            "agent"
-        } else {
-            "task"
-        };
-        let workdir = property(&svc, "WorkingDirectory=");
-        let mut desc = property(&svc, "Description=");
-        if let Some(rest) = desc.strip_prefix(&format!("{PREFIX}{name}: ")) {
-            desc = rest.to_owned();
-        }
-        desc = desc.replace(&home_str, "~");
-        if desc.chars().count() > 88 {
-            desc = desc.chars().take(87).collect::<String>();
-            desc.push('…');
-        }
-        let wd_short = tildify(&workdir);
-        let suffix =
-            if !workdir.is_empty() && !format!(" {desc} ").contains(&format!(" {wd_short} ")) {
-                format!("  ({wd_short})")
-            } else {
-                String::new()
-            };
-        let shown = if desc.is_empty() {
-            "(no description)"
-        } else {
-            &desc
-        };
-        println!("  [{tag}] {name}: {shown}{suffix}");
-    }
-    Ok(())
-}
-
-pub fn enable(name: &str) -> Result<()> {
-    let name = one_name(name)?;
-    let dir = unit_dir();
-    require_units(&dir, "enable", &name)?;
-    run("systemctl", &["--user", "daemon-reload"])?;
-    run(
-        "systemctl",
-        &["--user", "enable", "--now", &timer_unit(&name)],
-    )?;
-    let next = next_run(&name);
-    let next = if next.is_empty() { "unknown" } else { &next };
-    println!("enabled {}: next run {next}", timer_unit(&name));
-    Ok(())
-}
-
-pub fn disable(name: &str) -> Result<()> {
-    let name = one_name(name)?;
-    let dir = unit_dir();
-    require_units(&dir, "disable", &name)?;
-    run(
-        "systemctl",
-        &["--user", "disable", "--now", &timer_unit(&name)],
-    )?;
+    print!("{}", view::render(&rows));
+    let enabled = rows.iter().filter(|r| r.enabled).count();
+    let failed = rows.iter().filter(|r| r.failed).count();
     println!(
-        "disabled {} (units kept, re-enable with: octask enable {name})",
-        timer_unit(&name)
+        "{}",
+        format!(
+            "{} task(s): {} enabled, {} disabled, {} failed",
+            rows.len(),
+            enabled,
+            rows.len() - enabled,
+            failed
+        )
+        .dimmed()
     );
     Ok(())
 }
 
-pub fn status(name: &str) -> Result<()> {
+/// Enable or disable one task, or every managed task when `name` is None.
+pub fn set_enabled(name: Option<String>, enable: bool, dry_run: bool) -> Result<()> {
+    let dir = unit_dir();
+    let names: Vec<String> = match name {
+        Some(name) => vec![one_name(&name)?],
+        None => managed_names(&dir),
+    };
+    if names.is_empty() {
+        println!("no managed tasks to change");
+        return Ok(());
+    }
+    let verb = if enable { "enable" } else { "disable" };
+    if enable && !dry_run {
+        sys_run("systemctl", &["--user", "daemon-reload"])?;
+    }
+
+    let mut changed = 0;
+    for name in names {
+        if !units_exist(&dir, &name) {
+            println!("{name}: no units (skipped)");
+            continue;
+        }
+        if is_enabled(&name) == enable {
+            println!("{}", format!("{name}: already {verb}d").dimmed());
+            continue;
+        }
+        if dry_run {
+            println!("dry-run: would {verb} {}", timer_unit(&name));
+        } else {
+            let tail = if enable {
+                ("enable", "--now")
+            } else {
+                ("disable", "--now")
+            };
+            sys_run("systemctl", &["--user", tail.0, tail.1, &timer_unit(&name)])?;
+            println!("{verb}d {}", timer_unit(&name));
+        }
+        changed += 1;
+    }
+    if dry_run {
+        println!("dry-run: {changed} task(s) would change");
+    } else {
+        println!("{changed} task(s) changed");
+    }
+    Ok(())
+}
+
+pub fn pause() -> Result<()> {
+    let rows = view::collect();
+    let enabled: Vec<String> = rows
+        .iter()
+        .filter(|r| r.enabled)
+        .map(|r| r.name.clone())
+        .collect();
+    state::save(
+        &state::state_path(),
+        &state::PauseState {
+            enabled: enabled.clone(),
+        },
+    )?;
+    set_enabled(None, false, false)?;
+    println!(
+        "paused {} task(s); resume with: octask resume",
+        enabled.len()
+    );
+    Ok(())
+}
+
+pub fn resume() -> Result<()> {
+    let path = state::state_path();
+    let Some(saved) = state::load(&path)? else {
+        bail!("no paused state (octask pause first)");
+    };
+    let wanted: BTreeSet<String> = saved.enabled.into_iter().collect();
+    let names = managed_names(&unit_dir());
+    for name in &names {
+        let target = wanted.contains(name);
+        if is_enabled(name) != target {
+            let tail = if target {
+                ("enable", "--now")
+            } else {
+                ("disable", "--now")
+            };
+            sys_run("systemctl", &["--user", tail.0, tail.1, &timer_unit(name)])?;
+        }
+    }
+    state::clear(&path)?;
+    println!(
+        "resumed {} task(s) from {} managed",
+        wanted.len(),
+        names.len()
+    );
+    Ok(())
+}
+
+pub fn run(name: &str) -> Result<()> {
+    let name = one_name(name)?;
+    let dir = unit_dir();
+    require_units(&dir, "run", &name)?;
+    sys_run(
+        "systemctl",
+        &["--user", "start", "--no-block", &service_unit(&name)],
+    )?;
+    println!("started {}", service_unit(&name));
+    Ok(())
+}
+
+pub fn status(name: &str, json: bool) -> Result<()> {
     let name = one_name(name)?;
     let dir = unit_dir();
     require_units(&dir, "status", &name)?;
-    run(
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "name": name,
+                "enabled": is_enabled(&name),
+                "timer_active": systemctl_show(&format!("{name}.timer"), "ActiveState"),
+                "service_active": systemctl_show(&format!("{name}.service"), "ActiveState"),
+                "result": systemctl_show(&format!("{name}.service"), "Result"),
+                "next_run": next_run(&name),
+            }))?
+        );
+        return Ok(());
+    }
+    sys_run(
         "systemctl",
         &[
             "--user",
             "status",
             &timer_unit(&name),
-            &format!("{PREFIX}{name}.service"),
+            &service_unit(&name),
             "--no-pager",
         ],
     )
 }
 
-pub fn logs(name: &str, lines: u32) -> Result<()> {
+pub fn logs(name: &str, lines: u32, follow: bool) -> Result<()> {
     let name = one_name(name)?;
-    run(
-        "journalctl",
-        &[
-            "--user",
-            "-u",
-            &format!("{PREFIX}{name}.service"),
-            "-n",
-            &lines.to_string(),
-            "--no-pager",
-        ],
-    )
+    let mut args: Vec<String> = vec![
+        "--user".into(),
+        "-u".into(),
+        service_unit(&name),
+        "-n".into(),
+        lines.to_string(),
+        "--no-pager".into(),
+    ];
+    if follow {
+        args.push("-f".into());
+    }
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    sys_run("journalctl", &refs)
 }
 
-pub fn show(name: &str) -> Result<()> {
+pub fn show(name: &str, json: bool) -> Result<()> {
     let name = one_name(name)?;
     let dir = unit_dir();
     require_units(&dir, "show", &name)?;
     let t = load_task(&dir, &name)?;
+    let next = next_run(&name);
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "name": t.name,
+                "kind": if t.is_agent { "agent" } else { "exec" },
+                "agent": t.agent,
+                "model": t.model,
+                "prompt": t.prompt,
+                "exec": t.exec,
+                "workdir": t.workdir,
+                "oncalendar": t.oncalendar,
+                "delay": t.delay,
+                "persistent": t.persistent,
+                "timeout": t.timeout,
+                "dirty_only": t.dirty,
+                "description": t.description,
+                "envs": t.envs,
+                "credentials": t.creds,
+                "enabled": is_enabled(&name),
+                "next_run": next,
+            }))?
+        );
+        return Ok(());
+    }
     if t.is_agent {
         println!("task: {name} (agent)");
         println!("agent: {}", t.agent);
@@ -242,9 +342,79 @@ pub fn show(name: &str) -> Result<()> {
     for c in &t.creds {
         println!("credential: {c}");
     }
-    let next = next_run(&name);
     if !next.is_empty() {
         println!("next run: {next}");
     }
+    Ok(())
+}
+
+pub fn cleanup(dry_run: bool, include_history: bool) -> Result<()> {
+    let dir = unit_dir();
+    let names: BTreeSet<String> = managed_names(&dir).into_iter().collect();
+    let mut stale: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(file) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !file.starts_with(PREFIX) {
+                continue;
+            }
+            let keep = names.iter().any(|name| {
+                file == format!("{PREFIX}{name}.timer") || file == format!("{PREFIX}{name}.service")
+            });
+            if !keep {
+                stale.push(path);
+            }
+        }
+    }
+
+    let state_dir = state::state_dir();
+    let mut artifacts: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&state_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(file) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if file == "pause.json" {
+                continue;
+            }
+            if !include_history && path.is_dir() && file == "history" {
+                continue;
+            }
+            artifacts.push(path);
+        }
+    }
+    stale.sort();
+    artifacts.sort();
+
+    if stale.is_empty() && artifacts.is_empty() {
+        println!("nothing to clean");
+        return Ok(());
+    }
+    for path in stale.iter().chain(artifacts.iter()) {
+        if dry_run {
+            println!("dry-run: would remove {}", tildify(&path.to_string_lossy()));
+        } else if path.is_dir() {
+            let _ = std::fs::remove_dir_all(path);
+        } else {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+    println!(
+        "{}",
+        format!(
+            "{} {}",
+            stale.len() + artifacts.len(),
+            if dry_run {
+                "artifact(s) would be removed"
+            } else {
+                "artifact(s) removed"
+            }
+        )
+        .dimmed()
+    );
     Ok(())
 }

@@ -96,6 +96,15 @@ describe("markdownOf", () => {
     expect(text).toContain("> **Answer:** the first")
   })
 
+  test("an unanswered question keeps its recommendation hint and shows no answer", () => {
+    const text = markdownOf({
+      ...base,
+      prompts: { questions: [{ title: "Pick", body: "", recommendation: "this" }] },
+    })
+    expect(text).toContain("> ➡️ this")
+    expect(text).toContain("> **Answer:** Not answered")
+  })
+
   test("a record with no content is just the heading", () => {
     expect(markdownOf({ ...base })).toBe("## Prompts")
   })
@@ -178,7 +187,15 @@ describe("answerText", () => {
 
   test("falls back to the first question when there is no description", () => {
     const text = answerText({ ...base, prompts: { questions: [{ title: "First?", body: "" }] } }, {})
-    expect(text).toBe("# Prompt: First?")
+    expect(text).toBe("# Prompt: First?\n\nFirst?\nNot answered")
+  })
+
+  test("a skipped question is shown as not answered beside the answered ones", () => {
+    const text = answerText(
+      { ...base, prompts: { questions: [{ title: "First?", body: "" }, { title: "Second?", body: "" }] } },
+      { "0": "one" },
+    )
+    expect(text).toBe("# Prompt: First?\n\nFirst?\none\n\nSecond?\nNot answered")
   })
 })
 
@@ -222,7 +239,18 @@ describe("formFieldsOf", () => {
     const [field] = formFieldsOf(prompt)
     expect(field?.options).toEqual([{ value: "the first", label: "the first (Recommended)" }])
     expect(field?.placeholder).toBe("the first")
-    expect(field?.description).toBe("why")
+    expect(field?.description).toBe("[Pick one]\n\nwhy")
+  })
+
+  test("the card text brackets the title so it reads apart from the body", () => {
+    const [field] = formFieldsOf(prompt)
+    expect(field?.title).toBe("Pick one")
+    expect(field?.description).toBe("[Pick one]\n\nwhy")
+  })
+
+  test("a question without a body still shows its title", () => {
+    const field = formFieldsOf({ ...base, prompts: { questions: [{ title: "Only title" }] } })[0]
+    expect(field?.description).toBe("[Only title]")
   })
 
   test("a question without a recommendation stays free text", () => {
@@ -251,7 +279,7 @@ describe("formFieldsOf", () => {
     expect(description).toEndWith("… full text in the Prompts section")
     expect(
       formFieldsOf({ ...base, prompts: { questions: [{ title: "tall", body }] } })[0]?.description,
-    ).toBe(description)
+    ).toBe(`[tall]\n\n${description}`)
   })
 })
 

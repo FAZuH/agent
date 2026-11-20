@@ -421,6 +421,7 @@ install_skill https://github.com/mattpocock/skills/tree/main/skills/productivity
   --skill grill-me grilling handoff teach to-questionnaire wait-what writing-for-agents
 install_skill AminBlg/SimpleEnglish --skill simple-english
 install_skill FAZuH/bgrun --skill bgrun
+install_skill vercel/board --skill board
 # Not bonus: the install links @antislop-copywriting into the instructions, so a
 # default install that omits it leaves that link dangling.
 install_skill miqdadbadjuber/anti-slop --skill antislop antislop-code antislop-copywriting antislop-layoutmobile
@@ -442,7 +443,7 @@ if ((DIGEST_MAIL || DIGEST_PHONE)); then
   if ((DIGEST_PHONE)); then DIGESTS+=("phone-digest"); fi
   deploy_digest "${DIGESTS[@]}"
   # Override the unattended model with DIGEST_MODEL=... ./install.sh
-  DIGEST_MODEL="${DIGEST_MODEL:-opencode/mimo-v2.6-flash-free}"
+  DIGEST_MODEL="${DIGEST_MODEL:-commandcode/deepseek/deepseek-v4.1-flash}"
   if ((DIGEST_MAIL)); then
     "$HOME/.cargo/bin/mail-digest" setup --model "$DIGEST_MODEL" \
       --workdir "$HOME/.config/fazuh-agent/digest/mail-digest"
