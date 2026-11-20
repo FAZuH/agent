@@ -48,6 +48,10 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   maxRounds: "Maximum rounds of the supervisor's review.",
   maxEvidence: "Maximum read-only evidence calls the supervisor may make.",
   askWaitMs: "Milliseconds the supervisor waits for the permission request before resolving the hold.",
+  standalone: "Skips the Jev scorer; the supervisor judges every call in the native hold.",
+  nonBlocking: "Runs calls at once with no hold or card and judges each session's calls in one batch; implies standalone.",
+  batchMs: "Milliseconds per non-blocking batch window.",
+  batchMax: "Most calls in one non-blocking batch before an early flush.",
 }
 
 const field = (label: string, key: string): SettingMeta => ({
@@ -100,8 +104,8 @@ export const SETTING_META: Record<string, FeatureSettingMeta> = {
       toastOutcomes: field("Toast outcomes", "toastOutcomes"),
     },
   },
-  hook_no_respawn: {
-    group: "No respawn",
+  hook_session_ban: {
+    group: "Session ban",
     fields: {
       holdMs: field("Hold duration", "holdMs"),
       bindGraceMs: field("Bind grace period", "bindGraceMs"),
@@ -123,9 +127,23 @@ export const SETTING_META: Record<string, FeatureSettingMeta> = {
       maxRounds: field("Maximum rounds", "maxRounds"),
       maxEvidence: field("Maximum evidence", "maxEvidence"),
       askWaitMs: field("Ask wait time", "askWaitMs"),
+      standalone: field("Standalone", "standalone"),
+      nonBlocking: field("Non blocking", "nonBlocking"),
+      batchMs: field("Batch window", "batchMs"),
+      batchMax: field("Batch size", "batchMax"),
       toast: field("Toast", "toast"),
     },
   },
+}
+
+/** Friendly labels for audit fields shown in the expanded call detail. */
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  rawVerdict: "Raw verdict",
+  decisionNote: "Decision note",
+}
+
+export function auditFieldLabel(field: string): string {
+  return AUDIT_FIELD_LABELS[field] ?? friendlyLabel(field)
 }
 
 /** Sentence case from a raw key or feature id, with any `hook_` prefix removed. */

@@ -1,9 +1,9 @@
 /**
- * The no-respawn rule as pure data: the task key, the verdict table, the
+ * The session-ban rule as pure data: the task key, the verdict table, the
  * admission window and the generation. No host, no filesystem, no clock.
  *
  * Every constant below is one of the nine decisions fixed in
- * probes/no-respawn-identity/design.md section 9. Change that file before
+ * probes/session-ban-identity/design.md section 9. Change that file before
  * changing a number here, or the two disagree about what the plugin promises.
  */
 
@@ -79,7 +79,7 @@ export type Row =
   | "9"
   | "10"
   | "11"
-  | "fence"
+  | "sessionBan"
   | "retired"
   | "none"
 
@@ -106,14 +106,14 @@ export interface TaskRecord {
 }
 
 /**
- * A fence, with the kind that decides whether a human may lift it.
+ * A session ban, with the kind that decides whether a human may lift it.
  *
- * `parent` is the session fence of a parent whose own run was stopped: it holds,
+ * `parent` is the session ban of a parent whose own run was stopped: it holds,
  * and a human approval for that exact call admits the approved generation.
- * `subtree` is the fence around the sessions bound to an aborted task: it denies,
+ * `subtree` is the session ban around the sessions bound to an aborted task: it denies,
  * and no approval or generation overrides it.
  */
-export interface Fence {
+export interface SessionBan {
   kind: "parent" | "subtree"
   atSeq: number
   cause: string
@@ -168,9 +168,9 @@ export interface AdmissionDecision {
  * otherwise share one key and hold each other.
  */
 export function fingerprint(prompt: string): string {
-  if (typeof prompt !== "string") throw new TypeError("nospawn: prompt must be a string")
+  if (typeof prompt !== "string") throw new TypeError("session-ban: prompt must be a string")
   const text = prompt.normalize("NFKC").replace(/\s+/g, " ").trim()
-  if (!text) throw new TypeError("nospawn: an empty prompt has no task key")
+  if (!text) throw new TypeError("session-ban: an empty prompt has no task key")
   return createHash("sha256").update(LOWERCASE ? text.toLowerCase() : text, "utf8").digest("hex")
 }
 
@@ -182,7 +182,7 @@ export function fingerprint(prompt: string): string {
  */
 export function holdMarker(callKey: string, reason: string): string {
   const digest = createHash("sha256").update(String(callKey), "utf8").digest("hex").slice(0, 12)
-  return `nospawn hold ${digest}: ${reason}`
+  return `session-ban hold ${digest}: ${reason}`
 }
 
 /** Whether a tombstone still blocks, expired by the wall backstop, or spent. */
@@ -233,17 +233,17 @@ export function nextGeneration(rec?: TaskRecord, approvedBy?: "human"): number {
  * 2. The evidence gate: rows 9 and 10.
  * 3. The task table against this parent's records: rows 3, 4, 5, 7, 8 and the
  *    no-record case.
- * 4. The parent session fence, only over an allow, so it can never return a
+ * 4. The parent session ban, only over an allow, so it can never return a
  *    different verdict than the task table already justified.
  *
  * `records` may hold records of other parents: they are filtered out here, so a
  * caller cannot leak a tombstone onto an unrelated session.
  *
  * A human approval is consulted only at the hold rows (3, 4, 9) and at the
- * parent fence, and always against the newest record that could be the one being
+ * parent session ban, and always against the newest record that could be the one being
  * replaced. Rows 1, 2 and 6 deny on exact evidence and never see an approval.
  */
-export function verdict(input: AdmissionInput, records: TaskRecord[] = [], fence?: Fence): AdmissionDecision {
+export function verdict(input: AdmissionInput, records: TaskRecord[] = [], sessionBan?: SessionBan): AdmissionDecision {
   const parentID = input.parentID
   const mine = records.filter((rec) => rec.parentID === parentID)
   const foreign = records.some((rec) => rec.parentID !== parentID)
@@ -256,10 +256,10 @@ export function verdict(input: AdmissionInput, records: TaskRecord[] = [], fence
     return decide("deny", "1", false, null, "the aborted invocation replayed")
   }
 
-  // Row 6 is the child subtree fence and is never approvable. An unknown kind
-  // lands here too: a fence that cannot be read is not a fence to lift.
-  if (fence && fence.kind !== "parent") {
-    return decide("deny", "6", false, null, "the calling session is inside a fenced subtree")
+  // Row 6 is the child subtree session ban and is never approvable. An unknown kind
+  // lands here too: a session ban that cannot be read is not a session ban to lift.
+  if (sessionBan && sessionBan.kind !== "parent") {
+    return decide("deny", "6", false, null, "the calling session is inside a session-banned subtree")
   }
 
   if (resume && mine.some((rec) => rec.childIDs.includes(resume))) {
@@ -292,19 +292,19 @@ export function verdict(input: AdmissionInput, records: TaskRecord[] = [], fence
     else decision = decide("allow", "5", true, null, "the same task, after a user turn")
   }
 
-  // 4. The parent fence, over an allow only. It cannot rescue a task hold: a
+  // 4. The parent session ban, over an allow only. It cannot rescue a task hold: a
   // stale approval that fails row 4 must not pass through here instead.
-  if (decision.effect !== "allow" || !fence) return decision
+  if (decision.effect !== "allow" || !sessionBan) return decision
   // A call a human already answered for carries its own lift: the same record
-  // and the same generation, so the fence has nothing left to ask.
+  // and the same generation, so the session ban has nothing left to ask.
   if (decision.generation !== null) return decision
   if (frontierNow === null) {
-    // Without the frontier there is no proof a user item passed the fence, so
-    // the fence holds whatever the evidence gate concluded.
-    return hold(input, "fence", "the parent session is fenced and the frontier cannot be read", match)
+    // Without the frontier there is no proof a user item passed the session ban, so
+    // the session ban holds whatever the evidence gate concluded.
+    return hold(input, "sessionBan", "the parent session is session-banned and the frontier cannot be read", match)
   }
-  if (frontierNow > fence.atSeq) return decision
-  return hold(input, "fence", "the parent session is fenced", match)
+  if (frontierNow > sessionBan.atSeq) return decision
+  return hold(input, "sessionBan", "the parent session is session-banned", match)
 }
 
 /** The newest live record: the one an approval has to beat. */
@@ -316,7 +316,7 @@ function newest(records: TaskRecord[]): TaskRecord | undefined {
  * A hold, unless a human approved this call. The approval must carry a positive
  * whole generation, and against a known record it must be newer than that
  * record, so a stale approval cannot admit a generation nobody answered for.
- * Used by rows 3, 4, 9 and the parent session fence, never by rows 1, 2 or 6.
+ * Used by rows 3, 4, 9 and the parent session ban, never by rows 1, 2 or 6.
  */
 function hold(input: AdmissionInput, row: Row, reason: string, rec?: TaskRecord): AdmissionDecision {
   const approved = input.approvedGeneration

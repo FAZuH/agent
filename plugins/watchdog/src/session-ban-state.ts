@@ -1,5 +1,5 @@
 /**
- * The no-respawn store: one snapshot per parent session plus an append-only
+ * The session-ban store: one snapshot per parent session plus an append-only
  * audit beside it.
  *
  * The audit is the durable intent and the snapshot is the derived state, so the
@@ -22,13 +22,14 @@
  */
 
 import { createHash } from "node:crypto"
-import { chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs"
+import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { STATE_DIR_MODE, STATE_FILE_MODE, TTL_MS, type AuditEvidence, type Fence, type TaskRecord } from "./nospawn.ts"
+import { STATE_DIR_MODE, STATE_FILE_MODE, TTL_MS, type AuditEvidence, type SessionBan, type TaskRecord } from "./session-ban.ts"
 
 /** Test and milestone-B override. Takes precedence over the host state root. */
-export const STATE_DIR_ENV = "OPENCODE_JEV_NOSPAWN_DIR"
+export const STATE_DIR_ENV = "OPENCODE_JEV_SESSION_BAN_DIR"
+const LEGACY_STATE_DIR_ENV = "OPENCODE_JEV_NOSPAWN_DIR"
 
 /**
  * How long a writer waits for another one before it refuses to guess.
@@ -80,7 +81,7 @@ export interface Snapshot {
   parentID: string
   frontierSeq: number
   eventCursor: number
-  fence?: Fence
+  sessionBan?: SessionBan
   tasks: Record<string, TaskRecord>
   degraded?: { reason: string; since: number; attempts: number }
 }
@@ -102,13 +103,19 @@ export interface SnapshotRead {
 export function stateDir(): string {
   const override = process.env[STATE_DIR_ENV]
   if (override) return override
+  const legacyOverride = process.env[LEGACY_STATE_DIR_ENV]
+  if (legacyOverride) return legacyOverride
   const root =
     process.env.OPENCODE_JEV_STATE_HOME ??
     process.env.JEV_STATE_HOME ??
     process.env.JEV_DATA_HOME ??
     process.env.JEV_DATA_DIR ??
     join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "jev")
-  return join(root, "nospawn")
+  const current = join(root, "session-ban")
+  const legacy = join(root, "nospawn")
+  if (existsSync(current)) return current
+  if (existsSync(legacy)) return legacy
+  return current
 }
 
 /** Read a parent's snapshot. A missing or unreadable file is never "empty". */
@@ -145,7 +152,7 @@ export function writeTask(parentID: string, key: string, rec: TaskRecord): void 
   withParentLock(parentID, () => {
     const read = readSnapshot(parentID)
     if (!read.ok && read.reason !== "missing") {
-      throw new Error(`nospawn: refusing to write over a ${read.reason} snapshot for ${parentID}`)
+      throw new Error(`session-ban: refusing to write over a ${read.reason} snapshot for ${parentID}`)
     }
     const snap = read.snap ?? blank(parentID)
     snap.tasks[key] = merge(snap.tasks[key], { ...rec, parentID, fingerprint: key })
@@ -255,7 +262,7 @@ export function withParentLock<T>(parentID: string, body: () => T): T {
         dropStale(path, stale)
         continue
       }
-      if (Date.now() > deadline) throw new Error(`nospawn: ${parentID} is locked by another writer`)
+      if (Date.now() > deadline) throw new Error(`session-ban: ${parentID} is locked by another writer`)
       pause(LOCK_POLL_MS)
     }
   }
@@ -354,12 +361,12 @@ function validate(parentID: string, parsed: unknown, audit: AuditEvidence): Snap
     return { ok: false, reason: "corrupt", snap: null, audit }
   }
   if (!object(snap.tasks)) return { ok: false, reason: "corrupt", snap: null, audit }
-  if (snap.fence != null) {
-    const fence = snap.fence as Partial<Fence>
-    // A fence of unknown kind cannot be classified, and guessing would either
+  if (snap.sessionBan != null) {
+    const sessionBan = snap.sessionBan as Partial<SessionBan>
+    // A session ban of unknown kind cannot be classified, and guessing would either
     // deny work a human could lift or lift one nobody may.
-    const kind = fence?.kind
-    if (!object(fence) || (kind !== "parent" && kind !== "subtree") || !number(fence.atSeq) || !number(fence.at)) {
+    const kind = sessionBan?.kind
+    if (!object(sessionBan) || (kind !== "parent" && kind !== "subtree") || !number(sessionBan.atSeq) || !number(sessionBan.at)) {
       return { ok: false, reason: "corrupt", snap: null, audit }
     }
   }

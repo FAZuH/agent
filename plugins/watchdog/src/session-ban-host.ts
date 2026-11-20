@@ -1,5 +1,5 @@
 /**
- * The host glue for the no-respawn rule: the only module that touches `ctx`.
+ * The host glue for the session-ban rule: the only module that touches `ctx`.
  *
  * Five jobs, in the order one `subagent` call meets them:
  *
@@ -44,12 +44,12 @@ import {
   type AbortAuthority,
   type AuditEvidence,
   type CallRecord,
-  type Fence,
+  type SessionBan,
   type Row,
   type TaskRecord,
   tombstoneState,
-} from "./nospawn.ts"
-import * as fsStore from "./nospawn-state.ts"
+} from "./session-ban.ts"
+import * as fsStore from "./session-ban-state.ts"
 import { logCall } from "../../../lib/lib-jev/state.ts"
 import {
   INBOX_ENQUEUED,
@@ -59,7 +59,7 @@ import {
   type FeedState,
   type Frontier,
   type SessionEvent,
-} from "./nospawn-frontier.ts"
+} from "./session-ban-frontier.ts"
 
 /** The tool this rule is about, and the only action it judges. */
 export const SUBAGENT = "subagent"
@@ -90,9 +90,9 @@ export interface AbortRequest {
 
 /** What one abort did: what the command prints and the audit records. */
 export interface AbortReceipt {
-  /** After this call the task is stopped, or the session is fenced. */
+  /** After this call the task is stopped, or the session is session-banned. */
   sealed: boolean
-  /** The tombstone or fence reached disk. False means memory-only: a restart loses it. */
+  /** The tombstone or session ban reached disk. False means memory-only: a restart loses it. */
   durable: boolean
   /** Call keys the aborted task owned, settled deny `revocation:abort`. */
   revoked: string[]
@@ -100,10 +100,10 @@ export interface AbortReceipt {
   interrupted: string[]
   /** Children left alone; the audit line carries the reason. */
   preserved: string[]
-  /** Bound children whose subtree fence reached disk: row 6 holds for them. */
-  fenced: number
-  /** Bound children whose fence write failed, so row 6 does not hold for them. */
-  fenceFailures: string[]
+  /** Bound children whose subtree session ban reached disk: row 6 holds for them. */
+  sessionBanned: number
+  /** Bound children whose session ban write failed, so row 6 does not hold for them. */
+  sessionBanFailures: string[]
   /**
    * The host posted its own synthetic notice for this abort. The command route
    * reads it to avoid saying the same thing twice.
@@ -140,7 +140,7 @@ export interface HostOptions {
   /** The switch, re-read per call: turning it off stops enforcement at once. */
   enabled?: () => boolean
   /** The evaluator. Injected only to count invocations; the real table by default. */
-  evaluate?: (input: AdmissionInput, records: TaskRecord[], fence?: Fence) => AdmissionDecision
+  evaluate?: (input: AdmissionInput, records: TaskRecord[], sessionBan?: SessionBan) => AdmissionDecision
   now?: () => number
   /** Retry timer for the degraded schedule. */
   schedule?: (fn: () => void, ms: number) => unknown
@@ -178,10 +178,12 @@ export interface AdmissionHost {
    * gate has no way to reach it from a verdict.
    */
   abort(request: AbortRequest): Promise<AbortReceipt>
-  /** Fence the parent's own run and interrupt its children. */
-  fenceParent(parentID: string, cause: string): Promise<void>
-  /** Fence, revoke the session's open calls, then interrupt it and its children. */
+  /** Write the session ban for the parent's run and interrupt its children. */
+  applySessionBan(parentID: string, cause: string): Promise<void>
+  /** Write the session ban, revoke the session's open calls, then interrupt it and its children. */
   abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
+  /** Remove the session ban so a replacement subagent is admitted again. */
+  clearSessionBan(parentID: string): boolean
   close(): void
 }
 
@@ -261,11 +263,11 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   /** Tombstones whose durable write failed: the table must still see them. */
   const memory = new Map<string, TaskRecord>()
   /**
-   * Parent fences whose durable write failed. The table reads them beside the
+   * Parent session bans whose durable write failed. The table reads them beside the
    * snapshot, so a session abort holds in this process even when the disk does
-   * not carry the fence; `durable:false` says a restart loses it.
+   * not carry the session ban; `durable:false` says a restart loses it.
    */
-  const fences = new Map<string, Fence>()
+  const sessionBans = new Map<string, SessionBan>()
 
   const emptyParent = (): ParentState => ({
     frontier: { seq: 0, cursor: 0 },
@@ -374,7 +376,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     ok: boolean
     audit: AuditEvidence
     records: TaskRecord[]
-    fence?: Fence
+    sessionBan?: SessionBan
   } {
     // The store classifies its own read errors, so this path cannot inherit a
     // weaker rule: `unreadable` here means the file exists and could not be read.
@@ -382,10 +384,10 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     const ok = read.ok
     const audit: AuditEvidence = read.audit
     const sealed = [...memory.values()].filter((rec) => rec.parentID === parentID)
-    // A fence whose durable write failed still holds in this process. It is
+    // A session ban whose durable write failed still holds in this process. It is
     // newer than whatever the disk carries, so it wins while it is present.
-    const held = fences.get(parentID)
-    if (!ok || !read.snap) return { ok: false, audit, records: sealed, ...(held ? { fence: held } : {}) }
+    const held = sessionBans.get(parentID)
+    if (!ok || !read.snap) return { ok: false, audit, records: sealed, ...(held ? { sessionBan: held } : {}) }
     const records = Object.values(read.snap.tasks)
     // A tombstone whose durable write failed still holds. The disk record is the
     // base; the in-memory seal replaces it for this process, and adds itself
@@ -395,7 +397,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
       if (at >= 0 && records[at].abortedAt == null) records[at] = rec
       else if (at < 0) records.push(rec)
     }
-    return { ok: true, audit, records, fence: held ?? read.snap.fence }
+    return { ok: true, audit, records, sessionBan: held ?? read.snap.sessionBan }
   }
 
   // ——— 2. enforcement ———
@@ -435,7 +437,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
 
     const evidence = readEvidence(entry.parentID)
     const input = admissionInput(entry, evidence)
-    const decision = evaluate(input, evidence.records, evidence.fence)
+    const decision = evaluate(input, evidence.records, evidence.sessionBan)
     if (decision.effect === "allow") {
       if (decision.retire) retire(entry.parentID, entry.fingerprint, decision.reason)
       const opened = entry.holdRow !== null
@@ -512,7 +514,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   async function expire(entry: Entry): Promise<void> {
     try {
       if (closed || entry.settled?.effect === "deny" || entry.holdRow === null) return
-      const message = `${entry.holdMarker ?? "nospawn hold"} expired after ${holdMs} ms`
+      const message = `${entry.holdMarker ?? "session-ban hold"} expired after ${holdMs} ms`
       if (!(await selfReject(entry, "the hold expired", message))) return
       settleDenied(entry, "hold_expired", `${message}; Jev rejected the call`)
     } catch {}
@@ -737,7 +739,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
 
   function admissionInput(
     entry: Entry,
-    evidence: { ok: boolean; audit: AuditEvidence; records: TaskRecord[]; fence?: Fence },
+    evidence: { ok: boolean; audit: AuditEvidence; records: TaskRecord[]; sessionBan?: SessionBan },
   ): AdmissionInput {
     const state = parent(entry.parentID)
     const readable = state.subscription === "ok" && state.log === "ok"
@@ -766,7 +768,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   function denyEvent(event: any, decision: Decision): Decision {
     if (decision.effect !== "deny") return decision
     event.effect = "deny"
-    event.message = `nospawn: ${decision.reason}`
+    event.message = `session-ban: ${decision.reason}`
     return decision
   }
 
@@ -874,7 +876,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
       for (const [key, entry] of entries) if (entry.parentID === parentID) entries.delete(key)
       for (const [childID, info] of children) if (childID === parentID || info.parentID === parentID) children.delete(childID)
       for (const sealed of [...memory.keys()]) if (sealed.startsWith(`${parentID}|`)) memory.delete(sealed)
-      fences.delete(parentID)
+      sessionBans.delete(parentID)
       parents.delete(parentID)
     } catch {}
   }
@@ -953,7 +955,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     for (const entry of entries.values()) {
       if (entry.parentID !== parentID || entry.settled?.effect === "deny" || entry.holdRow === null) continue
       const evidence = readEvidence(parentID)
-      const again = evaluate(admissionInput(entry, evidence), evidence.records, evidence.fence)
+      const again = evaluate(admissionInput(entry, evidence), evidence.records, evidence.sessionBan)
       if (again.effect !== "allow") continue
       entry.settled = {
         decision: "allow",
@@ -983,16 +985,16 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   function feedFailed(reason: string): void {
     if (closed) return
     // The feed is the frontier's only source: why it failed, in the call log.
-    logCall({ hook: "hook_no_respawn", site: "feed", reason })
+    logCall({ hook: "hook_session_ban", site: "feed", reason })
     feedAlive = false
     for (const parentID of [...parents.keys()]) frontierFailed(parentID, reason)
   }
 
-  // ——— 5. abort and the session fence ———
+  // ——— 5. abort and the session ban ———
 
   /**
    * Stop one task, in the contract's order: seal, revoke, interrupt, contain,
-   * fence, notify. The tombstone is durable before anything a replacement can
+   * session ban, notify. The tombstone is durable before anything a replacement can
    * observe, and nothing here resumes anything.
    *
    * A second abort of a task that is already sealed re-seals nothing, moves no
@@ -1080,24 +1082,24 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     // and no approval lifts that. Read the record again: containment above may
     // have bound one more child.
     const boundChildren = readEvidence(parentID).records.find((item) => item.fingerprint === key)?.childIDs ?? rec.childIDs
-    const unfenced: string[] = []
-    for (const childID of boundChildren) if (!(await fenceSubtree(childID, key, cause))) unfenced.push(childID)
-    // Named in the receipt, not only the audit: a child the fence missed can
+    const notSessionBanned: string[] = []
+    for (const childID of boundChildren) if (!(await writeSubtreeSessionBan(childID, key, cause))) notSessionBanned.push(childID)
+    // Named in the receipt, not only the audit: a child the session ban missed can
     // still spawn, and the user must not be told otherwise.
-    receipt.fenced = boundChildren.length - unfenced.length
-    receipt.fenceFailures = unfenced
+    receipt.sessionBanned = boundChildren.length - notSessionBanned.length
+    receipt.sessionBanFailures = notSessionBanned
 
     receipt.notified = await notify(parentID, `Jev aborted task ${key.slice(0, 12)} (${by}): ${cause}. Unrelated work continues; a replacement of that task is held until your next message.`)
     audit(parentID, {
       event: "abort_done",
       fingerprint: key,
-      detail: `${by}: ${cause}; revoked ${receipt.revoked.length}, interrupted ${receipt.interrupted.length}, preserved ${receipt.preserved.length}${refused.length ? `, interrupt refused ${refused.join(",")}` : ""}${unfenced.length ? `, subtree fence refused ${unfenced.join(",")}` : ""}`,
+      detail: `${by}: ${cause}; revoked ${receipt.revoked.length}, interrupted ${receipt.interrupted.length}, preserved ${receipt.preserved.length}${refused.length ? `, interrupt refused ${refused.join(",")}` : ""}${notSessionBanned.length ? `, subtree session ban refused ${notSessionBanned.join(",")}` : ""}`,
     })
     return receipt
   }
 
   /**
-   * Stop the parent's own run: fence first, then revoke every open call in the
+   * Stop the parent's own run: session ban first, then revoke every open call in the
    * session, then interrupt the parent and its children. A pending prompt left
    * open would otherwise take a late answer and restart the stopped run.
    */
@@ -1105,26 +1107,26 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     const receipt = emptyReceipt()
     const at = now()
     audit(parentID, { event: "abort", detail: `session: ${by}: ${cause}` })
-    const { fence, written } = writeParentFence(parentID, `session: ${by}: ${cause}`, at)
+    const { sessionBan, written } = writeSessionBan(parentID, `session: ${by}: ${cause}`, at)
     receipt.sealed = true
     receipt.durable = written
     if (written) {
-      // The disk now carries the newest fence, so a memory-only one from an
+      // The disk now carries the newest session ban, so a memory-only one from an
       // earlier failed write must not shadow it.
-      fences.delete(parentID)
+      sessionBans.delete(parentID)
     } else {
-      // The disk has no fence, so the table would admit a new subagent call in
+      // The disk has no session ban, so the table would admit a new subagent call in
       // this session. Hold it here for the rest of the process instead; the
       // receipt says a restart loses that hold.
-      fences.set(parentID, fence)
-      audit(parentID, { event: "abort", detail: `session: ${by}: ${cause}; parent fence held in memory only` })
+      sessionBans.set(parentID, sessionBan)
+      audit(parentID, { event: "abort", detail: `session: ${by}: ${cause}; parent session ban held in memory only` })
     }
 
     for (const entry of entries.values()) {
       if (entry.parentID !== parentID || entry.settled?.effect === "deny") continue
       const call = calls.get(entry.key)
       if (call) call.abortedAt = at
-      record(entry, { decision: "deny", row: "fence", reason: "revocation:abort", generation: null, effect: "deny" })
+      record(entry, { decision: "deny", row: "sessionBan", reason: "revocation:abort", generation: null, effect: "deny" })
       clearHold(entry)
       // Only a call that was actually asked has a prompt to resolve.
       if (entry.perId) void selfReject(entry, "the call was revoked")
@@ -1147,7 +1149,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   }
 
   function emptyReceipt(): AbortReceipt {
-    return { sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], fenced: 0, fenceFailures: [], notified: false }
+    return { sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], sessionBanned: 0, sessionBanFailures: [], notified: false }
   }
 
   function refuse(receipt: AbortReceipt, parentID: string, reason: string): AbortReceipt {
@@ -1193,21 +1195,21 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   }
 
   /** Row 6's writer: an admission inside this session denies and stays denied. */
-  async function fenceSubtree(childID: string, key: string, cause: string): Promise<boolean> {
+  async function writeSubtreeSessionBan(childID: string, key: string, cause: string): Promise<boolean> {
     const at = now()
     return mutateSnapshot(childID, (snap) => {
-      snap.fence = { kind: "subtree", atSeq: snap.frontierSeq, cause: `task ${key.slice(0, 12)}: ${cause}`, at }
+      snap.sessionBan = { kind: "subtree", atSeq: snap.frontierSeq, cause: `task ${key.slice(0, 12)}: ${cause}`, at }
     })
   }
 
-  /** The parent fence write both `fenceParent` and `abortSession` use. */
-  function writeParentFence(parentID: string, cause: string, at: number): { fence: Fence; written: boolean } {
+  /** The parent session ban write both `applySessionBan` and `abortSession` use. */
+  function writeSessionBan(parentID: string, cause: string, at: number): { sessionBan: SessionBan; written: boolean } {
     const state = parent(parentID)
-    const fence: Fence = { kind: "parent", atSeq: state.frontier.seq, cause, at }
+    const sessionBan: SessionBan = { kind: "parent", atSeq: state.frontier.seq, cause, at }
     const written = mutateSnapshot(parentID, (snap) => {
-      snap.fence = fence
+      snap.sessionBan = sessionBan
     })
-    return { fence, written }
+    return { sessionBan, written }
   }
 
   /** Tell the parent's session. Never the aborted child: that would be a resume. */
@@ -1221,18 +1223,35 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     }
   }
 
-  async function fenceParent(parentID: string, cause: string): Promise<void> {
+  async function applySessionBan(parentID: string, cause: string): Promise<void> {
     const at = now()
-    const { written } = writeParentFence(parentID, cause, at)
+    const { written } = writeSessionBan(parentID, cause, at)
     if (!written) {
-      // No durable fence means the parent cannot be held for certain; the audit
+      // No durable session ban means the parent cannot be held for certain; the audit
       // line still records the abort, which is what a later read holds on.
-      audit(parentID, { event: "abort", detail: `parent fence not written: ${cause}` })
+      audit(parentID, { event: "abort", detail: `parent session ban not written: ${cause}` })
     } else {
-      fences.delete(parentID)
+      sessionBans.delete(parentID)
     }
     const all = [...children.entries()].filter(([, info]) => info.parentID === parentID).map(([id]) => id)
     for (const childID of all) await interrupt(childID)
+  }
+
+  /** Remove only the session ban, leaving tombstones and cursors untouched. */
+  function clearSessionBan(parentID: string): boolean {
+    sessionBans.delete(parentID)
+    if (!canMutate(parentID)) return false
+    try {
+      return store.withParentLock(parentID, () => {
+        const read = store.readSnapshot(parentID)
+        if (!read.ok || !read.snap || read.snap.sessionBan == null) return true
+        delete read.snap.sessionBan
+        store.writeSnapshot(parentID, read.snap)
+        return true
+      })
+    } catch {
+      return false
+    }
   }
 
   function descendants(roots: string[]): string[] {
@@ -1351,7 +1370,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
    * a hold, which the caller's read path already enforces.
    *
    * `store.writeSnapshot` is the store's raw writer, and the only one that can
-   * move `fence`, `frontierSeq` or `degraded`; the store's own docstring says
+   * move `session ban`, `frontierSeq` or `degraded`; the store's own docstring says
    * milestone B must not call it. Contract 3 names this call under
    * `withParentLock` as the permitted form, so it is used here and nowhere
    * else. Closing the gap needs a store API for the non-task fields.
@@ -1401,8 +1420,9 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     frontierRepaired,
     feedFailed,
     abort,
-    fenceParent,
+    applySessionBan,
     abortSession,
+    clearSessionBan,
     close,
   }
 }
@@ -1466,35 +1486,37 @@ function wrapSubagent(editor: any, host: AdmissionHost): void {
  * What `setup` keeps: the disposer, and the two entry points the plugin has no
  * other way to reach. Without this handle an abort trigger cannot exist.
  */
-export interface NoRespawnHandle {
+export interface SessionBanHandle {
   dispose: () => void
   abort(request: AbortRequest): Promise<AbortReceipt>
   abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
+  clearSessionBan(parentID: string): boolean
 }
 
 /** A handle that records nothing: the feature is off, so there is nothing to stop. */
-function offHandle(): NoRespawnHandle {
+function offHandle(): SessionBanHandle {
   const refuse = async (): Promise<AbortReceipt> => ({
     sealed: false,
     durable: false,
     revoked: [],
     interrupted: [],
     preserved: [],
-    fenced: 0,
-    fenceFailures: [],
+    sessionBanned: 0,
+    sessionBanFailures: [],
     notified: false,
     reason: "the feature is off",
   })
-  return { dispose: () => {}, abort: refuse, abortSession: refuse }
+  return { dispose: () => {}, abort: refuse, abortSession: refuse, clearSessionBan: () => false }
 }
 
-export async function register(ctx: any, options: HostOptions = {}): Promise<NoRespawnHandle> {
+export async function register(ctx: any, options: HostOptions = {}): Promise<SessionBanHandle> {
   const host = createAdmissionHost({ ...options, ctx })
   await attach(ctx, host)
   return {
     dispose: () => host.close(),
     abort: (request) => host.abort(request),
     abortSession: (parentID, by, cause) => host.abortSession(parentID, by, cause),
+    clearSessionBan: (parentID) => host.clearSessionBan(parentID),
   }
 }
 
@@ -1524,7 +1546,7 @@ export async function attach(ctx: any, host: AdmissionHost): Promise<void> {
         // The admission path does not inherit the permission hook's fail-open
         // wrapper: an error here denies.
         event.effect = "deny"
-        event.message = "nospawn: enforcement failed"
+        event.message = "session-ban: enforcement failed"
         return { decision: "hold", row: "none", reason: "enforcement failed", generation: null, effect: "deny" }
       }
     }),
@@ -1549,7 +1571,7 @@ export async function attach(ctx: any, host: AdmissionHost): Promise<void> {
 /** `attached` means the registration call returned: present, and not thrown. */
 function recordAttach(site: string, present: boolean, error?: unknown): void {
   logCall({
-    hook: "hook_no_respawn",
+    hook: "hook_session_ban",
     site: `attach.${site}`,
     present,
     attached: present && error === undefined,
@@ -1576,7 +1598,7 @@ async function pump(stream: any, host: AdmissionHost): Promise<void> {
       const type = String(event?.type ?? "")
       if (first) {
         first = false
-        logCall({ hook: "hook_no_respawn", site: "attach.event.first", type })
+        logCall({ hook: "hook_session_ban", site: "attach.event.first", type })
       }
       if (type === "session.created") host.created(event)
       else if (type === "session.deleted") host.deleted(event)
@@ -1600,7 +1622,7 @@ async function pump(stream: any, host: AdmissionHost): Promise<void> {
  * The one guard the flag needs: off means no hook, no subscription, and no
  * state file. `setup` calls this and nothing else.
  */
-export async function start(ctx: any, enabled: () => boolean, options: HostOptions = {}): Promise<NoRespawnHandle> {
+export async function start(ctx: any, enabled: () => boolean, options: HostOptions = {}): Promise<SessionBanHandle> {
   if (!enabled()) return offHandle()
   return register(ctx, { ...options, enabled })
 }

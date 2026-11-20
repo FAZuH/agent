@@ -5,7 +5,7 @@
  * so a credential in a state field or a logged payload cannot cross RPC.
  */
 import { grant, readApprovals, rejectApproval } from "../../../lib/lib-jev/approve.ts"
-import { readBans } from "../../../lib/lib-jev/ban.ts"
+import { readToolBans } from "../../../lib/lib-jev/tool-ban.ts"
 import { applySecret, applySetting, settingsSnapshot, type SetSecretInput, type SetSettingInput } from "./jev-settings.ts"
 import {
   FEATURES,
@@ -68,6 +68,8 @@ const LOG_FIELDS = [
   "acted",
   "decisions",
   "rules",
+  "rawVerdict",
+  "decisionNote",
 ] as const
 
 export function statusSnapshot() {
@@ -138,8 +140,20 @@ export interface JevRpcDeps {
   sessionTitle?: (sessionID: string) => Promise<string | undefined>
   /** Stop a session tree after a block. */
   stopSession?: (sessionID: string) => Promise<string[]>
-  /** Lift the ban on a session + subagents. */
-  unblockSession?: (sessionID: string) => Promise<number>
+  /** Lift the tool ban on a session + subagents. */
+  liftToolBan?: (sessionID: string) => Promise<number>
+  /** Remove the session ban left by an abort. */
+  clearSessionBan?: (sessionID: string) => boolean
+  /** Start one new turn with the Continue text. */
+  resumeSession?: (sessionID: string, text: string) => Promise<void>
+}
+
+const CONTINUE_TEXT = "Continue the interrupted task."
+
+async function liftBothBans(sessionID: string, deps: JevRpcDeps): Promise<number> {
+  const count = deps.liftToolBan ? await deps.liftToolBan(sessionID) : 0
+  deps.clearSessionBan?.(sessionID)
+  return count
 }
 
 /**
@@ -148,7 +162,7 @@ export interface JevRpcDeps {
  */
 export function jevRpcHandlers(deps: JevRpcDeps = {}) {
   return {
-    listBans: async () => ({ bans: readBans() }),
+    listToolBans: async () => ({ toolBans: readToolBans() }),
     status: async () => statusSnapshot(),
     stopSession: async (input: any) => {
       const sessionID = String(input?.sessionID ?? "")
@@ -156,10 +170,17 @@ export function jevRpcHandlers(deps: JevRpcDeps = {}) {
       changed("stop")
       return { ok: true, subagents }
     },
-    unblockSession: async (input: any) => {
+    liftToolBan: async (input: any) => {
       const sessionID = String(input?.sessionID ?? "")
-      const count = deps.unblockSession ? await deps.unblockSession(sessionID) : 0
-      changed("unblock")
+      const count = await liftBothBans(sessionID, deps)
+      changed("liftToolBan")
+      return { ok: true, count }
+    },
+    liftToolBanAndResume: async (input: any) => {
+      const sessionID = String(input?.sessionID ?? "")
+      const count = await liftBothBans(sessionID, deps)
+      await deps.resumeSession?.(sessionID, CONTINUE_TEXT)
+      changed("liftToolBanAndResume")
       return { ok: true, count }
     },
     log: async (input: any) => {

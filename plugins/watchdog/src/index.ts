@@ -15,15 +15,16 @@ import { changed, jevRpcHandlers, setJevEmitter } from "./gui-rpc.ts"
 import { Contract as JevContract } from "../../../lib/lib-jev/rpc.ts"
 import { autoAccept } from "./autopermit.ts"
 import { callToken, consumeGrant, recordApproval } from "../../../lib/lib-jev/approve.ts"
-import { banSession, isBanned, latestBannedCard, readBans, setBanCard, unbanSession } from "../../../lib/lib-jev/ban.ts"
-import { stopSessionTree, unblockSession } from "./session-stop.ts"
+import { banTool, isToolBanned, latestToolBanCard, readToolBans, setToolBanCard, unbanTool } from "../../../lib/lib-jev/tool-ban.ts"
+import { stopSessionTree, liftToolBan } from "./tool-ban-actions.ts"
 import { cancelCard, createCard } from "./form.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
-import { start as startNoRespawn, type AbortReceipt, type AbortRequest, type NoRespawnHandle } from "./nospawn-host.ts"
+import { start as startSessionBan, type AbortReceipt, type AbortRequest, type SessionBanHandle } from "./session-ban-host.ts"
 import { attachSupervisor, SUPERVISOR_HOLD_REASON, supervisorHandoff, type SupervisorCall, type SupervisorHostHandle, type SupervisorResolution } from "./supervisor-host.ts"
-import { readSnapshot, type SnapshotRead } from "./nospawn-state.ts"
-import type { AbortAuthority, TaskRecord } from "./nospawn.ts"
-import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/lib-jev/state.ts"
+import { createBatchRunner, resolveSupervisorMode, type BatchRunner, type SupervisorMode } from "./supervisor-batch.ts"
+import { readSnapshot, type SnapshotRead } from "./session-ban-state.ts"
+import type { AbortAuthority, TaskRecord } from "./session-ban.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/lib-jev/state.ts"
 import { attachCardEvents, cardRouteActiveNow, markCardRouteActive, onBeforeExecute, questionCardsOn, type CardDeps, type GateDecision } from "./question-cards.ts"
 import { resourcesOf } from "./actions.ts"
 
@@ -477,9 +478,9 @@ export function formatAlert(call: AlertCall, outcome: Outcome, now: Date): Alert
   const callText = String(redact(call.text))
   const shortSession = call.sessionID.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 8) || "session"
   const filename = `jev-held-call-${shortSession}.txt`
-  const fence = callText.includes("```") ? "````" : "```"
+  const codeFence = callText.includes("```") ? "````" : "```"
   const overLimit = callText.length > DISCORD_CONTENT_LIMIT
-  const held = overLimit ? `Full redacted call attached as ${filename}.` : `${fence}\n${callText}\n${fence}`
+  const held = overLimit ? `Full redacted call attached as ${filename}.` : `${codeFence}\n${callText}\n${codeFence}`
   const confidence = outcome.reason?.match(/P=\d+\.\d+/)?.[0] ?? "unknown"
   const body: Record<string, unknown> = {
     content: ALERT_CONTENT,
@@ -581,6 +582,16 @@ export function supervisorState(): JevState {
   }
 }
 
+/** The resolved route, re-read from config on every call. With no usable
+ *  supervisor the mode stays on the untouched Jev-first path. */
+export function supervisorMode(): SupervisorMode {
+  return resolveSupervisorMode({
+    standalone: supervisorStandalone(),
+    nonBlocking: supervisorNonBlocking(),
+    active: featureOn("hook_supervisor") && supervisorConfigured(),
+  })
+}
+
 /**
  * The permission hook. The host evaluates its own rules first and hands the
  * result over: an explicit deny never reaches here, so what arrives is an
@@ -651,17 +662,23 @@ async function decideForCard(
   const resources = resourcesOf(input)
   const allow = (): GateDecision => ({ effect: "allow", resources })
   if (!action || !sessionID) return allow()
-  // A banned session is blocked even if a trusted-path/grant early-return would
+  const mode = supervisorMode()
+  ensureSupervisorRuntime(ctx, mode)
+  if (mode === "nonBlocking") {
+    return { effect: "deny", message: "jev supervisor: a batch verdict cannot judge a held card", resources }
+  }
+  const standalone = mode === "standalone"
+  // A tool ban is blocked even if a trusted-path/grant early-return would
   // otherwise allow. Gated so flag-off stays byte-identical.
-  if (cardRouteActiveNow() && isBanned(sessionID)) {
-    return { effect: "deny", message: "jev: this session is blocked until Unblock.", resources }
+  if (cardRouteActiveNow() && isToolBanned(sessionID)) {
+    return { effect: "deny", message: "jev: this session is blocked until Lift tool ban.", resources }
   }
   const standard = featureOn("hook_tool_standard")
   const risk = featureOn("hook_tool_risk")
-  if (!standard && !risk) return allow()
+  if (!standalone && !standard && !risk) return allow()
   const inStandard = standard && actionsInScope("hook_tool_standard", action)
   const inRisk = risk && actionsInScope("hook_tool_risk", action)
-  if (!inStandard && !inRisk) return allow()
+  if (!standalone && !inStandard && !inRisk) return allow()
   if (allResourcesTrusted(resources, cfgStr("hook_tool_risk", "trustedPaths"))) {
     logCall({ hook: "hook_tool_risk", sessionID, tool: action, skipped: "trusted path" })
     return allow()
@@ -680,41 +697,85 @@ async function decideForCard(
   if (!info) return allow()
   info.input = async () => JSON.stringify(input ?? null).slice(0, 4000)
   let outcome: Outcome | null = null
-  if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
-  if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
-  if (!outcome) return allow()
-  if (outcome.effect === "allow") return allow()
+  if (!standalone) {
+    if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
+    if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
+    if (!outcome) return allow()
+    if (outcome.effect === "allow") return allow()
+  }
   // Every non-allow outcome hands off to the supervisor when it is enabled;
   // that resolution replaces the Jev effect entirely. With no hand-off the
   // outcome's own default applies: propagate → V-PROPAGATE, deny → skip, abort → V-ABORT.
   const handoff: SupervisorCall = { sessionID, action, resources, subject: info.enrichedSubject ?? info.subject, text: info.text }
   const supervisorEnabled = Boolean(supervisorHost) && featureOn("hook_supervisor") && supervisorConfigured()
+  if (standalone) {
+    // No Jev verdict to replace: the supervisor's own resolution drives the card.
+    if (!supervisorEnabled || !supervisorHost) {
+      logCall({ hook: "hook_supervisor", sessionID, detail: "standalone card route has no supervisor host; the call was denied" })
+      return { effect: "deny", message: "jev supervisor: unavailable in standalone mode", resources }
+    }
+    const resolution = await supervisorHost.supervise(handoff)
+    return {
+      effect: gateEffect({ effect: "propagate" }, resolution),
+      resources,
+      ...(resolution !== null ? { notice: SUPERVISOR_HOLD_REASON } : {}),
+    }
+  }
   const resolution = supervisorEnabled ? await supervisorHost!.supervise(handoff) : null
   return {
     effect: gateEffect(outcome, resolution),
-    message: outcome.message,
+    message: outcome?.message,
     resources,
     ...(resolution !== null ? { notice: SUPERVISOR_HOLD_REASON } : {}),
   }
 }
 
 async function evaluatePermission(ctx: any, event: any): Promise<void> {
+  const mode = supervisorMode()
+  const runtimeReady = ensureSupervisorRuntime(ctx, mode)
+  const standalone = mode !== "default"
   const standard = featureOn("hook_tool_standard")
   const risk = featureOn("hook_tool_risk")
-  if (!standard && !risk) return
+  if (!standalone && !standard && !risk) return
   const action = normalizeAction(String(event?.action ?? ""))
   const sessionID = String(event?.sessionID ?? "")
-  if (!action || !sessionID) return
+  if (!action || !sessionID) {
+    if (standalone) denyWithoutSupervisor(event, sessionID, "no action or session to judge")
+    return
+  }
+  if (standalone && !runtimeReady) {
+    denyWithoutSupervisor(event, sessionID, "supervisor runtime unavailable")
+    return
+  }
+
+  // Non-blocking records the call and lets it run. No hold, no card, no Jev
+  // scorer: one later supervisor call judges the whole per-session batch.
+  if (mode === "nonBlocking") {
+    if (!supervisorBatch) {
+      denyWithoutSupervisor(event, sessionID, "no batch runner available")
+      return
+    }
+    const info = callInfo(ctx, event)
+    if (!info) {
+      denyWithoutSupervisor(event, sessionID, "no call metadata to judge")
+      return
+    }
+    const { subject, text } = await withInput(info)
+    supervisorBatch.record({ ...info, subject, text })
+    event.effect = "allow"
+    return
+  }
+
   const inStandard = standard && actionsInScope("hook_tool_standard", action)
   const inRisk = risk && actionsInScope("hook_tool_risk", action)
-  if (!inStandard && !inRisk) return
+  if (!standalone && !inStandard && !inRisk) return
   const resources = Array.isArray(event?.resources) ? event.resources.map(String) : []
 
-  // A banned session is denied before any other shortcut,
+  // A tool ban is denied before any other shortcut,
   // including trusted paths. Gated on the card route so flag-off is byte-identical.
-  if (cardRouteActiveNow() && isBanned(sessionID)) {
+  if (cardRouteActiveNow() && isToolBanned(sessionID)) {
     event.effect = "deny"
-    event.message = "jev: this session is blocked until Unblock."
+    event.message = "jev: this session is blocked until Lift tool ban."
     return
   }
   // Trusted paths keep the host's own effect: Jev never examines a call whose
@@ -744,15 +805,29 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   const info = callInfo(ctx, event)
   if (!info) return
   let outcome: Outcome | null = null
-  // The rules first: an explicit policy is cheaper than a verdict, and a
-  // blocked call never needs the second opinion.
-  if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
-  if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
-  if (!outcome) return
+  if (!standalone) {
+    // The rules first: an explicit policy is cheaper than a verdict, and a
+    // blocked call never needs the second opinion.
+    if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
+    if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
+    if (!outcome) return
+  }
+  const handoff: SupervisorCall = { ...info, subject: info.enrichedSubject ?? info.subject }
+  if (standalone) {
+    // No Jev score to hold on: the supervisor judges every in-scope call.
+    const marker = supervisorHost ? supervisorHandoff(handoff, "propagate", true, supervisorConfigured()) : null
+    if (marker && supervisorHost) {
+      event.effect = "ask"
+      event.message = marker
+      supervisorHost.begin(handoff, marker)
+    } else {
+      denyWithoutSupervisor(event, sessionID, "no supervisor host available")
+    }
+    return
+  }
   // Every non-allow Jev outcome hands off to the supervisor when enabled; the
   // native hold stays open while it investigates. The marker is the correlation
   // name for `permission.asked`; the hook returns without waiting for the run.
-  const handoff: SupervisorCall = { ...info, subject: info.enrichedSubject ?? info.subject }
   const marker = supervisorHandoff(
     handoff,
     outcome.effect,
@@ -771,7 +846,7 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   event.effect = hostEffect(outcome)
   if (outcome.message) event.message = outcome.message
   if (outcome.effect === "abort") {
-    await stopSessionTree(ctx, sessionID, noRespawn ? { abortSession: (id, by, cause) => noRespawn!.abortSession(id, by as AbortAuthority, cause) } : {})
+    await stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {})
     void alertUser(ctx, info, outcome)
   }
 }
@@ -791,15 +866,127 @@ export const JEV_COMMANDS: Record<string, string> = {
 }
 
 /**
- * The no-respawn handle `setup` keeps. Module state because a command closure is
+ * The session-ban handle `setup` keeps. Module state because a command closure is
  * created at setup time and there is nowhere else to put it: the plugin context
  * has no registry.
  */
-let noRespawn: NoRespawnHandle | null = null
+let sessionBan: SessionBanHandle | null = null
 
 /** The supervisor host owns the only extra evaluate-time behavior; it never
  *  registers a second permission hook. Set in `setup` when configured. */
 let supervisorHost: SupervisorHostHandle | null = null
+
+/** Non-blocking windows, keyed by session. Created on demand for that mode. */
+let supervisorBatch: BatchRunner | null = null
+let supervisorRuntimeKey = ""
+let batchFeedCtx: any = null
+
+function denyWithoutSupervisor(event: any, sessionID: string, reason: string): void {
+  logCall({ hook: "hook_supervisor", sessionID, detail: `${reason}; the call was denied` })
+  event.effect = "deny"
+  event.message = `jev supervisor: ${reason}`
+}
+
+function resetSupervisorRuntime(): void {
+  if (supervisorBatch) {
+    supervisorBatch.close()
+    supervisorBatch = null
+  }
+  if (supervisorHost) {
+    supervisorHost.close()
+    supervisorHost = null
+  }
+  supervisorRuntimeKey = ""
+}
+
+function attachSupervisorHost(ctx: any): boolean {
+  if (supervisorHost) return true
+  if (!featureOn("hook_supervisor") || !supervisorConfigured()) return false
+  try {
+    const F = "hook_supervisor"
+    supervisorHost = attachSupervisor({
+      ctx,
+      config: {
+        state: supervisorState,
+        limits: () => ({
+          timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeoutMs"))),
+          maxRounds: Math.max(1, Math.round(cfgNum(F, "maxRounds"))),
+          maxEvidenceCalls: Math.max(0, Math.round(cfgNum(F, "maxEvidence"))),
+        }),
+        evidenceRoot: () => cfgStr(F, "root").trim() || ctx?.location?.directory || process.cwd(),
+        askWaitMs: () => Math.max(1, Math.round(cfgNum(F, "askWaitMs"))),
+      },
+      isEnabled: () => featureOn("hook_supervisor") && supervisorConfigured(),
+      cardMode: () => cardRouteActiveNow(),
+      abortSession: (sessionID, by, cause) =>
+        sessionBan
+          ? sessionBan.abortSession(sessionID, by as AbortAuthority, cause)
+          : Promise.resolve({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], sessionBanned: 0, sessionBanFailures: [], notified: false, reason: "no session-ban host" }),
+      toolBan: (sessionID, reason) => {
+        banTool(sessionID, [], reason)
+        logCall({ hook: "hook_supervisor", sessionID, detail: "session ban held; tool ban placed" })
+      },
+    })
+    return Boolean(supervisorHost)
+  } catch (error) {
+    logCall({ hook: "hook_supervisor", error: error instanceof JevError ? error.message : String(error) })
+    return false
+  }
+}
+
+function wireBatchSessionEnd(ctx: any): void {
+  if (batchFeedCtx === ctx || typeof ctx?.event?.subscribe !== "function") return
+  batchFeedCtx = ctx
+  try {
+    const stream = ctx.event.subscribe({ types: ["session.deleted"] })
+    if (!stream) {
+      batchFeedCtx = null
+      return
+    }
+    void (async () => {
+      try {
+        for await (const event of stream) {
+          const sessionID = String(event?.data?.sessionID ?? "")
+          if (sessionID) supervisorBatch?.endSession(sessionID)
+        }
+      } catch {}
+    })()
+  } catch {
+    batchFeedCtx = null
+  }
+}
+
+/** Re-read per call: GUI config writes never re-run `setup`. */
+function ensureSupervisorRuntime(ctx: any, mode: SupervisorMode): boolean {
+  const active = featureOn("hook_supervisor") && supervisorConfigured()
+  if (!active) {
+    if (supervisorHost || supervisorBatch) resetSupervisorRuntime()
+    return mode === "default"
+  }
+  const key = JSON.stringify([mode, supervisorStandalone(), supervisorNonBlocking(), supervisorBatchMs(), supervisorBatchMax()])
+  if (supervisorRuntimeKey === key && supervisorHost && (mode !== "nonBlocking" || supervisorBatch)) return true
+  if (supervisorBatch) {
+    supervisorBatch.close()
+    supervisorBatch = null
+  }
+  if (!attachSupervisorHost(ctx)) {
+    supervisorRuntimeKey = ""
+    return false
+  }
+  if (mode === "nonBlocking") {
+    supervisorBatch = createBatchRunner({
+      batchMs: supervisorBatchMs(),
+      batchMax: supervisorBatchMax(),
+      onFlush: (batch) => {
+        const host = supervisorHost
+        if (host) void host.judgeBatch(batch.calls)
+      },
+    })
+    wireBatchSessionEnd(ctx)
+  }
+  supervisorRuntimeKey = key
+  return true
+}
 
 export interface AbortCommandHost {
   abort(request: AbortRequest): Promise<AbortReceipt>
@@ -832,21 +1019,21 @@ function receiptLine(what: string, receipt: AbortReceipt): string {
   const counts = [
     `${many(receipt.revoked.length, "call")} settled deny`,
     `${many(receipt.interrupted.length, "session")} interrupted`,
-    ...(receipt.fenced ? [`${many(receipt.fenced, "child session")} fenced`] : []),
+    ...(receipt.sessionBanned ? [`${many(receipt.sessionBanned, "child session")} session-banned`] : []),
     ...(receipt.preserved.length ? [`${many(receipt.preserved.length, "child")} preserved`] : []),
   ].join(", ")
-  const unfenced = receipt.fenceFailures.length ? fenceFailureClause(receipt.fenceFailures) : ""
-  return `jev-abort: ${what} stopped (${counts}). Unrelated work continues; a replacement is held until your next message.${unfenced}${durability(receipt)}`
+  const notSessionBanned = receipt.sessionBanFailures.length ? sessionBanFailureClause(receipt.sessionBanFailures) : ""
+  return `jev-abort: ${what} stopped (${counts}). Unrelated work continues; a replacement is held until your next message.${notSessionBanned}${durability(receipt)}`
 }
 
 /**
  * The failure the audit also records, in the place a user reads. Row 6 does not
- * hold for these children, so the line must not read like a clean fence.
+ * hold for these children, so the line must not read like a clean session ban.
  */
-function fenceFailureClause(failures: string[]): string {
+function sessionBanFailureClause(failures: string[]): string {
   const ids = failures.map(shortKey).join(", ")
   const them = failures.length === 1 ? "it" : "them"
-  return ` NOT FENCED: ${many(failures.length, "child session")} refused the subtree fence (${ids}), so a new subagent call inside ${them} is not denied.`
+  return ` NOT SESSION_BANNED: ${many(failures.length, "child session")} refused the subtree session ban (${ids}), so a new subagent call inside ${them} is not denied.`
 }
 
 function taskListing(rows: TaskRecord[]): string {
@@ -874,7 +1061,7 @@ export async function runAbort(
   /** The receipt behind the text, so the command can tell whether the host spoke. */
   seen?: (receipt: AbortReceipt) => void,
 ): Promise<string> {
-  if (!deps.enabled()) return "jev-abort: hook_no_respawn is off, so nothing is recorded and nothing can be stopped."
+  if (!deps.enabled()) return "jev-abort: hook_session_ban is off, so nothing is recorded and nothing can be stopped."
   if (!parentID) return "jev-abort: this command needs a session."
   const read = deps.read(parentID)
   if (!read.ok && read.reason !== "missing") {
@@ -884,7 +1071,7 @@ export async function runAbort(
   const target = arg.trim().split(/\s+/)[0] ?? ""
 
   if (target === "session") {
-    if (!deps.host) return "jev-abort: the no-respawn host is not registered in this process."
+    if (!deps.host) return "jev-abort: the session-ban host is not registered in this process."
     const receipt = await deps.host.abortSession(parentID, "user", "user command")
     seen?.(receipt)
     return receiptLine(`session ${shortKey(parentID)}`, receipt)
@@ -895,7 +1082,7 @@ export async function runAbort(
   if (matches.length === 0) return `jev-abort: no task with that prefix in this session.\n${taskListing(rows)}`
   if (matches.length > 1) return `jev-abort: ambiguous prefix; nothing was aborted.\n${taskListing(rows)}`
   const rec = matches[0]
-  if (!deps.host) return "jev-abort: the no-respawn host is not registered in this process."
+  if (!deps.host) return "jev-abort: the session-ban host is not registered in this process."
 
   const receipt = await deps.host.abort({
     parentID,
@@ -925,6 +1112,10 @@ export default {
   tui: true,
 
   setup: async (ctx: any) => {
+    const mode = supervisorMode()
+    resetSupervisorRuntime()
+    batchFeedCtx = null
+
     // Desktop panel RPC. The GUI half calls these handlers; they read state
     // from disk server-side and return only allowlisted fields. A host with no
     // rpc.register simply has no Desktop panel, as before.
@@ -941,8 +1132,14 @@ export default {
                 return undefined
               }
             },
-            stopSession: (sessionID) => stopSessionTree(ctx, sessionID, noRespawn ? { abortSession: (id, by, cause) => noRespawn!.abortSession(id, by as AbortAuthority, cause) } : {}),
-            unblockSession: (sessionID) => unblockSession(ctx, sessionID),
+            stopSession: (sessionID) => stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {}),
+            liftToolBan: (sessionID) => liftToolBan(ctx, sessionID),
+            clearSessionBan: (sessionID) => (sessionBan ? sessionBan.clearSessionBan(sessionID) : false),
+            resumeSession: async (sessionID, text) => {
+              try {
+                await ctx.session?.prompt?.({ sessionID, text })
+              } catch {}
+            },
           }),
         )
         setJevEmitter((event) => registration.events.emit("changed", event))
@@ -964,10 +1161,12 @@ export default {
         try {
           await evaluatePermission(ctx, event)
         } catch (error) {
-          // Fail open: a Jev problem must never be the thing that stops the agent.
-          // It is still an error, not a skip: a skip means the plugin decided
-          // nothing, and a failure logged as a skip left the sidebar empty
-          // while the provider failed on every call.
+          // Default fails open on a Jev problem; supervisor modes fail closed
+          // so an exception cannot leave a call without a judgement.
+          if (supervisorMode() !== "default") {
+            event.effect = "deny"
+            event.message = "jev supervisor: evaluation failed; the call was denied"
+          }
           logCall({
             hook: "hook_tool_risk",
             sessionID: String(event?.sessionID ?? ""),
@@ -979,17 +1178,18 @@ export default {
 
     // Question-card route, inert until the opt-in flag is on. The evaluate hook
     // forces allow and parks a hold; execute.before opens the card and awaits it.
-    if (questionCardsOn()) {
+    // Non-blocking has no hold to open, so it never registers this route.
+    if (questionCardsOn() && mode !== "nonBlocking") {
       if (typeof ctx?.tool?.hook === "function") {
         const deps: CardDeps = {
-          stopTree: (sessionID) => stopSessionTree(ctx, sessionID, noRespawn ? { abortSession: (id, by, cause) => noRespawn!.abortSession(id, by as AbortAuthority, cause) } : {}),
-          ban: (sessionID, subagents, reason) => {
-            banSession(sessionID, subagents, reason)
-            logCall({ hook: "hook_tool_risk", sessionID, detail: `banned session + ${subagents.length} subagents` })
+          stopTree: (sessionID) => stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {}),
+          toolBan: (sessionID, subagents, reason) => {
+            banTool(sessionID, subagents, reason)
+            logCall({ hook: "hook_tool_risk", sessionID, detail: `tool ban + ${subagents.length} subagents` })
           },
-          staleCard: (sessionID) => readBans().find((row) => row.sessionID === sessionID)?.formID,
-          setCard: (sessionID, formID, tool) => setBanCard(sessionID, formID, tool),
-          unban: (sessionID) => unbanSession(sessionID),
+          staleCard: (sessionID) => readToolBans().find((row) => row.sessionID === sessionID)?.formID,
+          setCard: (sessionID, formID, tool) => setToolBanCard(sessionID, formID, tool),
+          unbanTool: (sessionID) => unbanTool(sessionID),
           changed: (reason) => changed(reason),
           notifyAbort: (sessionID, text) =>
             alertUser(
@@ -999,6 +1199,7 @@ export default {
             ),
         }
         await ctx.tool.hook("execute.before", async (event: any) => {
+          if (supervisorMode() === "nonBlocking") return
           await onBeforeExecute(ctx, event, decideForCard, deps)
         })
         attachCardEvents(ctx)
@@ -1009,51 +1210,26 @@ export default {
     }
     }
 
-    // The no-respawn admission path, behind its own switch. It is the one hook
+    // The session-ban admission path, behind its own switch. It is the one hook
     // in the plugin that fails closed, so an off flag must leave exactly
     // today's plugin: no wrapper, no subscription, no state file. `start`
     // checks the flag before it touches the context for that reason.
     try {
       // The handle is what `/jev-abort` reaches: a disposer alone leaves no
       // route from a decision to a stopped task.
-      noRespawn = await startNoRespawn(ctx, () => featureOn("hook_no_respawn"), {
-        holdMs: Math.max(1, Math.round(cfgNum("hook_no_respawn", "holdMs"))),
-        graceMs: Math.max(0, Math.round(cfgNum("hook_no_respawn", "bindGraceMs"))),
-        capMs: Math.max(1, Math.round(cfgNum("hook_no_respawn", "admissionWindowMs"))),
+      sessionBan = await startSessionBan(ctx, () => featureOn("hook_session_ban"), {
+        holdMs: Math.max(1, Math.round(cfgNum("hook_session_ban", "holdMs"))),
+        graceMs: Math.max(0, Math.round(cfgNum("hook_session_ban", "bindGraceMs"))),
+        capMs: Math.max(1, Math.round(cfgNum("hook_session_ban", "admissionWindowMs"))),
       })
     } catch (error) {
-      logCall({ hook: "hook_no_respawn", error: error instanceof JevError ? error.message : String(error) })
+      logCall({ hook: "hook_session_ban", error: error instanceof JevError ? error.message : String(error) })
     }
 
-    // The supervisor runs only with its own model configured and the feature
-    // on. It adds no permission hook: it reuses the propagate effect the risk
-    // hook already sets and resolves that hold through the permission surface.
-    try {
-      if (featureOn("hook_supervisor") && supervisorConfigured()) {
-        const F = "hook_supervisor"
-        supervisorHost = attachSupervisor({
-          ctx,
-          config: {
-            state: supervisorState,
-            limits: () => ({
-              timeoutMs: Math.max(1, Math.round(cfgNum(F, "timeoutMs"))),
-              maxRounds: Math.max(1, Math.round(cfgNum(F, "maxRounds"))),
-              maxEvidenceCalls: Math.max(0, Math.round(cfgNum(F, "maxEvidence"))),
-            }),
-            evidenceRoot: () => cfgStr(F, "root").trim() || ctx?.location?.directory || process.cwd(),
-            askWaitMs: () => Math.max(1, Math.round(cfgNum(F, "askWaitMs"))),
-          },
-          isEnabled: () => featureOn("hook_supervisor") && supervisorConfigured(),
-          cardMode: () => cardRouteActiveNow(),
-          abortSession: (sessionID, by, cause) =>
-            noRespawn
-              ? noRespawn.abortSession(sessionID, by as AbortAuthority, cause)
-              : Promise.resolve({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], fenced: 0, fenceFailures: [], notified: false, reason: "no no-respawn host" }),
-        })
-      }
-    } catch (error) {
-      logCall({ hook: "hook_supervisor", error: error instanceof JevError ? error.message : String(error) })
-    }
+    // The supervisor adds no permission hook: it reuses the propagate effect the
+    // risk hook already sets and resolves that hold through the permission surface.
+    // The same wiring runs on demand when config changes after setup.
+    ensureSupervisorRuntime(ctx, mode)
 
     // /jev commands. Every field the client reads at call time is a setting,
     // not a constant: the wire model id and the endpoint path are
@@ -1089,7 +1265,7 @@ export default {
             }
 
             if (name === "jev-latest") {
-              const record = latestBannedCard()
+              const record = latestToolBanCard()
               if (!record?.formID) return respond("No blocked calls to reopen.")
               const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
               const formID = `frm_jev_block_${nonce}`
@@ -1100,10 +1276,10 @@ export default {
                   id: formID,
                   title: `Jev blocked a ${record.tool ?? "tool"} call`,
                   metadata: { kind: "question", jevTool: record.tool ?? "" },
-                  fields: [{ key: "decision", title: "This call was stopped", description: "Use Unblock to lift the ban, then continue from the main session.", type: "string", custom: true }],
+                  fields: [{ key: "decision", title: "This call was stopped", description: "Use Lift tool ban to lift the tool ban, then continue from the main session.", type: "string", custom: true }],
                 },
               })
-              setBanCard(record.sessionID, formID, record.tool ?? "")
+              setToolBanCard(record.sessionID, formID, record.tool ?? "")
               return respond("Reopened the latest blocked call as a card.")
             }
             if (name === "jev-model") {
@@ -1145,9 +1321,9 @@ export default {
                 parentID,
                 arg,
                 {
-                  enabled: () => featureOn("hook_no_respawn"),
+                  enabled: () => featureOn("hook_session_ban"),
                   read: readSnapshot,
-                  host: noRespawn,
+                  host: sessionBan,
                 },
                 (receipt) => {
                   notified = receipt.notified

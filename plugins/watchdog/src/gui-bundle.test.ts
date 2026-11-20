@@ -55,3 +55,12 @@ test("the shipped GUI renders friendly setting titles and OpenCode-style rows", 
   expect(code).toContain("data-component=settings-list")
   expect(code).toContain("data-slot=settings-row-description")
 })
+
+test("the shipped GUI offers both tool-ban actions and friendly audit labels", () => {
+  const code = readFileSync(join(import.meta.dir, "../dist/gui-experimental.cjs"), "utf8")
+  expect(code).toContain("Lift tool ban")
+  expect(code).toContain("Lift tool ban & resume")
+  expect(code).toContain("Tool ban ·")
+  expect(code).toContain("Raw verdict")
+  expect(code).toContain("Decision note")
+})

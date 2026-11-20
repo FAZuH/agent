@@ -67,8 +67,9 @@ export interface JevRPC {
   approveAll(input: {}): Promise<{ ok: boolean; count: number }>
   rejectAll(input: {}): Promise<{ ok: boolean; count: number }>
   stopSession(input: { sessionID: string }): Promise<{ ok: boolean; subagents: string[] }>
-  unblockSession(input: { sessionID: string }): Promise<{ ok: boolean; count: number }>
-  listBans(input: {}): Promise<{ bans: SessionBanInfo[] }>
+  liftToolBan(input: { sessionID: string }): Promise<{ ok: boolean; count: number }>
+  liftToolBanAndResume(input: { sessionID: string }): Promise<{ ok: boolean; count: number }>
+  listToolBans(input: {}): Promise<{ toolBans: ToolBanInfo[] }>
   setEnabled(input: { on: boolean }): Promise<{ ok: boolean }>
   setFeature(input: { key: string; on: boolean }): Promise<{ ok: boolean }>
   // Optional so the panel still renders against a server without the Settings methods.
@@ -78,11 +79,11 @@ export interface JevRPC {
   subscribe(listener: (event: { reason: string }) => void): () => void
 }
 
-export interface SessionBanInfo {
+export interface ToolBanInfo {
   sessionID: string
   subagents: string[]
   reason: string
-  bannedAt: string
+  toolBannedAt: string
   formID?: string
   tool?: string
 }
@@ -92,7 +93,7 @@ export interface JevViewState {
   settings?: SettingsInfo
   rows: Array<Record<string, unknown>>
   approvals: Approval[]
-  bans: SessionBanInfo[]
+  toolBans: ToolBanInfo[]
   loading: boolean
   error?: string
   busy?: string
@@ -129,7 +130,7 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
   // How many recent rows to fetch; capped to the RPC log limit.
   let limit = 15
   let paused = false
-  let state: JevViewState = { rows: [], approvals: [], bans: [], loading: false }
+  let state: JevViewState = { rows: [], approvals: [], toolBans: [], loading: false }
   const update = (next: JevViewState) => {
     state = next
     dialogs.update(state)
@@ -141,11 +142,11 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
     update({ ...state, loading: true, error: undefined })
     try {
       const withLog = opts.log !== false
-      const [status, log, pending, bans, settings] = await Promise.all([
+      const [status, log, pending, toolBans, settings] = await Promise.all([
         rpc.status({}),
         withLog ? rpc.log({ limit: Math.min(200, Math.max(1, limit)), ...(sessionID ? { sessionID } : {}) }) : Promise.resolve(null),
         rpc.approvals({}),
-        rpc.listBans({}),
+        rpc.listToolBans({}),
         rpc.getSettings ? rpc.getSettings({}) : Promise.resolve(undefined),
       ])
       if (disposed || request !== generation) return
@@ -154,7 +155,7 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
         settings: settings ?? state.settings,
         rows: withLog && log ? log.rows : state.rows,
         approvals: pending.approvals,
-        bans: bans.bans,
+        toolBans: toolBans.toolBans,
         loading: false,
       })
     } catch (error) {
@@ -236,8 +237,10 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
     approveAll: () => bulk("approveAll", () => rpc.approveAll({})),
     rejectAll: () => bulk("rejectAll", () => rpc.rejectAll({})),
     stopSession: (sessionID: string) => mutate(`stop:${sessionID}`, () => rpc.stopSession({ sessionID })),
-    unblockSession: (sessionID: string) => mutate(`unblock:${sessionID}`, () => rpc.unblockSession({ sessionID })),
-    listBans: () => rpc.listBans({}),
+    liftToolBan: (sessionID: string) => mutate(`liftToolBan:${sessionID}`, () => rpc.liftToolBan({ sessionID })),
+    liftToolBanAndResume: (sessionID: string) =>
+      mutate(`liftToolBanAndResume:${sessionID}`, () => rpc.liftToolBanAndResume({ sessionID })),
+    listToolBans: () => rpc.listToolBans({}),
     dispose() {
       disposed = true
       unsubscribe()

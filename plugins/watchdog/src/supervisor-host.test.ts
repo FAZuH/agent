@@ -42,6 +42,7 @@ interface Harness {
   interrupts: string[]
   audits: SupervisorAudit[]
   aborts: any[]
+  toolBans: any[]
   hookCalls: string[]
   modelInputs: any[]
   modelOpts: any[]
@@ -56,6 +57,7 @@ function harness(opts: {
   enabled?: boolean
   listReturnsPending?: boolean
   modelThrows?: boolean
+  toolBanThrows?: boolean
   note?: string
   decision?: any
   gate?: Promise<void>
@@ -71,6 +73,7 @@ function harness(opts: {
   const interrupts: string[] = []
   const audits: SupervisorAudit[] = []
   const aborts: any[] = []
+  const toolBans: any[] = []
   const hookCalls: string[] = []
   const modelInputs: any[] = []
   const modelOpts: any[] = []
@@ -169,13 +172,154 @@ function harness(opts: {
       aborts.push({ sessionID, by, cause })
       return {}
     },
+    toolBan: (sessionID: string, reason: string) => {
+      toolBans.push({ sessionID, reason })
+      if (opts.toolBanThrows) throw new Error("tool ban store unavailable")
+    },
     onResolved: (record, resolution) => resolveDone({ record, resolution }),
   })
 
-  return { push, replies, notices, toasts, interrupts, audits, aborts, hookCalls, modelInputs, modelOpts, done, handle, perId }
+  return { push, replies, notices, toasts, interrupts, audits, aborts, toolBans, hookCalls, modelInputs, modelOpts, done, handle, perId }
 }
 
 const markerFor = (call = CALL) => supervisorMarker(call, SUPERVISOR_HOLD_REASON)
+
+describe("non-blocking batch judgement", () => {
+  const BATCH_A: SupervisorCall = {
+    sessionID: "ses_batch_01",
+    action: "shell",
+    resources: ["src/a.ts"],
+    subject: { action: "shell", resources: ["src/a.ts"] },
+    text: "shell: cat src/a.ts",
+  }
+  const BATCH_B: SupervisorCall = {
+    sessionID: "ses_batch_01",
+    action: "edit",
+    resources: ["src/b.ts"],
+    subject: { action: "edit", resources: ["src/b.ts"] },
+    text: "edit: src/b.ts",
+  }
+
+  test("one model call receives the whole batch, with no permission hold", async () => {
+    const h = harness({ verdict: "allow" })
+    const verdict = await h.handle.judgeBatch([BATCH_A, BATCH_B])
+    expect(verdict).toBe("allow")
+    expect(h.modelInputs).toHaveLength(1)
+    expect(h.modelInputs[0].calls.map((c: any) => c.action)).toEqual(["shell", "edit"])
+    expect(h.modelInputs[0].calls[0].subject).toEqual(BATCH_A.subject)
+    expect(h.modelInputs[0].sessionID).toBe("ses_batch_01")
+    expect(h.replies).toHaveLength(0)
+    expect(h.aborts).toHaveLength(0)
+  })
+
+  test("the batch body carries the bounded call inputs the model judges", async () => {
+    const h = harness({ verdict: "allow" })
+    const withInput: SupervisorCall = {
+      ...BATCH_A,
+      subject: { action: "shell", resources: ["src/a.ts"], input: '{"cmd":"cat src/a.ts"}' },
+      text: "shell: cat src/a.ts\ninput: {\"cmd\":\"cat src/a.ts\"}",
+    }
+    await h.handle.judgeBatch([withInput])
+    expect(h.modelInputs[0].calls[0].subject.input).toBe('{"cmd":"cat src/a.ts"}')
+    expect(h.modelInputs[0].calls[0].text).toContain("input:")
+  })
+
+  test("an allow verdict leaves the batch standing", async () => {
+    const h = harness({ verdict: "allow" })
+    expect(await h.handle.judgeBatch([BATCH_A])).toBe("allow")
+    expect(h.interrupts).toHaveLength(0)
+    expect(h.aborts).toHaveLength(0)
+  })
+
+  test("a propagate verdict aborts the session that produced the batch", async () => {
+    const h = harness({ verdict: "propagate" })
+    expect(await h.handle.judgeBatch([BATCH_A, BATCH_B])).toBe("abort")
+    expect(h.aborts).toEqual([{ sessionID: "ses_batch_01", by: "supervisor", cause: "supervisor batch verdict" }])
+    expect(h.interrupts).toEqual(["ses_batch_01"])
+  })
+
+  test("a deny verdict aborts the batch session", async () => {
+    const h = harness({ verdict: "deny" })
+    expect(await h.handle.judgeBatch([BATCH_A])).toBe("abort")
+    expect(h.aborts[0].sessionID).toBe("ses_batch_01")
+  })
+
+  test("an unknown, padded or absent verdict aborts", async () => {
+    const unknown = harness({ verdict: "ALLOW" })
+    expect(await unknown.handle.judgeBatch([BATCH_A])).toBe("abort")
+    const absent = harness({ decision: null })
+    expect(await absent.handle.judgeBatch([BATCH_A])).toBe("abort")
+    const failed = harness({ modelThrows: true })
+    expect(await failed.handle.judgeBatch([BATCH_A])).toBe("abort")
+  })
+
+  test("abort targets the recorded session, not the host's call", async () => {
+    const h = harness({ verdict: "abort" })
+    await h.handle.judgeBatch([BATCH_A])
+    expect(h.aborts[0].sessionID).not.toBe(CALL.sessionID)
+    expect(h.interrupts).toEqual(["ses_batch_01"])
+  })
+
+  test("a batch with no single session is refused without a model call or abort target", async () => {
+    const h = harness({ verdict: "allow" })
+    expect(await h.handle.judgeBatch([BATCH_A, CALL])).toBe("abort")
+    expect(h.modelInputs).toHaveLength(0)
+    expect(h.aborts).toHaveLength(0)
+    expect(h.audits.some((entry) => entry.event === "supervisor_abort" && entry.resolution === "abort")).toBe(true)
+  })
+
+  test("the audit records the disposition but no call text", async () => {
+    const h = harness({ verdict: "deny" })
+    await h.handle.judgeBatch([BATCH_A, BATCH_B])
+    const text = JSON.stringify(h.audits)
+    expect(text).not.toContain("shell: cat src/a.ts")
+    expect(text).not.toContain("edit: src/b.ts")
+    expect(h.audits.map((entry) => entry.event)).toEqual(["supervisor_decision", "supervisor_abort"])
+  })
+
+  test("every batch audit row carries the raw verdict and a redacted decision note", async () => {
+    const h = harness({ verdict: "deny", note: "api_key=abcdef123456: rm -rf build output" })
+    await h.handle.judgeBatch([BATCH_A])
+    expect(h.audits).toHaveLength(2)
+    for (const row of h.audits) {
+      expect(row.rawVerdict).toBe("deny")
+      expect(row.decisionNote).toBe("api_key=[redacted] rm -rf build output")
+    }
+  })
+
+  test("a decision note longer than 400 characters is clipped", async () => {
+    const h = harness({ verdict: "deny", note: "x".repeat(500) })
+    await h.handle.judgeBatch([BATCH_A])
+    for (const row of h.audits) expect(row.decisionNote).toHaveLength(400)
+  })
+
+  test("a failed model call leaves raw audit fields empty and keeps the failure reason", async () => {
+    const h = harness({ modelThrows: true })
+    await h.handle.judgeBatch([BATCH_A])
+    for (const row of h.audits) {
+      expect(row.rawVerdict).toBe("")
+      expect(row.decisionNote).toBe("")
+      expect(row.reason).toContain("batch judgement failed")
+    }
+  })
+
+  test("a batch abort writes a tool ban for the target session", async () => {
+    const h = harness({ verdict: "abort" })
+    expect(await h.handle.judgeBatch([BATCH_A])).toBe("abort")
+    expect(h.toolBans).toHaveLength(1)
+    expect(h.toolBans[0].sessionID).toBe("ses_batch_01")
+    expect(h.toolBans[0].reason).toContain("tool ban")
+    expect(h.toolBans[0].reason).toContain("session ban")
+  })
+
+  test("a failed tool ban write does not stop the abort", async () => {
+    const h = harness({ verdict: "abort", toolBanThrows: true })
+    expect(await h.handle.judgeBatch([BATCH_A])).toBe("abort")
+    expect(h.toolBans).toHaveLength(1)
+    expect(h.aborts).toHaveLength(1)
+    expect(h.interrupts).toEqual(["ses_batch_01"])
+  })
+})
 
 async function start(h: Harness, verdict: any, marker: string) {
   h.handle.begin(CALL, marker)
@@ -187,11 +331,11 @@ async function start(h: Harness, verdict: any, marker: string) {
 }
 
 describe("supervisor marker", () => {
-  test("is distinct from a nospawn hold marker and carries the call digest", () => {
+  test("is distinct from a session-ban hold marker and carries the call digest", () => {
     const marker = markerFor()
     expect(marker.startsWith("jev supervisor ")).toBe(true)
     expect(marker).toContain("A reviewer is checking this tool call")
-    expect(marker).not.toContain("nospawn hold")
+    expect(marker).not.toContain("session-ban hold")
   })
 
   test("tells the agent a reviewer is checking the call, nothing ran, and it can approve, reject or wait", () => {
@@ -455,7 +599,7 @@ describe("single writer and redaction", () => {
 })
 
 describe("two-writer correlation and fail-closed identity", () => {
-  test("a frame carrying the no-respawn marker still correlates by identity", async () => {
+  test("a frame carrying the session-ban marker still correlates by identity", async () => {
     const h = harness({ verdict: "allow" })
     const marker = markerFor()
     h.handle.begin(CALL, marker)
@@ -466,7 +610,7 @@ describe("two-writer correlation and fail-closed identity", () => {
         sessionID: CALL.sessionID,
         action: CALL.action,
         resources: CALL.resources,
-        message: "nospawn hold abcdef123456: a subagent replacement",
+        message: "session-ban hold abcdef123456: a subagent replacement",
       },
     })
     const { resolution } = await h.done

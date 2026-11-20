@@ -15,12 +15,12 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-index-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_STATE_HOME = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
-process.env.OPENCODE_JEV_NOSPAWN_DIR = join(scratch, "nospawn")
+process.env.OPENCODE_JEV_SESSION_BAN_DIR = join(scratch, "session-ban")
 
 const { default: plugin, supervisorConfigured, supervisorState, formatAlert, buildAlertForm, alertUser, allResourcesTrusted, hostEffect } = await import("./index.ts")
 const state = await import("../../../lib/lib-jev/state.ts")
 const { supervisorHandoff } = await import("./supervisor-host.ts")
-const { banSession, unbanSession } = await import("../../../lib/lib-jev/ban.ts")
+const { banTool, unbanTool } = await import("../../../lib/lib-jev/tool-ban.ts")
 const { resetCardRoute, markCardRouteActive } = await import("./question-cards.ts")
 const { jevRpcHandlers } = await import("./gui-rpc.ts")
 
@@ -89,6 +89,41 @@ describe("supervisor handoff seam", () => {
     setSupervisor("systemone", "", "")
   })
 
+  const setBatchConfig = (patch: Record<string, state.ConfigValue>) => {
+    const base = state.loadState()
+    state.saveState({
+      config: {
+        ...base.config,
+        hook_supervisor: { ...base.config.hook_supervisor, ...patch },
+      },
+    })
+  }
+
+  test("the four new config keys default to the current path", () => {
+    expect(state.featureConfig("hook_supervisor").standalone).toBe(false)
+    expect(state.featureConfig("hook_supervisor").nonBlocking).toBe(false)
+    expect(state.featureConfig("hook_supervisor").batchMs).toBe(30000)
+    expect(state.featureConfig("hook_supervisor").batchMax).toBe(10)
+  })
+
+  test("typed readers return stored mode and batch values", () => {
+    setBatchConfig({ standalone: true, nonBlocking: true, batchMs: 250, batchMax: 3 })
+    expect(state.supervisorStandalone()).toBe(true)
+    expect(state.supervisorNonBlocking()).toBe(true)
+    expect(state.supervisorBatchMs()).toBe(250)
+    expect(state.supervisorBatchMax()).toBe(3)
+    setBatchConfig({ standalone: false, nonBlocking: false, batchMs: 30000, batchMax: 10 })
+  })
+
+  test("typed readers reject wrong types and non-positive windows", () => {
+    setBatchConfig({ standalone: 1 as any, nonBlocking: "yes" as any, batchMs: -5, batchMax: 0 })
+    expect(state.supervisorStandalone()).toBe(true)
+    expect(state.supervisorNonBlocking()).toBe(false)
+    expect(state.supervisorBatchMs()).toBe(1)
+    expect(state.supervisorBatchMax()).toBe(1)
+    setBatchConfig({ standalone: false, nonBlocking: false, batchMs: 30000, batchMax: 10 })
+  })
+
   test("flag ON: evaluate forces allow, never ask, no supervisor handoff", async () => {
     const base = state.loadState()
     state.saveState({
@@ -144,11 +179,11 @@ describe("supervisor handoff seam", () => {
     state.saveState({ config: { ...cur.config, hook_tool_risk: { ...cur.config.hook_tool_risk, questionCards: false } } })
   })
 
-  test("setup registers exactly the risk and no-respawn evaluate writers", async () => {
+  test("setup registers exactly the risk and session-ban evaluate writers", async () => {
     const base = state.loadState()
     state.saveState({
       enabled: true,
-      features: { ...base.features, hook_no_respawn: true, hook_supervisor: true, hook_tool_risk: true },
+      features: { ...base.features, hook_session_ban: true, hook_supervisor: true, hook_tool_risk: true },
       config: {
         ...base.config,
         hook_supervisor: { ...base.config.hook_supervisor, model: "supervisor-model", endpoint: "http://supervisor.local/v1" },
@@ -178,6 +213,246 @@ describe("supervisor handoff seam", () => {
 })
 
 const { CONFIG_PATH_ENV: NATIVE_CFG_ENV, resetAutoAcceptCache: resetNativeAutoAccept } = await import("./autopermit.ts")
+
+describe("supervisor mode wiring", () => {
+  const setMode = (patch: Record<string, state.ConfigValue>, supervisorOn = true) => {
+    const base = state.loadState()
+    state.saveState({
+      enabled: true,
+      features: { ...base.features, hook_supervisor: supervisorOn },
+      config: {
+        ...base.config,
+        hook_tool_risk: { ...base.config.hook_tool_risk, questionCards: true, actions: "shell,edit" },
+        hook_supervisor: {
+          ...base.config.hook_supervisor,
+          protocol: "opencode",
+          model: "supervisor-model",
+          endpoint: "",
+          standalone: false,
+          nonBlocking: false,
+          batchMs: 60000,
+          batchMax: 10,
+          ...patch,
+        },
+      },
+    })
+  }
+
+  const harness = async (opts: { failLocation?: () => boolean } = {}) => {
+    const { resetCardRoute } = await import("./question-cards.ts")
+    resetCardRoute()
+    let evaluate: any
+    let beforeExecute: any
+    const toolHooks: string[] = []
+    const feed: any[] = []
+    let wake = () => {}
+    const feedStream = {
+      async *[Symbol.asyncIterator]() {
+        while (true) {
+          while (feed.length) yield feed.shift()
+          await new Promise<void>((resolve) => {
+            wake = resolve
+          })
+        }
+      },
+    }
+    const emptyStream = {
+      async *[Symbol.asyncIterator]() {},
+    }
+    const ctx: any = {
+      get location() {
+        if (opts.failLocation?.()) throw new Error("no location")
+        return { directory: scratch }
+      },
+      permission: { hook: async (name: string, cb: any) => { if (name === "evaluate" && !evaluate) evaluate = cb }, reply: async () => {}, list: async () => [] },
+      event: { subscribe: ({ types }: any = {}) => (types?.includes?.("session.deleted") ? feedStream : emptyStream) },
+      tool: {
+        transform: async () => {},
+        hook: async (name: string, cb: any) => {
+          toolHooks.push(name)
+          if (name === "execute.before") beforeExecute = cb
+        },
+      },
+      session: { hook: async () => {}, context: async () => [], interrupt: async () => {}, synthetic: async () => {}, get: async () => ({}) },
+      command: { transform: async () => {} },
+    }
+    await plugin.setup(ctx)
+    return {
+      evaluate: (...args: any[]) => evaluate(...args),
+      toolHooks,
+      invokeBefore: async (event: any) => {
+        if (!beforeExecute) throw new Error("no execute.before hook was registered")
+        await beforeExecute(event)
+      },
+      feedEvent: (event: any) => {
+        feed.push(event)
+        wake()
+        wake = () => {}
+      },
+    }
+  }
+
+  const decisionRows = (sessionID: string) =>
+    state.readLog(50).filter((row: any) => row.hook === "hook_supervisor" && row.event === "supervisor_decision" && row.sessionID === sessionID)
+  const waitFor = async (predicate: () => boolean, timeoutMs = 2000) => {
+    const deadline = Date.now() + timeoutMs
+    while (!predicate()) {
+      if (Date.now() >= deadline) throw new Error("waitFor timed out before the condition held")
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+  }
+
+  test("supervisorMode resolves from config and needs an active supervisor", async () => {
+    const { supervisorMode } = await import("./index.ts")
+    setMode({})
+    expect(supervisorMode()).toBe("default")
+    setMode({ standalone: true })
+    expect(supervisorMode()).toBe("standalone")
+    setMode({ nonBlocking: true })
+    expect(supervisorMode()).toBe("nonBlocking")
+    setMode({ nonBlocking: true }, false)
+    expect(supervisorMode()).toBe("default")
+  })
+
+  test("standalone holds every call for the supervisor without calling the Jev scorer", async () => {
+    setMode({ standalone: true })
+    const base = state.loadState()
+    process.env.JEV_API_KEY = "test-key-standalone"
+    state.saveState({
+      features: { ...base.features, hook_tool_risk: false },
+      endpoint: "http://jev.test/v1",
+      protocol: "systemone",
+      model: "test-model",
+      keyEnv: "JEV_API_KEY",
+      config: { ...base.config, hook_tool_risk: { ...base.config.hook_tool_risk, questionCards: false } },
+    })
+    const originalFetch = globalThis.fetch
+    let fetches = 0
+    globalThis.fetch = (async () => {
+      fetches++
+      throw new Error("Jev must not be called in standalone mode")
+    }) as any
+    try {
+      const h = await harness()
+      const event: any = { action: "shell", sessionID: "ses_standalone", resources: ["src/x.ts"], effect: "allow" }
+      await h.evaluate(event)
+      expect(event.effect).toBe("ask")
+      expect(String(event.message)).toMatch(/^jev supervisor /)
+      expect(fetches).toBe(0)
+    } finally {
+      globalThis.fetch = originalFetch
+      delete process.env.JEV_API_KEY
+      setMode({})
+    }
+  })
+
+  test("non-blocking evaluate allows at once, registers no card route, and flushes at the cap", async () => {
+    setMode({ nonBlocking: true, batchMax: 2 })
+    try {
+      const h = await harness()
+      expect(h.toolHooks).not.toContain("execute.before")
+      const first: any = { action: "shell", sessionID: "ses_batch", resources: ["src/a.ts"], effect: "ask" }
+      await h.evaluate(first)
+      expect(first.effect).toBe("allow")
+      expect(first.message).toBeUndefined()
+      const second: any = { action: "edit", sessionID: "ses_batch", resources: ["src/b.ts"], effect: "ask" }
+      await h.evaluate(second)
+      expect(second.effect).toBe("allow")
+      await waitFor(() => decisionRows("ses_batch").length === 1)
+      const decisions = decisionRows("ses_batch")
+      expect(decisions).toHaveLength(1)
+      expect(decisions[0].detail).toContain("non-blocking batch of 2 calls")
+    } finally {
+      setMode({})
+    }
+  })
+
+  test("the batch window flushes after batchMs", async () => {
+    setMode({ nonBlocking: true, batchMs: 15 })
+    try {
+      const h = await harness()
+      const event: any = { action: "shell", sessionID: "ses_timer", resources: ["src/a.ts"], effect: "ask" }
+      await h.evaluate(event)
+      expect(event.effect).toBe("allow")
+      await waitFor(() => decisionRows("ses_timer").some((row: any) => row.detail.includes("non-blocking batch of 1 call")))
+    } finally {
+      setMode({})
+    }
+  })
+
+  test("session end flushes a pending batch", async () => {
+    setMode({ nonBlocking: true })
+    try {
+      const h = await harness()
+      const event: any = { action: "shell", sessionID: "ses_end", resources: ["src/a.ts"], effect: "ask" }
+      await h.evaluate(event)
+      expect(decisionRows("ses_end")).toHaveLength(0)
+      h.feedEvent({ type: "session.deleted", data: { sessionID: "ses_end" } })
+      await waitFor(() => decisionRows("ses_end").some((row: any) => row.detail.includes("non-blocking batch of 1 call")))
+    } finally {
+      setMode({})
+    }
+  })
+
+  test("standalone fails closed when the host cannot be obtained after setup", async () => {
+    setMode({ standalone: true, root: "" }, false)
+    let failLocation = false
+    try {
+      const h = await harness({ failLocation: () => failLocation })
+      failLocation = true
+      setMode({ standalone: true, root: "" }, true)
+      const event: any = { action: "shell", sessionID: "ses_no_host", resources: ["src/a.ts"], effect: "allow" }
+      await h.evaluate(event)
+      expect(event.effect).toBe("deny")
+      expect(String(event.message)).toContain("supervisor")
+      expect(decisionRows("ses_no_host")).toHaveLength(0)
+      const logs = state.readLog(50).filter((row: any) => row.hook === "hook_supervisor" && row.sessionID === "ses_no_host")
+      expect(logs.some((row: any) => String(row.detail).includes("denied"))).toBe(true)
+    } finally {
+      setMode({})
+    }
+  })
+
+  test("a post-setup toggle to nonBlocking lazily creates a batch runner", async () => {
+    setMode({ nonBlocking: false }, false)
+    try {
+      const h = await harness()
+      setMode({ nonBlocking: true, batchMax: 2 })
+      expect(h.toolHooks).toContain("execute.before")
+      await expect(h.invokeBefore({ tool: "shell", sessionID: "ses_toggle", input: {}, id: "call_toggle" })).resolves.toBeUndefined()
+      const first: any = { action: "shell", sessionID: "ses_toggle", resources: ["src/a.ts"], effect: "ask" }
+      await h.evaluate(first)
+      expect(first.effect).toBe("allow")
+      const second: any = { action: "edit", sessionID: "ses_toggle", resources: ["src/b.ts"], effect: "ask" }
+      await h.evaluate(second)
+      expect(second.effect).toBe("allow")
+      await waitFor(() => decisionRows("ses_toggle").length === 1)
+      expect(decisionRows("ses_toggle")[0].detail).toContain("non-blocking batch of 2 calls")
+    } finally {
+      setMode({})
+    }
+  })
+
+  test("a supervisor-mode exception fails closed at the evaluate wrapper", async () => {
+    setMode({ nonBlocking: true })
+    try {
+      const h = await harness()
+      const event: any = {
+        get action() {
+          throw new Error("bad event")
+        },
+        sessionID: "ses_exception",
+        resources: ["src/a.ts"],
+        effect: "allow",
+      }
+      await h.evaluate(event)
+      expect(event.effect).toBe("deny")
+      expect(String(event.message)).toContain("evaluation failed")
+    } finally {
+      setMode({})
+    }
+  })
+})
 
 describe("native evaluate path host effects", () => {
   async function drive(verdict: string) {
@@ -439,24 +714,24 @@ describe("v02 Discord abort notice", () => {
   })
 })
 
-describe("ban bypass + listBans", () => {
-  test("listBans returns records with no secret fields", async () => {
-    banSession("ses_lb", ["sub1"], "block reason")
+describe("tool ban bypass + listTool bans", () => {
+  test("listTool bans returns records with no secret fields", async () => {
+    banTool("ses_lb", ["sub1"], "block reason")
     const handlers = jevRpcHandlers()
-    const result: any = await (handlers as any).listBans({})
-    expect(Array.isArray(result.bans)).toBe(true)
-    const row = result.bans.find((b: any) => b.sessionID === "ses_lb")
+    const result: any = await (handlers as any).listToolBans({})
+    expect(Array.isArray(result.toolBans)).toBe(true)
+    const row = result.toolBans.find((b: any) => b.sessionID === "ses_lb")
     expect(row).toBeDefined()
     const text = JSON.stringify(row)
     expect(text).not.toMatch(/password|token|webhook|https?:/i)
-    unbanSession("ses_lb")
+    unbanTool("ses_lb")
   })
-  test("evaluatePermission denies a banned session while card route active", async () => {
+  test("evaluatePermission denies a tool ban while card route active", async () => {
     setFlagOn()
     resetCardRoute()
     markCardRouteActive()
     setTrusted("/tmp/opencode")
-    banSession("ses_banned", ["subx"], "block")
+    banTool("ses_banned", ["subx"], "block")
     let evaluate: any
     const ctx: any = {
       location: { directory: scratch },
@@ -469,9 +744,9 @@ describe("ban bypass + listBans", () => {
     await plugin.setup(ctx)
     const event: any = { action: "shell", sessionID: "ses_banned", resources: ["/tmp/opencode/x.ts"], effect: "allow" }
     await evaluate(event)
-    // Trusted path would have skipped, but ban must force deny.
+    // Trusted path would have skipped, but tool ban must force deny.
     expect(event.effect).toBe("deny")
-    unbanSession("ses_banned")
+    unbanTool("ses_banned")
     resetCardRoute()
     setFlagOff()
   })

@@ -56,7 +56,7 @@ export const FEATURES: Feature[] = [
   { key: "hook_skill_pick", label: "Skill picker", what: "Asks Jev which skill fits each prompt and advises it in context" },
   { key: "hook_tool_risk", label: "Tool risk", what: "Asks Jev what to do with each tool call: allow, propagate, deny, or abort" },
   { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
-  { key: "hook_no_respawn", label: "No respawn", what: "Holds a subagent replacement of an aborted task: once or reject, never always" },
+  { key: "hook_session_ban", label: "Session ban", what: "Holds a subagent replacement of an aborted task: once or reject, never always" },
   { key: "hook_supervisor", label: "Supervisor", what: "Investigates a Jev propagate inside the native hold with bounded read-only evidence" },
 ]
 
@@ -69,6 +69,7 @@ export const LEGACY_FEATURE_KEYS: Record<string, string[]> = {
   hook_skill_pick: ["pick_skill"],
   hook_tool_risk: ["hook_risk", "risk_hook"],
   hook_tool_standard: [],
+  hook_session_ban: ["hook_no_respawn"],
 }
 
 /**
@@ -81,6 +82,7 @@ export const LEGACY_CONFIG_CARRY: Record<string, string[]> = {
   hook_skill_pick: ["timeout", "minProbability", "minMargin", "maxCandidates", "maxPicks", "alsoAbove", "autoOptimize", "optimizeModel", "toast"],
   hook_tool_risk: ["timeout", "toast"],
   hook_tool_standard: [],
+  hook_session_ban: ["holdMs", "bindGraceMs", "admissionWindowMs", "toast", "toastOutcomes"],
 }
 
 /**
@@ -114,15 +116,17 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
   hook_tool_standard: { rulesFile: "~/.config/fazuh-agent/jev-rules.yaml", defaultEffect: "block", defaultThreshold: 0.7, minProbability: 0.7, timeout: 5000, actions: "shell,edit", fileMaxChars: 8000, toast: true, toastOutcomes: "deny" },
   // The editable numbers: a hold waits 60 s for a human, and an unbound child
   // is contained only inside the aborted call's window. The tombstone TTL and
-  // the repair delays are fixed decisions in `nospawn.ts` and
-  // `nospawn-frontier.ts`, so they are not settings.
-  hook_no_respawn: { holdMs: 60000, bindGraceMs: 2000, admissionWindowMs: 60000, toast: true, toastOutcomes: "deny" },
+  // the repair delays are fixed decisions in `session-ban.ts` and
+  // `session-ban-frontier.ts`, so they are not settings.
+  hook_session_ban: { holdMs: 60000, bindGraceMs: 2000, admissionWindowMs: 60000, toast: true, toastOutcomes: "deny" },
   // The supervisor is opt-in and separate from the global Jev model: it gets its
   // own endpoint/model/protocol/key so a review call can run against a different
   // provider than the preliminary check. protocol is systemone, chat, or
   // opencode; opencode uses the host's stateless generate.text and needs no
   // endpoint or key. Empty key fields fall back to the global key settings.
-  // Empty root falls back to the session's working dir.
+  // Empty root falls back to the session's working dir. standalone skips the
+  // Jev scorer; nonBlocking runs calls at once and judges a batch per session,
+  // bounded by batchMs (window) and batchMax (calls).
   hook_supervisor: {
     model: "",
     endpoint: "",
@@ -135,6 +139,10 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
     maxEvidence: 6,
     askWaitMs: 5000,
     toast: true,
+    standalone: false,
+    nonBlocking: false,
+    batchMs: 30000,
+    batchMax: 10,
   },
 }
 
@@ -218,7 +226,7 @@ export const DEFAULTS: JevState = {
   sidebar: true,
   sidebarCount: 5,
   sidebarSubject: true,
-  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_no_respawn: false, hook_supervisor: false },
+  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_session_ban: false, hook_supervisor: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
 }
@@ -339,6 +347,24 @@ export function cfgStr(feature: string, key: string): string {
   const fallback = FEATURE_DEFAULTS[feature]?.[key]
   const raw = featureConfig(feature)[key] ?? fallback
   return typeof raw === "string" ? raw : typeof fallback === "string" ? fallback : ""
+}
+
+/** Supervisor mode switches, re-read on every call like the other config. */
+export function supervisorStandalone(): boolean {
+  return cfgBool("hook_supervisor", "standalone")
+}
+
+export function supervisorNonBlocking(): boolean {
+  return cfgBool("hook_supervisor", "nonBlocking")
+}
+
+/** Batch windows are at least one call or one millisecond. */
+export function supervisorBatchMs(): number {
+  return Math.max(1, Math.round(cfgNum("hook_supervisor", "batchMs")))
+}
+
+export function supervisorBatchMax(): number {
+  return Math.max(1, Math.round(cfgNum("hook_supervisor", "batchMax")))
 }
 
 export function loadState(): JevState {

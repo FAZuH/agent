@@ -9,7 +9,7 @@
  */
 import { cfgBool, logCall } from "../../../lib/lib-jev/state.ts"
 import { cancelCard, createCard } from "./form.ts"
-import { banForForm } from "../../../lib/lib-jev/ban.ts"
+import { toolBanForForm } from "../../../lib/lib-jev/tool-ban.ts"
 
 /** Set true only when the flag is on AND execute.before was registered. */
 let cardRouteActive = false
@@ -43,10 +43,10 @@ export type DecideFn = (ctx: any, tool: string, sessionID: string, input: unknow
 /** Host actions injected by index.ts so this module never imports the handles. */
 export interface CardDeps {
   stopTree: (sessionID: string) => Promise<string[]>
-  ban: (sessionID: string, subagents: string[], reason: string) => void
+  toolBan: (sessionID: string, subagents: string[], reason: string) => void
   staleCard: (sessionID: string) => string | undefined
   setCard: (sessionID: string, formID: string, tool: string) => void
-  unban: (sessionID: string) => number
+  unbanTool: (sessionID: string) => number
   changed: (reason: string) => void
   /** V-ABORT notification (webhook/toast). Optional so callers need no TUI. */
   notifyAbort?: (sessionID: string, text: string) => Promise<void>
@@ -92,7 +92,7 @@ function cardFor(tool: string, nonce: string, notice?: string) {
 
 /** Create the card with one fresh-id retry. Awaits only the HTTP POST,
  *  never a card answer. Returns the id of the card that actually opened (or the
- *  last attempted id if both fail), so the ban record stores a reachable id. */
+ *  last attempted id if both fail), so the tool ban record stores a reachable id. */
 async function openCardRecord(sessionID: string, tool: string, stale: string | undefined, notice?: string): Promise<string> {
   const fresh = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
   const nonce = fresh()
@@ -117,23 +117,23 @@ export function handleCardReply(formID: string, answer: unknown): boolean {
     waiter(decision)
     return true
   }
-  // A ban record card answers `unblock` to lift the ban.
-  const record = banForForm(formID)
+  // A tool ban card answers `lift-tool-ban` to lift the tool ban.
+  const record = toolBanForForm(formID)
   if (!record) return false
-  if (decision === "unblock") {
+  if (decision === "lift-tool-ban") {
     const g = globalThis as any
-    const key = "__jevCardUnban"
-    const unban: ((id: string) => number) | undefined = g[key]
-    if (unban) unban(record.sessionID)
+    const key = "__jevCardLiftToolBan"
+    const unbanTool: ((id: string) => number) | undefined = g[key]
+    if (unbanTool) unbanTool(record.sessionID)
     else {
-      void import("../../../lib/lib-jev/ban.ts").then((m) => m.unbanSession(record.sessionID))
+      void import("../../../lib/lib-jev/tool-ban.ts").then((m) => m.unbanTool(record.sessionID))
     }
     return true
   }
   return false
 }
 
-/** Subscribe to native form events. A reply resolves a V-PROPAGATE waiter or lifts a ban. */
+/** Subscribe to native form events. A reply resolves a V-PROPAGATE waiter or lifts a tool ban. */
 export function attachCardEvents(ctx: any): void {
   const stream = ctx?.event?.subscribe?.({ types: ["form.replied", "form.cancelled"] })
   if (!stream) return
@@ -159,7 +159,7 @@ async function abortTree(sessionID: string, text: string, deps: CardDeps): Promi
 async function propagateUserCard(sessionID: string, tool: string, decision: GateDecision, deps: CardDeps): Promise<"allow" | "deny" | "abort"> {
   const formID = await openCardRecord(sessionID, tool, deps.staleCard(sessionID), decision.notice)
   deps.setCard(sessionID, formID, tool)
-  ;(globalThis as any).__jevCardUnban = deps.unban
+  ;(globalThis as any).__jevCardLiftToolBan = deps.unbanTool
   deps.changed("propagate")
   const timeoutMs = deps.askTimeoutMs ?? 60_000
   return await new Promise<"allow" | "deny" | "abort">((resolve) => {

@@ -1,8 +1,8 @@
 /**
- * Self-check for the no-respawn rules, the store and the frontier reducer. No
+ * Self-check for the session-ban rules, the store and the frontier reducer. No
  * host, no network, no model: hand-built records and a temp state directory.
  *
- *   bun test plugins/watchdog/src/nospawn.test.ts
+ *   bun test plugins/watchdog/src/session-ban.test.ts
  *
  * These are unit tests against the modules, not host evidence. The store is
  * imported dynamically, as in jev.test.ts: a static import would hoist above the
@@ -14,10 +14,10 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const scratch = mkdtempSync(join(tmpdir(), "jev-nospawn-test-"))
+const scratch = mkdtempSync(join(tmpdir(), "jev-session-ban-test-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
-process.env.OPENCODE_JEV_NOSPAWN_DIR = join(scratch, "nospawn")
+process.env.OPENCODE_JEV_SESSION_BAN_DIR = join(scratch, "session-ban")
 
 const {
   ADMISSION_WINDOW_MS,
@@ -38,12 +38,12 @@ const {
   nextGeneration,
   tombstoneState,
   verdict,
-} = await import("./nospawn.ts")
-type AdmissionInput = import("./nospawn.ts").AdmissionInput
-type Fence = import("./nospawn.ts").Fence
-type TaskRecord = import("./nospawn.ts").TaskRecord
-const store = await import("./nospawn-state.ts")
-const frontier = await import("./nospawn-frontier.ts")
+} = await import("./session-ban.ts")
+type AdmissionInput = import("./session-ban.ts").AdmissionInput
+type SessionBan = import("./session-ban.ts").SessionBan
+type TaskRecord = import("./session-ban.ts").TaskRecord
+const store = await import("./session-ban-state.ts")
+const frontier = await import("./session-ban-frontier.ts")
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
@@ -126,14 +126,14 @@ describe("verdict table", () => {
     expect(verdict(admission(), [record({ abortedAt: NOW - TTL_MS - 1 })])).toMatchObject({ effect: "allow", row: "retired" })
     expect(verdict(admission(), [])).toMatchObject({ effect: "allow", row: "none" })
 
-    // Table B: exact blocks, the fence, and missing evidence.
+    // Table B: exact blocks, the session ban, and missing evidence.
     expect(verdict(admission(), [live], { kind: "subtree", atSeq: 41, cause: "abort", at: NOW })).toMatchObject({ effect: "deny", row: "6" })
     expect(verdict(admission({ resumeChildID: "ses_child" }), [record({ childIDs: ["ses_child"] })])).toMatchObject({ effect: "deny", row: "2" })
     expect(verdict(admission({ resumeChildID: "ses_unknown", frontierNow: 42 }), [live])).toMatchObject({ effect: "hold", row: "3" })
 
-    const fence: Fence = { kind: "parent", atSeq: 41, cause: "abort", at: NOW }
-    expect(verdict(admission({ frontierNow: 41 }), [], fence)).toMatchObject({ effect: "hold", row: "fence" })
-    expect(verdict(admission({ frontierNow: 42 }), [], fence)).toMatchObject({ effect: "allow", row: "none" })
+    const sessionBan: SessionBan = { kind: "parent", atSeq: 41, cause: "abort", at: NOW }
+    expect(verdict(admission({ frontierNow: 41 }), [], sessionBan)).toMatchObject({ effect: "hold", row: "sessionBan" })
+    expect(verdict(admission({ frontierNow: 42 }), [], sessionBan)).toMatchObject({ effect: "allow", row: "none" })
 
     expect(verdict(admission({ frontierNow: null }), [live])).toMatchObject({ effect: "hold", row: "9" })
     expect(verdict(admission({ stateOk: false, audit: "live" }), [])).toMatchObject({ effect: "hold", row: "9" })
@@ -146,7 +146,7 @@ describe("verdict table", () => {
     expect(HOLD_REPLIES).toEqual(["once", "always", "reject"])
     // A reject is session-wide on this host, so Jev only rejects a solo request.
     expect(HOLD_FANOUT).toBe("solo-only")
-    expect(holdMarker("ses_a|msg_1|call_1", "the reason")).toMatch(/^nospawn hold [0-9a-f]{12}: the reason$/)
+    expect(holdMarker("ses_a|msg_1|call_1", "the reason")).toMatch(/^session-ban hold [0-9a-f]{12}: the reason$/)
     // The digest names the call, not the reason: two calls cannot share a marker.
     expect(holdMarker("ses_a|msg_1|call_1", "x")).not.toBe(holdMarker("ses_a|msg_1|call_2", "x"))
     expect(holdMarker("ses_a|msg_1|call_1", "x")).toBe(holdMarker("ses_a|msg_1|call_1", "y").replace(": y", ": x"))
@@ -202,39 +202,39 @@ describe("approval", () => {
   })
 })
 
-describe("fence kinds", () => {
-  const parentFence: Fence = { kind: "parent", atSeq: 41, cause: "abort", at: NOW }
-  const subtreeFence: Fence = { kind: "subtree", atSeq: 41, cause: "abort", at: NOW }
+describe("session ban kinds", () => {
+  const parentSessionBan: SessionBan = { kind: "parent", atSeq: 41, cause: "abort", at: NOW }
+  const subtreeSessionBan: SessionBan = { kind: "subtree", atSeq: 41, cause: "abort", at: NOW }
 
-  test("a parent fence holds without an approval", () => {
-    expect(verdict(admission(), [], parentFence)).toMatchObject({ effect: "hold", row: "fence", generation: null })
-    expect(verdict(admission({ frontierNow: 40 }), [], parentFence)).toMatchObject({ effect: "hold", row: "fence" })
+  test("a parent session ban holds without an approval", () => {
+    expect(verdict(admission(), [], parentSessionBan)).toMatchObject({ effect: "hold", row: "sessionBan", generation: null })
+    expect(verdict(admission({ frontierNow: 40 }), [], parentSessionBan)).toMatchObject({ effect: "hold", row: "sessionBan" })
 
-    // A user item past the fence admits, approval or not. The task table is what
+    // A user item past the session ban admits, approval or not. The task table is what
     // decided, so its row is what the decision reports.
-    expect(verdict(admission({ frontierNow: 42 }), [], parentFence)).toMatchObject({ effect: "allow", row: "none", generation: null })
+    expect(verdict(admission({ frontierNow: 42 }), [], parentSessionBan)).toMatchObject({ effect: "allow", row: "none", generation: null })
   })
 
-  test("a parent fence admits one generation with a valid approval", () => {
-    expect(verdict(admission({ approvedGeneration: 2 }), [], parentFence)).toMatchObject({ effect: "allow", row: "fence", generation: 2 })
+  test("a parent session ban admits one generation with a valid approval", () => {
+    expect(verdict(admission({ approvedGeneration: 2 }), [], parentSessionBan)).toMatchObject({ effect: "allow", row: "sessionBan", generation: 2 })
 
     // The approval answers that call only; the next one holds again.
-    expect(verdict(admission(), [], parentFence)).toMatchObject({ effect: "hold", row: "fence", generation: null })
+    expect(verdict(admission(), [], parentSessionBan)).toMatchObject({ effect: "hold", row: "sessionBan", generation: null })
   })
 
-  test("a parent fence never rescues a stale approval that the task table rejects", () => {
+  test("a parent session ban never rescues a stale approval that the task table rejects", () => {
     const newer = record({ generation: 5 })
 
-    // The task table decides first: row 4 holds, and the fence does not lift it.
-    expect(verdict(admission({ approvedGeneration: 2 }), [newer], parentFence)).toMatchObject({
+    // The task table decides first: row 4 holds, and the session ban does not lift it.
+    expect(verdict(admission({ approvedGeneration: 2 }), [newer], parentSessionBan)).toMatchObject({
       effect: "hold",
       row: "4",
       generation: null,
     })
 
     // A generation newer than the record passes row 4, and that same answer
-    // already satisfies the fence.
-    expect(verdict(admission({ approvedGeneration: 6 }), [newer], parentFence)).toMatchObject({
+    // already satisfies the session ban.
+    expect(verdict(admission({ approvedGeneration: 6 }), [newer], parentSessionBan)).toMatchObject({
       effect: "allow",
       row: "4",
       generation: 6,
@@ -267,58 +267,58 @@ describe("fence kinds", () => {
     })
   })
 
-  test("a row 5 admit retires, and the fence opens only on the same user item", () => {
+  test("a row 5 admit retires, and the session ban opens only on the same user item", () => {
     const live = record()
 
-    expect(verdict(admission({ frontierNow: 42 }), [live], parentFence)).toMatchObject({
+    expect(verdict(admission({ frontierNow: 42 }), [live], parentSessionBan)).toMatchObject({
       effect: "allow",
       row: "5",
       retire: true,
       generation: null,
     })
 
-    // A user item past the tombstone but not past the fence still holds.
-    const laterFence: Fence = { kind: "parent", atSeq: 50, cause: "abort", at: NOW }
-    expect(verdict(admission({ frontierNow: 42 }), [live], laterFence)).toMatchObject({
+    // A user item past the tombstone but not past the session ban still holds.
+    const laterSessionBan: SessionBan = { kind: "parent", atSeq: 50, cause: "abort", at: NOW }
+    expect(verdict(admission({ frontierNow: 42 }), [live], laterSessionBan)).toMatchObject({
       effect: "hold",
-      row: "fence",
+      row: "sessionBan",
       retire: false,
     })
 
-    // The fence hold compares against the record the task table matched, so a
-    // stale approval cannot slip through the fence after row 5 let it by.
+    // The session ban hold compares against the record the task table matched, so a
+    // stale approval cannot slip through the session ban after row 5 let it by.
     const newer: TaskRecord = record({ generation: 5 })
-    expect(verdict(admission({ frontierNow: 42, approvedGeneration: 2 }), [newer], laterFence)).toMatchObject({
+    expect(verdict(admission({ frontierNow: 42, approvedGeneration: 2 }), [newer], laterSessionBan)).toMatchObject({
       effect: "hold",
-      row: "fence",
+      row: "sessionBan",
       generation: null,
     })
-    expect(verdict(admission({ frontierNow: 42, approvedGeneration: 6 }), [newer], laterFence)).toMatchObject({
+    expect(verdict(admission({ frontierNow: 42, approvedGeneration: 6 }), [newer], laterSessionBan)).toMatchObject({
       effect: "allow",
-      row: "fence",
+      row: "sessionBan",
       generation: 6,
     })
   })
 
-  test("a parent fence keeps a stale or missing generation held", () => {
+  test("a parent session ban keeps a stale or missing generation held", () => {
     for (const approvedGeneration of [undefined, Number.NaN, 0, -1, 1.5]) {
-      expect(verdict(admission({ approvedGeneration }), [], parentFence)).toMatchObject({
+      expect(verdict(admission({ approvedGeneration }), [], parentSessionBan)).toMatchObject({
         effect: "hold",
-        row: "fence",
+        row: "sessionBan",
         generation: null,
       })
     }
   })
 
-  test("a child subtree fence denies with a valid generation present", () => {
-    expect(verdict(admission(), [], subtreeFence)).toMatchObject({ effect: "deny", row: "6", generation: null })
-    expect(verdict(admission({ approvedGeneration: 2 }), [record({ generation: 1 })], subtreeFence)).toMatchObject({
+  test("a child subtree session ban denies with a valid generation present", () => {
+    expect(verdict(admission(), [], subtreeSessionBan)).toMatchObject({ effect: "deny", row: "6", generation: null })
+    expect(verdict(admission({ approvedGeneration: 2 }), [record({ generation: 1 })], subtreeSessionBan)).toMatchObject({
       effect: "deny",
       row: "6",
     })
 
-    // An unknown kind is not a fence a human can lift.
-    expect(verdict(admission({ approvedGeneration: 2 }), [], { kind: "other" } as unknown as Fence)).toMatchObject({
+    // An unknown kind is not a session ban a human can lift.
+    expect(verdict(admission({ approvedGeneration: 2 }), [], { kind: "other" } as unknown as SessionBan)).toMatchObject({
       effect: "deny",
       row: "6",
     })
@@ -357,7 +357,7 @@ describe("store", () => {
     store.appendAudit(parent, { event: "abort", fingerprint: key, detail: "durability" })
     store.writeTask(parent, key, record({ parentID: parent }))
 
-    const reopened = await import(`./nospawn-state.ts?reopen=${Date.now()}`)
+    const reopened = await import(`./session-ban-state.ts?reopen=${Date.now()}`)
     const read = reopened.readSnapshot(parent)
     expect(read).toMatchObject({ ok: true, reason: "ok", audit: "live" })
     expect(read.snap?.tasks[key]?.abortedAt).toBe(NOW - 1_000)
@@ -397,15 +397,15 @@ describe("store", () => {
       row: "10",
     })
 
-    // A fence of unknown kind cannot be classified, so the snapshot is corrupt
+    // A session ban of unknown kind cannot be classified, so the snapshot is corrupt
     // and the parent holds. A named kind is readable.
-    const fencedID = "ses_fence_kind"
-    const base = { v: 1, parentID: fencedID, frontierSeq: 0, eventCursor: 0, tasks: {} }
-    const fencePath = store.parentPaths(fencedID).snapshot
-    writeFileSync(fencePath, JSON.stringify({ ...base, fence: { kind: "other", atSeq: 1, at: 2 } }), "utf8")
-    expect(store.readSnapshot(fencedID).reason).toBe("corrupt")
-    writeFileSync(fencePath, JSON.stringify({ ...base, fence: { kind: "parent", atSeq: 1, cause: "abort", at: 2 } }), "utf8")
-    expect(store.readSnapshot(fencedID).snap?.fence?.kind).toBe("parent")
+    const sessionBannedID = "ses_ban_kind"
+    const base = { v: 1, parentID: sessionBannedID, frontierSeq: 0, eventCursor: 0, tasks: {} }
+    const sessionBanPath = store.parentPaths(sessionBannedID).snapshot
+    writeFileSync(sessionBanPath, JSON.stringify({ ...base, sessionBan: { kind: "other", atSeq: 1, at: 2 } }), "utf8")
+    expect(store.readSnapshot(sessionBannedID).reason).toBe("corrupt")
+    writeFileSync(sessionBanPath, JSON.stringify({ ...base, sessionBan: { kind: "parent", atSeq: 1, cause: "abort", at: 2 } }), "utf8")
+    expect(store.readSnapshot(sessionBannedID).snap?.sessionBan?.kind).toBe("parent")
 
     // A wrong schema is corruption, never an empty store.
     const wrong = "ses_version"
@@ -523,7 +523,7 @@ describe("store", () => {
 
   test("two processes writing one parent keep every key", async () => {
     const parent = "ses_race"
-    const module = join(import.meta.dir, "nospawn-state.ts")
+    const module = join(import.meta.dir, "session-ban-state.ts")
     const script = join(scratch, "race-writer.ts")
     writeFileSync(
       script,
@@ -545,7 +545,7 @@ for (let i = 0; i < 100; i++) writeTask(${JSON.stringify(parent)}, "child-" + i,
 
     const child = Bun.spawn([process.execPath, script], {
       cwd: scratch,
-      env: { ...process.env, OPENCODE_JEV_NOSPAWN_DIR: store.stateDir() },
+      env: { ...process.env, OPENCODE_JEV_SESSION_BAN_DIR: store.stateDir() },
       stdout: "ignore",
       stderr: "inherit",
     })
@@ -632,5 +632,75 @@ describe("frontier", () => {
     expect(frontier.repair({ seq: 5, cursor: 8 }, "failed", "ok")).toBeNull()
     expect(frontier.repair({ seq: 5, cursor: 8 }, "ok", "failed")).toBeNull()
     expect(frontier.repair({ seq: 5, cursor: 8 }, "ok", "ok")).toEqual({ seq: 5, cursor: 8 })
+  })
+})
+
+describe("session ban store migration", () => {
+  test("the new state-dir env var wins and the old one is a fallback", () => {
+    const savedNew = process.env[store.STATE_DIR_ENV]
+    const savedOld = process.env.OPENCODE_JEV_NOSPAWN_DIR
+    const savedRoot = process.env.OPENCODE_JEV_STATE_HOME
+    try {
+      process.env.OPENCODE_JEV_STATE_HOME = scratch
+      process.env[store.STATE_DIR_ENV] = join(scratch, "migration-new")
+      process.env.OPENCODE_JEV_NOSPAWN_DIR = join(scratch, "migration-old")
+      expect(store.stateDir()).toBe(join(scratch, "migration-new"))
+      delete process.env[store.STATE_DIR_ENV]
+      expect(store.stateDir()).toBe(join(scratch, "migration-old"))
+      delete process.env.OPENCODE_JEV_NOSPAWN_DIR
+      expect(store.stateDir()).toBe(join(scratch, "session-ban"))
+    } finally {
+      if (savedNew === undefined) delete process.env[store.STATE_DIR_ENV]
+      else process.env[store.STATE_DIR_ENV] = savedNew
+      if (savedOld === undefined) delete process.env.OPENCODE_JEV_NOSPAWN_DIR
+      else process.env.OPENCODE_JEV_NOSPAWN_DIR = savedOld
+      if (savedRoot === undefined) delete process.env.OPENCODE_JEV_STATE_HOME
+      else process.env.OPENCODE_JEV_STATE_HOME = savedRoot
+    }
+  })
+
+  test("a legacy store directory is read, then the new one takes over", () => {
+    const root = mkdtempSync(join(tmpdir(), "jev-ban-dir-"))
+    const savedNew = process.env[store.STATE_DIR_ENV]
+    const savedOld = process.env.OPENCODE_JEV_NOSPAWN_DIR
+    const savedData = process.env.JEV_DATA_DIR
+    const savedState = process.env.JEV_STATE_HOME
+    const savedRoot = process.env.OPENCODE_JEV_STATE_HOME
+    try {
+      delete process.env[store.STATE_DIR_ENV]
+      delete process.env.OPENCODE_JEV_NOSPAWN_DIR
+      delete process.env.OPENCODE_JEV_STATE_HOME
+      process.env.JEV_DATA_DIR = root
+      process.env.JEV_STATE_HOME = root
+      const parent = "ses_legacy_dir"
+      const key = fingerprint("legacy dir task")
+      process.env[store.STATE_DIR_ENV] = join(root, "nospawn")
+      store.writeTask(parent, key, record({ parentID: parent, fingerprint: key }))
+      delete process.env[store.STATE_DIR_ENV]
+
+      expect(store.stateDir()).toBe(join(root, "nospawn"))
+      expect(store.readSnapshot(parent).snap?.tasks[key]).toBeDefined()
+
+      const currentParent = "ses_current_dir"
+      const currentKey = fingerprint("current dir task")
+      process.env[store.STATE_DIR_ENV] = join(root, "session-ban")
+      store.writeTask(currentParent, currentKey, record({ parentID: currentParent, fingerprint: currentKey }))
+      delete process.env[store.STATE_DIR_ENV]
+
+      expect(store.stateDir()).toBe(join(root, "session-ban"))
+      expect(store.readSnapshot(currentParent).snap?.tasks[currentKey]).toBeDefined()
+    } finally {
+      if (savedNew === undefined) delete process.env[store.STATE_DIR_ENV]
+      else process.env[store.STATE_DIR_ENV] = savedNew
+      if (savedOld === undefined) delete process.env.OPENCODE_JEV_NOSPAWN_DIR
+      else process.env.OPENCODE_JEV_NOSPAWN_DIR = savedOld
+      if (savedData === undefined) delete process.env.JEV_DATA_DIR
+      else process.env.JEV_DATA_DIR = savedData
+      if (savedState === undefined) delete process.env.JEV_STATE_HOME
+      else process.env.JEV_STATE_HOME = savedState
+      if (savedRoot === undefined) delete process.env.OPENCODE_JEV_STATE_HOME
+      else process.env.OPENCODE_JEV_STATE_HOME = savedRoot
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

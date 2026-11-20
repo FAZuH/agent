@@ -219,3 +219,56 @@ test("a successful log write emits a changed event with reason log to RPC emitte
   logCall({ hook: "hook_tool_risk", event: "pre_tool", verdict: "allow", sessionID: "ses_log_event", detail: "shell: echo hi" })
   expect(reasons).toContain("log")
 })
+
+test("logRows exposes the new audit fields but never a call payload", () => {
+  writeFileSync(
+    LOG_FILE,
+    JSON.stringify({
+      ts: "2026-11-19T05:00:00.000Z",
+      event: "supervisor_abort",
+      rawVerdict: "deny",
+      decisionNote: "api_key=[redacted] destructive rm",
+      sent: "TOP-SECRET-PAYLOAD",
+    }),
+  )
+  const row = logRows(10)[0] as any
+  expect(row.rawVerdict).toBe("deny")
+  expect(row.decisionNote).toBe("api_key=[redacted] destructive rm")
+  expect("sent" in row).toBe(false)
+})
+
+test("liftTool ban clears the tool ban and the session ban", async () => {
+  const cleared: string[] = []
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => 2,
+    clearSessionBan: (sessionID) => { cleared.push(sessionID); return true },
+  })
+  const result = await (handlers as any).liftToolBan({ sessionID: "ses_batch_01" })
+  expect(result).toEqual({ ok: true, count: 2 })
+  expect(cleared).toEqual(["ses_batch_01"])
+})
+
+test("liftTool banAndResume clears both bans then resumes once with the Continue text", async () => {
+  const order: string[] = []
+  const resumed: string[] = []
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => 1,
+    clearSessionBan: () => { order.push("clearSessionBan"); return true },
+    resumeSession: async (sessionID, text) => { order.push("resumeSession"); resumed.push(`${sessionID}|${text}`) },
+  })
+  const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_batch_02" })
+  expect(result).toEqual({ ok: true, count: 1 })
+  expect(order).toEqual(["clearSessionBan", "resumeSession"])
+  expect(resumed).toEqual(["ses_batch_02|Continue the interrupted task."])
+})
+
+test("liftToolBanAndResume still clears both bans when no resume dep is wired", async () => {
+  const cleared: string[] = []
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => 1,
+    clearSessionBan: (sessionID) => { cleared.push(sessionID); return true },
+  })
+  const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_no_resume" })
+  expect(result).toEqual({ ok: true, count: 1 })
+  expect(cleared).toEqual(["ses_no_resume"])
+})

@@ -6,7 +6,7 @@ import { filterSettings } from "./gui-search.ts"
 
 const gui = readFileSync(new URL("./gui.tsx", import.meta.url), "utf8")
 
-const RENDERED_FEATURE_FIELDS = 43
+const RENDERED_FEATURE_FIELDS = 47
 const search = (query: string) => filterSettings(query, FEATURE_DEFAULTS)
 
 describe("Jev Settings search filter", () => {
@@ -30,7 +30,7 @@ describe("Jev Settings search filter", () => {
 
   test("hides a whole section when none of its fields match", () => {
     const result = search("hold duration")
-    expect(result.groups.map((group) => group.feature)).toEqual(["hook_no_respawn"])
+    expect(result.groups.map((group) => group.feature)).toEqual(["hook_session_ban"])
     expect(result.groups.find((group) => group.feature === "hook_skill_pick")).toBeUndefined()
   })
 

@@ -11,7 +11,7 @@ mkdirSync(join(scratch, "opencode"), { recursive: true })
 writeFileSync(join(scratch, "opencode", "service.json"), JSON.stringify({ url: "http://127.0.0.1:1", password: "dummy" }))
 
 const { loadState, saveState } = await import("../../../lib/lib-jev/state.ts")
-const { readBans, banSession, setBanCard, unbanSession, banForForm } = await import("../../../lib/lib-jev/ban.ts")
+const { readToolBans, banTool, setToolBanCard, unbanTool, toolBanForForm } = await import("../../../lib/lib-jev/tool-ban.ts")
 const { resetCardRoute, markCardRouteActive, onBeforeExecute, handleCardReply, buildAskCard, ASK_OPTIONS } = await import("./question-cards.ts")
 type CardDeps = import("./question-cards.ts").CardDeps
 type DecideFn = import("./question-cards.ts").DecideFn
@@ -43,8 +43,8 @@ function stubFetch() {
   }) as any
   return { calls, formIDs, restore: () => (globalThis.fetch = original) }
 }
-function deps(stopped: string[] = []): CardDeps & { banned: any[]; cards: any[]; changedEvents: any[]; notices: any[] } {
-  const banned: any[] = []
+function deps(stopped: string[] = []): CardDeps & { toolBanned: any[]; cards: any[]; changedEvents: any[]; notices: any[] } {
+  const toolBanned: any[] = []
   const cards: any[] = []
   const changedEvents: any[] = []
   const notices: any[] = []
@@ -53,13 +53,13 @@ function deps(stopped: string[] = []): CardDeps & { banned: any[]; cards: any[];
       stopped.push(sessionID)
       return ["sub_a", "sub_b"]
     },
-    ban: (sessionID, subagents, reason) => banned.push({ sessionID, subagents, reason }),
+    toolBan: (sessionID, subagents, reason) => toolBanned.push({ sessionID, subagents, reason }),
     staleCard: () => undefined,
     setCard: (sessionID, formID, tool) => cards.push({ sessionID, formID, tool }),
-    unban: (sessionID) => 1,
+    unbanTool: (sessionID) => 1,
     changed: (reason) => changedEvents.push(reason),
     notifyAbort: async (sessionID, text) => { notices.push({ sessionID, text }) },
-    banned,
+    toolBanned,
     cards,
     changedEvents,
     notices,
@@ -118,7 +118,7 @@ describe("gate effects", () => {
       deactivate()
     }
   })
-  test("deny skips only this call: no tree stop, no ban, no card", async () => {
+  test("deny skips only this call: no tree stop, no tool ban, no card", async () => {
     activate()
     const f = stubFetch()
     const stopped: string[] = []
@@ -126,7 +126,7 @@ describe("gate effects", () => {
     try {
       await expect(onBeforeExecute({}, event, deny, d)).rejects.toThrow(/denied/)
       expect(stopped).toEqual([])
-      expect(d.banned.length).toBe(0)
+      expect(d.toolBanned.length).toBe(0)
       expect(d.cards.length).toBe(0)
       expect(f.calls.length).toBe(0)
     } finally {
@@ -249,10 +249,10 @@ describe("card records", () => {
     const cards: any[] = []
     const d: CardDeps = {
       stopTree: async () => [],
-      ban: (sid, subs, reason) => banSession(sid, subs, reason),
-      staleCard: (sid) => readBans().find((b) => b.sessionID === sid)?.formID,
-      setCard: (sid, formID, tool) => { setBanCard(sid, formID, tool); cards.push({ sid, formID }) },
-      unban: (sid) => unbanSession(sid),
+      toolBan: (sid, subs, reason) => banTool(sid, subs, reason),
+      staleCard: (sid) => readToolBans().find((b) => b.sessionID === sid)?.formID,
+      setCard: (sid, formID, tool) => { setToolBanCard(sid, formID, tool); cards.push({ sid, formID }) },
+      unbanTool: (sid) => unbanTool(sid),
       changed: () => {},
     }
     try {
@@ -266,17 +266,17 @@ describe("card records", () => {
     } finally {
       globalThis.fetch = original
       deactivate()
-      unbanSession("ses_block")
+      unbanTool("ses_block")
     }
   })
-  test("the ban card reply unblocks the session", async () => {
-    banSession("ses_reply", ["sub_x"], "block")
+  test("the tool ban card reply lifts the tool ban", async () => {
+    banTool("ses_reply", ["sub_x"], "block")
     const fid = "frm_jev_block_reply1"
-    setBanCard("ses_reply", fid, "bash")
-    ;(globalThis as any).__jevCardUnban = (id: string) => unbanSession(id)
-    expect(handleCardReply(fid, { decision: "unblock" })).toBe(true)
-    expect(banForForm(fid)).toBeUndefined()
-    expect(handleCardReply(fid, { decision: "unblock" })).toBe(false)
-    delete (globalThis as any).__jevCardUnban
+    setToolBanCard("ses_reply", fid, "bash")
+    ;(globalThis as any).__jevCardLiftToolBan = (id: string) => unbanTool(id)
+    expect(handleCardReply(fid, { decision: "lift-tool-ban" })).toBe(true)
+    expect(toolBanForForm(fid)).toBeUndefined()
+    expect(handleCardReply(fid, { decision: "lift-tool-ban" })).toBe(false)
+    delete (globalThis as any).__jevCardLiftToolBan
   })
 })

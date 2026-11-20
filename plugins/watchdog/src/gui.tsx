@@ -1,8 +1,8 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { MenuItem, Panel, Plugin, Style } from "@opencode/plugin/gui"
-import { createJevView, type Approval, type SessionBanInfo, type SettingsInfo } from "./gui-controller.ts"
+import { createJevView, type Approval, type ToolBanInfo, type SettingsInfo } from "./gui-controller.ts"
 import { Contract } from "../../../lib/lib-jev/rpc.ts"
-import { groupLabel, settingMeta } from "../../../lib/lib-jev/setting-meta.ts"
+import { auditFieldLabel, groupLabel, settingMeta } from "../../../lib/lib-jev/setting-meta.ts"
 import { filterSettings } from "./gui-search.ts"
 
 const TAB = { id: "jev-view-v1", title: "Jev", closable: "compact" as const }
@@ -54,8 +54,14 @@ const CSS = `
 .fazuh-jev-detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; opacity: .85; }
 .fazuh-jev-actions { display: flex; gap: 6px; }
 .fazuh-jev-approvals { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; }
-.fazuh-jev-bans { display: flex; flex-direction: column; gap: 5px; padding: 6px 0; }
-.fazuh-jev-ban { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border-weak-base); border-radius: 6px; font-size: 12px; }
+.fazuh-jev-tool-bans { display: flex; flex-direction: column; gap: 5px; padding: 6px 0; }
+.fazuh-jev-tool-ban { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border-weak-base); border-radius: 6px; font-size: 12px; }
+.fazuh-jev-tool-bans [data-component="settings-row"] { display: flex; align-items: center; flex-wrap: nowrap; gap: 16px; padding-block: 12px; border-bottom: .5px solid var(--v2-border-border-base, var(--border-weak-base)); }
+.fazuh-jev-tool-bans [data-component="settings-row"]:last-child { border-bottom: 0; }
+.fazuh-jev-tool-bans [data-slot="settings-row-copy"] { display: flex; flex-direction: column; flex: 1; gap: 8px; min-width: 0; }
+.fazuh-jev-tool-bans [data-slot="settings-row-title"] { font-size: 13px; font-weight: 530; color: var(--v2-text-text-base, var(--text-strong)); }
+.fazuh-jev-tool-bans [data-slot="settings-row-description"] { font-size: 13px; font-weight: 440; line-height: 20px; color: var(--v2-text-text-muted, var(--text-weak)); }
+.fazuh-jev-tool-bans [data-slot="settings-row-control"] { display: flex; flex-shrink: 0; justify-content: flex-end; gap: 6px; }
 .fazuh-jev-approve { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-weak-base); border-radius: 6px; padding: 9px 10px; }
 .fazuh-jev-approve-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
 .fazuh-jev-approve-head b { color: #e0a458; font-family: monospace; }
@@ -117,6 +123,8 @@ function detailLines(row: Record<string, unknown>): Array<[string, string]> {
   if (row.skipped) lines.push(["Skipped", String(row.skipped)])
   if (row.decisions) lines.push(["Decisions", JSON.stringify(row.decisions)])
   if (row.rules) lines.push(["Rules", JSON.stringify(row.rules)])
+  if (row.rawVerdict) lines.push([auditFieldLabel("rawVerdict"), String(row.rawVerdict)])
+  if (row.decisionNote) lines.push([auditFieldLabel("decisionNote"), String(row.decisionNote)])
   if (row.token) lines.push(["Token", String(row.token)])
   if (row.sessionID) {
     const id = String(row.sessionID)
@@ -222,7 +230,7 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
   const [state, setState] = createSignal({
     rows: [] as Array<Record<string, unknown>>,
     approvals: [] as Approval[],
-    bans: [] as SessionBanInfo[],
+    toolBans: [] as ToolBanInfo[],
     loading: true,
     busy: undefined as string | undefined,
     error: undefined as string | undefined,
@@ -256,9 +264,10 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
       getSettings: (input) => rpc.getSettings(input),
       setSetting: (input) => rpc.setSetting(input),
       setSecret: (input) => rpc.setSecret(input),
-      listBans: (input) => rpc.listBans(input),
+      listToolBans: (input) => rpc.listToolBans(input),
       stopSession: (input) => rpc.stopSession(input),
-      unblockSession: (input) => rpc.unblockSession(input),
+      liftToolBan: (input) => rpc.liftToolBan(input),
+      liftToolBanAndResume: (input) => rpc.liftToolBanAndResume(input),
       subscribe: (listener) => rpc.events.on("changed", (event: any) => listener({ reason: String(event?.data?.reason ?? "") })),
     },
     {
@@ -370,17 +379,17 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
 
       <Show when={tab() === "blocked"}>
         <div class="fazuh-jev-section" style={{ flex: "1", "min-height": "0" }}>
-          <Show when={state().approvals.length > 0 || state().bans.length > 0}>
+          <Show when={state().approvals.length > 0 || state().toolBans.length > 0}>
             <div class="fazuh-jev-bulk">
               <span class="fazuh-jev-bulk-label">{state().approvals.length} calls need you</span>
               <Show when={state().approvals[0]?.sessionID}>
                 <ui.Button
                   size="small"
                   disabled={!!state().busy}
-                  busy={running(`unblock:${state().approvals[0]!.sessionID}`)}
-                  onClick={() => void controller.unblockSession(state().approvals[0]!.sessionID)}
+                  busy={running(`liftToolBan:${state().approvals[0]!.sessionID}`)}
+                  onClick={() => void controller.liftToolBan(state().approvals[0]!.sessionID)}
                 >
-                  Unblock session
+                  Lift tool ban
                 </ui.Button>
               </Show>
               <ui.Button
@@ -442,22 +451,35 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
               </For>
             </Show>
           </div>
-          <Show when={state().bans.length > 0}>
-            <div class="fazuh-jev-bans">
-              <span class="fazuh-jev-bulk-label">Banned sessions</span>
-              <For each={state().bans}>
-                {(ban) => (
-                  <div class="fazuh-jev-ban">
-                    <span>{ban.sessionID}{ban.tool ? ` · ${ban.tool}` : ""}</span>
-                    <ui.Button
-                      size="small"
-                      variant="contrast"
-                      disabled={!!state().busy}
-                      busy={running(`unblock:${ban.sessionID}`)}
-                      onClick={() => void controller.unblockSession(ban.sessionID)}
-                    >
-                      Unblock
-                    </ui.Button>
+          <Show when={state().toolBans.length > 0}>
+            <div class="fazuh-jev-tool-bans">
+              <span class="fazuh-jev-bulk-label">Tool bans</span>
+              <For each={state().toolBans}>
+                {(toolBan) => (
+                  <div class="fazuh-jev-tool-ban" data-component="settings-row">
+                    <div data-slot="settings-row-copy">
+                      <div data-slot="settings-row-title">Tool ban · {toolBan.sessionID}{toolBan.tool ? ` · ${toolBan.tool}` : ""}</div>
+                      <div data-slot="settings-row-description">Tool calls are blocked in this session. Lifting the ban also clears its session ban.</div>
+                    </div>
+                    <div data-slot="settings-row-control" class="fazuh-jev-actions">
+                      <ui.Button
+                        size="small"
+                        variant="contrast"
+                        disabled={!!state().busy}
+                        busy={running(`liftToolBan:${toolBan.sessionID}`)}
+                        onClick={() => void controller.liftToolBan(toolBan.sessionID)}
+                      >
+                        Lift tool ban
+                      </ui.Button>
+                      <ui.Button
+                        size="small"
+                        disabled={!!state().busy}
+                        busy={running(`liftToolBanAndResume:${toolBan.sessionID}`)}
+                        onClick={() => void controller.liftToolBanAndResume(toolBan.sessionID)}
+                      >
+                        Lift tool ban & resume
+                      </ui.Button>
+                    </div>
                   </div>
                 )}
               </For>

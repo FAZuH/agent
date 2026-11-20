@@ -3,9 +3,9 @@
  * network, no model, no provider: fabricated `ctx`, fabricated events, a temp
  * state directory.
  *
- *   bun test plugins/watchdog/src/nospawn-host.test.ts
+ *   bun test plugins/watchdog/src/session-ban-host.test.ts
  *
- * M8-M13 of probes/no-respawn-identity/test-plan.md, plus the flag-off guard.
+ * M8-M13 of probes/session-ban-identity/test-plan.md, plus the flag-off guard.
  * Passing these is not host evidence: the wrapper chain, event delivery, the
  * durable cursor and the permission frames are all faked here.
  */
@@ -15,14 +15,14 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 
-const scratch = mkdtempSync(join(tmpdir(), "jev-nospawn-host-"))
+const scratch = mkdtempSync(join(tmpdir(), "jev-session-ban-host-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
-process.env.OPENCODE_JEV_NOSPAWN_DIR = join(scratch, "nospawn")
+process.env.OPENCODE_JEV_SESSION_BAN_DIR = join(scratch, "session-ban")
 
-const hostModule = await import("./nospawn-host.ts")
-const store = await import("./nospawn-state.ts")
-const rules = await import("./nospawn.ts")
+const hostModule = await import("./session-ban-host.ts")
+const store = await import("./session-ban-state.ts")
+const rules = await import("./session-ban.ts")
 const stateModule = await import("../../../lib/lib-jev/state.ts")
 
 const { createAdmissionHost, attach, register, start, callKey, SUBAGENT, EVENT_TYPES } = hostModule
@@ -161,7 +161,7 @@ const repliedFrame = (sessionID: string, requestID: string, reply: "once" | "alw
 })
 
 /** What a hold must write onto the event: the call key digest and the reason. */
-const MARKER = /^nospawn hold [0-9a-f]{12}: .+$/
+const MARKER = /^session-ban hold [0-9a-f]{12}: .+$/
 
 /** Correlate an ask to the hold it belongs to, then answer it as a human would. */
 async function answer(api: FakeCtx, sessionID: string, event: any, reply: "once" | "always" | "reject") {
@@ -228,11 +228,11 @@ async function wired(options: any = {}) {
 describe("flag off", () => {
   test("registration wires nothing and creates no state directory", async () => {
     // The shipped default: every feature is opt-in.
-    expect(stateModule.featureStored("hook_no_respawn")).toBe(false)
+    expect(stateModule.featureStored("hook_session_ban")).toBe(false)
 
     const dir = join(scratch, "flag-off")
-    const previous = process.env.OPENCODE_JEV_NOSPAWN_DIR
-    process.env.OPENCODE_JEV_NOSPAWN_DIR = dir
+    const previous = process.env.OPENCODE_JEV_SESSION_BAN_DIR
+    process.env.OPENCODE_JEV_SESSION_BAN_DIR = dir
     try {
       const api = fakeCtx()
       const { dispose } = await start(api.ctx, () => false)
@@ -243,14 +243,14 @@ describe("flag off", () => {
       expect(existsSync(dir)).toBe(false)
       dispose()
     } finally {
-      process.env.OPENCODE_JEV_NOSPAWN_DIR = previous
+      process.env.OPENCODE_JEV_SESSION_BAN_DIR = previous
     }
   })
 
   test("registration wires four domains when the flag is on", async () => {
     const dir = join(scratch, "flag-on")
-    const previous = process.env.OPENCODE_JEV_NOSPAWN_DIR
-    process.env.OPENCODE_JEV_NOSPAWN_DIR = dir
+    const previous = process.env.OPENCODE_JEV_SESSION_BAN_DIR
+    process.env.OPENCODE_JEV_SESSION_BAN_DIR = dir
     const api = fakeCtx()
     const { dispose } = await start(api.ctx, () => true)
     try {
@@ -266,7 +266,7 @@ describe("flag off", () => {
     } finally {
       dispose()
       api.close()
-      process.env.OPENCODE_JEV_NOSPAWN_DIR = previous
+      process.env.OPENCODE_JEV_SESSION_BAN_DIR = previous
     }
   })
 })
@@ -321,9 +321,9 @@ describe("observer", () => {
     let writes = 0
     let evaluations = 0
     const { api, dispose, call } = await wired({
-      evaluate: (input: any, records: any[], fence: any) => {
+      evaluate: (input: any, records: any[], sessionBan: any) => {
         evaluations += 1
-        return verdict(input, records, fence)
+        return verdict(input, records, sessionBan)
       },
       store: {
         writeTask: () => {
@@ -355,9 +355,9 @@ describe("enforcement", () => {
   test("calls the real evaluator once per assert and fails closed", async () => {
     let evaluations = 0
     const { api, dispose, call } = await wired({
-      evaluate: (input: any, records: any[], fence: any) => {
+      evaluate: (input: any, records: any[], sessionBan: any) => {
         evaluations += 1
-        return verdict(input, records, fence)
+        return verdict(input, records, sessionBan)
       },
     })
     const parentID = "ses_enforce"
@@ -411,9 +411,9 @@ describe("enforcement", () => {
     const host = createAdmissionHost({
       ctx: api.ctx,
       readPrompt: async () => "a different task entirely",
-      evaluate: (input: any, records: any[], fence: any) => {
+      evaluate: (input: any, records: any[], sessionBan: any) => {
         evaluations += 1
-        return verdict(input, records, fence)
+        return verdict(input, records, sessionBan)
       },
     })
     await attach(api.ctx, host)
@@ -1685,7 +1685,7 @@ describe("registration diagnostics", () => {
         "attach.event.subscribe",
       ])
       for (const record of records) {
-        expect(record.hook).toBe("hook_no_respawn")
+        expect(record.hook).toBe("hook_session_ban")
         expect(record.present).toBe(true)
         expect(record.attached).toBe(true)
         expect("error" in record).toBe(false)
@@ -1753,9 +1753,9 @@ describe("registration diagnostics", () => {
       const evaluations: any[] = []
       const host = createAdmissionHost({
         ctx: api.ctx,
-        evaluate: (input: any, records: any[], fence: any) => {
-          evaluations.push({ input, records, fence })
-          return verdict(input, records, fence)
+        evaluate: (input: any, records: any[], sessionBan: any) => {
+          evaluations.push({ input, records, sessionBan })
+          return verdict(input, records, sessionBan)
         },
       })
       const parentID = subscribeThrows ? "ses_subscribe_refused" : "ses_subscribe_working"
@@ -1799,7 +1799,7 @@ describe("registration diagnostics", () => {
 
     // The table, not a fallback, produced the refused case's verdict.
     const [seen] = refused.evaluations
-    const table = verdict(seen.input, seen.records, seen.fence)
+    const table = verdict(seen.input, seen.records, seen.sessionBan)
     expect(refused.decision.row).toBe(table.row)
     expect(refused.decision.reason).toBe(table.reason)
     expect(refused.decision.effect).toBe(table.effect)
@@ -1825,7 +1825,7 @@ describe("registration diagnostics", () => {
       const first = attachFor("event.first")
       expect(first.length).toBe(1)
       expect(first[0].type).toBe("session.deleted")
-      expect(first[0].hook).toBe("hook_no_respawn")
+      expect(first[0].hook).toBe("hook_session_ban")
     } finally {
       dispose()
     }
@@ -1977,9 +1977,9 @@ describe("abort trigger", () => {
     }
   })
 
-  test("fences every bound child, so an admission inside the child denies row 6", async () => {
+  test("session bans every bound child, so an admission inside the child denies row 6", async () => {
     const { api, host, dispose, call } = await wired({})
-    const parentID = "ses_abort_fence"
+    const parentID = "ses_abort_ban"
     const childID = "ses_abort_child"
     const prompt = "summarize the parser"
     try {
@@ -1990,9 +1990,9 @@ describe("abort trigger", () => {
       const receipt = await host.abort({ parentID, fingerprint: fingerprint(prompt), scope: "task", by: "user", cause: "user command" })
       expect(receipt.interrupted).toEqual([childID])
 
-      const childFence = store.readSnapshot(childID).snap?.fence
-      expect(childFence?.kind).toBe("subtree")
-      expect(String(childFence?.cause)).toContain(fingerprint(prompt).slice(0, 12))
+      const childSessionBan = store.readSnapshot(childID).snap?.sessionBan
+      expect(childSessionBan?.kind).toBe("subtree")
+      expect(String(childSessionBan?.cause)).toContain(fingerprint(prompt).slice(0, 12))
 
       // Row 6: the child cannot spawn anything, and no generation lifts it.
       await call("write the changelog", "msg_c", "call_c", childID)
@@ -2006,32 +2006,32 @@ describe("abort trigger", () => {
     }
   })
 
-  test("names a subtree fence the store refused, so no child is reported fenced", async () => {
-    const unfencedChild = "ses_abort_unfenced"
+  test("names a subtree session ban the store refused, so no child is reported session-banned", async () => {
+    const childWithoutSessionBan = "ses_abort_unbanned"
     const { api, host, dispose, call } = await wired({
       store: {
         writeSnapshot: (parentID: string, ...rest: any[]) => {
-          if (parentID === unfencedChild) throw new Error("the lock was held")
+          if (parentID === childWithoutSessionBan) throw new Error("the lock was held")
           return (store.writeSnapshot as any)(parentID, ...rest)
         },
       },
     })
-    const parentID = "ses_abort_fence_fail"
+    const parentID = "ses_abort_ban_fail"
     const prompt = "summarize the parser"
     try {
       await call(prompt, "msg_1", "call_1", parentID)
-      await api.feed({ type: "session.created", data: { sessionID: unfencedChild, parentID }, created: Date.now() })
-      expect(taskOf(parentID, prompt).childIDs).toEqual([unfencedChild])
+      await api.feed({ type: "session.created", data: { sessionID: childWithoutSessionBan, parentID }, created: Date.now() })
+      expect(taskOf(parentID, prompt).childIDs).toEqual([childWithoutSessionBan])
 
       const receipt = await host.abort({ parentID, fingerprint: fingerprint(prompt), scope: "task", by: "user", cause: "user command" })
       expect(receipt.sealed).toBe(true)
-      // The child was interrupted, but its fence never reached disk: row 6 does
+      // The child was interrupted, but its session ban never reached disk: row 6 does
       // not hold there, and the receipt says so instead of the audit alone.
-      expect(receipt.interrupted).toEqual([unfencedChild])
-      expect(receipt.fenced).toBe(0)
-      expect(receipt.fenceFailures).toEqual([unfencedChild])
-      expect(store.readSnapshot(unfencedChild).snap?.fence).toBeUndefined()
-      expect(auditLines(parentID).some((line) => String(line.detail ?? "").includes("subtree fence refused"))).toBe(true)
+      expect(receipt.interrupted).toEqual([childWithoutSessionBan])
+      expect(receipt.sessionBanned).toBe(0)
+      expect(receipt.sessionBanFailures).toEqual([childWithoutSessionBan])
+      expect(store.readSnapshot(childWithoutSessionBan).snap?.sessionBan).toBeUndefined()
+      expect(auditLines(parentID).some((line) => String(line.detail ?? "").includes("subtree session ban refused"))).toBe(true)
     } finally {
       dispose()
     }
@@ -2188,7 +2188,7 @@ describe("abort trigger", () => {
       expect(api.replies[0]).toMatchObject({ sessionID: parentID, requestID: id, decision: "reject" })
       expect(receipt.interrupted).toContain(parentID)
       expect(api.interrupts).toContain(parentID)
-      expect(store.readSnapshot(parentID).snap?.fence?.kind).toBe("parent")
+      expect(store.readSnapshot(parentID).snap?.sessionBan?.kind).toBe("parent")
 
       const decision = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
       expect(decision.effect).toBe("deny")
@@ -2233,7 +2233,7 @@ describe("abort trigger", () => {
     }
   })
 
-  test("a refused parent fence still holds the session in memory and says so", async () => {
+  test("a refused parent session ban still holds the session in memory and says so", async () => {
     let fail = false
     const { api, host, dispose, call } = await wired({
       store: {
@@ -2252,17 +2252,17 @@ describe("abort trigger", () => {
       expect(receipt.durable).toBe(false)
       fail = false
 
-      // The disk carries no fence: the hold is this process's own, and the
+      // The disk carries no session ban: the hold is this process's own, and the
       // audit says a restart loses it.
-      expect(store.readSnapshot(parentID).snap?.fence).toBeUndefined()
-      expect(auditLines(parentID).some((line) => String(line.detail ?? "").includes("parent fence held in memory only"))).toBe(true)
+      expect(store.readSnapshot(parentID).snap?.sessionBan).toBeUndefined()
+      expect(auditLines(parentID).some((line) => String(line.detail ?? "").includes("parent session ban held in memory only"))).toBe(true)
 
       // A new subagent call in that session is held anyway.
       await call("write the changelog", "msg_2", "call_2", parentID)
       const blocked = assertEvent(parentID, "msg_2", "call_2")
       const decision = await api.permission.evaluate(blocked)
       expect(decision.decision).toBe("hold")
-      expect(decision.row).toBe("fence")
+      expect(decision.row).toBe("sessionBan")
       expect(decision.effect).toBe("ask")
       expect(blocked.effect).toBe("ask")
     } finally {
@@ -2292,5 +2292,77 @@ describe("abort trigger", () => {
     expect(receipt.reason).toBe("no such task in this session")
     expect(existsSync(store.parentPaths("ses_abort_empty").snapshot)).toBe(false)
     dispose()
+  })
+})
+
+describe("clearing the session ban", () => {
+  test("removes the durable session ban and keeps every other snapshot field", async () => {
+    const { host, dispose, call } = await wired({})
+    const parentID = "ses_clear_ban"
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      await host.abortSession(parentID, "user", "stop the run")
+      const before = store.readSnapshot(parentID).snap!
+      expect(before.sessionBan?.kind).toBe("parent")
+
+      expect(host.clearSessionBan(parentID)).toBe(true)
+
+      const after = store.readSnapshot(parentID).snap!
+      expect(after.sessionBan).toBeUndefined()
+      expect(after.tasks).toEqual(before.tasks)
+      expect(after.frontierSeq).toBe(before.frontierSeq)
+      expect(after.eventCursor).toBe(before.eventCursor)
+      expect(after.parentID).toBe(before.parentID)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("clears an in-memory only session ban held after a failed marker write", async () => {
+    let fail = true
+    const { api, host, dispose, call } = await wired({
+      store: {
+        writeSnapshot: (...args: any[]) => {
+          if (fail) throw new Error("the lock was held")
+          return (store.writeSnapshot as any)(...args)
+        },
+      },
+    })
+    const parentID = "ses_clear_ban_memory"
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      const receipt = await host.abortSession(parentID, "user", "stop the run")
+      expect(receipt.durable).toBe(false)
+      fail = false
+
+      await call("write the changelog", "msg_2", "call_2", parentID)
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).row).toBe("sessionBan")
+
+      expect(host.clearSessionBan(parentID)).toBe(true)
+      await call("draft a spec", "msg_3", "call_3", parentID)
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_3", "call_3"))).row).not.toBe("sessionBan")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("a session with no session ban is a clean no-op", async () => {
+    const { host, dispose, call } = await wired({})
+    const parentID = "ses_clear_ban_none"
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      expect(store.readSnapshot(parentID).snap?.sessionBan).toBeUndefined()
+      expect(host.clearSessionBan(parentID)).toBe(true)
+      expect(store.readSnapshot(parentID).snap?.sessionBan).toBeUndefined()
+    } finally {
+      dispose()
+    }
+  })
+
+  test("the registered handle exposes clearSession ban", async () => {
+    const api = fakeCtx()
+    const handle = await register(api.ctx)
+    expect(typeof handle.clearSessionBan).toBe("function")
+    handle.dispose()
   })
 })

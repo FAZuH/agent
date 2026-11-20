@@ -183,12 +183,12 @@ export const Contract = {
         additionalProperties: false,
       },
     },
-    listBans: {
+    listToolBans: {
       input: { type: "object", properties: {}, additionalProperties: false },
       output: {
         type: "object",
         properties: {
-          bans: {
+          toolBans: {
             type: "array",
             items: {
               type: "object",
@@ -196,16 +196,16 @@ export const Contract = {
                 sessionID: { type: "string" },
                 subagents: { type: "array", items: { type: "string" } },
                 reason: { type: "string" },
-                bannedAt: { type: "string" },
+                toolBannedAt: { type: "string" },
                 formID: { type: "string" },
                 tool: { type: "string" },
               },
-              required: ["sessionID", "subagents", "reason", "bannedAt"],
+              required: ["sessionID", "subagents", "reason", "toolBannedAt"],
               additionalProperties: false,
             },
           },
         },
-        required: ["bans"],
+        required: ["toolBans"],
         additionalProperties: false,
       },
     },
@@ -223,7 +223,21 @@ export const Contract = {
         additionalProperties: false,
       },
     },
-    unblockSession: {
+    liftToolBan: {
+      input: {
+        type: "object",
+        properties: { sessionID: { type: "string" } },
+        required: ["sessionID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        required: ["ok", "count"],
+        additionalProperties: false,
+      },
+    },
+    liftToolBanAndResume: {
       input: {
         type: "object",
         properties: { sessionID: { type: "string" } },

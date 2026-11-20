@@ -21,6 +21,9 @@ function harness() {
     rejectAll: async () => ({ ok: true, count: 0 }),
     setEnabled: async () => ({ ok: true }),
     setFeature: async () => ({ ok: true }),
+    liftToolBan: async () => ({ ok: true, count: 0 }),
+    liftToolBanAndResume: async () => ({ ok: true, count: 0 }),
+    stopSession: async () => ({ ok: true, subagents: [] }),
     subscribe: (fn) => { listener = fn; return () => { listener = undefined } },
   }
   const view = createJevView(rpc, { update: (s) => states.push(s), error: () => {} })
@@ -119,5 +122,27 @@ describe("JevView controller", () => {
     h.view.refresh()
     await new Promise((r) => setTimeout(r, 0))
     expect(h.calls.length).toBe(before + 1)
+  })
+  test("liftTool banAndResume forwards the session once", async () => {
+    const seen: string[] = []
+    const rpc: JevRPC = {
+      status: async () => ({}) as any,
+      log: async () => ({ rows: [] }),
+      approvals: async () => ({ approvals: [] }),
+      approve: async () => ({ ok: true }),
+      reject: async () => ({ ok: true }),
+      approveAll: async () => ({ ok: true, count: 0 }),
+      rejectAll: async () => ({ ok: true, count: 0 }),
+      setEnabled: async () => ({ ok: true }),
+      setFeature: async () => ({ ok: true }),
+      stopSession: async () => ({ ok: true, subagents: [] }),
+      liftToolBan: async () => ({ ok: true, count: 0 }),
+      liftToolBanAndResume: async (input) => { seen.push(input.sessionID); return { ok: true, count: 1 } },
+      listToolBans: async () => ({ toolBans: [] }),
+      subscribe: () => () => {},
+    }
+    const view = createJevView(rpc, { update: () => {}, error: () => {} })
+    await (view as any).liftToolBanAndResume("ses_batch_01")
+    expect(seen).toEqual(["ses_batch_01"])
   })
 })

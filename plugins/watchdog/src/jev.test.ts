@@ -455,6 +455,28 @@ describe("per-feature config", () => {
     expect(s.config.hook_tool_risk.minProbability).toBe(FEATURE_DEFAULTS.hook_tool_risk.minProbability)
   })
 
+  test("a persisted session-ban key and its tuned config survive the rename", () => {
+    writeState({
+      features: { hook_no_respawn: true },
+      config: { hook_no_respawn: { holdMs: 12345, bindGraceMs: 4321, admissionWindowMs: 6789, toast: false, toastOutcomes: "allow" } },
+    })
+    const s = loadState()
+    expect(s.features.hook_session_ban).toBe(true)
+    expect(s.config.hook_session_ban.holdMs).toBe(12345)
+    expect(s.config.hook_session_ban.bindGraceMs).toBe(4321)
+    expect(s.config.hook_session_ban.admissionWindowMs).toBe(6789)
+    expect(s.config.hook_session_ban.toast).toBe(false)
+    expect(s.config.hook_session_ban.toastOutcomes).toBe("allow")
+    // A new key wins over the legacy one.
+    writeState({
+      features: { hook_no_respawn: true, hook_session_ban: false },
+      config: { hook_no_respawn: { holdMs: 111 }, hook_session_ban: { holdMs: 222 } },
+    })
+    const explicit = loadState()
+    expect(explicit.features.hook_session_ban).toBe(false)
+    expect(explicit.config.hook_session_ban.holdMs).toBe(222)
+  })
+
   test("the YOLO branch and the approval lifetime are global settings", () => {
     writeState({ yoloAsk: "no-op", approveTtl: 30 })
     const s = loadState()
@@ -1051,7 +1073,7 @@ const commandContext = (synthetic?: (message: any) => Promise<void>) => {
  * The command's body, with its three dependencies injected: the flag, the
  * snapshot read and the host handle. No state directory is touched, so these
  * are pure refusal and routing checks; the abort itself is tested in
- * `nospawn-host.test.ts`.
+ * `session-ban-host.test.ts`.
  */
 describe("jev-abort command", () => {
   const KEY = "a".repeat(64)
@@ -1082,11 +1104,11 @@ describe("jev-abort command", () => {
       calls,
       abort: async (request: any) => {
         calls.push(["abort", request])
-        return { fenced: 0, fenceFailures: [], notified: false, ...receipt }
+        return { sessionBanned: 0, sessionBanFailures: [], notified: false, ...receipt }
       },
       abortSession: async (parentID: string, by: string, cause: string) => {
         calls.push(["session", parentID, by, cause])
-        return { sealed: true, durable: true, revoked: [], interrupted: [parentID], preserved: [], fenced: 0, fenceFailures: [], notified: false }
+        return { sealed: true, durable: true, revoked: [], interrupted: [parentID], preserved: [], sessionBanned: 0, sessionBanFailures: [], notified: false }
       },
     }
   }
@@ -1110,7 +1132,7 @@ describe("jev-abort command", () => {
     expect(message).toContain("off")
     expect(reads).toBe(0)
     expect(host.calls).toEqual([])
-    expect(existsSync(join(scratch, "nospawn"))).toBe(false)
+    expect(existsSync(join(scratch, "session-ban"))).toBe(false)
   })
 
   test("lists the session's tasks when no target is given", async () => {
@@ -1202,22 +1224,22 @@ describe("jev-abort command", () => {
     expect(expired).toContain("nothing was sealed")
   })
 
-  test("reports a child session the subtree fence missed", async () => {
+  test("reports a child session the subtree session ban missed", async () => {
     const missed = await runAbort("ses_x", KEY.slice(0, 6), {
       enabled: () => true,
       read: (() => snapshot([record()])) as any,
-      host: fakeHost({ sealed: true, durable: true, revoked: [], interrupted: ["ses_c"], preserved: [], fenced: 0, fenceFailures: ["ses_c"] }),
+      host: fakeHost({ sealed: true, durable: true, revoked: [], interrupted: ["ses_c"], preserved: [], sessionBanned: 0, sessionBanFailures: ["ses_c"] }),
     })
-    expect(missed).toContain("NOT FENCED")
+    expect(missed).toContain("NOT SESSION_BANNED")
     expect(missed).toContain("ses_c")
 
-    const fenced = await runAbort("ses_x", KEY.slice(0, 6), {
+    const sessionBanned = await runAbort("ses_x", KEY.slice(0, 6), {
       enabled: () => true,
       read: (() => snapshot([record()])) as any,
-      host: fakeHost({ sealed: true, durable: true, revoked: [], interrupted: ["ses_c"], preserved: [], fenced: 1, fenceFailures: [] }),
+      host: fakeHost({ sealed: true, durable: true, revoked: [], interrupted: ["ses_c"], preserved: [], sessionBanned: 1, sessionBanFailures: [] }),
     })
-    expect(fenced).toContain("1 child session fenced")
-    expect(fenced).not.toContain("NOT FENCED")
+    expect(sessionBanned).toContain("1 child session session-banned")
+    expect(sessionBanned).not.toContain("NOT SESSION_BANNED")
   })
 
   test("refuses an unreadable store", async () => {
@@ -1254,7 +1276,7 @@ describe("jev-abort command", () => {
     })
     await jevPlugin.setup(ctx)
     const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "" } })
-    expect(result.content).toContain("hook_no_respawn is off")
+    expect(result.content).toContain("hook_session_ban is off")
     expect(sent.length).toBe(1)
     expect(sent[0]).toMatchObject({ sessionID: "ses_cmd", resume: false })
     expect(sent[0].text).toBe(result.content)
@@ -1262,7 +1284,7 @@ describe("jev-abort command", () => {
 
   test("sends one message for an abort: the host's own notice", async () => {
     clearState()
-    setFeature("hook_no_respawn", true)
+    setFeature("hook_session_ban", true)
     const sent: any[] = []
     const { ctx, commands } = commandContext(async (message) => {
       sent.push(message)
@@ -1271,7 +1293,7 @@ describe("jev-abort command", () => {
       await jevPlugin.setup(ctx)
       const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "session" } })
       expect(result.content).toContain("ses_cmd stopped")
-      expect(result.content).not.toContain("hook_no_respawn is off")
+      expect(result.content).not.toContain("hook_session_ban is off")
       // The host already told the session, so the command stays quiet: one
       // message, and it is not the returned line.
       expect(sent.length).toBe(1)
@@ -1279,14 +1301,14 @@ describe("jev-abort command", () => {
       expect(sent[0].text).toContain("Jev aborted this session")
       expect(sent[0].text).not.toBe(result.content)
     } finally {
-      setFeature("hook_no_respawn", false)
+      setFeature("hook_session_ban", false)
       clearState()
-      rmSync(join(scratch, "nospawn"), { recursive: true, force: true })
+      rmSync(join(scratch, "session-ban"), { recursive: true, force: true })
     }
   })
 
   test("the receipt says whether the host spoke", async () => {
-    const { register } = await import("./nospawn-host.ts")
+    const { register } = await import("./session-ban-host.ts")
     const notices: any[] = []
     const wired = await register({ session: { synthetic: async (message: any) => { notices.push(message) } } })
     const mute = await register({})
@@ -1299,7 +1321,7 @@ describe("jev-abort command", () => {
     } finally {
       wired.dispose()
       mute.dispose()
-      rmSync(join(scratch, "nospawn"), { recursive: true, force: true })
+      rmSync(join(scratch, "session-ban"), { recursive: true, force: true })
     }
   })
 
@@ -1312,7 +1334,7 @@ describe("jev-abort command", () => {
     })
     await jevPlugin.setup(ctx)
     const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "" } })
-    expect(result.content).toContain("hook_no_respawn is off")
+    expect(result.content).toContain("hook_session_ban is off")
     const [entry] = readCallLog(1)
     expect(entry.hook).toBe("jev-abort")
     expect(entry.error).toContain("synthetic refused")

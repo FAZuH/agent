@@ -11,7 +11,7 @@
  * is a user decision, so neither retires a tombstone.
  */
 
-import { DEGRADED_RETRY_MS } from "./nospawn.ts"
+import { DEGRADED_RETRY_MS } from "./session-ban.ts"
 
 export const INBOX_ENQUEUED = "session.inbox.enqueued"
 export const USER_ITEM = "user"

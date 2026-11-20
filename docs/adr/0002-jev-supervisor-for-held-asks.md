@@ -49,7 +49,7 @@ Human-only gates and a confident Jev `deny` had to stay absolute.
   3 (`abort`) passed for the resolution path with a
   test-only fixture supplying the verdict token, because a real model correctly
   judged the sandbox-safe calls as `allow`; the reject on the wire, caller
-  denial, no tool effect and the abort cascade with its fence and audit ran on
+  denial, no tool effect and the abort cascade with its session ban and audit ran on
   the real host with real plugin code. The raw systemone endpoint accepts only
   `typesafe/jev` models for supervisor decisions; native sessions used
   `commandcode/deepseek/deepseek-v4.1-flash` with the default variant. Result:

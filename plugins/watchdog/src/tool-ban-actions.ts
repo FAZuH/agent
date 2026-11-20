@@ -11,16 +11,16 @@
  * a pending steer input, so a terminal stop does not auto-continue the agent.
  *
  * "Resume main only": no resume API exists. The closest achievable behavior is
- * to clear the ban and leave the main session to be driven by the next user
+ * to clear the tool ban and leave the main session to be driven by the next user
  * message; subagents are NOT restarted (the main session does that itself).
  */
 import { logCall } from "../../../lib/lib-jev/state.ts"
-import { isBanned } from "../../../lib/lib-jev/ban.ts"
-import { banSession, unbanSession } from "../../../lib/lib-jev/ban.ts"
+import { isToolBanned } from "../../../lib/lib-jev/tool-ban.ts"
+import { banTool, unbanTool } from "../../../lib/lib-jev/tool-ban.ts"
 
 export interface StopDeps {
   ctx: any
-  /** Reuse the no-respawn durable fence instead of duplicating it when on. */
+  /** Reuse the session-ban durable session ban instead of duplicating it when on. */
   abortSession?: (sessionID: string, by: "user", cause: string) => Promise<unknown>
 }
 
@@ -75,7 +75,7 @@ export async function stopSessionTree(ctx: any, sessionID: string, deps: Omit<St
   try {
     await ctx?.session?.synthetic?.({
       sessionID,
-      text: "jev: this call was blocked and the session (including its subagents) was stopped. Use Unblock to lift the ban, then continue from the main session.",
+      text: "jev: this call was blocked and the session (including its subagents) was stopped. Use Lift tool ban to lift the tool ban, then continue from the main session.",
       delivery: "queue",
     })
   } catch {}
@@ -83,12 +83,12 @@ export async function stopSessionTree(ctx: any, sessionID: string, deps: Omit<St
   return subagents
 }
 
-/** Unblock: lift the ban for a session + subagents. No resume API exists, so the
- *  next user message drives the main session; subagents are not restarted. */
-export async function unblockSession(ctx: any, sessionID: string): Promise<number> {
-  const count = unbanSession(sessionID)
-  logCall({ hook: "hook_tool_risk", sessionID, detail: `ban lifted for session and subagents (${count} records)` })
+/** Lift the tool ban for a session and its subagents. No resume API exists here;
+ *  the resume action starts a new turn. */
+export async function liftToolBan(ctx: any, sessionID: string): Promise<number> {
+  const count = unbanTool(sessionID)
+  logCall({ hook: "hook_tool_risk", sessionID, detail: `tool ban lifted for session and subagents (${count} records)` })
   return count
 }
 
-export { banSession, unbanSession, isBanned }
+export { banTool, unbanTool, isToolBanned }

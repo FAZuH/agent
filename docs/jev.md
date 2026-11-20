@@ -167,12 +167,12 @@ cannot be read skips its rule: a missing reference must never block a call.
 
 A rule file that cannot be parsed is loud in `/jev-log` and changes nothing.
 
-**`hook_no_respawn`** (off by default): stops an automatic replacement of a
+**`hook_session_ban`** (off by default): stops an automatic replacement of a
 `subagent` task the user aborted. Identity is `(parent session, normalized
 prompt)`: NFKC, whitespace collapse, trim, lowercase, then SHA-256. A
 replacement in the same turn is held behind the host's own permission prompt:
 the hook sets the effect to `ask` and returns, and the host asks the human. The
-prompt message is `nospawn hold <first 12 hex of sha256(call key)>: <reason>`.
+prompt message is `session-ban hold <first 12 hex of sha256(call key)>: <reason>`.
 That marker is the only name the two sides share: `permission.asked` carries it,
 and Jev matches it back to the call. A user message seen on the live event feed
 retires the tombstone. A message that arrives while the feed is down is not
@@ -181,14 +181,14 @@ replayed, so the 15 minute backstop is what ends that tombstone.
 Three outcomes, in this order:
 
 - **Deny**, on exact evidence only: the aborted call's own key replayed, a
-  resume of a child bound to the aborted task, or any admission inside a fenced
+  resume of a child bound to the aborted task, or any admission inside a session-banned
   child session. No prompt, no approval.
 - **Hold**, for a recognized replacement before a new user turn: the host asks.
   The answers are the host's fixed vocabulary, `once`, `always` and `reject`.
   `once` admits this call by minting its generation. `always` does the same and
   nothing more: Jev asserts without `save`, so no rule is written, nothing
   persists, and the next identical call asks again. `reject` denies.
-  A hold never softens another hook: the no-respawn hook registers last among
+  A hold never softens another hook: the session-ban hook registers last among
   Jev's own evaluate hooks, so a `deny` Jev's risk hook set is kept, audited
   `hold_refused_by_deny`, instead of being turned into a question. A plugin
   registering after Jev can still overwrite an `ask`, and one did on a real
@@ -197,7 +197,7 @@ Three outcomes, in this order:
   and any admission after a user turn.
 
 The host puts no expiry on a permission request, so the deadline is Jev's own:
-`hook_no_respawn.holdMs` (60 s). The deny at that deadline is best-effort and
+`hook_session_ban.holdMs` (60 s). The deny at that deadline is best-effort and
 solo-only. A `reject` reply on this host rejects **every** pending permission in
 that session, in both the plain and the message-carrying shape, and there is no
 narrower cancel route. Jev therefore rejects only when its own request is the
@@ -230,7 +230,7 @@ event, so turning it off stops new admissions at once. An already-armed hold
 keeps its deadline and can still deny, and a pending prompt stays answerable.
 Turning it on needs a plugin reload, because registration happens once in
 `setup`. This feature writes its own per-parent audit, and also writes
-`hook_no_respawn` records to the call log for registration and feed failures.
+`hook_session_ban` records to the call log for registration and feed failures.
 Those records carry no verdict, so neither `toast` nor `toastOutcomes`
 announces an admission; an attach failure does toast when the global toast is
 on.
@@ -242,14 +242,14 @@ one. It takes a hex prefix of a task key, or `session`:
   calls that record owns settle deny `revocation:abort` (a call already allowed
   is revoked), then its bound children and their descendants are interrupted,
   then a child created inside the aborted call's window with no sibling
-  admission open is contained, then each bound child is fenced and a refused
-  fence is reported. A second abort of the same task re-seals nothing, moves
+  admission open is contained, then each bound child is session-banned and a refused
+  session ban is reported. A second abort of the same task re-seals nothing, moves
   nothing, and cancels only calls that record owns. A tombstone that is retired
   or expired is refused, because the store keeps it spent and a re-seal would
   report a seal that is not there.
-- `/jev-abort session` stops the parent's own run: the session fence is written,
+- `/jev-abort session` stops the parent's own run: the session ban is written,
   every open call in the session is revoked and its pending prompt rejected, then
-  the parent and its children are interrupted. A fence write the store refused is
+  the parent and its children are interrupted. A session ban write the store refused is
   held in memory for the rest of the process and the command reports `NOT DURABLE`.
 - `/jev-abort` with no target lists this session's tasks with their key prefix,
   agent, generation, state and child count.
@@ -257,20 +257,20 @@ one. It takes a hex prefix of a task key, or `session`:
 The authority recorded is `user`. The abort refuses rather than guesses: a
 prefix that names nothing, a prefix that names two tasks, an unreadable store,
 or the feature switched off aborts nothing and says so. A tombstone or a parent
-fence the store refused to write is held in memory only, and the command says
+session ban the store refused to write is held in memory only, and the command says
 `NOT DURABLE`: a restart loses that seal.
 
 An abort stops work on this machine. Nothing in this feature observes or blocks
 a socket, a fetch, or a child's own network call, and an abort says nothing
 about provider work already started or already billed.
 
-An abort attempts to fence every session bound to the task with
-`kind: "subtree"`: when the fence reaches disk, a new `subagent` call inside
-that child denies row 6 and no approval or generation lifts it. The fence
+An abort attempts to session ban every session bound to the task with
+`kind: "subtree"`: when the session ban reaches disk, a new `subagent` call inside
+that child denies row 6 and no approval or generation lifts it. The session ban
 reaching disk is host-proven; the deny it causes is fixture-proven, and no host
-admission inside a fenced child has been attempted. The receipt counts the
-fences that reached disk and names the sessions whose fence write failed; the
-command prints `NOT FENCED` for those, because that child can still spawn. Before this release nothing wrote that fence; the guarantee it carries
+admission inside a session-banned child has been attempted. The receipt counts the
+session bans that reached disk and names the sessions whose session ban write failed; the
+command prints `NOT SESSION_BANNED` for those, because that child can still spawn. Before this release nothing wrote that session ban; the guarantee it carries
 did not exist, and the table row was unreachable.
 
 `abortSession` exists on the host handle and is called today only by
@@ -296,25 +296,44 @@ There is no call-level abort: `abort` takes a task fingerprint or
 call-level tool, so a second route would duplicate it.
 
 State is one snapshot plus one append-only audit per parent session, under
-`nospawn/` in the state root. Anything with this user's uid can edit those
+`session-ban/` in the state root. Anything with this user's uid can edit those
 files, so they are a recovery record, not a tamper boundary. A tombstone whose
 write fails is held in memory for the rest of the process instead of being
 dropped, and the audit says so. A restart starts the frontier at zero and
 replays nothing from the durable log, so a live tombstone reads as same-turn
 and holds again until a new user item arrives or the 15 minute TTL ends. Seals
-and fences held in memory only are lost with the process.
+and session bans held in memory only are lost with the process.
 
 **`hook_supervisor`** (off by default): resolves a Jev `propagate`, `deny`, or
 `abort` through a separate supervisor model. It stays off until a distinct
 supervisor model is configured. An endpoint is needed too, unless `protocol` is
 `opencode`, which uses the host's own generation API. When enabled, every
 non-allow Jev outcome hands off to the supervisor and has no other Jev effect:
-Jev does not route to the user, deny, abort, ban, or notify at that stage. A
+Jev does not route to the user, deny, abort, tool ban, or notify at that stage. A
 supervisor resolution replaces the outcome: `allow` releases the call,
 `propagate` routes it to the user with all three options, and `abort` stops the
 session. The supervisor uses its own endpoint, model, protocol and key settings,
 so the review call can run against a different provider than the preliminary
 check. Empty supervisor key fields fall back to the global key settings.
+
+`standalone` (default `false`) skips the Jev scorer: every in-scope call goes
+straight to the supervisor's native hold. `nonBlocking` (default `false`)
+implies standalone and removes the hold: calls run at once, and the supervisor
+judges one batch per session. `batchMs` (30000) and `batchMax` (10) bound each
+window; a batch also flushes at session end. Only an exact `allow` lets a batch
+stand; `propagate`, `deny`, a malformed answer or a model failure aborts the
+session that produced it. Non-blocking opens no question card. Both switches
+off keep the Jev-first path above unchanged.
+
+| Mode | Config | Jev scorer | Permission hold | Question card | Judgement |
+| --- | --- | --- | --- | --- | --- |
+| default | both off | yes | on non-allow outcomes | when enabled | one call per held outcome |
+| standalone | `standalone` | no | every in-scope call | when enabled | one call per held call |
+| nonBlocking | `nonBlocking` | no | none | no | one call per batch window |
+
+Batch judging is metadata-and-input-only: each batch call sends its action,
+resources, and bounded `subject`/`text` (including bounded tool arguments), but
+no history snapshot. The blocking paths above send the history snapshot.
 
 The same bounded, redacted, role-labelled snapshot of recent history that the
 preliminary risk check now sends also goes to the supervisor, so the check
@@ -329,7 +348,7 @@ The model is asked one question with four answers:
 | --- | --- | --- |
 | `allow` | `allow` | release the call. In native mode Jev rechecks identity, arguments, policy and liveness before granting a `once`; a failed recheck leaves the prompt open. |
 | `deny` | `abort` | stop the session. In native mode Jev rejects the call when it can and interrupts the session. |
-| `abort` | `abort` | stop the session and notify the user through the no-respawn host. With siblings pending the prompt stays answerable and the audit records it. |
+| `abort` | `abort` | stop the session and notify the user through the session-ban host. With siblings pending the prompt stays answerable and the audit records it. |
 | `propagate` | `propagate` | hand the decision to the user, who chooses allow, deny, or abort. |
 
 An uncertain, malformed, over-budget or failed answer becomes `propagate`, never
@@ -370,7 +389,7 @@ silent allow) and case 5 (context snapshot shape). Cases 2 (`deny`) and 3
 on that same host: a test-only decision fixture supplied the verdict token,
 because a real model correctly judged these sandbox-safe calls as `allow`; the
 reject on the wire, caller denial, no tool effect and the abort cascade with its
-fence and audit ran on the real host with real plugin code. Only the decision
+session ban and audit ran on the real host with real plugin code. Only the decision
 token was controlled. The raw systemone endpoint accepts only `typesafe/jev`
 models for supervisor decisions; native sessions used
 `commandcode/deepseek/deepseek-v4.1-flash` with the default variant. Full
@@ -439,7 +458,7 @@ These are the rules the code enforces, not aspirations:
   prompt mode it delegates to `hook_supervisor`, and if the supervisor is off
   or cannot decide the call routes to the user; with client auto-accept it
   is blocked for approval instead. No Jev failure stops the agent on its own,
-  though a supervisor abort still holds. `hook_no_respawn` is
+  though a supervisor abort still holds. `hook_session_ban` is
   the deliberate exception: it is off by default, and when on it denies on a
   missing admission record, an unreadable store, or a deny another hook already
   set. Fail-closed is the whole point of that switch.
@@ -451,7 +470,7 @@ These are the rules the code enforces, not aspirations:
   or below `hook_tool_standard.minProbability`, is not violated.
 - **Four switches can block, and only those four.** `hook_tool_risk` blocks
   on a `deny` or an `abort`; `hook_tool_standard` blocks on a violated rule
-  whose effect is `block`; `hook_no_respawn` blocks a replacement of an aborted
+  whose effect is `block`; `hook_session_ban` blocks a replacement of an aborted
   task, and on a store it cannot read; `hook_supervisor` rejects or aborts a
   held call. All four are off by default.
 - **The key is never echoed, logged, or read back.** `/jev-key` writes it at
@@ -522,11 +541,11 @@ load, so tuned thresholds survive the upgrade.
 | `hook_tool_standard` | `fileMaxChars` | `8000` | characters a `{file:…}` reference may add to a rule |
 | `hook_tool_standard` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
 | `hook_tool_standard` | `toastOutcomes` | `deny` | what a call has to end in for this feature to announce it: `allow`, `propagate`, `deny`, `all` |
-| `hook_no_respawn` | `holdMs` | `60000` | ms a replacement waits for a human before Jev rejects it, when its request is the only pending one in the session |
-| `hook_no_respawn` | `bindGraceMs` | `2000` | ms after a call binds its child that an unbound child may still belong to it |
-| `hook_no_respawn` | `admissionWindowMs` | `60000` | ceiling on that window, whatever the binding says |
-| `hook_no_respawn` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
-| `hook_no_respawn` | `toastOutcomes` | `deny` | what a call has to end in for this feature to announce it |
+| `hook_session_ban` | `holdMs` | `60000` | ms a replacement waits for a human before Jev rejects it, when its request is the only pending one in the session |
+| `hook_session_ban` | `bindGraceMs` | `2000` | ms after a call binds its child that an unbound child may still belong to it |
+| `hook_session_ban` | `admissionWindowMs` | `60000` | ceiling on that window, whatever the binding says |
+| `hook_session_ban` | `toast` | `true` | announce each of this feature's calls as a TUI toast (the global `toast` must also be on) |
+| `hook_session_ban` | `toastOutcomes` | `deny` | what a call has to end in for this feature to announce it |
 | `hook_supervisor` | `model` | `""` | supervisor model's wire id; required to turn the feature on; `providerID/modelID` when `protocol` is `opencode` |
 | `hook_supervisor` | `endpoint` | `""` | supervisor decisions or chat endpoint; required with `model` unless `protocol` is `opencode` |
 | `hook_supervisor` | `protocol` | `systemone` | `systemone`, `chat`, or `opencode` for the supervisor's own provider |
@@ -538,6 +557,10 @@ load, so tuned thresholds survive the upgrade.
 | `hook_supervisor` | `maxEvidence` | `6` | most evidence reads and searches per investigation |
 | `hook_supervisor` | `askWaitMs` | `5000` | ms to wait for the correlated permission frame before escalating |
 | `hook_supervisor` | `toast` | `true` | announce supervisor records as a TUI toast (the global `toast` must also be on) |
+| `hook_supervisor` | `standalone` | `false` | skip the Jev scorer; the supervisor judges every in-scope call through the native hold |
+| `hook_supervisor` | `nonBlocking` | `false` | run calls at once, with no hold or card; judge each session's calls in one batch. Implies `standalone` |
+| `hook_supervisor` | `batchMs` | `30000` | ms per non-blocking batch window |
+| `hook_supervisor` | `batchMax` | `10` | most calls in one non-blocking batch before an early flush |
 
 A state file written before the feature rename (`pick_skill`/`risk_hook`, and
 then `hook_risk`) is migrated on load: the switch carries over, and so do the
@@ -545,6 +568,13 @@ settings whose meaning did not change. The old probability floors do not: the
 old hook judged one binary question, the new one judges a four-way verdict,
 so the same number would mean something else. `gateProbability` becomes
 `hook_tool_risk.minProbability`, the bar for acting on an answer.
+
+The session-ban rename migrates the same way. A persisted `hook_no_respawn`
+switch loads as `hook_session_ban`, carrying `holdMs`, `bindGraceMs`,
+`admissionWindowMs`, `toast` and `toastOutcomes`. `jev-bans.json` is read when
+`jev-tool-bans.json` is absent, and the `nospawn/` store when `session-ban/` is
+absent, including `OPENCODE_JEV_NOSPAWN_DIR` when `OPENCODE_JEV_SESSION_BAN_DIR`
+is unset. The new name always wins when present.
 
 Endpoint and model ship empty on purpose. Both are provider-specific and neither
 has a portable default, so the plugin carries nobody's billing details and
@@ -696,13 +726,24 @@ switch.
 first. Approve all grants a one-time approval to every held call. Reject all
 dismisses every held call.
 
+A supervisor batch abort also writes a tool ban, so the session appears in the
+**Tool bans** list. Each row offers **Lift tool ban** and **Lift tool ban &
+resume**. Lifting a tool ban removes the tool ban record and the session ban
+left by the abort. Lifting and resuming does both, then starts one new turn in
+that session with "Continue the interrupted task." OpenCode has no API to
+resume the interrupted turn itself, so this is a new turn and not a continuation
+of the aborted one.
+
 **Features** shows the feature switches.
 
 **Calls** shows the last 15 logged calls with an **All sessions / This session**
 scope toggle. A call row expands to its redacted detail. The detail includes
-the session id and the resolved title. The time is local HH:MM. Every
-successful Jev log write emits a `changed("log")` RPC event. The panel
-subscribes to `changed` and reloads the list. No manual reload is needed.
+the session id and the resolved title. Batch abort rows also show a **Raw
+verdict** and a **Decision note**. The note is redacted and clipped to 400
+characters before it is written, and it never carries the call payload. The
+time is local HH:MM. Every successful Jev log write emits a `changed("log")`
+RPC event. The panel subscribes to `changed` and reloads the list. No manual
+reload is needed.
 
 Nothing secret crosses the panel's RPC: log rows are an explicit field
 allowlist (no `sent`, `received`, endpoint or webhook), and the key is reported
@@ -810,9 +851,9 @@ supervises it.
 Two homes: the machine-local state root (`~/.local/state/opencode/jev/`) holds
 the settings, the optimizer cache, approvals, grants, and logs; the config root
 (`~/.config/fazuh-agent/`) holds the secrets and the default rules file. Env
-overrides: `OPENCODE_JEV_STATE_HOME`, `OPENCODE_JEV_NOSPAWN_DIR`,
-`OPENCODE_JEV_CONFIG_DIR`, `OPENCODE_JEV_SECRET_DIR`. `OPENCODE_JEV_NOSPAWN_DIR`
-is read first and is the only one that relocates the no-respawn directory
+overrides: `OPENCODE_JEV_STATE_HOME`, `OPENCODE_JEV_SESSION_BAN_DIR`,
+`OPENCODE_JEV_CONFIG_DIR`, `OPENCODE_JEV_SECRET_DIR`. `OPENCODE_JEV_SESSION_BAN_DIR`
+is read first and is the only one that relocates the session-ban directory
 alone. The older `JEV_STATE_HOME`, `JEV_DATA_HOME`,
 `JEV_CONFIG_DIR`, `JEV_SECRET_DIR`, and `JEV_DATA_DIR` still work as aliases.
 The old layouts under `~/.config/fazuh-agent/data/`,
@@ -827,18 +868,18 @@ on the first load after the upgrade; the old files stay as the rollback path.
 | `~/.local/state/opencode/jev/jev-approvals.json` | the blocked calls waiting for a human, one entry per token (local, written by the server) |
 | `~/.local/state/opencode/jev/jev-grants.json` | the approved tokens (local, written by the TUI, spent by the server) |
 | `~/.local/state/opencode/jev/jev-tui.log` | TUI diagnostics, written on every panel open |
-| `~/.local/state/opencode/jev/nospawn/<parent>-<sha256[0:8]>.json` | one aborted-task snapshot per parent session, 0600 |
-| `~/.local/state/opencode/jev/nospawn/<parent>-<sha256[0:8]>.audit.jsonl` | the append-only trail beside it, until the session is deleted |
+| `~/.local/state/opencode/jev/session-ban/<parent>-<sha256[0:8]>.json` | one aborted-task snapshot per parent session, 0600 |
+| `~/.local/state/opencode/jev/session-ban/<parent>-<sha256[0:8]>.audit.jsonl` | the append-only trail beside it, until the session is deleted |
 | `~/.config/fazuh-agent/secrets/jev_api_key` | the key, 0600 |
 | `lib/lib-jev/jev.ts` | the client, redaction, and answer validator |
 | `lib/lib-jev/state.ts` | the three homes, key resolution, the call log |
 | `plugins/watchdog/src/index.ts` | the five hook domains, the optimizer, and the text commands |
 | `plugins/watchdog/src/rules.ts` | the rules file: the loader, the matcher, the `{file:…}` expansion |
 | `plugins/watchdog/src/approve.ts` | the blocked calls, the tokens, and the grants |
-| `plugins/watchdog/src/nospawn.ts` | the task key, the verdict table, TTL and window arithmetic (pure) |
-| `plugins/watchdog/src/nospawn-state.ts` | the per-parent snapshot, audit, lock, and prune |
-| `plugins/watchdog/src/nospawn-frontier.ts` | the user-turn frontier and the repair schedule (pure) |
-| `plugins/watchdog/src/nospawn-host.ts` | the only module that touches `ctx`: observer, enforcement, the hold, the cascade, the frontier feed |
+| `plugins/watchdog/src/session-ban.ts` | the task key, the verdict table, TTL and window arithmetic (pure) |
+| `plugins/watchdog/src/session-ban-state.ts` | the per-parent snapshot, audit, lock, and prune |
+| `plugins/watchdog/src/session-ban-frontier.ts` | the user-turn frontier and the repair schedule (pure) |
+| `plugins/watchdog/src/session-ban-host.ts` | the only module that touches `ctx`: observer, enforcement, the hold, the cascade, the frontier feed |
 | `plugins/watchdog/src/supervisor.ts` | the four verdicts, strict decision validation, precedence, budget arithmetic (pure) |
 | `plugins/watchdog/src/context.ts` | the bounded, redacted, role-labelled history snapshot (pure) |
 | `plugins/watchdog/src/evidence.ts` | the typed read-only evidence broker and its caps (pure) |
@@ -850,8 +891,8 @@ on the first load after the upgrade; the old files stay as the rollback path.
 | `plugins/watchdog/src/gui.tsx` | the Desktop Jev side panel and menu launcher |
 | `plugins/watchdog/dist/gui-experimental.cjs` | the built Desktop GUI bundle |
 
-`nospawn/` (0700) holds `<sanitized parent>-<sha256[0:8]>.json` (0600), the same
-name `.audit.jsonl`, and a transient `.json.lock`; `OPENCODE_JEV_NOSPAWN_DIR`
+`session-ban/` (0700) holds `<sanitized parent>-<sha256[0:8]>.json` (0600), the same
+name `.audit.jsonl`, and a transient `.json.lock`; `OPENCODE_JEV_SESSION_BAN_DIR`
 relocates the directory.
 
 ## Tests
@@ -861,9 +902,9 @@ bun test plugins/watchdog/src
 ```
 
 Eight files, 410 tests (410 pass, 0 fail, 1292 expectations). `jev.test.ts` is
-the hooks, the state machine and the `/jev-abort` command's refusals (142); `nospawn.test.ts` is the task key, the
+the hooks, the state machine and the `/jev-abort` command's refusals (142); `session-ban.test.ts` is the task key, the
 verdict table, the store and the frontier, all pure or on a temp directory (25);
-`nospawn-host.test.ts` drives the host glue through fake contexts and fabricated
+`session-ban-host.test.ts` drives the host glue through fake contexts and fabricated
 events, including the flag-off guard, the duplicate-assert re-ask, a refused
 approval, a refused self-reply, a refused seal, the lock takeover band, the
 feed's death, a user turn through the feed, a deleted session, the hold's whole
@@ -872,7 +913,7 @@ deadline with its message, the fan-out skip, the uncancellable deadline, and the
 deny that is never softened), and the abort trigger: a quiet seal, an
 allow revoked, a same-prompt hold an abort does not own, an unreadable store
 refused, a retired or expired task refused, a memory-only seal, a memory-only
-session fence, the subtree fence denying row 6, a subtree fence the store
+session ban, the subtree session ban denying row 6, a subtree session ban the store
 refused, and a session abort revoking a held call (68). `context.test.ts`
 covers the bounded, redacted history snapshot: shape variants, byte and entry
 bounds, redaction, role labels, the incomplete marker, the cache and snapshot
