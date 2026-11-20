@@ -167,8 +167,8 @@ flowchart LR
 
 - **report-hygiene**: the gate before any artifact here goes out: PR body, issue comment, merge text.
 - **pr-creator**: the pull request, using the repository's own template and checks.
-- **pr-watchmerge**: watch the checks and merge when they pass.
-- **pr-to-close**: the whole worktree lifecycle: create, merge, clean up.
+- **pr-watchmerge**: watch the checks, merge when they pass, then close out the issues the PR resolved.
+- **pr-to-close**: the whole worktree lifecycle: create, merge, close issues, clean up.
 - **resolving-merge-conflicts**: the mechanics of an in-progress merge or rebase.
 - **issue-closeout**: link the merge back to the issues it fixed, and close them.
 

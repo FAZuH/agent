@@ -26,7 +26,7 @@ the category directory never reaches the installed name.
 - **[offload](../skills/orchestration/offload/SKILL.md)**: Move builds, checks, and agent batches to remote machines.
 - **[scratch-finish](../skills/orchestration/scratch-finish/SKILL.md)**: Archive a completed `.scratch/` workspace.
 - **[worktree](../skills/orchestration/worktree/SKILL.md)**: Isolate work on a branch, then finish or close its worktree.
-- **[pr-to-close](../skills/orchestration/pr-to-close/SKILL.md)**: Take a finished worktree branch through PR creation, merge, and cleanup.
+- **[pr-to-close](../skills/orchestration/pr-to-close/SKILL.md)**: Take a finished worktree branch through PR creation, merge, issue closeout, and cleanup.
 
 ## Workflow
 
@@ -37,7 +37,7 @@ the category directory never reaches the installed name.
 - **[deep-research](../skills/workflow/deep-research/SKILL.md)**: Investigate a narrow external question and capture one cited findings file.
 - **[issue-closeout](../skills/workflow/issue-closeout/SKILL.md)**: Link merged pull requests to resolved issues and close them where needed.
 - **[pr-creator](../skills/workflow/pr-creator/SKILL.md)**: Create a pull request using the repository's standards and template.
-- **[pr-watchmerge](../skills/workflow/pr-watchmerge/SKILL.md)**: Watch pull request checks and merge once they pass.
+- **[pr-watchmerge](../skills/workflow/pr-watchmerge/SKILL.md)**: Watch pull request checks, merge once they pass, then close out the issues the PR resolved.
 - **[setup-dev-docs](../skills/workflow/setup-dev-docs/SKILL.md)**: Bootstrap, audit, or update durable `docs/dev/` documentation.
 
 ## Dev
