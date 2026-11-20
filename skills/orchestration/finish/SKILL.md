@@ -47,6 +47,10 @@ text.
 Load the @commit skill and follow it exactly. Return its proposed groups
 unchanged. Do not duplicate its steps here.
 
+If a PR merged during this session and @issue-closeout has not run, run it here.
+@pr-watchmerge normally does this at merge time; this is the safety net for
+direct merges.
+
 ## 4. Archive a completed `.scratch/` workspace
 
 Repo uses `.scratch/` (see the @scratch skill): load the @scratch-finish skill

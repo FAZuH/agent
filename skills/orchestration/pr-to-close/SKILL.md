@@ -1,9 +1,10 @@
 ---
 name: pr-to-close
 description: >-
-  Close a worktree feature end to end: create the PR (@pr-creator), watch CI
-  and merge when green (@pr-watchmerge), close the worktree (@worktree).
-  Triggers: create a PR then close the worktree, ship and clean up.
+  Close a worktree feature end to end: create the PR (@pr-creator), watch CI,
+  merge when green and close out the resolved issues (@pr-watchmerge), close the
+  worktree (@worktree). Triggers: create a PR then close the worktree, ship and
+  clean up.
 ---
 
 # PR to close
@@ -28,7 +29,7 @@ branch. It owns branch safety, committing, the repo's checks, pushing, and the
 
 Follow the @pr-watchmerge skill on the PR from step 1. Failing checks: do NOT
 merge, do NOT close the worktree. Surface the failure and wait. Proceed only
-once merged.
+once merged and its issue closeout step has run.
 
 ### 3. Close the worktree
 
@@ -48,6 +49,7 @@ verifies the untracked main-tree items survived.
 - Run the three skills strictly in order. Never merge before a PR is open,
   never close before the PR is merged.
 - PR unmerged or checks failing: never close the worktree. Stop and report.
+- Never close the worktree while the merged PR's issues still need closeout.
 - Each sub-skill's own safety rules still bind; this skill adds none beyond
   the ordering above.
 - Report the final state: PR number, merge commit, worktree cleaned up.
