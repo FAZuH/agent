@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 
 const gui = readFileSync(new URL("./gui.tsx", import.meta.url), "utf8")
 const controller = readFileSync(new URL("./gui-controller.ts", import.meta.url), "utf8")
-const rpc = readFileSync(new URL("../../../lib/lib-jev/rpc.ts", import.meta.url), "utf8")
+const rpc = readFileSync(new URL("../../../lib/jev/rpc.ts", import.meta.url), "utf8")
 const server = readFileSync(new URL("./gui-rpc.ts", import.meta.url), "utf8")
 
 describe("Jev Desktop Settings tab wiring", () => {
@@ -26,7 +26,7 @@ describe("Jev Desktop Settings tab wiring", () => {
     }
   })
 
-  test("lib/lib-jev/rpc.ts declares the three settings methods", () => {
+  test("lib/jev/rpc.ts declares the three settings methods", () => {
     for (const method of ["getSettings", "setSetting", "setSecret"]) {
       expect(rpc, `contract must declare ${method}`).toMatch(new RegExp(`^\\s{4}${method}:\\s*\\{`, "m"))
     }

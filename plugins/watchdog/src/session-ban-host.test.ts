@@ -23,7 +23,7 @@ process.env.OPENCODE_JEV_SESSION_BAN_DIR = join(scratch, "session-ban")
 const hostModule = await import("./session-ban-host.ts")
 const store = await import("./session-ban-state.ts")
 const rules = await import("./session-ban.ts")
-const stateModule = await import("../../../lib/lib-jev/state.ts")
+const stateModule = await import("../../../lib/jev/state.ts")
 
 const { createAdmissionHost, attach, register, start, callKey, SUBAGENT, EVENT_TYPES } = hostModule
 const { fingerprint, verdict } = rules

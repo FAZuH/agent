@@ -14,9 +14,9 @@
  * to clear the tool ban and leave the main session to be driven by the next user
  * message; subagents are NOT restarted (the main session does that itself).
  */
-import { logCall } from "../../../lib/lib-jev/state.ts"
-import { isToolBanned } from "../../../lib/lib-jev/tool-ban.ts"
-import { banTool, unbanTool } from "../../../lib/lib-jev/tool-ban.ts"
+import { logCall } from "../../../lib/jev/state.ts"
+import { isToolBanned } from "../../../lib/jev/tool-ban.ts"
+import { banTool, unbanTool } from "../../../lib/jev/tool-ban.ts"
 
 export interface StopDeps {
   ctx: any

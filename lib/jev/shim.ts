@@ -10,7 +10,7 @@
  * plugin uses, so pointing the plugin at a different provider moves the shim
  * with it. Env overrides win, which is what you want for a one-off run.
  *
- *   bun lib/lib-jev/shim.ts
+ *   bun lib/jev/shim.ts
  *   JEGREP_ENDPOINT_URL=http://127.0.0.1:8756/ jegrep "query" --endpoint local
  */
 

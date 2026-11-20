@@ -17,7 +17,7 @@ import {
   writeKey,
   type ConfigValue,
   type JevState,
-} from "../../../lib/lib-jev/state.ts"
+} from "../../../lib/jev/state.ts"
 
 export interface SettingsResult {
   ok: boolean

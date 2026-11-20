@@ -5,7 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./tui": "./src/tui.ts",
-    "./rpc": "../../lib/lib-jev/rpc.ts",
+    "./rpc": "../../lib/jev/rpc.ts",
     "./gui-experimental": "./dist/gui-experimental.cjs"
   },
   "scripts": {

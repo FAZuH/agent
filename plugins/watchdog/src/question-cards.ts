@@ -7,9 +7,9 @@
  * `propagate` opens one question card and holds only that call while the session and
  * its subagents keep running; the user picks allow, deny, or abort.
  */
-import { cfgBool, logCall } from "../../../lib/lib-jev/state.ts"
+import { cfgBool, logCall } from "../../../lib/jev/state.ts"
 import { cancelCard, createCard } from "./form.ts"
-import { toolBanForForm } from "../../../lib/lib-jev/tool-ban.ts"
+import { toolBanForForm } from "../../../lib/jev/tool-ban.ts"
 
 /** Set true only when the flag is on AND execute.before was registered. */
 let cardRouteActive = false
@@ -126,7 +126,7 @@ export function handleCardReply(formID: string, answer: unknown): boolean {
     const unbanTool: ((id: string) => number) | undefined = g[key]
     if (unbanTool) unbanTool(record.sessionID)
     else {
-      void import("../../../lib/lib-jev/tool-ban.ts").then((m) => m.unbanTool(record.sessionID))
+      void import("../../../lib/jev/tool-ban.ts").then((m) => m.unbanTool(record.sessionID))
     }
     return true
   }

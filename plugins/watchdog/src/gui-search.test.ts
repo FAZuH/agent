@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { FEATURE_DEFAULTS } from "../../../lib/lib-jev/state.ts"
-import { settingMeta } from "../../../lib/lib-jev/setting-meta.ts"
+import { FEATURE_DEFAULTS } from "../../../lib/jev/state.ts"
+import { settingMeta } from "../../../lib/jev/setting-meta.ts"
 import { filterSettings } from "./gui-search.ts"
 
 const gui = readFileSync(new URL("./gui.tsx", import.meta.url), "utf8")

@@ -829,10 +829,10 @@ usually means the endpoint is not the provider's decisions path.
 `jegrep` is the semantic-grep binary for the file-explorer use case. Its
 `--endpoint local` posts to `JEGREP_ENDPOINT_URL` and deliberately sends no
 `Authorization` header, so it cannot reach a provider that needs a bearer token.
-`lib/lib-jev/shim.ts` is a loopback proxy that adds the header and forwards:
+`lib/jev/shim.ts` is a loopback proxy that adds the header and forwards:
 
 ```bash
-bun lib/lib-jev/shim.ts
+bun lib/jev/shim.ts
 JEGREP_ENDPOINT_URL=http://127.0.0.1:8756/ jegrep "which agent handles mail" --endpoint local
 ```
 
@@ -871,8 +871,8 @@ on the first load after the upgrade; the old files stay as the rollback path.
 | `~/.local/state/opencode/jev/session-ban/<parent>-<sha256[0:8]>.json` | one aborted-task snapshot per parent session, 0600 |
 | `~/.local/state/opencode/jev/session-ban/<parent>-<sha256[0:8]>.audit.jsonl` | the append-only trail beside it, until the session is deleted |
 | `~/.config/fazuh-agent/secrets/jev_api_key` | the key, 0600 |
-| `lib/lib-jev/jev.ts` | the client, redaction, and answer validator |
-| `lib/lib-jev/state.ts` | the three homes, key resolution, the call log |
+| `lib/jev/jev.ts` | the client, redaction, and answer validator |
+| `lib/jev/state.ts` | the three homes, key resolution, the call log |
 | `plugins/watchdog/src/index.ts` | the five hook domains, the optimizer, and the text commands |
 | `plugins/watchdog/src/rules.ts` | the rules file: the loader, the matcher, the `{file:…}` expansion |
 | `plugins/watchdog/src/approve.ts` | the blocked calls, the tokens, and the grants |
@@ -885,7 +885,7 @@ on the first load after the upgrade; the old files stay as the rollback path.
 | `plugins/watchdog/src/evidence.ts` | the typed read-only evidence broker and its caps (pure) |
 | `plugins/watchdog/src/supervisor-host.ts` | the supervisor hold: native prompt correlation, investigation, recheck, resolution and audit |
 | `plugins/watchdog/src/tui.ts` | the two panels, the key dialog, and the approve picker |
-| `lib/lib-jev/rpc.ts` | the shared JSON-Schema RPC contract (status, log, approvals, approve, reject, switches) |
+| `lib/jev/rpc.ts` | the shared JSON-Schema RPC contract (status, log, approvals, approve, reject, switches) |
 | `plugins/watchdog/src/gui-rpc.ts` | server RPC handlers; allowlisted state and log projections, never secrets |
 | `plugins/watchdog/src/gui-controller.ts` | Desktop load/subscribe/mutate with RPC error unwrapping |
 | `plugins/watchdog/src/gui.tsx` | the Desktop Jev side panel and menu launcher |

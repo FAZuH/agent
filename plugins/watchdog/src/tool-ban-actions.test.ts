@@ -9,8 +9,8 @@ process.env.JEV_STATE_HOME = scratch
 process.env.XDG_STATE_HOME = scratch
 mkdirSync(scratch, { recursive: true })
 
-const { isToolBanned, readToolBans, unbanTool } = await import("../../../lib/lib-jev/tool-ban.ts")
-const { banTool } = await import("../../../lib/lib-jev/tool-ban.ts")
+const { isToolBanned, readToolBans, unbanTool } = await import("../../../lib/jev/tool-ban.ts")
+const { banTool } = await import("../../../lib/jev/tool-ban.ts")
 const { subagentsOf, stopSessionTree, liftToolBan } = await import("./tool-ban-actions.ts")
 
 function ctx(children: Array<{ id: string; parentID: string }> = []) {

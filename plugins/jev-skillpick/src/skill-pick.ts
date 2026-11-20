@@ -3,8 +3,8 @@
  * context. Advisory only and fail-open: a Jev problem never blocks the agent.
  */
 
-import { ask, JevError } from "../../../lib/lib-jev/jev.ts"
-import { cfgBool, cfgNum, cfgStr, featureOn, loadData, logCall, saveData, setSkillCriterion } from "../../../lib/lib-jev/state.ts"
+import { ask, JevError } from "../../../lib/jev/jev.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, loadData, logCall, saveData, setSkillCriterion } from "../../../lib/jev/state.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { readFileSync, readdirSync } from "node:fs"

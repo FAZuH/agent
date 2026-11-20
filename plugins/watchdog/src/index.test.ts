@@ -18,9 +18,9 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 process.env.OPENCODE_JEV_SESSION_BAN_DIR = join(scratch, "session-ban")
 
 const { default: plugin, supervisorConfigured, supervisorState, formatAlert, buildAlertForm, alertUser, allResourcesTrusted, hostEffect } = await import("./index.ts")
-const state = await import("../../../lib/lib-jev/state.ts")
+const state = await import("../../../lib/jev/state.ts")
 const { supervisorHandoff } = await import("./supervisor-host.ts")
-const { banTool, unbanTool } = await import("../../../lib/lib-jev/tool-ban.ts")
+const { banTool, unbanTool } = await import("../../../lib/jev/tool-ban.ts")
 const { resetCardRoute, markCardRouteActive } = await import("./question-cards.ts")
 const { jevRpcHandlers } = await import("./gui-rpc.ts")
 

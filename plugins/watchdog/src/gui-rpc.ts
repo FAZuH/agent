@@ -4,8 +4,8 @@
  * log files from disk. Every value returned here is an allowlisted projection,
  * so a credential in a state field or a logged payload cannot cross RPC.
  */
-import { grant, readApprovals, rejectApproval } from "../../../lib/lib-jev/approve.ts"
-import { readToolBans } from "../../../lib/lib-jev/tool-ban.ts"
+import { grant, readApprovals, rejectApproval } from "../../../lib/jev/approve.ts"
+import { readToolBans } from "../../../lib/jev/tool-ban.ts"
 import { applySecret, applySetting, settingsSnapshot, type SetSecretInput, type SetSettingInput } from "./jev-settings.ts"
 import {
   FEATURES,
@@ -20,7 +20,7 @@ import {
   setEnabled,
   setFeature,
   spend,
-} from "../../../lib/lib-jev/state.ts"
+} from "../../../lib/jev/state.ts"
 
 type Emit = (event: { reason: string }) => void
 // The server loads a plugin once per location. Keep every registration's

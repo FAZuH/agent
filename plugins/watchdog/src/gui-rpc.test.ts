@@ -8,7 +8,7 @@ process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { jevRpcHandlers, logRows, setJevEmitter, statusSnapshot } = await import("./gui-rpc.ts")
-const { STATE_FILE, LOG_FILE, APPROVALS_FILE, logCall } = await import("../../../lib/lib-jev/state.ts")
+const { STATE_FILE, LOG_FILE, APPROVALS_FILE, logCall } = await import("../../../lib/jev/state.ts")
 
 test("statusSnapshot projects safe config fields and masks the endpoint", () => {
   writeFileSync(
@@ -129,7 +129,7 @@ test("setFeature rejects an unknown key", async () => {
 })
 
 test("approve and reject act only on a matching pending call", async () => {
-  const { recordApproval } = await import("../../../lib/lib-jev/approve.ts")
+  const { recordApproval } = await import("../../../lib/jev/approve.ts")
   const token = "abc123"
   const approval = {
     token,
@@ -147,7 +147,7 @@ test("approve and reject act only on a matching pending call", async () => {
   // Wrong session cannot approve.
   expect((await (handlers as any).approve({ token, sessionID: "other" })).ok).toBe(false)
   expect((await (handlers as any).approve({ token, sessionID: "ses_test" })).ok).toBe(true)
-  const { readGrants } = await import("../../../lib/lib-jev/approve.ts")
+  const { readGrants } = await import("../../../lib/jev/approve.ts")
   expect(token in readGrants()).toBe(true)
   // A rejected token is gone from the pending list.
   expect((await (handlers as any).reject({ token })).ok).toBe(true)
@@ -165,7 +165,7 @@ test("status and log handlers agree with the direct projections", async () => {
 
 test("approveAll grants every pending call with its own session and emits one change", async () => {
   rmSync(APPROVALS_FILE, { force: true })
-  const { recordApproval, readGrants, rejectApproval } = await import("../../../lib/lib-jev/approve.ts")
+  const { recordApproval, readGrants, rejectApproval } = await import("../../../lib/jev/approve.ts")
   const ts = new Date().toISOString()
   recordApproval(
     { token: "bulk_ok_a", sessionID: "ses_a", action: "shell", resources: ["echo a"], subject: "shell: echo a", reason: "human", ts },
@@ -191,7 +191,7 @@ test("approveAll grants every pending call with its own session and emits one ch
 
 test("rejectAll drops every pending call and emits one change", async () => {
   rmSync(APPROVALS_FILE, { force: true })
-  const { recordApproval } = await import("../../../lib/lib-jev/approve.ts")
+  const { recordApproval } = await import("../../../lib/jev/approve.ts")
   const ts = new Date().toISOString()
   recordApproval(
     { token: "bulk_no_a", sessionID: "ses_a", action: "shell", resources: ["echo a"], subject: "shell: echo a", reason: "human", ts },

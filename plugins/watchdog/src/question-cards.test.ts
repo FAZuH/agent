@@ -10,8 +10,8 @@ process.env.XDG_STATE_HOME = scratch
 mkdirSync(join(scratch, "opencode"), { recursive: true })
 writeFileSync(join(scratch, "opencode", "service.json"), JSON.stringify({ url: "http://127.0.0.1:1", password: "dummy" }))
 
-const { loadState, saveState } = await import("../../../lib/lib-jev/state.ts")
-const { readToolBans, banTool, setToolBanCard, unbanTool, toolBanForForm } = await import("../../../lib/lib-jev/tool-ban.ts")
+const { loadState, saveState } = await import("../../../lib/jev/state.ts")
+const { readToolBans, banTool, setToolBanCard, unbanTool, toolBanForForm } = await import("../../../lib/jev/tool-ban.ts")
 const { resetCardRoute, markCardRouteActive, onBeforeExecute, handleCardReply, buildAskCard, ASK_OPTIONS } = await import("./question-cards.ts")
 type CardDeps = import("./question-cards.ts").CardDeps
 type DecideFn = import("./question-cards.ts").DecideFn

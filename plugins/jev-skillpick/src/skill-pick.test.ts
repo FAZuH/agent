@@ -15,7 +15,7 @@ process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { firstSentence, hashDescription, optimizeCriteria, optimizerModel, renderAdvice, resolveCriteria, rosterHash, stripCriterionPreamble } = await import("./index.ts")
-const { DATA_FILE, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfigMap, setFeatureConfig } = await import("../../../lib/lib-jev/state.ts")
+const { DATA_FILE, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfigMap, setFeatureConfig } = await import("../../../lib/jev/state.ts")
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
@@ -43,7 +43,7 @@ describe("skill criteria", () => {
   })
 
   test("a cached criterion reads clean even when stored with the old prefix", async () => {
-    const { setSkillCriterion: realSet, DATA_FILE } = await import("../../../lib/lib-jev/state.ts")
+    const { setSkillCriterion: realSet, DATA_FILE } = await import("../../../lib/jev/state.ts")
     rmSync(DATA_FILE, { force: true })
     realSet("demo", hashDescription("Full description."), "Pick for demo work. Skip for prose.")
     const { entries } = resolveCriteria([{ id: "demo", meaning: "Full description." }])
@@ -52,7 +52,7 @@ describe("skill criteria", () => {
   })
 
   test("a matching cache entry wins; a changed description falls back", async () => {
-    const { setSkillCriterion: realSet, DATA_FILE } = await import("../../../lib/lib-jev/state.ts")
+    const { setSkillCriterion: realSet, DATA_FILE } = await import("../../../lib/jev/state.ts")
     rmSync(DATA_FILE, { force: true })
     const desc = "Full original description here."
     realSet("demo", hashDescription(desc), "Terse criterion.")
@@ -72,7 +72,7 @@ describe("skill criteria", () => {
   })
 
   test("corrupt cache entries are dropped, not surfaced", async () => {
-    const { skillCriteriaMap: realMap } = await import("../../../lib/lib-jev/state.ts")
+    const { skillCriteriaMap: realMap } = await import("../../../lib/jev/state.ts")
     const out = realMap({
       good: { origHash: "abc", terse: "Fine.", v: 1 },
       wrongVersion: { origHash: "abc", terse: "Old.", v: 0 },
@@ -109,7 +109,7 @@ describe("multi-pick advice", () => {
 
   test("maxPicks caps the named skills", async () => {
     clearState()
-    const state = await import("../../../lib/lib-jev/state.ts")
+    const state = await import("../../../lib/jev/state.ts")
     state.setFeatureConfig("hook_skill_pick", "maxPicks", 2)
     state.setFeatureConfig("hook_skill_pick", "alsoAbove", 0.01)
     expect(renderAdvice(winner())).toContain("@commit (P=0.88)")
@@ -120,7 +120,7 @@ describe("multi-pick advice", () => {
   })
 
   test("maxPicks 1 restores single-pick behavior", async () => {
-    const state = await import("../../../lib/lib-jev/state.ts")
+    const state = await import("../../../lib/jev/state.ts")
     state.setFeatureConfig("hook_skill_pick", "maxPicks", 1)
     expect(renderAdvice(winner())).toBe(
       "Jev routing: consider loading skill @commit (P=0.88). Advisory — if your own reading disagrees, decide yourself.",
@@ -220,7 +220,7 @@ describe("optimizer", () => {
     expect(seen.prompt).toContain("- demo: Full description.")
     // No override and no session model: the host default is named explicitly.
     expect(seen.model).toEqual({ providerID: "9router", id: "oc/host-free" })
-    const { loadData } = await import("../../../lib/lib-jev/state.ts")
+    const { loadData } = await import("../../../lib/jev/state.ts")
     expect(loadData().skillCriteria.demo.terse).toBe("Use when doing demo.")
   })
 
@@ -243,7 +243,7 @@ describe("optimizer", () => {
     const { failed } = await optimizeCriteria(ctx, stale, { manual: true })
     expect(calls).toBe(0)
     expect(failed).toBe(1)
-    const { readLog } = await import("../../../lib/lib-jev/state.ts")
+    const { readLog } = await import("../../../lib/jev/state.ts")
     expect(readLog(1)[0].skipped).toContain("no model to generate with")
     reset()
   })

@@ -9,13 +9,13 @@
  * which is the one switch allowed to block.
  */
 
-import { ask, JevError, redact, signalFor } from "../../../lib/lib-jev/jev.ts"
+import { ask, JevError, redact, signalFor } from "../../../lib/jev/jev.ts"
 import { snapshotFor, snapshotIsUsable } from "./context.ts"
 import { changed, jevRpcHandlers, setJevEmitter } from "./gui-rpc.ts"
-import { Contract as JevContract } from "../../../lib/lib-jev/rpc.ts"
+import { Contract as JevContract } from "../../../lib/jev/rpc.ts"
 import { autoAccept } from "./autopermit.ts"
-import { callToken, consumeGrant, recordApproval } from "../../../lib/lib-jev/approve.ts"
-import { banTool, isToolBanned, latestToolBanCard, readToolBans, setToolBanCard, unbanTool } from "../../../lib/lib-jev/tool-ban.ts"
+import { callToken, consumeGrant, recordApproval } from "../../../lib/jev/approve.ts"
+import { banTool, isToolBanned, latestToolBanCard, readToolBans, setToolBanCard, unbanTool } from "../../../lib/jev/tool-ban.ts"
 import { stopSessionTree, liftToolBan } from "./tool-ban-actions.ts"
 import { cancelCard, createCard } from "./form.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
@@ -24,7 +24,7 @@ import { attachSupervisor, SUPERVISOR_HOLD_REASON, supervisorHandoff, type Super
 import { createBatchRunner, resolveSupervisorMode, type BatchRunner, type SupervisorMode } from "./supervisor-batch.ts"
 import { readSnapshot, type SnapshotRead } from "./session-ban-state.ts"
 import type { AbortAuthority, TaskRecord } from "./session-ban.ts"
-import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/lib-jev/state.ts"
+import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/jev/state.ts"
 import { attachCardEvents, cardRouteActiveNow, markCardRouteActive, onBeforeExecute, questionCardsOn, type CardDeps, type GateDecision } from "./question-cards.ts"
 import { resourcesOf } from "./actions.ts"
 

@@ -28,8 +28,8 @@
  */
 
 import { appendFileSync } from "node:fs"
-import { grant, readApprovals, type Approval } from "../../../lib/lib-jev/approve.ts"
-import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, maskUrl, sidebarLines, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "../../../lib/lib-jev/state.ts"
+import { grant, readApprovals, type Approval } from "../../../lib/jev/approve.ts"
+import { FEATURES, FEATURE_DEFAULTS, TUI_LOG_FILE, maskUrl, sidebarLines, featureOn, featureStored, keySource, loadState, newSince, pluginEnabled, readLog, saveState, setEnabled, setFeature, setFeatureConfig, setLogMax, spend, toastLine, toastOutcomeAllowed, toastsOn, writeKey, type JevState } from "../../../lib/jev/state.ts"
 
 const short = (path: string) => path.replace(/^\/home\/[^/]+/, "~")
 

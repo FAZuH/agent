@@ -12,7 +12,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createEvidenceBroker } from "./evidence.ts"
-import { normalize } from "../../../lib/lib-jev/jev.ts"
+import { normalize } from "../../../lib/jev/jev.ts"
 import { MIN_CONFIDENCE } from "./supervisor.ts"
 import {
   SUPERVISOR_AUDIT_EVENTS,

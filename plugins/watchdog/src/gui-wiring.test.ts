@@ -17,6 +17,6 @@ describe("Jev Desktop panel first render", () => {
     for (const m of ["listToolBans", "stopSession", "liftToolBan", "liftToolBanAndResume"]) {
       expect(src, `wrapper must forward ${m}`).toMatch(new RegExp(`${m}:\\s*\\(input\\)\\s*=>\\s*rpc\\.${m}\\(input\\)`))
     }
-    expect(src, "Contract must be the shared lib-jev one").toContain('from "../../../lib/lib-jev/rpc.ts"')
+    expect(src, "Contract must be the shared jev one").toContain('from "../../../lib/jev/rpc.ts"')
   })
 })

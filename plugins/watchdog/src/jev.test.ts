@@ -19,17 +19,17 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { actionsInScope, normalizeAction, propagateOutcome, runAbort, JEV_COMMANDS, stronger, undecidedOutcome, verdictOutcome } = await import("./index.ts")
 const jevPlugin = (await import("./index.ts")).default
-const { ask, answersOf, JevError, normalize, redact, signalFor } = await import("../../../lib/lib-jev/jev.ts")
-const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await import("../../../lib/lib-jev/approve.ts")
+const { ask, answersOf, JevError, normalize, redact, signalFor } = await import("../../../lib/jev/jev.ts")
+const { callToken, consumeGrant, grant, readApprovals, recordApproval } = await import("../../../lib/jev/approve.ts")
 const { expandFileRefs, matchesPattern, parseRules, ruleApplies } = await import("./rules.ts")
 type Rule = import("./rules.ts").Rule
 const { autoAccept, CONFIG_PATH_ENV, CONTENT_ENV, parseConfig, resetAutoAcceptCache, stripTrailingCommas } = await import("./autopermit.ts")
 const writeState = (value: unknown) => writeFileSync(STATE_FILE, JSON.stringify(value), "utf8")
 const clearState = () => rmSync(STATE_FILE, { force: true })
 const { DATA_FILE, DEFAULTS, FEATURES, FEATURE_DEFAULTS, STATE_FILE, cfgStr, featureConfig, featureConfigMap, featureMap, featureOn, featureStored, loadState, logCall, maskUrl, migrateDataFile, migrateLegacyLayout, migrateLocalState, migrateStatePath, newSince, pluginEnabled, pruneLog, readLog: readCallLog, saveData, saveState, setEnabled, setFeature, setFeatureConfig, sidebarLine, sidebarLines, toastLine, toastOutcomeAllowed, toastsOn } = await import(
-  "../../../lib/lib-jev/state.ts"
+  "../../../lib/jev/state.ts"
 )
-type JevState = import("../../../lib/lib-jev/state.ts").JevState
+type JevState = import("../../../lib/jev/state.ts").JevState
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
@@ -525,7 +525,7 @@ describe("per-feature config", () => {
   })
 
   test("pruneLog keeps the tail at logMax", async () => {
-    const { LOG_FILE } = await import("../../../lib/lib-jev/state.ts")
+    const { LOG_FILE } = await import("../../../lib/jev/state.ts")
     clearState()
     rmSync(LOG_FILE, { force: true })
     setFeatureConfig("hook_skill_pick", "timeout", FEATURE_DEFAULTS.hook_skill_pick.timeout) // writes default state, logMax=500
@@ -1327,7 +1327,7 @@ describe("jev-abort command", () => {
 
   test("a throttled synthetic route keeps the content and logs the failure", async () => {
     clearState()
-    const { LOG_FILE } = await import("../../../lib/lib-jev/state.ts")
+    const { LOG_FILE } = await import("../../../lib/jev/state.ts")
     rmSync(LOG_FILE, { force: true })
     const { ctx, commands } = commandContext(async () => {
       throw new Error("synthetic refused")

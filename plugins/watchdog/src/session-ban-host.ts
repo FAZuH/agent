@@ -50,7 +50,7 @@ import {
   tombstoneState,
 } from "./session-ban.ts"
 import * as fsStore from "./session-ban-state.ts"
-import { logCall } from "../../../lib/lib-jev/state.ts"
+import { logCall } from "../../../lib/jev/state.ts"
 import {
   INBOX_ENQUEUED,
   USER_ITEM,

@@ -16,7 +16,7 @@ import { lstat, readdir, readFile, realpath } from "node:fs/promises"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { join } from "node:path"
-import { ask as jevAsk, redact, type JevQuestion, type JevResult, type Thresholds } from "../../../lib/lib-jev/jev.ts"
+import { ask as jevAsk, redact, type JevQuestion, type JevResult, type Thresholds } from "../../../lib/jev/jev.ts"
 import { snapshotFor, snapshotIsUsable } from "./context.ts"
 import { MAX_QUERY_CHARS, createEvidenceBroker, type EvidenceBroker, type EvidenceRef, type EvidenceResult, type RawEvidenceAdapter, type RawSearchHit, type RawLogEntry } from "./evidence.ts"
 import {
@@ -43,7 +43,7 @@ import {
 import { HOLD_FANOUT, fingerprint, type AbortAuthority } from "./session-ban.ts"
 import { batchTargetSession, normalizeBatchVerdict, type BatchVerdict } from "./supervisor-batch.ts"
 import type { SupervisorCall } from "./supervisor-call.ts"
-import { logCall, type JevState } from "../../../lib/lib-jev/state.ts"
+import { logCall, type JevState } from "../../../lib/jev/state.ts"
 
 export type { SupervisorCall }
 

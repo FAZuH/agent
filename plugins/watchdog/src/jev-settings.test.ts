@@ -9,7 +9,7 @@ const scratch = mkdtempSync(join(tmpdir(), "jev-settings-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const state = await import("../../../lib/lib-jev/state.ts")
+const state = await import("../../../lib/jev/state.ts")
 const { settingsSnapshot, applySetting, applySecret } = await import("./jev-settings.ts")
 
 const KEY_VALUE = "sk-live-secret-DO-NOT-LOG"

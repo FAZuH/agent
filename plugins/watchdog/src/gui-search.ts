@@ -2,7 +2,7 @@
  * Pure search filtering for the Jev Settings tab. The view renders rows from
  * the metadata here, so a query matches only the friendly text the user sees.
  */
-import { groupLabel, settingMeta } from "../../../lib/lib-jev/setting-meta.ts"
+import { groupLabel, settingMeta } from "../../../lib/jev/setting-meta.ts"
 
 interface RowText {
   key: string

@@ -4,8 +4,8 @@
  * command refreshes cached criteria on demand.
  */
 
-import { JevError } from "../../../lib/lib-jev/jev.ts"
-import { logCall } from "../../../lib/lib-jev/state.ts"
+import { JevError } from "../../../lib/jev/jev.ts"
+import { logCall } from "../../../lib/jev/state.ts"
 import {
   OPTIMIZE_BATCH,
   ROSTER_ROOTS,

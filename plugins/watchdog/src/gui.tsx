@@ -1,8 +1,8 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { MenuItem, Panel, Plugin, Style } from "@opencode/plugin/gui"
 import { createJevView, type Approval, type ToolBanInfo, type SettingsInfo } from "./gui-controller.ts"
-import { Contract } from "../../../lib/lib-jev/rpc.ts"
-import { auditFieldLabel, groupLabel, settingMeta } from "../../../lib/lib-jev/setting-meta.ts"
+import { Contract } from "../../../lib/jev/rpc.ts"
+import { auditFieldLabel, groupLabel, settingMeta } from "../../../lib/jev/setting-meta.ts"
 import { filterSettings } from "./gui-search.ts"
 
 const TAB = { id: "jev-view-v1", title: "Jev", closable: "compact" as const }

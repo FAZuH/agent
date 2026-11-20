@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { FEATURE_DEFAULTS, FEATURES } from "../../../lib/lib-jev/state.ts"
-import { friendlyGroup, friendlyLabel, groupLabel, settingMeta } from "../../../lib/lib-jev/setting-meta.ts"
+import { FEATURE_DEFAULTS, FEATURES } from "../../../lib/jev/state.ts"
+import { friendlyGroup, friendlyLabel, groupLabel, settingMeta } from "../../../lib/jev/setting-meta.ts"
 
 const rendered = Object.entries(FEATURE_DEFAULTS).flatMap(([feature, fields]) =>
   Object.entries(fields).map(([key]) => ({ feature, key })),
