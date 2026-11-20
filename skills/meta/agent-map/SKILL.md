@@ -40,8 +40,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 
 **Orchestration** — control, delegate, track, finish agent work:
 `orchestrate`, `routing` (project/session router and dispatch),
-`workflows` (routing table and procedures), `agent-talk`
-(message a running agent session), `session`
+`workflows` (routing table and procedures), `session`
 (spec, context packet, checkpoints in `.scratch/`), `finish`, `scratch-finish`,
 `self-improve` (retro and sweep), `long-horizon` (overnight runs), `offload`
 (remote machines), `worktree` (branch work), `pr-to-close`.
@@ -58,7 +57,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 `secrets-argv`, `app-paths`, `commit-scopes`, `readme`, `terse`.
 
 **Utils** — machine and tool helpers:
-`pdf-read`, `pdf-write`, `notes` (durable tool notes), `plan-confirm`,
+`pdf-read`, `pdf-write`, `plan-confirm`,
 `scheduled-task` (octask/systemd timers), `scheduled-agent` (unattended runs),
 `omarchy-plugin-install`.
 
@@ -74,7 +73,7 @@ The global rules are not a skill: they sit in `instructions/` and the global
 config loads them in every session.
 
 **OpenCode v2**: `opencode-guideline` (the HTTP API, models, sessions, plugin
-authoring, plugin loading), `ocv2-compact` (compact a session).
+authoring, plugin loading).
 
 ### External skills (`~/.agents/skills`)
 

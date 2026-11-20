@@ -99,7 +99,6 @@ Gotchas 1 to 3 (service vs plain serve, project discovery and location, the plug
 
 - `references/sessions.md`: full fork→switch→verify→talk→wait flow
 - `references/pluginhealth.md`: `GET /api/plugin` diagnosis
-- @notes: durable notes for OpenCode v2 quirks, tool behavior, and host-specific guidance
 
 ## Memory
 

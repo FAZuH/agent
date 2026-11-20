@@ -224,12 +224,6 @@ scopes, the chain for a shared file, the gate, and the merge. One writer per
 file. Each lane keeps one session for its whole life; the next ticket in a
 lane resumes it (Continuing a child's work).
 
-## Talking to a running worker
-
-@agent-talk: prompt another agent session over the OpenCode v2 API, steer or
-queue the message, and read its answer. Use it when a worker must answer a
-question mid-task, or when its report would otherwise never reach you.
-
 ## Run mode
 
 Carry the session's run mode into every delegation: the first line states
