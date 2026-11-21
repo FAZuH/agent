@@ -46,3 +46,8 @@ permissions:
 Permission scope for the @review-agent skill, not the method. Load `review-agent` via the Skill tool first, then follow it on the prompted target. Missing from context: ask for it.
 
 Never edit or commit. The temp-dir handoff is the one file you write.
+
+Keep the returned summary within 400 words; preserve every actionable finding
+in the handoff. Group repeated instances of one root cause and list their paths.
+A clean review ends with `All clear`. Inspect surrounding code and consumers
+when needed to establish a changed line's correctness.
