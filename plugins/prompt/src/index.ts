@@ -183,6 +183,7 @@ export default {
           ...current,
           answers: { ...(current.answers ?? {}), ...answers },
           answeredAt: Date.now(),
+          revision: (current.revision ?? 0) + 1,
         }),
       )
       if (!claimed) return { ok: true, delivered: false, duplicate: true }
@@ -206,6 +207,7 @@ export default {
         const released = updatePrompt(sessionID, promptID, (current) => ({
           ...current,
           answeredAt: undefined,
+          revision: (current.revision ?? 0) + 1,
         }))
         if (released) emitChanged(released)
       }
@@ -219,6 +221,7 @@ export default {
       const updated = updatePrompt(sessionID, promptID, (current) => ({
         ...current,
         dismissedAt: Date.now(),
+        revision: (current.revision ?? 0) + 1,
       }))
       if (updated) emitChanged(updated)
       waiter?.({ type: "dismissed" })
@@ -229,6 +232,12 @@ export default {
       const waiter = runtime.blocked.get(promptID)
       runtime.blocked.delete(promptID)
       dropForm(sessionID, promptID)
+      const updated = updatePrompt(sessionID, promptID, (current) => ({
+        ...current,
+        deferredAt: Date.now(),
+        revision: (current.revision ?? 0) + 1,
+      }))
+      if (updated) emitChanged(updated)
       waiter?.({ type: "deferred" })
       return { ok: true }
     }
@@ -261,6 +270,19 @@ export default {
       const opened = await openNativeForm(target, true)
       if (!opened?.created) return { ok: false, reason: "Could not reopen the prompt as a question card." }
       runtime.forms.set(target.id, opened.id)
+      if (target.deferredAt) {
+        const updated = claimPrompt(
+          sessionID,
+          target.id,
+          (current) => JSON.stringify(current) !== JSON.stringify(target),
+          (current) => ({
+            ...current,
+            deferredAt: undefined,
+            revision: (current.revision ?? 0) + 1,
+          }),
+        )
+        if (updated) emitChanged(updated)
+      }
       return { ok: true }
     }
 
@@ -370,6 +392,81 @@ export default {
     }
 
     await ctx.tool.transform((tools: any) => {
+      tools.add({
+        name: "prompt_list",
+        description:
+          "Read stored questions, procedures, status and answers from the caller session only. Read-only: does not reopen, answer or dismiss prompts. Use for recovery before asking again. Pending, deferred, dismissed or missing answers never imply approval.",
+        input: {
+          type: "object",
+          properties: {
+            promptID: { type: "string" },
+            status: { type: "string", enum: ["pending", "answered", "dismissed", "deferred"] },
+            limit: { type: "integer", minimum: 1, maximum: 50, default: 10 },
+            offset: { type: "integer", minimum: 0, default: 0 },
+          },
+          additionalProperties: false,
+        },
+        execute: async (input: any, tctx: any) => {
+          const sessionID = typeof tctx?.sessionID === "string" ? tctx.sessionID : ""
+          if (!sessionID) return { content: "prompt_list failed: no session." }
+          if (
+            !input ||
+            typeof input !== "object" ||
+            Array.isArray(input) ||
+            Object.keys(input).some((key) => !["promptID", "status", "limit", "offset"].includes(key)) ||
+            (input.promptID !== undefined && typeof input.promptID !== "string") ||
+            (input.limit !== undefined &&
+              (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50)) ||
+            (input.offset !== undefined && (!Number.isSafeInteger(input.offset) || input.offset < 0))
+          ) {
+            return { content: JSON.stringify({ error: "invalid prompt_list filters" }) }
+          }
+          if (
+            input?.status !== undefined &&
+            !["pending", "answered", "dismissed", "deferred"].includes(input.status)
+          ) {
+            return { content: JSON.stringify({ error: "invalid status" }) }
+          }
+          const matching = readPrompts(sessionID)
+            .filter((prompt) => prompt.sessionID === sessionID)
+            .reverse()
+            .map((prompt) => ({
+              ...prompt,
+              status: prompt.answeredAt
+                ? "answered"
+                : prompt.dismissedAt
+                  ? "dismissed"
+                  : prompt.deferredAt
+                    ? "deferred"
+                    : "pending",
+            }))
+            .filter((prompt) => input?.promptID === undefined || prompt.id === input.promptID)
+            .filter((prompt) => input?.status === undefined || prompt.status === input.status)
+          const offset = input.offset ?? 0
+          const limit = input.limit ?? 10
+          const prompts: unknown[] = []
+          let cursor = offset
+          for (const prompt of matching.slice(offset, offset + limit)) {
+            const record =
+              Buffer.byteLength(JSON.stringify(prompt)) > 60_000
+                ? { id: prompt.id.slice(0, 200), status: prompt.status, contentOmitted: true }
+                : prompt
+            const candidate = JSON.stringify({
+              prompts: [...prompts, record],
+              nextOffset: cursor + 1 < matching.length ? cursor + 1 : null,
+            })
+            if (Buffer.byteLength(candidate) > 64_000) break
+            prompts.push(record)
+            cursor++
+          }
+          return {
+            content: JSON.stringify({
+              prompts,
+              nextOffset: cursor < matching.length ? cursor : null,
+            }),
+          }
+        },
+      })
       tools.add({
         name: "prompt_user",
         description:
