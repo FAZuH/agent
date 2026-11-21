@@ -219,6 +219,101 @@ export function snapshotIsUsable(snapshot: Snapshot): boolean {
   return snapshot.complete && snapshot.entries.length > 0
 }
 
+/** One genuine user prompt: its text content only. */
+export interface UserPromptEntry {
+  text: string
+  truncated: boolean
+  /** True when credential redaction rewrote the text. */
+  altered: boolean
+}
+
+export interface UserPromptHistory {
+  /** False when the raw value is not a recognisable context shape. */
+  complete: boolean
+  /** True when a prompt was dropped or clipped. */
+  bounded: boolean
+  /** Oldest first. */
+  entries: UserPromptEntry[]
+  /** The newest prompt: the task under review. Null means there is no task. */
+  current: UserPromptEntry | null
+}
+
+/** Text parts of a user message. Tool, reasoning and file parts never count. */
+function userTextOf(message: any): string {
+  if (typeof message === "string") return message
+  if (!message || typeof message !== "object") return ""
+  const parts = Array.isArray(message.parts)
+    ? message.parts
+    : Array.isArray(message.content)
+      ? message.content
+      : Array.isArray(message.content?.parts)
+        ? message.content.parts
+        : undefined
+  if (parts) {
+    return parts
+      .filter((part: any) => typeof part === "string" || part?.type === "text")
+      .map((part: any) => (typeof part === "string" ? part : safeText(part.text ?? part.content)))
+      .filter(Boolean)
+      .join("\n")
+  }
+  for (const key of ["text", "body"]) {
+    if (typeof message[key] === "string" && message[key]) return message[key]
+  }
+  return typeof message.content === "string" ? message.content : ""
+}
+
+/**
+ * The genuine user prompts in a projected context.
+ *
+ * Provenance: a text part under the user role is the only evidence available
+ * that a human wrote it. A synthetic message injected under that role cannot be
+ * told apart without a host provenance API (unverified, ticket #19).
+ *
+ * The newest user turn defines the task. When it carries no text, there is no
+ * task and an older prompt is never substituted for it. The newest turn also
+ * gets the budget first, so it is never the entry that is dropped.
+ */
+export function userPrompts(raw: unknown): UserPromptHistory {
+  const { kind, list } = listOf(raw)
+  if (kind === "invalid") return { complete: false, bounded: false, entries: [], current: null }
+
+  const turns: number[] = []
+  for (let i = 0; i < list.length; i++) if (roleOf(list[i]) === "user") turns.push(i)
+  if (!turns.length) return { complete: true, bounded: false, entries: [], current: null }
+
+  const newestRaw = userTextOf(list[turns[turns.length - 1]])
+  const newestText = redactText(newestRaw)
+  if (!newestText.trim()) return { complete: true, bounded: turns.length > 1, entries: [], current: null }
+
+  const newestClipped = byteLen(newestText) > MAX_SNAPSHOT_BYTES
+  const kept: UserPromptEntry[] = [
+    {
+      text: newestClipped ? clipBytes(newestText, MAX_SNAPSHOT_BYTES) : newestText,
+      truncated: newestClipped,
+      altered: newestText !== newestRaw,
+    },
+  ]
+  let bytes = byteLen(kept[0].text)
+  for (let i = turns.length - 2; i >= 0; i--) {
+    const remaining = MAX_SNAPSHOT_BYTES - bytes
+    if (remaining <= 0 || kept.length >= MAX_SNAPSHOT_ENTRIES) break
+    const olderRaw = userTextOf(list[turns[i]])
+    const olderText = redactText(olderRaw)
+    if (!olderText.trim()) continue
+    const clipped = byteLen(olderText) > remaining
+    const text = clipped ? clipBytes(olderText, remaining) : olderText
+    kept.push({ text, truncated: clipped, altered: olderText !== olderRaw })
+    bytes += byteLen(text)
+  }
+  kept.reverse()
+  return {
+    complete: true,
+    bounded: kept.length < turns.length || kept.some((entry) => entry.truncated),
+    entries: kept,
+    current: kept[kept.length - 1],
+  }
+}
+
 const REVISION_SAMPLE_BYTES = 512
 
 /** Bounded, deterministic sample of a value, capped in size and depth. */
