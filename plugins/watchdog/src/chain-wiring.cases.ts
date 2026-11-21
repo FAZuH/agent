@@ -80,6 +80,8 @@ let postArrived: (() => void) | null = null
 let omitAnswers: ((payload: any) => string[]) | null = null
 /** Answers the fake provider returns verbatim, for the rejection-log cases. */
 let malformedAnswers: ((payload: any) => Record<string, any>) | null = null
+/** Every state body the fake decisions route received in this case. */
+const decisions: any[] = []
 /** Answer every question with a confident allow, over the criteria's four labels. */
 const CHOICE = (label: string) => ({
   type: "choice",
@@ -95,6 +97,7 @@ const server = Bun.serve({
     const url = new URL(request.url)
     if (url.pathname === "/decisions" && request.method === "POST") {
       const payload = await request.json()
+      decisions.push(payload)
       const omitted = new Set(omitAnswers?.(payload) ?? [])
       const malformed = malformedAnswers?.(payload) ?? {}
       const answers: Record<string, any> = {}
@@ -170,6 +173,7 @@ beforeEach(() => {
   postArrived = null
   omitAnswers = null
   malformedAnswers = null
+  decisions.length = 0
   // Pacing knobs are pinned per case: an inherited operator value must not move
   // the default this suite asserts.
   for (const key of Object.keys(process.env)) if (key.startsWith("WATCHDOG_CHAIN")) delete process.env[key]
@@ -305,7 +309,7 @@ interface Host {
   subscriptions: Subscription[]
   /** The answer feeds the chain opens: the fake host's other hooks subscribe too. */
   formFeeds(): Subscription[]
-  calls: { generate: any[]; context: string[]; checks: any[]; projected: any[] }
+  calls: { generate: any[]; context: string[]; checks: any[]; projected: any[]; synthetic: number }
   push(event: any): Promise<void>
   lose(): Promise<void>
 }
@@ -327,13 +331,15 @@ interface HostOptions {
   spreadNewest?: boolean
   /** Model a host that refuses to register one named hook. */
   rejectHook?: (name: string) => boolean
+  /** The host-recorded direct Parent of a session, or null when it is a root. */
+  parentOf?: (sessionID: string) => string | null | undefined
 }
 
 function fakeHost(options: HostOptions = {}): Host {
   const hooks: Record<string, Array<(event: any) => any>> = {}
   const generateHooks: Array<(event: any) => any> = []
   const subscriptions: Subscription[] = []
-  const calls: Host["calls"] = { generate: [], context: [], checks: [], projected: [] }
+  const calls: Host["calls"] = { generate: [], context: [], checks: [], projected: [], synthetic: 0 }
   const context = options.context ?? MESSAGES
   const ctx: any = {
     location: { directory: scratch },
@@ -393,9 +399,15 @@ function fakeHost(options: HostOptions = {}): Host {
         calls.projected.push(event.messages)
         return { data: { text: options.generate ? await options.generate(request) : "" } }
       },
-      get: async () => ({}),
+      get: async (request: any) => {
+        const sessionID = String(request?.sessionID ?? "")
+        const parentID = options.parentOf?.(sessionID) ?? null
+        return { id: sessionID, ...(parentID ? { parentID } : {}) }
+      },
       interrupt: async () => {},
-      synthetic: async () => {},
+      synthetic: async () => {
+        calls.synthetic += 1
+      },
     },
     command: { transform: async () => {} },
   }
@@ -1127,6 +1139,89 @@ describe("feed lifetime", () => {
   })
 })
 
+describe("parent review", () => {
+  const call = (sessionID: string, id: string, command: string) => ({ sessionID, tool: "shell", input: { command }, id })
+
+  test("a subagent call is reviewed by its direct Parent on the inherited context", async () => {
+    arm()
+    nodes("parent")
+    const PARENT = "ses_w80p"
+    const host = fakeHost({
+      parentOf: (id) => (id === "ses_w80" ? PARENT : null),
+      generate: (request) => allowReply(request.prompt),
+    })
+    await plugin.setup(host.ctx)
+    expect(await settle(gate(host.hooks)(call("ses_w80", "c80a", "ls a")))).toBe("allowed")
+
+    expect(host.calls.generate).toHaveLength(1)
+    expect(host.calls.generate[0].sessionID).toBe(PARENT)
+    expect(host.calls.context).toContain(PARENT)
+    // The Parent's own projection is inherited, not replaced by the review prompt.
+    const projected = host.calls.projected[0]
+    expect(projected.length).toBeGreaterThan(1)
+    expect(JSON.stringify(projected)).toContain("clean up the build directory")
+    // Never both in sequence: a subagent call has no Supervisor row.
+    expect(since().some((row) => row.stage === "supervisor")).toBe(false)
+    // No native fork and no new judge session: the review is one transient call.
+    expect(host.calls.synthetic).toBe(0)
+    expect(since().find((row) => row.event === "chain_stage")?.stage).toBe("parent")
+  })
+
+  test("an unavailable Parent advances to the human, never Supervisor", async () => {
+    arm()
+    nodes("parent,human")
+    const PARENT = "ses_w82p"
+    const host = fakeHost({
+      parentOf: (id) => (id === "ses_w82" ? PARENT : null),
+      generate: () => {
+        throw new Error("the parent generation failed")
+      },
+    })
+    await plugin.setup(host.ctx)
+    const decision = settle(gate(host.hooks)(call("ses_w82", "c82a", "ls a")))
+    await cardsOpen(1)
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await decision).toBe("allowed")
+
+    // The failed Parent is unavailable review, and the human is next. Supervisor
+    // never stands in for it.
+    const stages = since()
+      .filter((row) => row.event === "chain_stage")
+      .map((row) => [row.stage, row.verdict])
+    expect(stages).toHaveLength(2)
+    expect(stages).toContainEqual(["parent", "unavailable"])
+    expect(stages).toContainEqual(["human", "allow"])
+  })
+
+  test("a root session is reviewed by Supervisor, never the Parent stage", async () => {
+    arm()
+    nodes("supervisor")
+    const host = fakeHost({ generate: (request) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    expect(await settle(gate(host.hooks)(call("ses_w81", "c81a", "ls a")))).toBe("allowed")
+
+    expect(host.calls.generate).toHaveLength(1)
+    expect(host.calls.generate[0].sessionID).toBe("ses_w81")
+    // Supervisor's filtered transport: the review prompt is the only projection.
+    expect(host.calls.projected[0]).toHaveLength(1)
+    expect(since().some((row) => row.stage === "parent")).toBe(false)
+  })
+
+  test("an exact action too large for the Parent prompt escalates unresolved", async () => {
+    arm()
+    nodes("parent")
+    const host = fakeHost({
+      parentOf: (id) => (id === "ses_w83" ? "ses_w83p" : null),
+      generate: (request) => allowReply(request.prompt),
+    })
+    await plugin.setup(host.ctx)
+    const huge = { sessionID: "ses_w83", tool: "shell", input: { command: "y".repeat(30_000) }, id: "c83a" }
+    expect(await settle(gate(host.hooks)(huge))).toMatch(/did not run/)
+    // Nothing was sent: the exact action did not fit, so no prompt judged it.
+    expect(host.calls.generate).toHaveLength(0)
+  })
+})
+
 describe("admission pacing", () => {
   const call = (sessionID: string, id: string, command: string) => ({ sessionID, tool: "shell", input: { command }, id })
 
@@ -1356,6 +1451,8 @@ describe("admission pacing", () => {
     const second = settle(wrapper(call("ses_w77", "c77b", "ls b")))
     expect(await first).toBe("allowed")
     expect(await second).toMatch(/did not run/)
+    // The Jev call carries the exact current task beside the filtered history.
+    expect(decisions[0]?.state?.currentTask).toBe("clean up the build directory")
     // The unanswered item propagated rather than being allowed by its sibling.
     const stages = new Map(since().filter((row) => row.event === "chain_stage").map((row) => [row.itemID, row.verdict]))
     expect(stages.size).toBe(2)

@@ -31,25 +31,26 @@ const allowAll = (request: any) =>
 interface Log {
   jev: Array<{ sessionID: string; items: ReviewItem[]; history: any }>
   generate: Array<{ sessionID: string; prompt: string; items: ReviewItem[] }>
+  parent: Array<{ parentID: string; prompt: string; items: ReviewItem[] }>
   human: Array<{ item: ReviewItem; brief: string }>
   precheck: ReviewItem[]
   recheck: ReviewItem[]
-  root: string[]
+  linkage: string[]
   history: string[]
   audit: any[]
 }
 
 function makeChain(over: Record<string, any> = {}) {
-  const log: Log = { jev: [], generate: [], human: [], precheck: [], recheck: [], root: [], history: [], audit: [] }
-  const nodes = { jev: true, supervisor: true, human: true, humanOnly: [] as string[], ...(over.nodes ?? {}) }
+  const log: Log = { jev: [], generate: [], parent: [], human: [], precheck: [], recheck: [], linkage: [], history: [], audit: [] }
+  const nodes = { jev: true, parent: true, supervisor: true, human: true, humanOnly: [] as string[], ...(over.nodes ?? {}) }
   const call = (value: any, ...args: any[]) => (typeof value === "function" ? value(...args) : value)
   const deps: ChainDeps = {
     enabled: over.enabled ?? (() => true),
     live: over.live ?? (() => true),
     nodes: () => nodes,
-    root: async (sessionID: string) => {
-      log.root.push(sessionID)
-      return call(over.root ?? true, sessionID)
+    linkage: async (sessionID: string) => {
+      log.linkage.push(sessionID)
+      return call(over.linkage ?? { parentID: null }, sessionID)
     },
     precheck: async (item: ReviewItem) => {
       log.precheck.push(item)
@@ -66,6 +67,10 @@ function makeChain(over: Record<string, any> = {}) {
     generate: async (request: { sessionID: string; prompt: string; items: ReviewItem[] }) => {
       log.generate.push(request)
       return call(over.generate ?? allowAll, request)
+    },
+    parentGenerate: async (request: { parentID: string; prompt: string; items: ReviewItem[] }) => {
+      log.parent.push(request)
+      return call(over.parentGenerate ?? allowAll, request)
     },
     ...(over.ledger ? { ledger: over.ledger } : {}),
     ...(over.ledgerError ? { ledgerError: over.ledgerError } : {}),
@@ -489,11 +494,145 @@ describe("generation boundary", () => {
     expect(log.generate).toHaveLength(0)
   })
 
-  test("a subagent session has no Parent stage, so it advances to the human", async () => {
-    const { chain, log } = makeChain({ root: false, jev: "propagate" })
-    await chain.admit(EVENT)
+  test("a subagent's LLM stage is its direct Parent, never Supervisor", async () => {
+    const { chain, log } = makeChain({ linkage: { parentID: "ses_parent_01" }, jev: "propagate" })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(true)
+    expect(log.parent).toHaveLength(1)
+    expect(log.parent[0].parentID).toBe("ses_parent_01")
+    expect(log.generate).toHaveLength(0)
+    const rows = log.audit.filter((row: any) => row.event === "chain_stage")
+    expect(rows.map((row: any) => row.stage)).toEqual(["jev", "parent"])
+  })
+
+  test("an unavailable Parent advances to the human, never Supervisor", async () => {
+    const { chain, log } = makeChain({
+      linkage: { parentID: "ses_parent_02" },
+      jev: "propagate",
+      parentGenerate: () => {
+        throw new Error("the parent generation failed")
+      },
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.verdict).toBe("deny")
     expect(log.generate).toHaveLength(0)
     expect(log.human).toHaveLength(1)
+    const rows = log.audit.filter((row: any) => row.event === "chain_stage")
+    expect(rows.map((row: any) => [row.stage, row.verdict])).toEqual([
+      ["jev", "propagate"],
+      ["parent", "unavailable"],
+      ["human", "deny"],
+    ])
+  })
+
+  test("a linkage that cannot be read is an unavailable Parent, not a root", async () => {
+    let reads = 0
+    const { chain, log } = makeChain({
+      linkage: () => {
+        if (reads++ > 0) return { parentID: null }
+        throw new Error("session lookup failed")
+      },
+      jev: "propagate",
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(true)
+    expect(log.parent).toHaveLength(0)
+    expect(log.generate).toHaveLength(0)
+    expect(log.human).toHaveLength(1)
+    // Supervisor never stands in for the Parent that could not be read.
+    expect(log.audit.some((row: any) => row.stage === "supervisor")).toBe(false)
+  })
+
+  test("a disabled Parent skips without authorizing anything", async () => {
+    const { chain, log } = makeChain({
+      nodes: { parent: false },
+      linkage: { parentID: "ses_parent_03" },
+      jev: "propagate",
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(true)
+    expect(log.parent).toHaveLength(0)
+    expect(log.generate).toHaveLength(0)
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("a Parent reply for another item authorizes nothing", async () => {
+    const { chain, log } = makeChain({
+      linkage: { parentID: "ses_parent_04" },
+      jev: "propagate",
+      parentGenerate: () => JSON.stringify({ results: [{ id: "wd_other.1", verdict: "allow" }] }),
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.verdict).toBe("deny")
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("the Parent prompt carries the exact task and the items, not the filtered list", async () => {
+    const { chain, log } = makeChain({ linkage: { parentID: "ses_parent_05" }, jev: "propagate" })
+    await chain.admit(EVENT)
+    const prompt = log.parent[0].prompt
+    expect(prompt).toContain("use exponential backoff")
+    expect(prompt).toContain("Tool: shell")
+    expect(prompt).toContain('Arguments: {"command":"rm -rf build","flag":true}')
+    // The inherited context is the history: no filtered user list, no older prompt.
+    expect(prompt).not.toContain("Genuine user messages")
+    expect(prompt).not.toContain("add a retry to the fetch helper")
+  })
+
+  test("the Parent inherits its context: the filtered history is the Supervisor's, not its own", async () => {
+    const { chain, log } = makeChain({ linkage: { parentID: "ses_parent_06" }, jev: "propagate" })
+    await chain.admit(EVENT)
+    // The Parent's own projection is read for usability, never filtered into a list.
+    expect(log.history).toContain("ses_parent_06")
+    expect(log.parent[0].prompt).not.toContain("TOOL_OUTPUT_SECRET")
+  })
+
+  test("a clipped current task makes the Parent unavailable", async () => {
+    const long = "x".repeat(9000)
+    const { chain, log } = makeChain({
+      linkage: { parentID: "ses_parent_07" },
+      jev: "propagate",
+      history: [{ role: "user", text: long }],
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(false)
+    expect(log.parent).toHaveLength(0)
+    // A task that cannot be shown exactly cannot be judged or carded.
+    expect(finalReason(log)).toContain("the exact action cannot be shown on a card")
+  })
+
+  test("an unreadable Parent context is unavailable review, never an empty history", async () => {
+    const { chain, log } = makeChain({
+      linkage: { parentID: "ses_parent_08" },
+      jev: "propagate",
+      history: async (sessionID: string) => {
+        if (sessionID === "ses_parent_08") return "not a context"
+        return HISTORY
+      },
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.verdict).toBe("deny")
+    expect(log.parent).toHaveLength(0)
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("a root session still reaches Supervisor and never the Parent stage", async () => {
+    const { chain, log } = makeChain({ jev: "propagate" })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(true)
+    expect(log.generate).toHaveLength(1)
+    expect(log.parent).toHaveLength(0)
+    // The exact task is explicit, not only the newest list entry.
+    expect(log.generate[0].prompt).toContain("Exact current task for the producing session:")
+    expect(log.generate[0].prompt).toContain("use exponential backoff")
+    const rows = log.audit.filter((row: any) => row.event === "chain_stage")
+    expect(rows.map((row: any) => row.stage)).toEqual(["jev", "supervisor"])
   })
 
   test("unreadable history is unavailability, never a judgment basis", async () => {

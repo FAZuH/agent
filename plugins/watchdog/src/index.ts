@@ -1112,9 +1112,10 @@ function chainList(value: string | undefined): string[] {
  * the controls.
  */
 export function chainNodes(): ChainNodes {
-  const on = new Set(chainList(process.env.WATCHDOG_CHAIN_NODES ?? "jev,supervisor,human").map((entry) => entry.toLowerCase()))
+  const on = new Set(chainList(process.env.WATCHDOG_CHAIN_NODES ?? "jev,parent,supervisor,human").map((entry) => entry.toLowerCase()))
   return {
     jev: on.has("jev"),
+    parent: on.has("parent"),
     supervisor: on.has("supervisor"),
     human: on.has("human"),
     humanOnly: chainList(process.env.WATCHDOG_CHAIN_HUMAN_ONLY).map(normalizeAction),
@@ -1155,14 +1156,15 @@ async function chainHostCheck(ctx: any, item: ReviewItem): Promise<{ ok: boolean
   return { ok: false, reason: "the host returned no permission effect" }
 }
 
-/** True for a session with no recorded Parent, so its LLM stage is Supervisor. */
-async function chainRoot(ctx: any, sessionID: string): Promise<boolean> {
-  try {
-    const session = await ctx.session.get({ sessionID })
-    return !(session?.parentID ?? session?.data?.parentID ?? session?.parent?.id)
-  } catch {
-    return false
-  }
+/**
+ * The host-recorded direct Parent, or null for a root session. Only the host's
+ * own linkage is read: ids, never titles or content. A throw is an unavailable
+ * Parent, and the chain then advances to the human rather than to Supervisor.
+ */
+async function chainLinkage(ctx: any, sessionID: string): Promise<{ parentID: string | null }> {
+  const session = await ctx.session.get({ sessionID })
+  const raw = session?.parentID ?? session?.data?.parentID ?? session?.parent?.id ?? null
+  return { parentID: typeof raw === "string" && raw ? raw : null }
 }
 
 /**
@@ -1187,7 +1189,11 @@ async function chainJev(batch: { sessionID: string; items: ReviewItem[]; history
       }
     }
     const result = await ask(
-      { calls: items.map((item) => ({ id: item.id, tool: item.tool, action: item.action, resources: item.resources, input: item.input })), history },
+      {
+        calls: items.map((item) => ({ id: item.id, tool: item.tool, action: item.action, resources: item.resources, input: item.input })),
+        currentTask: batch.history.current?.text ?? "",
+        history,
+      },
       questions,
       {
         log: false,
@@ -1295,6 +1301,23 @@ async function chainGenerate(runtime: ChainRuntime, ctx: any, request: { session
   } finally {
     runtime.reviews.delete(handle)
   }
+}
+
+/**
+ * `session.generate` on the Parent session. The parent's full projected context
+ * is inherited and must survive: this prompt is never registered with the
+ * generation filter, which only rewrites the Supervisor's own prompts. C1
+ * measured that the transient prompt does not appear in the parent transcript
+ * on one marker check; general transcript isolation is unverified (#19).
+ */
+async function chainParentGenerate(runtime: ChainRuntime, ctx: any, request: { parentID: string; prompt: string; items: ReviewItem[] }): Promise<string> {
+  const generate = ctx?.session?.generate
+  if (typeof generate !== "function") throw new Error("no session.generate")
+  const result = await generate.call(ctx.session, { sessionID: request.parentID, prompt: request.prompt })
+  if (runtime.replaced) throw new Error("the review runtime was replaced")
+  const text = typeof result === "string" ? result : result?.data?.text ?? result?.text
+  if (typeof text !== "string" || !text.trim()) throw new Error("no text")
+  return text
 }
 
 async function chainHistory(ctx: any, sessionID: string): Promise<unknown> {
@@ -1786,7 +1809,10 @@ export default {
                 ledger: operation,
                 error: operation === "read" ? "the budget ledger could not be read" : "the budget ledger could not be written",
               }),
-            root: async (sessionID) => (live() ? chainRoot(ctx, sessionID) : false),
+            linkage: async (sessionID) => {
+              if (!live()) throw new Error("the review runtime was replaced")
+              return chainLinkage(ctx, sessionID)
+            },
             precheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
             jev: async (batch) => {
               if (!live()) throw new Error("the review runtime was replaced")
@@ -1795,6 +1821,10 @@ export default {
             generate: async (request) => {
               if (!live()) throw new Error("the review runtime was replaced")
               return chainGenerate(runtime, ctx, request)
+            },
+            parentGenerate: async (request) => {
+              if (!live()) throw new Error("the review runtime was replaced")
+              return chainParentGenerate(runtime, ctx, request)
             },
             history: async (sessionID) => {
               if (!live()) throw new Error("the review runtime was replaced")
