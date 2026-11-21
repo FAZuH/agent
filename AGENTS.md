@@ -75,3 +75,22 @@ executables into `~/.local/bin/`, and installs the Rust `agent` package.
   `skill-doctor` flags broken references and source drift.
 - Do not commit another session's in-progress files. Check `git status` and
   stage only the files you changed.
+
+## Agent skills
+
+### Issue tracker
+
+Engineering skills use GitHub Issues for issues and published specs.
+Before tracker operations, read `docs/agents/issue-tracker.md`.
+This repo configuration overrides older local-tracker instructions.
+
+### Triage labels
+
+Before triaging or changing state labels, read
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses one domain context.
+Before domain exploration or recording decisions, read
+`docs/agents/domain.md`.
