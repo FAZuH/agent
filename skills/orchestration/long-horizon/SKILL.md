@@ -45,7 +45,9 @@ Follow the *Rules* section below.
 
 1. **Decide state and sentinels.** Pick the state dir (`/tmp/opencode/<name>/`),
    the workspace, the sentinel names, and the worker progress-file format.
-   Done when: you can name the exact file each event writes.
+   `mkdir -p` the state dir before writing `children.txt` by hand; the
+   heartbeat only creates it at start. Done when: you can name the exact file
+   each event writes.
 2. **Write the workers.** Progress file + sentinels + resume-on-restart.
    Done when: `kill` then re-run resumes without repeating work. Test it.
 3. **Start the supervisor detached.** Done when: its log shows one
@@ -73,14 +75,14 @@ heartbeat through `children.txt`, one session ID per line. Keep task/lane ID,
 attempt ID, agent, dispatch epoch, and state in the session ledger.
 @orchestrate owns attempt changes and session reuse.
 
-The heartbeat template keys `.done` markers by session ID, not attempt.
-For a reused session, stop its task-owned heartbeat before re-dispatch.
-Update the ledger and confirm the new dispatch started (or obtain its
-attempt-matched terminal report) before clearing the old marker and restarting
-the heartbeat. If dispatch state is unknown, inspect it before rearming.
-Clearing a marker under a running heartbeat can recreate it from the previous
-terminal outcome and suppress the next completion wake. On a wake, match the
-report to the current task/lane and attempt before settling it.
+The heartbeat keys `.done` markers by session ID, not attempt. After
+integrating a child report and re-dispatching the lane, touch (never rm) the
+`.done` marker: the heartbeat treats a terminal-outcome child whose newest
+message postdates the marker as revived, watches it for a second completion,
+and raises a "quiet after new work" wake past the stall bound instead of
+re-firing the settled report. Rming the marker re-fires that report forever,
+because revived sessions never flip their outcome back to busy. On a wake,
+match the report to the current task/lane and attempt before settling it.
 
 If a start has an unknown outcome, inspect the child and landed work before
 retrying. Unknown counts as neither failure nor success. Stop or isolate the
