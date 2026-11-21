@@ -19,6 +19,26 @@ These are items you must do in specific situations.
   - Skip one-off task trivia; a polluted bank buries the good facts.
   - If the hindsight MCP tools are absent, continue without memory.
 
+## Completion checklist
+
+Before declaring a code or UI change complete:
+
+1. Identify every affected entry point: CLI commands, API routes, tools, jobs,
+   and UI actions. Verify each changed path, not only its implementation module.
+2. Check every affected client and execution mode: desktop, web, mobile,
+   headless, local, and remote. Mark a surface not applicable only when the
+   change cannot reach it.
+3. Check affected providers, agents, shared contracts, configuration defaults,
+   and persisted data. Verify consumers still accept the changed output.
+4. Exercise success and relevant failure/reverse paths: empty input, errors,
+   cancellation, retry, reconnect, undo, and disabled states.
+5. For UI changes, inspect the rendered result at supported screen sizes and
+   check keyboard access, loading, empty, and error states. Check translations
+   when user-facing text changes.
+6. Run the relevant checks and update affected documentation. Report any
+   affected surface left unverified and why; do not claim it passed. A passing
+   build alone does not satisfy this checklist.
+
 ## Shell discipline
 
 - Never kill with `pkill -f <pattern>`. Kill the captured PID, count
