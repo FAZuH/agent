@@ -1480,4 +1480,61 @@ describe("opencode protocol", () => {
       ask({ task: "x" }, { pick: choice }, { ctx, state: openState({ model: "" }), log: false }),
     ).rejects.toThrow(/\/jev-model/)
   })
+
+  // A rejection is the one row written without the caller's consent: it is
+  // logged even under `log: false`. Nothing provider-controlled may ride along.
+  describe("rejection diagnostics", () => {
+    const MARK = "CANARY7f3c9a"
+    const TOKEN = "sk-live-CANARYTOKEN0000"
+    const brief = { type: "score" as const, instructions: "how much", criteria: ["none", "lots"] }
+    const shapes = [
+      { name: "type", question: choice, reason: "answer-type", answer: { type: `${MARK} ${TOKEN}`, probabilities: { a: 1, b: 0, c: 0 } } },
+      { name: "choice", question: choice, reason: "choice-unknown", answer: { type: "choice", choice: `${MARK} ${TOKEN}`, probabilities: { a: 0.9, b: 0.05, c: 0.05 } } },
+      { name: "score", question: score, reason: "score-range", answer: { type: "score", score: `${MARK} ${TOKEN}`, probabilities: { "0": 0.9, "1": 0.05, "2": 0.05 } } },
+      { name: "key", question: brief, reason: "probability-range", answer: { type: "score", probabilities: { "0": 0.9, [`${MARK} ${TOKEN}`]: "x" } } },
+    ]
+
+    const reject = async (shape: (typeof shapes)[number], log: boolean, hook: string) => {
+      const ctx: any = {
+        experimental: {
+          generate: {
+            text: async () => ({ text: JSON.stringify({ answers: { pick: shape.answer } }) }),
+          },
+        },
+      }
+      const caught = await ask({ task: "a task" }, { pick: shape.question }, { ctx, state: openState(), log, hook, thresholds }).then(
+        () => null,
+        (error: any) => error,
+      )
+      expect(caught).toBeInstanceOf(JevError)
+      // The human-facing message is fixed wording too: no answer value in it.
+      expect(String(caught.message)).not.toContain(MARK)
+      expect(String(caught.message)).not.toContain(TOKEN)
+      const rows = readCallLog(100_000).filter((row: any) => row.hook === hook)
+      expect(rows).toHaveLength(1)
+      return rows[0]
+    }
+
+    for (const shape of shapes) {
+      for (const log of [false, true]) {
+        test(`a ${shape.name} answer rejected under log:${log} logs ids and a reason only`, async () => {
+          const row = await reject(shape, log, `canary_${shape.name}_${log}`)
+          expect(row.failure).toBe("answer-rejected")
+          expect(row.reason).toBe(shape.reason)
+          expect(row.id).toBe("pick")
+          expect(row.questions).toEqual({ pick: shape.question.type })
+          expect(row.answered).toBe(1)
+          expect(row.sent).toBeUndefined()
+          expect(row.received).toBeUndefined()
+          expect(row.error).toBe("the model's answer could not be validated")
+          // Nothing provider-controlled in the row, and nothing in the log.
+          expect(JSON.stringify(row)).not.toContain(MARK)
+          expect(JSON.stringify(row)).not.toContain(TOKEN)
+          const log_ = JSON.stringify(readCallLog(100_000))
+          expect(log_).not.toContain(MARK)
+          expect(log_).not.toContain(TOKEN)
+        })
+      }
+    }
+  })
 })
