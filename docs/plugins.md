@@ -393,6 +393,13 @@ fallback for hosts without the plugin.
   is recorded with no answer and shown as "Not answered" in the agent's text
   and the views. The recommendation stays a hint on the card and is never used
   as an answer.
+- `prompt_list` (`promptID?`, `status?`, `limit?`, `offset?`) reads the caller
+  session's stored prompts and answers without changing cards. Status is
+  `pending`, `answered`, `dismissed`, or `deferred`. Results are newest first;
+  pages default to 10 records, allow at most 50, and return `nextOffset`.
+  Output is capped at 64,000 bytes; oversized records have `contentOmitted`.
+  Missing, blank, deferred, dismissed, or omitted answers grant no approval.
+  Historical deferrals without a stored timestamp appear pending.
 
 Records are one JSON file per session under
 `${XDG_STATE_HOME:-~/.local/state}/opencode/prompt/prompts/`, newest last,
