@@ -29,9 +29,9 @@ START (work decomposes into N independent units)
 |---|---|---|---|
 | 1 | SCOPE | you | Name each lane and the files it may write. |
 | 2 | SPLIT | you | A file two lanes need is a shared file: it leaves the lanes and becomes a chain. |
-| 3 | DISPATCH | you | One worker per lane, all in flight. Each brief names its scope, its deliverable, and its run mode. A lane that needs warm context: `branch_ask` for this session, `branch_subagent` for a finished subagent (`## Fork lanes`). |
+| 3 | DISPATCH | you | One worker per lane, all in flight. Use the @orchestrate assignment contract, task/lane ID, attempt ID, and run mode. A lane that needs warm context uses `## Fork lanes`. |
 | 4 | GATE | you | Hold a lane that needs a shared file until the predecessor's deliverable exists and the binding check passes. |
-| 5 | COLLECT | you | Read each lane's report. A lane whose scope narrowed stops and reports; you re-scope it. |
+| 5 | COLLECT | you | Match each report to the current task/lane and attempt. A lane whose scope narrowed stops and reports. Re-scope it before continuing. |
 | 6 | MERGE | you | Reconcile lanes that landed in one tree. |
 | 7 | VERIFY | you | Run the checks once, after the lanes land. |
 
@@ -74,8 +74,8 @@ zero. @orchestrate owns the resume rules.
 A lane dispatches with a fork instead of a fresh subagent when it needs warm
 context: `branch_ask` for this session's history, `branch_subagent` for a
 finished subagent's role and context. A fork inherits the source's transcript,
-agent, and model, so it needs no brief, and its report arrives as a separate
-prompt while the parent keeps working.
+agent, and model. Pass the assignment contract and current delta, not a
+repeated history. Its report arrives while the parent keeps working.
 
 - `branch_ask` runs only in a primary session and forks the caller.
 - `branch_subagent` forks a descendant of the caller that has a `parentID` and
@@ -95,22 +95,24 @@ Forking a subagent, its target rules, and the shared-prefix cache:
    wanted; a silent fork is never counted or tracked.
 3. Record each fork id in the session record under `## Forks`:
 
-   | fork | lane | scope | mode | deadline | status |
-   |---|---|---|---|---|---|
+   | fork | task/lane | attempt | scope | mode | deadline | status |
+   |---|---|---|---|---|---|---|
 
-4. Keep working. Do not wait for the lane to start or finish.
-5. On a `<branch sessionID=… parent=…>` prompt: match the fork id to its row,
-   append the report, and check the contract. A report that ignores the
-   contract is a re-ask, not a merge input.
-6. No report at the deadline: poll `GET /api/session/<fork>`. `.data.outcome`
-   is null while busy, then `succeeded` or `failed`. Still busy gets one more
-   deadline; `failed`, or idle with no report, is a lane failure. Record it and
-   decide between a resume prompt and a fresh subagent.
+4. Continue independent work after dispatch. End the turn only when waiting.
+   Use report events instead of progress polling.
+5. On a report event, match the fork, task/lane, and attempt to the ledger.
+   Append the report and check the contract. Re-ask for missing contract fields.
+   A stale attempt cannot settle the current one.
+6. At a missed deadline, inspect session state once. Busy or unknown is not
+   failure. Diagnose the stall before recovery. Follow @orchestrate for retry
+   limits, new attempts, and stopping or isolating an old writer before replacement.
 
 Report contract, placed in the fork prompt:
 
 ```text
 Report with branch_report, in this form:
+task/lane: assigned ID
+attempt: assigned ID
 status: done | blocked | failed
 files: none | path (read) | path (changed)
 finding: what you concluded, one paragraph
@@ -149,3 +151,5 @@ independent of the others.
   deliverable.
 - A lane that discovers its scope was narrowed stops and reports; the
   orchestrator re-scopes it.
+- Collection and checks must finish before archive. No task-owned writer can
+  remain active. @scratch-finish owns the completion barrier.

@@ -104,6 +104,26 @@ Schedule hint for "run every N hours": use `00/N:00:00` (fires on the hour,
 every N hours). For "once per 12 hours with a stagger" use
 `--oncalendar '*-*-* 00/12:00:00' --delay 30min`.
 
+## Avoid empty agent runs
+
+Use existing checks before starting an agent. `--dirty-only` wraps an
+`--agent` task with `git status --porcelain`. A clean tree exits successfully
+without starting the agent. It requires a Git workdir.
+
+For mail, schedule `mail-digest check --trigger` as the cheap check. It detects
+new or pending mail and applies backoff before triggering the digest agent.
+Inspect the JSON `errors` field even when `wake` is false. Preflight and trigger
+failures return errors.
+
+A no-work wrapper exits successfully. Keep check errors distinct from no work.
+The current dirty-only shell wrapper tests stdout, not Git's exit status.
+Inspect Git errors rather than treating every skipped run as proof of a clean tree.
+
+`--persistent` catches up missed timer runs. It is not a grace period or retry
+policy. After three confirmed failed starts in one recovery chain, stop retrying
+and report the blocker. Observe existing backoff. An unknown outcome needs
+inspection before retry, not a success or failure count.
+
 ## Removing and editing
 
 - Remove: `octask remove <name>` stops, disables, deletes both unit files, and

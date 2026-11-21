@@ -45,7 +45,8 @@ what it is for. Load one from there when a task needs it.
 - Load the reference file for the workflow you are about to run and follow its
   procedure.
 - When a workflow hands a step to a subagent, follow the @orchestrate
-  delegation rules: no duplication, resume with the child's `sessionID`.
+  delegation rules: assignment contract, task/attempt correlation, and session
+  reuse. If dispatch has an unknown outcome, inspect before retrying.
 - Non-trivial ticket work: build the context packet in @session before the
   first delegation, then pass each worker its role projection and the packet
   path, never raw research transcripts.

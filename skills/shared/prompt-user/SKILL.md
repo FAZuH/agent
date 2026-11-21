@@ -4,7 +4,7 @@ description: >-
   Anything the user must read or act on goes in a `prompt_user` tool call:
   numbered ❓ questions and 🏁 procedures, one divider. The Prompts view
   renders it; the reply does not repeat it. Triggers: asking the user,
-  sign-off.
+  sign-off, recovering stored questions and answers with `prompt_list`.
 ---
 
 # prompt-user
@@ -46,10 +46,40 @@ Two kinds:
 - A simple question whose answer is prose: answer it, and call `prompt_user`
   only for what the user must act on.
 - The user answers in the Prompts view; Enter steers the answer, Ctrl+Enter
-  queues it, and an empty answer takes the recommendation. The answer arrives
+  queues it, and an empty answer stays unanswered. The answer arrives
   as a new message unless a blocking call was explicitly requested; with
   `block` steer and queue do not apply. Do not ask which one they picked or
   repeat the answers in chat.
+
+## Recover a stored prompt
+
+Call `prompt_list` before asking again after an interruption or lost context.
+It reads only the caller's session and changes no records or cards.
+
+```json
+{ "promptID": "stored-prompt-id", "status": "pending", "limit": 10, "offset": 0 }
+```
+
+All fields are optional. Omit filters to include every status. `status` accepts
+`pending`, `answered`, `dismissed`, or `deferred`; `promptID` selects one record.
+Results are newest first. `limit` defaults to 10 (maximum 50); pass the returned
+`nextOffset` as `offset` until it is `null`. Offsets apply after filtering.
+Pages contain at most 64,000 UTF-8 bytes. A record over 60,000 bytes returns
+only its ID (up to 200 characters), status, and `contentOmitted: true`.
+Omitted content is not evidence of an answer.
+
+Normal records include stored questions, procedures, timestamps, status and
+`answers` keyed by zero-based question index. `answered` means an answer was
+submitted, not that every question has an answer. Use the actual answer text
+for the matching question and scope. Pending, deferred, dismissed, missing,
+empty, or omitted answers grant no approval; recommendations grant none.
+Deferrals recorded before this tool was added appear pending because no
+deferral timestamp was stored.
+
+For a pending or deferred matching question, keep the existing prompt rather
+than posting a duplicate; `/prompt-latest` can reopen its card. Dismissal is
+not consent. An empty result means no matching retained record, not approval:
+the store retains at most 50 prompts per session.
 
 ## Rules
 

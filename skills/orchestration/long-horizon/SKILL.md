@@ -29,7 +29,9 @@ Follow the *Rules* section below.
 2. **Supervisor** (`scripts/supervisor.sh`). A dumb loop: health-gate (N-of-M
    pings), restart dead workers, skip exhausted tracks, stop on a FOUND
    sentinel, exit when all tracks are done. Logs every spawn with its PID so a
-   double-spawn is forensically decidable.
+   double-spawn is forensically decidable. Before launch, arrange a stop after
+   three confirmed failed starts in one chain. The supplied template does not
+   enforce this limit. Honor stricter task limits and existing backoff.
 3. **Heartbeat** (`scripts/heartbeat.sh`). External watchdog that wakes the
    orchestrator with `POST /api/session/<id>/prompt` (steer delivery = queued
    until idle) on: child outcome transitions, child stalls, sentinel file
@@ -67,13 +69,23 @@ Follow the *Rules* section below.
 ## Fleet children
 
 Forked children (see @workflows, `reference/parallel-lanes.md`) plug into the
-heartbeat through
-`children.txt`, one line per child (sessionID, agent, dispatch epoch, state): a
-heartbeat or a recovering orchestrator must re-read the ledger without context.
-Key completion markers by dispatch generation, or delete them on re-dispatch: a
-stale `.done` suppresses a re-dispatched child's finish-wake. Stall means no new
-child message for ~45 min; re-notify hourly, because `outcome` alone cannot tell
-a slow child from a dead one.
+heartbeat through `children.txt`, one session ID per line. Keep task/lane ID,
+attempt ID, agent, dispatch epoch, and state in the session ledger.
+@orchestrate owns attempt changes and session reuse.
+
+The heartbeat template keys `.done` markers by session ID, not attempt.
+For a reused session, stop its task-owned heartbeat before re-dispatch.
+Update the ledger and confirm the new dispatch started (or obtain its
+attempt-matched terminal report) before clearing the old marker and restarting
+the heartbeat. If dispatch state is unknown, inspect it before rearming.
+Clearing a marker under a running heartbeat can recreate it from the previous
+terminal outcome and suppress the next completion wake. On a wake, match the
+report to the current task/lane and attempt before settling it.
+
+If a start has an unknown outcome, inspect the child and landed work before
+retrying. Unknown counts as neither failure nor success. Stop or isolate the
+old writer before replacement. Stall means no new child message for ~45 min.
+Re-notify hourly. A stall alone does not prove failure or cancel legitimate backoff.
 
 ## Rules
 
