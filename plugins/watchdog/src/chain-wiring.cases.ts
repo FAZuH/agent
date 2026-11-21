@@ -13,7 +13,7 @@
  */
 
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -30,6 +30,12 @@ const ENV_KEYS = [
   "WATCHDOG_CHAIN",
   "WATCHDOG_CHAIN_NODES",
   "WATCHDOG_CHAIN_HUMAN_ONLY",
+  "WATCHDOG_CHAIN_CAP",
+  "WATCHDOG_CHAIN_TIMING",
+  "WATCHDOG_CHAIN_BATCH_MAX",
+  "WATCHDOG_CHAIN_BATCH_MS",
+  "WATCHDOG_CHAIN_JEV_BATCH_MAX",
+  "WATCHDOG_CHAIN_JEV_BATCH_MS",
 ]
 const prior: Record<string, string | undefined> = {}
 for (const key of ENV_KEYS) prior[key] = process.env[key]
@@ -70,10 +76,34 @@ let deleteFails = false
 /** When set, a card POST waits on it: the test is holding the card open. */
 let postGate: Promise<void> | null = null
 let postArrived: (() => void) | null = null
+/** Question ids the fake provider leaves unanswered, so `ask` rejects the batch. */
+let omitAnswers: ((payload: any) => string[]) | null = null
+/** Answers the fake provider returns verbatim, for the rejection-log cases. */
+let malformedAnswers: ((payload: any) => Record<string, any>) | null = null
+/** Answer every question with a confident allow, over the criteria's four labels. */
+const CHOICE = (label: string) => ({
+  type: "choice",
+  choice: label,
+  probabilities:
+    label === "allow"
+      ? { allow: 0.96, propagate: 0.02, deny: 0.01, abort: 0.01 }
+      : { allow: 0.01, propagate: 0.02, deny: 0.01, abort: 0.96 },
+})
 const server = Bun.serve({
   port: 0,
   async fetch(request) {
     const url = new URL(request.url)
+    if (url.pathname === "/decisions" && request.method === "POST") {
+      const payload = await request.json()
+      const omitted = new Set(omitAnswers?.(payload) ?? [])
+      const malformed = malformedAnswers?.(payload) ?? {}
+      const answers: Record<string, any> = {}
+      for (const id of Object.keys(payload?.questions ?? {})) {
+        if (omitted.has(id)) continue
+        answers[id] = malformed[id] ?? CHOICE("allow")
+      }
+      return Response.json({ answers })
+    }
     const match = url.pathname.match(/^\/api\/session\/([^/]+)\/form(?:\/([^/]+))?$/)
     if (!match) return new Response("not found", { status: 404 })
     const formID = match[2] ? decodeURIComponent(match[2]) : ""
@@ -101,7 +131,7 @@ writeFileSync(join(XDG, "opencode", "service.json"), JSON.stringify({ url: `http
 const { default: plugin } = await import("./index.ts")
 const state = await import("../../../lib/jev/state.ts")
 const { banTool } = await import("../../../lib/jev/tool-ban.ts")
-const { chainStateHome, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
+const { chainStateHome, CHAIN_BUDGET_FILE, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
 
 // Every path the shared library resolved must be inside this suite's scratch
 // home. Anything else belongs to another suite or to the real machine, and this
@@ -138,7 +168,11 @@ beforeEach(() => {
   deleteFails = false
   postGate = null
   postArrived = null
-  for (const key of ["WATCHDOG_CHAIN", "WATCHDOG_CHAIN_NODES", "WATCHDOG_CHAIN_HUMAN_ONLY"]) delete process.env[key]
+  omitAnswers = null
+  malformedAnswers = null
+  // Pacing knobs are pinned per case: an inherited operator value must not move
+  // the default this suite asserts.
+  for (const key of Object.keys(process.env)) if (key.startsWith("WATCHDOG_CHAIN")) delete process.env[key]
   const base = state.loadState()
   // The question-card route also registers execute.before; off here keeps the
   // capture to the chain alone. A high logMax keeps one test's rows from being
@@ -395,9 +429,11 @@ const latestGate = (hooks: Record<string, Array<(event: any) => any>>) => {
   return list[list.length - 1]
 }
 
-const itemIDOf = (text: string): string => String(text ?? "").match(/wd_[0-9a-f]{24}/)?.[0] ?? ""
+const idsIn = (text: string): string[] => [...String(text ?? "").matchAll(/wd_[0-9a-f]{24}(?:\.\d+)?/g)].map((match) => match[0])
+const itemIDOf = (text: string): string => idsIn(text)[0] ?? ""
 
-const allowReply = (prompt: string) => JSON.stringify({ results: [{ id: itemIDOf(prompt), verdict: "allow", reason: "routine for the task" }] })
+/** One allow row per item the prompt carries: a batch gets an answer for each. */
+const allowReply = (prompt: string) => JSON.stringify({ results: idsIn(prompt).map((id) => ({ id, verdict: "allow", reason: "routine for the task" })) })
 
 const chainRows = (itemID: string) => since().filter((row) => row.hook === "hook_watchdog_chain" && row.itemID === itemID)
 
@@ -1088,5 +1124,262 @@ describe("feed lifetime", () => {
     await feeds[1].push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
     expect(await first).toBe("allowed")
     expect(since().some((entry) => entry.capability === "form.replied")).toBe(false)
+  })
+})
+
+describe("admission pacing", () => {
+  const call = (sessionID: string, id: string, command: string) => ({ sessionID, tool: "shell", input: { command }, id })
+
+  /** Point the Jev node at the fake provider and give it a key. */
+  const armJev = () => {
+    const base = state.loadState()
+    state.saveState({ ...base, endpoint: `http://127.0.0.1:${server.port}/decisions`, model: "test-model", protocol: "systemone" })
+    state.writeKey("test-key")
+  }
+
+  test("the session cap waits at the budget instead of denying", async () => {
+    arm()
+    process.env.WATCHDOG_CHAIN_CAP = "1"
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w70", "c70a", "ls a")))
+    await cardsOpen(1)
+    const second = settle(wrapper(call("ses_w70", "c70b", "ls b")))
+    await ticks(10)
+
+    const waits = since().filter((row) => row.waiting === true)
+    expect(waits).toHaveLength(1)
+    expect(waits[0].held).toBe(1)
+    expect(waits[0].event).toBe("chain_admission")
+    // The waiting call has not opened a card: it is not denied, it is paced.
+    expect(posted).toHaveLength(1)
+
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await first).toBe("allowed")
+    await cardsOpen(2)
+    await host.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "allow" } } })
+    expect(await second).toBe("allowed")
+  })
+
+  test("two identical calls in one session are two distinct items", async () => {
+    arm()
+    process.env.WATCHDOG_CHAIN_CAP = "2"
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w76", "c76a", "ls same")))
+    const second = settle(wrapper(call("ses_w76", "c76b", "ls same")))
+    await cardsOpen(2)
+
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    await host.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "allow" } } })
+    expect(await first).toBe("allowed")
+    expect(await second).toBe("allowed")
+
+    // Same digest, different admission: both calls decided, as two items.
+    const items = since().filter((row) => row.event === "chain_decision").map((row) => row.itemID)
+    expect(items).toHaveLength(2)
+    expect(new Set(items).size).toBe(2)
+  })
+
+  test("a restart keeps the interrupted slot until its session continues", async () => {
+    arm()
+    process.env.WATCHDOG_CHAIN_CAP = "1"
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const first = settle(gate(host.hooks)(call("ses_w72", "c72a", "ls a")))
+    await cardsOpen(1)
+
+    const ledger = join(chainStateHome(), CHAIN_BUDGET_FILE)
+    expect(existsSync(ledger)).toBe(true)
+    // Private file, hashed keys, redacted display names: no raw session id.
+    expect(statSync(ledger).mode & 0o777).toBe(0o600)
+    const held = JSON.parse(readFileSync(ledger, "utf8"))
+    const [key] = Object.keys(held.sessions)
+    expect(key).toMatch(/^sess_[0-9a-f]{24}$/)
+    expect(held.sessions[key][0].stage).toBe("human")
+    const heldID = String(held.sessions[key][0].id)
+    expect(readFileSync(ledger, "utf8")).not.toContain("ses_w72")
+
+    await plugin.setup(host.ctx)
+    expect(await first).toMatch(/did not run/)
+
+    // A sibling session's call reconciles the ledger and reports the interrupted
+    // review once, but it does not release the dead call's slot: ownership is
+    // kept, not silently dropped.
+    const other = settle(latestGate(host.hooks)(call("ses_w72b", "c72c", "ls other")))
+    await cardsOpen(2)
+    expect(readFileSync(ledger, "utf8")).toContain(heldID)
+    const restored = since().find((row) => row.restored === true)
+    expect(restored?.verdict).toBe("unresolved")
+    expect(String(restored?.reason)).toContain("not approved")
+
+    // Its own session continues: the dead slot is disposed and the new call is
+    // admitted without waiting on it.
+    const next = settle(latestGate(host.hooks)(call("ses_w72", "c72b", "ls b")))
+    await cardsOpen(3)
+    await host.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "allow" } } })
+    await host.push({ type: "form.replied", data: { id: posted[2].card.id, answer: { decision: "allow" } } })
+    expect(await other).toBe("allowed")
+    expect(await next).toBe("allowed")
+    expect(since().some((row) => row.waiting === true)).toBe(false)
+  })
+
+  test("an unreadable ledger refuses the call instead of admitting blind", async () => {
+    arm()
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const ledger = join(chainStateHome(), CHAIN_BUDGET_FILE)
+    mkdirSync(chainStateHome(), { recursive: true })
+    writeFileSync(ledger, "not json")
+
+    const decision = settle(gate(host.hooks)(call("ses_w78", "c78a", "ls a")))
+    expect(await decision).toMatch(/did not run/)
+    expect(posted).toHaveLength(0)
+    const row = since().find((row) => row.ledger === "read")
+    expect(row?.error).toContain("could not be read")
+  })
+
+  test("a restart ends a waiting admission and its batch window, not leaving either stuck", async () => {
+    arm()
+    process.env.WATCHDOG_CHAIN_CAP = "1"
+    // The one slot is held inside a batch window an hour wide: nothing but a
+    // retirement can end that wait, so this case proves the restart does.
+    process.env.WATCHDOG_CHAIN_JEV_BATCH_MAX = "2"
+    process.env.WATCHDOG_CHAIN_JEV_BATCH_MS = "3600000"
+    nodes("jev")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w75", "c75a", "ls a")))
+    await ticks(10)
+    expect(since().some((row) => row.event === "chain_stage")).toBe(false)
+    const second = settle(wrapper(call("ses_w75", "c75b", "ls b")))
+    await ticks(10)
+    expect(since().some((row) => row.waiting === true)).toBe(true)
+
+    await plugin.setup(host.ctx)
+    expect(await first).toMatch(/did not run/)
+    expect(await second).toMatch(/did not run/)
+  })
+
+  test("the batch maximum collects held calls into one generation", async () => {
+    arm()
+    nodes("supervisor")
+    process.env.WATCHDOG_CHAIN_BATCH_MAX = "2"
+    process.env.WATCHDOG_CHAIN_BATCH_MS = "1000"
+    const host = fakeHost({ generate: (request) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w71", "c71a", "ls a")))
+    await ticks(4)
+    const second = settle(wrapper(call("ses_w71", "c71b", "ls b")))
+
+    expect(await first).toBe("allowed")
+    expect(await second).toBe("allowed")
+    expect(host.calls.generate).toHaveLength(1)
+    expect(idsIn(host.calls.generate[0].prompt)).toHaveLength(2)
+  })
+
+  test("a malformed answer's model text never reaches the log", async () => {
+    arm()
+    nodes("jev")
+    armJev()
+    const CANARY = "CANARY8b41de"
+    const TOKEN = "sk-live-CANARYTOKEN0000"
+    // The provider fills the fields the validator reads with model-controlled
+    // text, so a rejection that echoed one would carry it into the row.
+    malformedAnswers = (payload) => {
+      const id = Object.keys(payload?.questions ?? {})[0]
+      return id ? { [id]: { type: `${CANARY} ${TOKEN}`, choice: `${CANARY} ${TOKEN}`, probabilities: { [`${CANARY} ${TOKEN}`]: "x" } } } : {}
+    }
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const decision = settle(gate(host.hooks)(call("ses_w79", "c79a", "ls a")))
+    expect(await decision).toMatch(/did not run/)
+
+    const rows = since()
+    expect(JSON.stringify(rows)).not.toContain(CANARY)
+    expect(JSON.stringify(rows)).not.toContain(TOKEN)
+    const rejected = rows.filter((row) => row.failure === "answer-rejected")
+    expect(rejected.length).toBeGreaterThan(0)
+    for (const row of rejected) {
+      expect(row.reason).toBe("answer-type")
+      expect(row.id).toMatch(/^wd_[0-9a-f]{24}\.\d+$/)
+      expect(row.error).toBe("the model's answer could not be validated")
+      expect(row.sent).toBeUndefined()
+      expect(row.received).toBeUndefined()
+    }
+  })
+
+  test("selecting nonblocking is reported, and the call is still held for authorization", async () => {
+    arm()
+    process.env.WATCHDOG_CHAIN_TIMING = "nonblocking"
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const held = settle(wrapper(call("ses_w74", "c74a", "ls a")))
+    await cardsOpen(1)
+    const row = since().find((row) => row.event === "chain_admission" && row.timing === "nonblocking")
+    expect(String(row?.reason)).toContain("#15")
+    expect(host.calls.generate).toHaveLength(0)
+
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await held).toBe("allowed")
+  })
+
+  test("a Jev batch the model answered only partly still decides the item it answered", async () => {
+    arm()
+    nodes("jev")
+    process.env.WATCHDOG_CHAIN_JEV_BATCH_MAX = "2"
+    process.env.WATCHDOG_CHAIN_JEV_BATCH_MS = "100"
+    armJev()
+    // The provider leaves the second call's question unanswered, so the batch
+    // reply fails normalization and only a per-call retry can decide either one.
+    omitAnswers = (payload) => (payload?.state?.calls ?? []).filter((entry: any) => entry?.input?.command === "ls b").map((entry: any) => entry.id)
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w77", "c77a", "ls a")))
+    const second = settle(wrapper(call("ses_w77", "c77b", "ls b")))
+    expect(await first).toBe("allowed")
+    expect(await second).toMatch(/did not run/)
+    // The unanswered item propagated rather than being allowed by its sibling.
+    const stages = new Map(since().filter((row) => row.event === "chain_stage").map((row) => [row.itemID, row.verdict]))
+    expect(stages.size).toBe(2)
+    const missed = since()
+      .filter((row) => row.failure === "answer-rejected" && row.reason === "no-answer")
+      .map((row) => String(row.id))
+    expect(new Set(missed).size).toBe(1)
+    expect(stages.get(missed[0])).toBe("propagate")
+    expect([...stages.entries()].find(([id]) => id !== missed[0])?.[1]).toBe("allow")
+
+    // The rejected batch and the rejected retry are logged as a category with
+    // item ids only: no prompt, no task history, no arguments, no raw answer.
+    const rejected = since().filter((row) => row.hook === "hook_tool_risk")
+    expect(rejected.length).toBeGreaterThanOrEqual(2)
+    for (const row of rejected) {
+      expect(row.failure).toBe("answer-rejected")
+      expect(row.sent).toBeUndefined()
+      expect(row.received).toBeUndefined()
+    }
+    expect(new Set(rejected.flatMap((row) => Object.keys(row.questions ?? {})))).toEqual(new Set(stages.keys()))
+    const logged = JSON.stringify(rejected)
+    expect(logged).not.toContain("clean up the build directory")
+    expect(logged).not.toContain("ls a")
+    expect(logged).not.toContain("ls b")
+    expect(logged).not.toContain("probabilities")
   })
 })
