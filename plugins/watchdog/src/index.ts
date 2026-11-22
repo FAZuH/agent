@@ -24,8 +24,8 @@ import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
 import { clearBanOrUnknown, HANDOVER_REFUSAL, revokeOpenPrompts, start as startSessionBan, type AbortReceipt, type AbortRequest, type SessionBanHandle } from "./session-ban-host.ts"
 import { attachSupervisor, SUPERVISOR_HOLD_REASON, supervisorHandoff, type SupervisorCall, type SupervisorHostHandle, type SupervisorResolution } from "./supervisor-host.ts"
 import { createBatchRunner, resolveSupervisorMode, type BatchRunner, type SupervisorMode } from "./supervisor-batch.ts"
-import { readSnapshot, writeSubtreeBan, type SnapshotRead } from "./session-ban-state.ts"
-import { abortNotice, abortStarted, abortSubtree, appendAbortRecord, awaitReleaseHold, containDeny, durabilitySentence, markAbortStarted, reconcileAbortRecords, recoveryCovers, recoveryReason, releaseHoldOpen, releaseWhenClear, replaceAbortRecord, retainUncoveredAbortMarks, type AbortIO, type AbortOutcome, type AbortSource, type RecoveryBlock } from "./abort.ts"
+import { clearSubtreeBan, readSnapshot, writeSubtreeBan, type SnapshotRead } from "./session-ban-state.ts"
+import { abortNotice, abortStarted, abortSubtree, appendAbortRecord, awaitReleaseHold, clearAbortMarks, containDeny, durabilitySentence, markAbortStarted, readAbortRecords, reconcileAbortRecords, recoveryCovers, recoveryReason, releaseHoldOpen, releaseOperation, releaseWhenClear, replaceAbortRecord, retainUncoveredAbortMarks, type AbortIO, type AbortOutcome, type AbortSource, type RecoveryBlock, type ReleaseIO, type ReleaseOutcome } from "./abort.ts"
 import type { TaskRecord } from "./session-ban.ts"
 import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/jev/state.ts"
 import { attachCardEvents, cardRouteActiveNow, heldQuestionCards, markCardRouteActive, onBeforeExecute, questionCardsOn, releaseHeldCard, resetCardRoute, type CardDeps, type GateDecision } from "./question-cards.ts"
@@ -1804,7 +1804,7 @@ export function chainNodes(): ChainNodes {
   }
 }
 
-/** The refusal a live abort gives. It lasts until ticket #16's release. */
+/** The refusal a live abort gives. It lasts until the operation's release. */
 const ABORT_MARK_REASON = "an abort covers this session, so this call is not admitted"
 
 /**
@@ -1817,8 +1817,8 @@ const ABORT_MARK_REASON = "an abort covers this session, so this call is not adm
  * approvable and retirable by the session-ban table, so it keeps its own vote in
  * the chain's host check and the provider's evaluator; folding it in here would
  * hide it behind a sentence no operator action can lift. A `subtree` ban has no
- * expiry, no approval and no user-turn retirement, so nothing but #16's release
- * clears it.
+ * expiry, no approval and no user-turn retirement, so nothing but its own
+ * operation's release clears it.
  *
  * Chain, tool-risk hook, question-card route, session-ban provider and the send
  * boundary all ask this function. A surface that reads its own subset has
@@ -2174,12 +2174,12 @@ function abortIO(ctx: any, runtime: ChainRuntime | null): AbortIO {
     // older prompt from this abort's receipt.
     holds: (sessionIDs) => revokeOpenPrompts(sessionIDs),
     approvals: (sessionIDs) => revokeApprovals(sessionIDs),
-    ban: (sessionIDs, cause) => {
+    ban: (sessionIDs, cause, operation) => {
       const at = Date.now()
       let written = 0
       let failed = 0
       for (const sessionID of sessionIDs) {
-        if (writeSubtreeBan(sessionID, `abort: ${cause}`, at)) written++
+        if (writeSubtreeBan(sessionID, `abort: ${cause}`, at, operation)) written++
         else failed++
       }
       return { written, failed }
@@ -2191,7 +2191,7 @@ function abortIO(ctx: any, runtime: ChainRuntime | null): AbortIO {
 }
 
 /**
- * One abort operation over one selected session and its owned descendants. The
+ * One abort operations over one selected session and its owned descendants. The
  * same function serves the chain's own verdict and the operator route, so a
  * headless client and a card answer cannot disagree about what an abort did.
  */
@@ -2201,6 +2201,54 @@ export async function abortSessionTree(
   request: { sessionID: string; source: AbortSource; cause: string },
 ): Promise<AbortOutcome> {
   return await abortSubtree(abortIO(ctx, runtime), request)
+}
+
+/**
+ * The host half of one release: lifting the operation's own restriction rows,
+ * clearing the marks it left, and starting the one continuation turn the
+ * operator asked for. `abort.ts` decides what release means; this wiring only
+ * names the primitives, so the headless route and the panel share it. The
+ * released ids are read once per release, before the release marks the record:
+ * only earlier releases matter here, and a later abort's row replaces an
+ * earlier operation's, so a released operation's row is debris any uncovered
+ * release may sweep.
+ */
+function releaseIO(ctx: any, runtime: ChainRuntime | null): ReleaseIO {
+  const current = (): ChainRuntime | null => (runtime && chainRuntime === runtime ? runtime : null)
+  const read = readAbortRecords()
+  const released = read.ok ? read.records.filter((record) => typeof record.operation.released === "number").map((record) => record.operation.id) : undefined
+  return {
+    unban: (sessionID, operation) => clearSubtreeBan(sessionID, operation, released),
+    unmark: (sessionIDs) => {
+      clearAbortMarks(sessionIDs)
+      current()?.chain?.unmarkAborted(sessionIDs)
+    },
+    continue: async (sessionID, text) => {
+      const send = ctx?.session?.prompt
+      if (typeof send !== "function") return "unsupported"
+      try {
+        await send.call(ctx.session, { sessionID, text })
+        return "sent"
+      } catch {
+        return "refused"
+      }
+    },
+    store: { append: appendAbortRecord, replace: replaceAbortRecord },
+    now: () => Date.now(),
+    audit: (row) => logCall({ hook: "hook_watchdog_chain", ...row, sessionID: auditSession(row.sessionID) }),
+  }
+}
+
+/**
+ * Release one abort operation. The same function serves every route, so a
+ * headless client and the panel cannot disagree about what a release did.
+ */
+export async function releaseSessionTree(
+  ctx: any,
+  runtime: ChainRuntime | null,
+  request: { operationID: string; continue?: boolean },
+): Promise<ReleaseOutcome> {
+  return await releaseOperation(releaseIO(ctx, runtime), request)
 }
 
 async function chainHistory(ctx: any, sessionID: string): Promise<unknown> {
@@ -2686,6 +2734,8 @@ export default {
                 } catch {}
               },
               abortSession: (sessionID) => abortSessionTree(ctx, chainRuntime, { sessionID, source: "human", cause: "operator abort" }),
+              releaseOperation: (request: { operationID: string; continue?: boolean }) =>
+                releaseSessionTree(ctx, chainRuntime, request),
               enforcedBy: () => enforcementPosture(),
             }),
           )

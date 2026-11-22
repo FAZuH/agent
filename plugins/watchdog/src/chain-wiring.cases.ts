@@ -150,7 +150,7 @@ const { default: plugin } = await import("./index.ts")
 const state = await import("../../../lib/jev/state.ts")
 const { banTool } = await import("../../../lib/jev/tool-ban.ts")
 const { chainStateHome, CHAIN_BUDGET_FILE, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
-const { readAbortRecords, appendAbortRecord, resetAbortMarks } = await import("./abort.ts")
+const { readAbortRecords, appendAbortRecord, resetAbortMarks, RELEASE_CONTINUE_TEXT } = await import("./abort.ts")
 const { resetCardRoute } = await import("./question-cards.ts")
 const { resetOpenPrompts } = await import("./session-ban-host.ts")
 const { readSnapshot, parentPaths, writeSnapshot, writeSubtreeBan, removeParent } = await import("./session-ban-state.ts")
@@ -4111,6 +4111,254 @@ describe("abort operation", () => {
     expect(read.ok && read.records.length).toBe(0)
     const row = since().find((entry) => entry.event === "chain_deny")
     expect(row?.shape).toBe("queued")
+  })
+
+  /** One root with two children, tagged per case so no two cases share a scope. */
+  const relTree = (tag: string) => {
+    const root = `ses_rel_${tag}_root`
+    const child = `ses_rel_${tag}_child`
+    const self = `ses_rel_${tag}_self`
+    return {
+      root,
+      child,
+      self,
+      options: {
+        sessions: [{ id: root }, { id: child, parentID: root }, { id: self, parentID: root }],
+        parentOf: (id: string) => (id === child || id === self ? root : null),
+      },
+    }
+  }
+
+  const operationIDOf = (sessionID: string) => {
+    const read = readAbortRecords()
+    if (!read.ok) throw new Error("unreachable")
+    const matches = read.records.filter((entry) => entry.operation.sessionID === sessionID)
+    return matches[matches.length - 1]!.operation.id
+  }
+
+  test("a child operation's release never lifts the ancestor's coverage over it", async () => {
+    // Criterion 7: B is the child's own abort, A the ancestor's separate one.
+    arm()
+    nodes("human")
+    const tree = relTree("b_first")
+    const host = fakeHost(tree.options)
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    await handlers.abortOperation({ sessionID: tree.child })
+    await handlers.abortOperation({ sessionID: tree.root })
+    expect(banOf(tree.child)?.kind).toBe("subtree")
+    expect(banOf(tree.root)?.kind).toBe("subtree")
+
+    const released = await handlers.releaseOperation({ operationID: operationIDOf(tree.child), continue: true })
+    expect(released.ok).toBe(true)
+    // The ancestor covers the child's whole scope, so nothing clears.
+    expect(released.covered).toEqual([tree.child])
+    expect(released.ban).toEqual({ cleared: 0, kept: 0, failed: 0 })
+    // No continuation while another operation covers the selected session.
+    expect(released.continued).toBe("prevented")
+    expect(host.calls.prompts).toEqual([])
+
+    // The child stays blocked by the ancestor's own restriction.
+    expect(banOf(tree.child)?.kind).toBe("subtree")
+    const refused = await gate(host.hooks)(call(tree.child, "cr1", "ls a")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(refused).toContain("did not run")
+  })
+
+  test("the ancestor's release lifts only itself, and continuing it resumes no child", async () => {
+    // Criterion 8: A is released while the child's own abort stands.
+    arm()
+    nodes("human")
+    const tree = relTree("a_first")
+    const host = fakeHost(tree.options)
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    await handlers.abortOperation({ sessionID: tree.child })
+    await handlers.abortOperation({ sessionID: tree.root })
+
+    const released = await handlers.releaseOperation({ operationID: operationIDOf(tree.root), continue: true })
+    expect(released.ok).toBe(true)
+    expect(released.covered).toEqual([tree.child])
+    // The ancestor's own rows lifted; the child's own abort holds it.
+    expect(banOf(tree.root)).toBeUndefined()
+    expect(banOf(tree.self)).toBeUndefined()
+    expect(banOf(tree.child)?.kind).toBe("subtree")
+    // One prompt, to the selected session only.
+    expect(host.calls.prompts).toEqual([{ sessionID: tree.root, text: RELEASE_CONTINUE_TEXT }])
+
+    // Continuing the ancestor does not resume the child.
+    const refused = await gate(host.hooks)(call(tree.child, "cr2", "ls b")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(refused).toContain("did not run")
+  })
+
+  test("releasing both without continuation resumes nothing, and the tree runs again", async () => {
+    // Criterion 9, the both-released half: no session stays covered, no prompt
+    // was asked for, and the next call passes the normal chain.
+    arm()
+    nodes("human")
+    const tree = relTree("both")
+    const host = fakeHost({ ...tree.options, generate: (request: any) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    await handlers.abortOperation({ sessionID: tree.child })
+    await handlers.abortOperation({ sessionID: tree.root })
+
+    const first = await handlers.releaseOperation({ operationID: operationIDOf(tree.root) })
+    const second = await handlers.releaseOperation({ operationID: operationIDOf(tree.child) })
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    expect(first.continued).toBe("not-requested")
+    expect(second.continued).toBe("not-requested")
+    expect(host.calls.prompts).toEqual([])
+    // Every restriction is gone, including the child row the ancestor's later
+    // write had replaced.
+    expect(banOf(tree.root)).toBeUndefined()
+    expect(banOf(tree.self)).toBeUndefined()
+    expect(banOf(tree.child)).toBeUndefined()
+
+    // A new call passes the normal chain again: host rules, review, admission.
+    nodes("parent,supervisor")
+    const allowed = await gate(host.hooks)(call(tree.child, "cr3", "ls c")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(allowed).toBe("allowed")
+  })
+
+  test("the final release with continuation prompts only the selected session", async () => {
+    // Criterion 9, the final-release half: with every other operation released,
+    // one prompt to the operation's own session and no other.
+    arm()
+    nodes("human")
+    const tree = relTree("final")
+    const host = fakeHost(tree.options)
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    await handlers.abortOperation({ sessionID: tree.child })
+    await handlers.abortOperation({ sessionID: tree.root })
+
+    const first = await handlers.releaseOperation({ operationID: operationIDOf(tree.root) })
+    expect(first.continued).toBe("not-requested")
+    const second = await handlers.releaseOperation({ operationID: operationIDOf(tree.child), continue: true })
+    expect(second.ok).toBe(true)
+    expect(second.continued).toBe("sent")
+    expect(host.calls.prompts).toEqual([{ sessionID: tree.child, text: RELEASE_CONTINUE_TEXT }])
+  })
+
+  test("a retried release answers already and never repeats the prompt", async () => {
+    // Criterion 10's retry: the record says released and continued, so the
+    // second request re-clears idempotently and sends nothing.
+    arm()
+    nodes("human")
+    const tree = relTree("retry")
+    const host = fakeHost(tree.options)
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    await handlers.abortOperation({ sessionID: tree.child })
+
+    const first = await handlers.releaseOperation({ operationID: operationIDOf(tree.child), continue: true })
+    expect(first.ok).toBe(true)
+    expect(first.already).toBe(false)
+    expect(first.continued).toBe("sent")
+    expect(host.calls.prompts).toHaveLength(1)
+
+    const second = await handlers.releaseOperation({ operationID: operationIDOf(tree.child), continue: true })
+    expect(second.ok).toBe(true)
+    expect(second.already).toBe(true)
+    expect(second.continued).toBe("already")
+    expect(host.calls.prompts).toHaveLength(1)
+  })
+
+  test("a restart restores the released and the active operation each to its own state", async () => {
+    // Criterion 6 with criterion 10's restart: the released operation is not
+    // re-asserted, the active one keeps its coverage, and the new runtime's
+    // release can finish what the first began.
+    arm()
+    nodes("human")
+    const tree = relTree("restart")
+    const before = fakeHost({ ...tree.options, generate: (request: any) => allowReply(request.prompt) })
+    await plugin.setup(before.ctx)
+    const handlers = before.calls.rpc[0].handlers
+    await handlers.abortOperation({ sessionID: tree.child })
+    await handlers.abortOperation({ sessionID: tree.root })
+    const childOp = operationIDOf(tree.child)
+    const rootOp = operationIDOf(tree.root)
+    await handlers.releaseOperation({ operationID: childOp })
+    // The child's release lifted nothing its scope did not own: the root
+    // operation still covers it.
+    expect(banOf(tree.child)?.kind).toBe("subtree")
+
+    // A second setup is a new runtime over the same durable store.
+    posted.length = 0
+    const after = fakeHost({ ...tree.options, generate: (request: any) => allowReply(request.prompt) })
+    await plugin.setup(after.ctx)
+    // The active operation keeps every restriction; the released one gains none.
+    expect(banOf(tree.child)?.kind).toBe("subtree")
+    expect(banOf(tree.root)?.kind).toBe("subtree")
+    expect(banOf(tree.self)?.kind).toBe("subtree")
+
+    const released = await after.calls.rpc[0].handlers.releaseOperation({ operationID: rootOp })
+    expect(released.ok).toBe(true)
+    // The root's own rows and the released child's replaced row both clear.
+    expect(banOf(tree.root)).toBeUndefined()
+    expect(banOf(tree.self)).toBeUndefined()
+    expect(banOf(tree.child)).toBeUndefined()
+
+    // The new runtime admits the released tree again, through its own chain.
+    nodes("parent,supervisor")
+    const allowed = await latestGate(after.hooks)(call(tree.child, "cr4", "ls d")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(allowed).toBe("allowed")
+  })
+
+  test("a released scope keeps stale approvals dead and late answers deciding nothing", async () => {
+    // Criterion 10's stale approvals and late replies: release restores no
+    // revoked authority and re-decides no settled call.
+    arm()
+    nodes("human")
+    const tree = relTree("stale")
+    const host = fakeHost({ ...tree.options, generate: (request: any) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    const ttl = state.loadState().approveTtl
+    recordApproval(
+      { token: "tok_rel_stale", sessionID: tree.child, action: "shell", resources: [], subject: "ls", reason: "review", ts: new Date().toISOString() },
+      ttl,
+    )
+    const one = settle(gate(host.hooks)(call(tree.child, "cq1", "ls a")))
+    const two = settle(gate(host.hooks)(call(tree.child, "cq2", "ls b")))
+    await cardsOpen(2)
+    const [first, second] = posted.map((entry) => entry.card.id)
+    await host.push({ type: "form.replied", data: { id: first, answer: { decision: "abort" } } })
+    expect(await one).toContain("aborted")
+    await ticks(10)
+    expect(deleted).toContain(second)
+    expect(await two).toContain("did not run")
+
+    await handlers.releaseOperation({ operationID: operationIDOf(tree.child) })
+
+    // The approval the abort revoked stays revoked: no restoration.
+    const approved = await handlers.approve({ token: "tok_rel_stale", sessionID: tree.child })
+    expect(approved.ok).toBe(false)
+
+    // A late answer for the cancelled card finds no hold and authorizes
+    // nothing: the next call's fate is the chain's, and the chain admits it.
+    await host.push({ type: "form.replied", data: { id: second, answer: { decision: "allow" } } })
+    nodes("parent,supervisor")
+    const later = await gate(host.hooks)(call(tree.child, "cq3", "ls c")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(later).toBe("allowed")
+    // No continuation was requested, and the late card sent none either.
+    expect(host.calls.prompts).toEqual([])
   })
 })
 

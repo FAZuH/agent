@@ -1781,6 +1781,28 @@ describe("abort scope", () => {
     await settle(2)
   })
 
+  test("unmarkAborted lifts only the marks a release uncovered", async () => {
+    const { schedule, fireAll } = handScheduler()
+    const { chain, log } = makeChain({
+      jev: "allow",
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 4, ms: 100 } }),
+      schedule,
+    })
+    chain.markAborted(["ses_abort_unmark", "ses_abort_stays"])
+    // One operation's release uncovers one session; the other keeps its mark.
+    chain.unmarkAborted(["ses_abort_unmark"])
+    const again = chain.admit(CALL("ses_abort_unmark", "ls a"))
+    await settle()
+    fireAll()
+    const allowed = await again
+    expect(allowed.allow).toBe(true)
+    expect(log.jev.length).toBeGreaterThan(0)
+    const still = await chain.admit(CALL("ses_abort_stays", "ls a"))
+    expect(still.allow).toBe(false)
+    expect(still.verdict).toBe("unresolved")
+    await settle(2)
+  })
+
   test("a started review is reported started, and its late allow is discarded", async () => {
     let release: (() => void) | null = null
     const { chain, log } = makeChain({

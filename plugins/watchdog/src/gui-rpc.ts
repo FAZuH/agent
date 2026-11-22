@@ -150,6 +150,8 @@ export function abortOperationRows() {
       source: record.operation.source,
       cause: record.operation.cause,
       at: record.operation.at,
+      ...(typeof record.operation.released === "number" ? { released: record.operation.released } : {}),
+      ...(typeof record.operation.continuedAt === "number" ? { continuedAt: record.operation.continuedAt } : {}),
       incomplete: incompleteContainment(record.containment).map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
     })),
   }
@@ -199,6 +201,22 @@ export interface JevRpcDeps {
     ban: { written: number; failed: number }
     operation: { id: string; scope: string[] }
     incomplete: Array<{ step: string; status: string; detail: string }>
+  }>
+  /**
+   * Release one abort operation by id, with optional selected-session
+   * continuation. The one public release: the panel and headless clients
+   * cannot disagree about what it did.
+   */
+  releaseOperation?: (request: { operationID: string; continue?: boolean }) => Promise<{
+    ok: boolean
+    durable: boolean
+    receipt: boolean
+    already: boolean
+    ban: { cleared: number; kept: number; failed: number }
+    covered: string[]
+    continued: "sent" | "prevented" | "not-requested" | "unsupported" | "already"
+    incomplete: Array<{ step: string; status: string; detail: string }>
+    reason?: string
   }>
 }
 
@@ -258,6 +276,39 @@ async function runAbortOperation(sessionID: string, reason: string | undefined, 
 }
 
 /**
+ * One release request through the public contract. The answer is the release
+ * operation's own receipt, verbatim fields plus the live posture, so the panel
+ * and a headless client read the same facts. A request that never ran answers
+ * `ok: false` with its reason, never a zeroed success.
+ */
+async function runReleaseOperation(operationID: string, wantContinue: boolean, deps: JevRpcDeps) {
+  const posture = () => deps.enforcedBy?.() ?? []
+  if (!operationID || !deps.releaseOperation)
+    return { ok: false, durable: false, receipt: false, already: false, operationID: "", ban: { cleared: 0, kept: 0, failed: 0 }, covered: [] as string[], continued: wantContinue ? ("prevented" as const) : ("not-requested" as const), incomplete: [] as Array<{ step: string; status: string; detail: string }>, enforcedBy: posture(), reason: deps.releaseOperation ? "no abort operation was named" : "no release operation is available in this process" }
+  try {
+    const outcome = await deps.releaseOperation({ operationID, continue: wantContinue })
+    changed(`releaseOperation ${operationID}`)
+    return {
+      ok: outcome.ok,
+      durable: outcome.durable,
+      receipt: outcome.receipt,
+      already: outcome.already,
+      operationID,
+      ban: outcome.ban,
+      covered: outcome.covered,
+      continued: outcome.continued,
+      incomplete: outcome.incomplete.map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
+      enforcedBy: posture(),
+      ...(outcome.reason ? { reason: outcome.reason } : {}),
+    }
+  } catch {
+    // The release may have landed before the throw: the record and the rows are
+    // whatever they are, and this answer claims nothing about either.
+    return { ok: false, durable: false, receipt: false, already: false, operationID, ban: { cleared: 0, kept: 0, failed: 0 }, covered: [] as string[], continued: wantContinue ? ("prevented" as const) : ("not-requested" as const), incomplete: [] as Array<{ step: string; status: string; detail: string }>, enforcedBy: posture(), reason: "the release failed; its record and restriction state cannot be verified" }
+  }
+}
+
+/**
  * A refusal a consumer can read. The zero fields are placeholders unless
  * `outcome` is `none`; `enforcedBy` is always the live posture, so an empty list
  * carries the warning even here.
@@ -288,10 +339,10 @@ function abortRefused(error: string | undefined, outcome: AbortOutcomeShape, enf
  */
 async function liftBothBans(sessionID: string, deps: JevRpcDeps): Promise<{ ok: boolean; count: number; error?: string }> {
   const ban = deps.clearSessionBan ? deps.clearSessionBan(sessionID) : "unknown"
-  // The ban is durable and no release operation exists in this version: the
-  // error states that, rather than pointing at an action a user cannot take.
+  // A durable abort ban answers to its operation, not to this switch: the
+  // error names the action that can lift it instead of claiming none exists.
   if (ban === "refused")
-    return { ok: false, count: 0, error: "a durable abort ban is in place; it persists, and this version has no operation that releases it" }
+    return { ok: false, count: 0, error: "a durable abort ban is in place; it persists, and only that operation's release can lift it" }
   if (ban === "unreadable") return { ok: false, count: 0, error: "the session ban state cannot be read, so nothing was lifted" }
   if (ban === "unknown") return { ok: false, count: 0, error: "the session-ban host is not available, so nothing was lifted" }
   const count = deps.liftToolBan ? await deps.liftToolBan(sessionID) : 0
@@ -367,6 +418,8 @@ export function jevRpcHandlers(deps: JevRpcDeps = {}) {
     approvals: async () => ({ approvals: pendingApprovals() }),
     abortOperations: async () => abortOperationRows(),
     abortOperation: async (input: any) => await runAbortOperation(String(input?.sessionID ?? ""), undefined, deps),
+    releaseOperation: async (input: any) =>
+      await runReleaseOperation(String(input?.operationID ?? ""), input?.continue === true, deps),
     approve: async (input: any) => {
       const token = String(input?.token ?? "")
       const sessionID = String(input?.sessionID ?? "")

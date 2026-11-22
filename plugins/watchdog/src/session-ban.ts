@@ -118,6 +118,13 @@ export interface SessionBan {
   atSeq: number
   cause: string
   at: number
+  /**
+   * The abort operation that wrote this row, when the abort family wrote it.
+   * Absent is either another family's row or one written before attribution:
+   * the legacy rows attribute by their fixed `abort: ` / `recovery: ` cause
+   * prefixes, which no other family writes.
+   */
+  operation?: string
 }
 
 /** What Jev saw of one `subagent` call, for window arithmetic after the fact. */

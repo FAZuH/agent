@@ -443,10 +443,11 @@ test("a durable abort ban makes the lift a reported refusal, not a success", asy
   expect(lifted.ok).toBe(false)
   // Nothing was lifted: the tool ban stays because the ban state is not clear.
   expect(lifted.count).toBe(0)
-  // The error states the restriction and this version's limitation: the release
-  // operation it used to name does not exist, so it must not direct anyone to it.
+  // The error states the restriction and the one action that can lift it: the
+  // release of the operation that wrote the ban, not this switch.
   expect(lifted.error).toContain("a durable abort ban is in place")
-  expect(lifted.error).toContain("no operation that releases it")
+  expect(lifted.error).toContain("only that operation's release can lift it")
+  expect(lifted.error).not.toContain("no operation that releases it")
   expect(lifted.error).not.toContain("#16")
   expect(lifted.error).not.toContain("clears it")
 
@@ -544,4 +545,107 @@ test("an abort queued during the awaited check still suppresses the continuation
 test("a session with no ban lifts cleanly", async () => {
   const handlers = jevRpcHandlers({ liftToolBan: async () => 0, clearSessionBan: () => "absent" })
   expect(await (handlers as any).liftToolBan({ sessionID: "ses_lift_absent" })).toEqual({ ok: true, count: 0 })
+})
+
+test("the release answer is the operation's own receipt plus the live posture", async () => {
+  const reasons: string[] = []
+  setJevEmitter((event) => reasons.push(event.reason))
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => ["chain", "cards"],
+    releaseOperation: async () => ({
+      ok: true,
+      durable: true,
+      receipt: true,
+      already: false,
+      ban: { cleared: 1, kept: 1, failed: 0 },
+      covered: ["ses_rpc_rel_child"],
+      continued: "sent",
+      incomplete: [],
+    }),
+  })
+  const result = await (handlers as any).releaseOperation({ operationID: "op_rpc_rel", continue: true })
+  expect(result).toEqual({
+    ok: true,
+    durable: true,
+    receipt: true,
+    already: false,
+    operationID: "op_rpc_rel",
+    ban: { cleared: 1, kept: 1, failed: 0 },
+    covered: ["ses_rpc_rel_child"],
+    continued: "sent",
+    incomplete: [],
+    enforcedBy: ["chain", "cards"],
+  })
+  // The panel refreshes off the same event the release emits.
+  expect(reasons).toContain("releaseOperation op_rpc_rel")
+  setJevEmitter(undefined)
+})
+
+test("a release with no route or no id says nothing ran", async () => {
+  const noRoute = jevRpcHandlers({})
+  const refused = await (noRoute as any).releaseOperation({ operationID: "op_rpc_no_route", continue: true })
+  expect(refused.ok).toBe(false)
+  expect(refused.reason).toContain("no release operation is available")
+  expect(refused.continued).toBe("prevented")
+
+  const handlers = jevRpcHandlers({
+    releaseOperation: async () => ({
+      ok: true,
+      durable: true,
+      receipt: true,
+      already: false,
+      ban: { cleared: 0, kept: 0, failed: 0 },
+      covered: [],
+      continued: "not-requested",
+      incomplete: [],
+    }),
+  })
+  const noId = await (handlers as any).releaseOperation({ operationID: "", continue: false })
+  expect(noId.ok).toBe(false)
+  expect(noId.reason).toContain("no abort operation was named")
+  expect(noId.continued).toBe("not-requested")
+  expect(noId.enforcedBy).toEqual([])
+})
+
+test("a release that throws reports its state as unverifiable, never a clean negative", async () => {
+  const handlers = jevRpcHandlers({
+    releaseOperation: async () => {
+      throw new Error("the host vanished")
+    },
+  })
+  const result = await (handlers as any).releaseOperation({ operationID: "op_rpc_rel_throw", continue: true })
+  expect(result.ok).toBe(false)
+  // The release may have landed before the throw: the answer claims nothing.
+  expect(result.reason).toContain("cannot be verified")
+  expect(result.continued).toBe("prevented")
+  expect(JSON.stringify(result)).not.toContain("vanished")
+})
+
+test("the operations list carries a release and its continuation", async () => {
+  const { abortFile } = await import("./abort.ts")
+  writeFileSync(
+    abortFile(),
+    JSON.stringify({
+      v: 1,
+      operations: [
+        {
+          operation: { id: "op_rows_live", sessionID: "ses_rows_live", scope: ["ses_rows_live"], source: "human", cause: "operator abort", at: 5 },
+          containment: [{ step: "receipt", status: "done", detail: "the operation record carries this receipt" }],
+        },
+        {
+          operation: { id: "op_rows_rel", sessionID: "ses_rows_rel", scope: ["ses_rows_rel"], source: "human", cause: "operator abort", at: 6, released: 7, continuedAt: 8 },
+          containment: [{ step: "receipt", status: "done", detail: "the operation record carries this receipt" }],
+        },
+      ],
+    }),
+  )
+  const handlers = jevRpcHandlers({})
+  const result = await (handlers as any).abortOperations({})
+  expect(result.ok).toBe(true)
+  const released = result.operations.find((operation: any) => operation.id === "op_rows_rel")
+  expect(released.released).toBe(7)
+  expect(released.continuedAt).toBe(8)
+  const live = result.operations.find((operation: any) => operation.id === "op_rows_live")
+  expect(live.released).toBeUndefined()
+  expect(live.continuedAt).toBeUndefined()
 })

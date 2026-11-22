@@ -227,7 +227,7 @@ export function pruneSnapshot(parentID: string, now: number, ttlMs = TTL_MS): nu
  * unreadable snapshot is never overwritten: that is a refusal, reported to the
  * caller, not a fresh ban on top of lost evidence.
  */
-export function writeSubtreeBan(sessionID: string, cause: string, at: number): boolean {
+export function writeSubtreeBan(sessionID: string, cause: string, at: number, operation?: string): boolean {
   const id = String(sessionID ?? "")
   if (!id) return false
   try {
@@ -235,13 +235,54 @@ export function writeSubtreeBan(sessionID: string, cause: string, at: number): b
       const read = readSnapshot(id)
       if (!read.ok && read.reason !== "missing") return false
       const snap = read.snap ?? blank(id)
-      snap.sessionBan = { kind: "subtree", atSeq: snap.frontierSeq, cause: String(cause ?? "").slice(0, 200), at }
+      snap.sessionBan = { kind: "subtree", atSeq: snap.frontierSeq, cause: String(cause ?? "").slice(0, 200), at, ...(operation ? { operation } : {}) }
       writeSnapshot(id, snap)
       return true
     })
   } catch {
     return false
   }
+}
+
+/**
+ * Remove the abort operation's own restriction row. Only that operation's row
+ * clears: another active operation's or another family's row is an independent
+ * restriction and stays, whatever its kind. `released` names operations already
+ * released on disk: a later abort's write replaces an earlier operation's row,
+ * so a released operation's row is debris no active record backs, and any
+ * release that uncovers the session sweeps it. A row this family wrote before
+ * attribution carries the family's fixed cause prefix, which no other family
+ * writes, so those clear for the named operation too. An unreadable store
+ * fails: the row stays and the session stays blocked.
+ */
+export function clearSubtreeBan(sessionID: string, operation: string, released?: string[]): "cleared" | "kept" | "absent" | "failed" {
+  const id = String(sessionID ?? "")
+  const op = String(operation ?? "")
+  if (!id || !op) return "failed"
+  try {
+    return withParentLock(id, () => {
+      const read = readSnapshot(id)
+      if (!read.ok && read.reason !== "missing") return "failed"
+      const snap = read.snap ?? blank(id)
+      const row = snap.sessionBan
+      if (!row) return "absent"
+      if (row.operation) {
+        if (row.operation === op) return clear(snap, id)
+        return released?.includes(row.operation) ? clear(snap, id) : "kept"
+      }
+      if (row.kind === "parent") return "kept"
+      return row.cause.startsWith("abort: ") || row.cause.startsWith("recovery: ") ? clear(snap, id) : "kept"
+    })
+  } catch {
+    return "failed"
+  }
+}
+
+function clear(snap: Snapshot, id: string): "cleared" {
+  delete snap.sessionBan
+  // writeSnapshot throws on a failed write; the outer catch answers "failed".
+  writeSnapshot(id, snap)
+  return "cleared"
 }
 
 /** Session deletion takes the whole parent with it, audit included. */

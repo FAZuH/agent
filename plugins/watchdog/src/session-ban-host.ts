@@ -1662,8 +1662,8 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
 
   /**
    * Remove the legacy `parent` session ban, leaving tombstones and cursors
-   * untouched. A `subtree` ban is the abort's durable restriction and only
-   * ticket #16's release operation may clear it, so this reports `refused` and
+   * untouched. A `subtree` ban is the abort's durable restriction and only the
+   * operation's release may clear it, so this reports `refused` and
    * the session stays stopped. `unreadable` is a store that cannot be read or
    * written: nothing was changed, and the caller must not claim a lift.
    */
@@ -1925,8 +1925,8 @@ function wrapSubagent(editor: any, host: AdmissionHost): void {
  */
 /**
  * What a lift did. `cleared` and `absent` both mean the session carries no
- * session ban; `refused` is a durable abort ban that only ticket #16's release
- * may clear; `unreadable` is a store that cannot be read or written; `unknown`
+ * session ban; `refused` is a durable abort ban that only the operation's
+ * release may clear; `unreadable` is a store that cannot be read or written; `unknown`
  * is a host that is off or never attached, so no ban state was observed at all.
  * Nothing may be lifted or resumed on `unreadable` or `unknown`.
  */

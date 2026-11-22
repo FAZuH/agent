@@ -5,7 +5,7 @@
  * The record is identity, scope and receipt. Enforcement is the durable subtree
  * session ban written to the session-ban store: a `subtree` ban has no expiry,
  * no approval and no user-turn retirement, and a restart reads it back. Records
- * are never removed here; release semantics belong to ticket #16.
+ * are never removed here; `releaseOperation` owns release semantics.
  *
  * A record carries no prompt, no argument, no model reply and no secret. Steps
  * name fixed capabilities and counts, and session ids are the host's own. A step
@@ -76,6 +76,13 @@ export interface AbortOperation {
   source: AbortSource
   cause: string
   at: number
+  /**
+   * When the operator released this operation, if ever. Absent is active: the
+   * operation's restrictions are in force and only its own release lifts them.
+   */
+  released?: number
+  /** When a release's continuation prompt was confirmed sent, if ever. */
+  continuedAt?: number
 }
 
 export interface AbortRecord {
@@ -197,10 +204,17 @@ export interface AbortIO {
    * could not close.
    */
   holds(sessionIDs: string[]): Promise<HoldRevocation>
-  /** Revoke this scope's pending approvals. */
+  /**
+   * Revoke this scope's pending approvals. Release never restores them: what
+   * an abort revoked stays revoked past a release.
+   */
   approvals(sessionIDs: string[]): { revoked: number; failed: number }
-  /** The durable subtree ban for the whole scope. */
-  ban(sessionIDs: string[], cause: string): { written: number; failed: number }
+  /**
+   * The durable subtree ban for the whole scope. `operation` attributes the
+   * rows to this abort, so a later release lifts exactly these restrictions
+   * and no other family's or operation's.
+   */
+  ban(sessionIDs: string[], cause: string, operation?: string): { written: number; failed: number }
   /** Persist a record: the first write seals identity, the last seals containment. */
   store: {
     append(record: AbortRecord): boolean
@@ -352,8 +366,9 @@ export function recoveryReason(block: RecoveryBlock): string {
  * Sessions an abort operation has selected in this process, recorded the moment
  * the operation starts. This is abort-level state, not the chain's: the durable
  * ban is only written after descendant discovery, and the review chain may be
- * off, so the early mark is the one signal that exists in that window. A
- * session is never removed: an abort is permanent until ticket #16's release.
+ * off, so the early mark is the one signal that exists in that window. A mark
+ * leaves only through that operation's release, and only when no other active
+ * operation covers the session.
  */
 const abortedSessions = new Set<string>()
 
@@ -373,11 +388,24 @@ export function abortStarted(sessionID: string): boolean {
  * the ban, so its mark is redundant. A mark outside that set is the only trace
  * of an abort that is still discovering, or died before writing its identity: no
  * record will ever name it, so dropping it would open the exact window this
- * registry exists to close. It is kept, and ticket #16's release is what clears
- * it later.
+ * registry exists to close. It is kept, and a release is what clears it later.
  */
 export function retainUncoveredAbortMarks(covered: Iterable<string>): void {
   for (const sessionID of covered) abortedSessions.delete(sessionID)
+}
+
+/** Clear the marks one released operation's uncovered scope leaves behind. */
+export function clearAbortMarks(sessionIDs: string[]): void {
+  for (const sessionID of sessionIDs) abortedSessions.delete(sessionID)
+}
+
+/**
+ * Every active operation covering this session: its own direct scope, or an
+ * ancestor's scope that names it. Effective blocked state is the truth of this
+ * list, one entry or many.
+ */
+export function coveringOperations(records: AbortRecord[], sessionID: string): AbortOperation[] {
+  return records.filter((record) => !record.operation.released && record.operation.scope.includes(sessionID)).map((record) => record.operation)
 }
 
 /**
@@ -534,10 +562,13 @@ export function reconcileAbortRecords(io: ReconcileIO): ReconcileOutcome {
   let blocked: string[] | null = null
   const scopes: string[] = []
   for (const record of read.records) {
+    // A released operation owns no restriction: its scope is not re-asserted,
+    // not marked, and never blocks a restart. Active operations are untouched.
+    if (record.operation.released) continue
     const scope = record.operation.scope
     for (const sessionID of scope) if (!scopes.includes(sessionID)) scopes.push(sessionID)
     if (banCovers(record)) continue
-    const ban = io.ban(scope, "recovery: the abort ban was not confirmed")
+    const ban = io.ban(scope, "recovery: the abort ban was not confirmed", record.operation.id)
     const row: ContainmentRow = {
       step: "ban",
       status: ban.failed ? "failed" : "done",
@@ -654,7 +685,7 @@ export async function abortSubtree(io: AbortIO, request: AbortRequest): Promise<
         },
   )
 
-  const ban = io.ban(scope, operation.cause)
+  const ban = io.ban(scope, operation.cause, operation.id)
   rows.push({
     step: "ban",
     status: ban.failed ? "failed" : "done",
@@ -793,6 +824,205 @@ export async function abortSubtree(io: AbortIO, request: AbortRequest): Promise<
     operation,
     containment: rows,
     incomplete,
+  }
+}
+
+/** What a release asks: one operation, and whether to continue its session. */
+export interface ReleaseRequest {
+  operationID: string
+  /** Send one continuation prompt to the selected session if it is effectively unblocked. */
+  continue?: boolean
+}
+
+/**
+ * What one release proved, in the abort family's receipt vocabulary. `ok` is
+ * the released record on disk; failed restriction clears and a prevented
+ * continuation are `incomplete` rows and statuses, never a silent success.
+ */
+export interface ReleaseOutcome {
+  /** The operation is released: this call marked it, or it was released before. */
+  ok: boolean
+  /** The released record reached disk. */
+  durable: boolean
+  /** The final record write landed: the release, plus `continuedAt` when a prompt was sent. */
+  receipt: boolean
+  /** The operation was already released when this call arrived. */
+  already: boolean
+  operation: AbortOperation | null
+  ban: { cleared: number; kept: number; failed: number }
+  /** Scope sessions another active operation still covers. */
+  covered: string[]
+  continued: "sent" | "prevented" | "not-requested" | "unsupported" | "already"
+  incomplete: ContainmentRow[]
+  reason?: string
+}
+
+/** What the host and this process can do for one release. */
+export interface ReleaseIO {
+  /**
+   * Lift one operation's own restriction row. `kept` is another operation's or
+   * another family's row; `failed` leaves the session blocked.
+   */
+  unban(sessionID: string, operation: string): "cleared" | "kept" | "absent" | "failed"
+  /** Clear the in-process abort marks and the review chain's cancelled marks. */
+  unmark(sessionIDs: string[]): void
+  /** Start one new turn on the selected session. `refused` is a host throw or decline. */
+  continue(sessionID: string, text: string): Promise<"sent" | "refused" | "unsupported">
+  store: AbortIO["store"]
+  now(): number
+  audit(row: Record<string, unknown>): void
+}
+
+/** The one continuation text a release can send. Fixed wording, no arguments. */
+export const RELEASE_CONTINUE_TEXT =
+  "The operator released the abort that stopped this session. No approval or past work was restored. Continue the task if it is still current."
+
+/**
+ * Release one operation, and nothing else. Coverage is re-derived from the
+ * records at every step: a session another active operation covers keeps its
+ * restriction, its marks and its row, so a child's release never overrides an
+ * ancestor's coverage and an ancestor's release never clears a child's own
+ * operation. The row clear is idempotent, so a retried release finishes what a
+ * crashed one left; the continuation is not: it fires once per operation, and a
+ * retry answers `already` instead of a second prompt. Release alone resumes
+ * nothing: no approval, no job, no descendant. Only the selected session can
+ * get the one prompt, and only while it is effectively unblocked at the send
+ * boundary.
+ */
+export async function releaseOperation(io: ReleaseIO, request: ReleaseRequest): Promise<ReleaseOutcome> {
+  const operationID = String(request?.operationID ?? "")
+  const refuse = (reason: string): ReleaseOutcome => ({
+    ok: false,
+    durable: false,
+    receipt: false,
+    already: false,
+    operation: null,
+    ban: { cleared: 0, kept: 0, failed: 0 },
+    covered: [],
+    continued: request?.continue ? "prevented" : "not-requested",
+    incomplete: [],
+    reason,
+  })
+  const read = readAbortRecords()
+  if (!read.ok) return refuse("the abort operation record cannot be read, so nothing was released")
+  const index = read.records.findIndex((record) => record.operation.id === operationID)
+  if (index < 0) return refuse("no abort operation has this id")
+  const record = read.records[index]
+  const operation = record.operation
+  const already = typeof operation.released === "number"
+  // One timestamp for every place the release names itself: the record write,
+  // the continuation write, and the returned receipt, so a retry or a reader
+  // never sees the same release at two different times.
+  const releasedAt = already ? operation.released : io.now()
+  const remaining = read.records.filter((entry) => entry !== record && !entry.operation.released)
+  const covered = operation.scope.filter((sessionID) => remaining.some((entry) => entry.operation.scope.includes(sessionID)))
+  const uncovered = operation.scope.filter((sessionID) => !covered.includes(sessionID))
+
+  // Identity first, as the abort does: a released record with rows still in
+  // place leaves those sessions blocked, the safe direction, and a retry
+  // finishes the clear. An already-released operation skips the rewrite.
+  let durable = already
+  if (!already) {
+    durable = io.store.replace({ operation: { ...operation, released: releasedAt }, containment: record.containment })
+  }
+
+  const ban = { cleared: 0, kept: 0, failed: 0 }
+  const incomplete: ContainmentRow[] = []
+  // The selected session's own row state decides continuation eligibility: a
+  // row that failed to clear, or one another family still owns, keeps it
+  // effectively blocked whatever this operation did.
+  let targetRow: "cleared" | "kept" | "absent" | "failed" | "uncovered-unknown" = "uncovered-unknown"
+  for (const sessionID of uncovered) {
+    const status = io.unban(sessionID, operation.id)
+    if (sessionID === operation.sessionID) targetRow = status
+    if (status === "failed") {
+      ban.failed++
+      continue
+    }
+    if (status === "kept") ban.kept++
+    else ban.cleared++
+  }
+  if (ban.failed) {
+    incomplete.push({
+      step: "ban",
+      status: "failed",
+      detail: `${ban.failed} restriction row(s) could not be cleared; those sessions stay blocked`,
+    })
+  }
+  // Marks follow the rows, not the coverage: a session the records still cover
+  // keeps every in-process signal, and an uncovered one keeps none.
+  io.unmark(uncovered)
+
+  let continued: ReleaseOutcome["continued"] = request?.continue ? "prevented" : "not-requested"
+  let receipt = durable
+  let continuedAt: number | undefined
+  let reason: string | undefined
+  if (request?.continue) {
+    if (already && typeof operation.continuedAt === "number") {
+      continued = "already"
+    } else {
+      // The send boundary re-derives coverage from a fresh read: another
+      // operation can have landed since the rows were cleared, and an abort
+      // marks its selected session before any await, so the live mark is asked
+      // too. Either fact prevents the prompt.
+      const fresh = readAbortRecords()
+      const target = operation.sessionID
+      if (!fresh.ok) {
+        reason = "the abort operation record cannot be read, so nothing was continued"
+      } else if (
+        coveringOperations(fresh.records, target).some((entry) => entry.id !== operation.id) ||
+        abortStarted(target) ||
+        targetRow === "failed" ||
+        targetRow === "kept"
+      ) {
+        reason = "the selected session is still effectively blocked; no continuation was sent"
+      } else {
+        const sent = await io.continue(target, RELEASE_CONTINUE_TEXT)
+        if (sent === "unsupported") {
+          continued = "unsupported"
+          reason = "the host exposes no primitive to start a turn, so no continuation was sent"
+        } else if (sent === "refused") {
+          continued = "prevented"
+          reason = "the host refused the continuation prompt"
+        } else {
+          continued = "sent"
+          // The send happened; the marker makes a retry answer `already`
+          // instead of a second prompt. A crash between the two leaves the
+          // one-window race the receipt cannot close: the retry may send once
+          // more.
+          continuedAt = io.now()
+          receipt = io.store.replace({
+            operation: { ...operation, released: releasedAt, continuedAt },
+            containment: record.containment,
+          })
+        }
+      }
+    }
+  }
+
+  io.audit({
+    event: "abort_release",
+    operationID: operation.id,
+    sessionID: operation.sessionID,
+    scope: operation.scope.length,
+    cleared: ban.cleared,
+    kept: ban.kept,
+    failed: ban.failed,
+    continued,
+    durable,
+    already,
+  })
+  return {
+    ok: durable,
+    durable,
+    receipt,
+    already,
+    operation: durable ? { ...operation, released: releasedAt, ...(continuedAt ? { continuedAt } : {}) } : operation,
+    ban,
+    covered,
+    continued,
+    incomplete,
+    ...(reason ? { reason } : {}),
   }
 }
 
@@ -953,8 +1183,21 @@ function asRecord(value: unknown): AbortRecord | null {
     if (typeof entry.detail !== "string") return null
     containment.push({ step: entry.step as AbortStep, status: entry.status as StepStatus, detail: entry.detail })
   }
+  // `released` and `continuedAt` ride along when present: a read that dropped
+  // them would resurrect a released operation's restrictions at the next start.
+  const released = typeof raw.released === "number" && Number.isFinite(raw.released) ? raw.released : undefined
+  const continuedAt = typeof raw.continuedAt === "number" && Number.isFinite(raw.continuedAt) ? raw.continuedAt : undefined
   return {
-    operation: { id, sessionID, scope, source, cause: typeof raw.cause === "string" ? raw.cause : "", at },
+    operation: {
+      id,
+      sessionID,
+      scope,
+      source,
+      cause: typeof raw.cause === "string" ? raw.cause : "",
+      at,
+      ...(released !== undefined ? { released } : {}),
+      ...(continuedAt !== undefined ? { continuedAt } : {}),
+    },
     containment,
   }
 }

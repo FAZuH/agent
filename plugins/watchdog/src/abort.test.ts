@@ -24,7 +24,7 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 process.env.OPENCODE_JEV_STATE_HOME = join(scratch, "jev")
 process.env.OPENCODE_JEV_SESSION_BAN_DIR = join(scratch, "session-ban")
 
-import type { AbortIO, AbortRecord, ContainmentRow } from "./abort.ts"
+import type { AbortIO, AbortRecord, ContainmentRow, ReleaseIO } from "./abort.ts"
 
 const {
   abortSubtree,
@@ -35,7 +35,11 @@ const {
   appendAbortRecord,
   replaceAbortRecord,
   reconcileAbortRecords,
+  releaseOperation,
+  coveringOperations,
+  markAbortStarted,
   resetAbortMarks,
+  RELEASE_CONTINUE_TEXT,
   abortFile,
   ABORT_FILE,
 } = await import("./abort.ts")
@@ -872,5 +876,262 @@ describe("the durable abort ban", () => {
       { kind: "parent", atSeq: 1, cause: "session abort", at: 1 },
     )
     expect(decision.effect).toBe("allow")
+  })
+})
+
+describe("the release operation", () => {
+  const CONFIRMED: ContainmentRow[] = [
+    { step: "ban", status: "done", detail: "durable subtree ban written for the whole scope" },
+    { step: "receipt", status: "done", detail: "the operation record carries this receipt" },
+  ]
+  const IDENTITY_ONLY: ContainmentRow[] = [
+    { step: "receipt", status: "unsupported", detail: "the containment receipt was not written; treat every step as unconfirmed" },
+  ]
+
+  const recordOf = (id: string, sessionID: string, scope: string[], over: Record<string, any> = {}): AbortRecord => ({
+    operation: { id, sessionID, scope, source: "human", cause: "operator abort", at: 1, ...over },
+    containment: CONFIRMED,
+  })
+
+  interface ReleaseCalls {
+    unbans: Array<[string, string]>
+    unmarks: string[][]
+    continues: Array<{ sessionID: string; text: string }>
+    audits: any[]
+  }
+
+  function fakeReleaseIO(over: Record<string, any> = {}) {
+    const calls: ReleaseCalls = { unbans: [], unmarks: [], continues: [], audits: [] }
+    const io: ReleaseIO = {
+      unban: (sessionID, operation) => {
+        calls.unbans.push([sessionID, operation])
+        return over.unban ? over.unban(sessionID, operation) : ("cleared" as const)
+      },
+      unmark: (sessionIDs) => calls.unmarks.push(sessionIDs),
+      continue: async (sessionID, text) => {
+        calls.continues.push({ sessionID, text })
+        return over.continue ? await over.continue(sessionID, text) : ("sent" as const)
+      },
+      // The real record file: coverage is derived from it, so the store is it.
+      store: { append: appendAbortRecord, replace: replaceAbortRecord },
+      now: () => over.now ?? 2_000_000_000_000,
+      audit: (row: any) => calls.audits.push(row),
+    }
+    return { io, calls }
+  }
+
+  test("an unknown id and an unreadable store release nothing", async () => {
+    recordHome("release-unknown")
+    appendAbortRecord(recordOf("op_known", "ses_known", ["ses_known"]))
+    const { io, calls } = fakeReleaseIO()
+    const unknown = await releaseOperation(io, { operationID: "op_missing" })
+    expect(unknown.ok).toBe(false)
+    expect(unknown.reason).toContain("no abort operation has this id")
+    writeFileSync(abortFile(), "{ not json")
+    const corrupt = await releaseOperation(io, { operationID: "op_known", continue: true })
+    expect(corrupt.ok).toBe(false)
+    expect(corrupt.reason).toContain("cannot be read")
+    expect(corrupt.continued).toBe("prevented")
+    expect(calls.unbans).toEqual([])
+    expect(calls.continues).toEqual([])
+  })
+
+  test("a child's release never lifts the ancestor's coverage over it", async () => {
+    // Criterion 7: B is the child's own abort, A an ancestor's separate one.
+    recordHome("release-child-first")
+    appendAbortRecord(recordOf("op_anc", "ses_root", ["ses_root", "ses_child"]))
+    appendAbortRecord(recordOf("op_child", "ses_child", ["ses_child"]))
+    const { io, calls } = fakeReleaseIO()
+    const outcome = await releaseOperation(io, { operationID: "op_child", continue: true })
+    // The ancestor covers the child's whole scope, so nothing clears.
+    expect(outcome.ok).toBe(true)
+    expect(outcome.covered).toEqual(["ses_child"])
+    expect(outcome.ban).toEqual({ cleared: 0, kept: 0, failed: 0 })
+    expect(outcome.incomplete).toEqual([])
+    expect(calls.unbans).toEqual([])
+    expect(calls.unmarks).toEqual([[]])
+    // No continuation: the child is still effectively blocked by the ancestor.
+    expect(outcome.continued).toBe("prevented")
+    expect(outcome.reason).toContain("still effectively blocked")
+    expect(calls.continues).toEqual([])
+    // The child's operation is released on disk; the ancestor's is untouched.
+    const read = readAbortRecords()
+    if (!read.ok) throw new Error("unreachable")
+    expect(read.records.find((entry) => entry.operation.id === "op_child")?.operation.released).toBe(2_000_000_000_000)
+    expect(read.records.find((entry) => entry.operation.id === "op_anc")?.operation.released).toBeUndefined()
+  })
+
+  test("the ancestor's release lifts only itself, and continuing it resumes no child", async () => {
+    // Criterion 8: A is released while the child's own abort stands.
+    recordHome("release-ancestor-first")
+    appendAbortRecord(recordOf("op_anc", "ses_root", ["ses_root", "ses_child"]))
+    appendAbortRecord(recordOf("op_child", "ses_child", ["ses_child"]))
+    const { io, calls } = fakeReleaseIO()
+    const outcome = await releaseOperation(io, { operationID: "op_anc", continue: true })
+    expect(outcome.covered).toEqual(["ses_child"])
+    expect(calls.unbans).toEqual([["ses_root", "op_anc"]])
+    expect(calls.unmarks).toEqual([["ses_root"]])
+    // One prompt, to the selected session only; the child's own abort holds it.
+    expect(outcome.continued).toBe("sent")
+    expect(calls.continues).toEqual([{ sessionID: "ses_root", text: RELEASE_CONTINUE_TEXT }])
+    // The release and its continuation persist as one operation state.
+    const read = readAbortRecords()
+    if (!read.ok) throw new Error("unreachable")
+    const released = read.records.find((entry) => entry.operation.id === "op_anc")?.operation
+    expect(released?.released).toBe(2_000_000_000_000)
+    expect(released?.continuedAt).toBe(2_000_000_000_000)
+    expect(read.records.find((entry) => entry.operation.id === "op_child")?.operation.released).toBeUndefined()
+  })
+
+  test("releasing both operations clears every restriction, one prompt each", async () => {
+    // Criterion 9, both-released half: no session stays covered.
+    recordHome("release-both")
+    appendAbortRecord(recordOf("op_anc", "ses_root", ["ses_root", "ses_child"]))
+    appendAbortRecord(recordOf("op_child", "ses_child", ["ses_child"]))
+    const { io, calls } = fakeReleaseIO()
+    const first = await releaseOperation(io, { operationID: "op_anc", continue: true })
+    const second = await releaseOperation(io, { operationID: "op_child", continue: true })
+    expect(first.covered).toEqual(["ses_child"])
+    expect(first.continued).toBe("sent")
+    expect(second.covered).toEqual([])
+    expect(second.ban).toEqual({ cleared: 1, kept: 0, failed: 0 })
+    expect(second.continued).toBe("sent")
+    expect(calls.unbans.map((entry) => entry[0])).toEqual(["ses_root", "ses_child"])
+    expect(calls.continues.map((entry) => entry.sessionID)).toEqual(["ses_root", "ses_child"])
+  })
+
+  test("an operation that lands between the clear and the send prevents the prompt", async () => {
+    recordHome("release-race")
+    appendAbortRecord(recordOf("op_solo", "ses_solo", ["ses_solo"]))
+    let landed = false
+    const { io, calls } = fakeReleaseIO({
+      unban: () => {
+        if (!landed) {
+          // A second abort lands while the rows are being cleared.
+          landed = true
+          appendAbortRecord(recordOf("op_late", "ses_solo", ["ses_solo"]))
+        }
+        return "cleared"
+      },
+    })
+    const outcome = await releaseOperation(io, { operationID: "op_solo", continue: true })
+    expect(outcome.continued).toBe("prevented")
+    expect(outcome.reason).toContain("still effectively blocked")
+    expect(calls.continues).toEqual([])
+  })
+
+  test("a live abort mark at the send boundary prevents the prompt", async () => {
+    recordHome("release-mark")
+    appendAbortRecord(recordOf("op_mark", "ses_mark", ["ses_mark"]))
+    // The fake unmark records the call and leaves the real mark registry
+    // alone, which stands in for an abort that landed in the window between
+    // the unmark and the send boundary.
+    markAbortStarted(["ses_mark"])
+    const { io, calls } = fakeReleaseIO()
+    const outcome = await releaseOperation(io, { operationID: "op_mark", continue: true })
+    expect(outcome.continued).toBe("prevented")
+    expect(outcome.reason).toContain("still effectively blocked")
+    expect(calls.continues).toEqual([])
+  })
+
+  test("a restriction row that fails to clear stays blocked and blocks the prompt", async () => {
+    recordHome("release-unban-failed")
+    appendAbortRecord(recordOf("op_f", "ses_f", ["ses_f", "ses_f_child"]))
+    const { io, calls } = fakeReleaseIO({ unban: () => "failed" })
+    const outcome = await releaseOperation(io, { operationID: "op_f", continue: true })
+    expect(outcome.ban).toEqual({ cleared: 0, kept: 0, failed: 2 })
+    expect(outcome.incomplete).toEqual([{ step: "ban", status: "failed", detail: expect.stringContaining("stay blocked") }])
+    expect(outcome.continued).toBe("prevented")
+    expect(calls.continues).toEqual([])
+  })
+
+  test("another family's row on the selected session prevents its continuation", async () => {
+    recordHome("release-kept")
+    appendAbortRecord(recordOf("op_k", "ses_k", ["ses_k"]))
+    const { io, calls } = fakeReleaseIO({ unban: () => "kept" })
+    const outcome = await releaseOperation(io, { operationID: "op_k", continue: true })
+    expect(outcome.ban).toEqual({ cleared: 0, kept: 1, failed: 0 })
+    expect(outcome.incomplete).toEqual([])
+    expect(outcome.continued).toBe("prevented")
+    expect(calls.continues).toEqual([])
+  })
+
+  test("a retried release finishes the clear but never repeats the prompt", async () => {
+    // Criterion 10's retry: the record says released and continued, the rows
+    // are whatever a crash left, and the answer is `already`.
+    recordHome("release-retry")
+    appendAbortRecord(recordOf("op_r", "ses_r", ["ses_r"]))
+    const { io, calls } = fakeReleaseIO()
+    const first = await releaseOperation(io, { operationID: "op_r", continue: true })
+    expect(first.already).toBe(false)
+    expect(first.continued).toBe("sent")
+    expect(first.receipt).toBe(true)
+    const second = await releaseOperation(io, { operationID: "op_r", continue: true })
+    expect(second.already).toBe(true)
+    expect(second.ok).toBe(true)
+    expect(second.continued).toBe("already")
+    // The row clear ran again, idempotently; the prompt did not.
+    expect(calls.unbans).toEqual([
+      ["ses_r", "op_r"],
+      ["ses_r", "op_r"],
+    ])
+    expect(calls.continues).toHaveLength(1)
+  })
+
+  test("the release audit is counts and statuses only", async () => {
+    recordHome("release-audit")
+    appendAbortRecord(recordOf("op_a", "ses_a", ["ses_a"]))
+    const { io, calls } = fakeReleaseIO()
+    await releaseOperation(io, { operationID: "op_a" })
+    expect(calls.audits).toHaveLength(1)
+    const row = calls.audits[0]
+    expect(Object.keys(row).sort()).toEqual([
+      "already",
+      "cleared",
+      "continued",
+      "durable",
+      "event",
+      "failed",
+      "kept",
+      "operationID",
+      "scope",
+      "sessionID",
+    ])
+    expect(row.event).toBe("abort_release")
+    // No continuation text, no prompt vocabulary, no call detail.
+    expect(JSON.stringify(calls.audits)).not.toContain("Continue")
+    expect(JSON.stringify(calls.audits)).not.toContain("prompt")
+  })
+
+  test("effective coverage is the OR of every active operation's scope", () => {
+    const records = [
+      recordOf("op_direct", "ses_c", ["ses_c"]),
+      recordOf("op_anc", "ses_root", ["ses_root", "ses_c"]),
+      recordOf("op_rel", "ses_other", ["ses_other"], { released: 5 }),
+      recordOf("op_far", "ses_far", ["ses_far"]),
+    ]
+    expect(coveringOperations(records, "ses_c").map((operation) => operation.id)).toEqual(["op_direct", "op_anc"])
+    expect(coveringOperations(records, "ses_far").map((operation) => operation.id)).toEqual(["op_far"])
+    expect(coveringOperations(records, "ses_unrelated")).toEqual([])
+  })
+
+  test("a released operation is not re-asserted at restart", async () => {
+    // Criterion 6's restart half: the released scope keeps no enforcement, the
+    // active one keeps all of it.
+    recordHome("release-reconcile")
+    appendAbortRecord({
+      operation: { id: "op_rel", sessionID: "ses_rel", scope: ["ses_rel", "ses_rel_child"], source: "human", cause: "operator abort", at: 1, released: 5 },
+      containment: IDENTITY_ONLY,
+    })
+    appendAbortRecord({
+      operation: { id: "op_live", sessionID: "ses_live", scope: ["ses_live"], source: "human", cause: "operator abort", at: 2 },
+      containment: IDENTITY_ONLY,
+    })
+    const { io, calls } = fakeIO()
+    const outcome = reconcileAbortRecords(io)
+    expect(outcome.scopes).toEqual(["ses_live"])
+    expect(outcome.blocked).toEqual(null)
+    expect(calls.bans.map((ban) => ban.ids)).toEqual([["ses_live"]])
+    expect(calls.bans[0].cause).toBe("recovery: the abort ban was not confirmed")
   })
 })

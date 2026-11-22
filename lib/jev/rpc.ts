@@ -201,6 +201,8 @@ export const Contract = {
                 source: { type: "string" },
                 cause: { type: "string" },
                 at: { type: "number" },
+                released: { type: "number" },
+                continuedAt: { type: "number" },
                 incomplete: {
                   type: "array",
                   items: {
@@ -335,6 +337,49 @@ export const Contract = {
           },
         },
         required: ["ok", "sealed", "durable", "receipt", "ban", "operationID", "scope", "incomplete", "outcome", "enforcedBy"],
+        additionalProperties: false,
+      },
+    },
+    releaseOperation: {
+      input: {
+        type: "object",
+        properties: { operationID: { type: "string" }, continue: { type: "boolean" } },
+        required: ["operationID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          durable: { type: "boolean" },
+          receipt: { type: "boolean" },
+          already: { type: "boolean" },
+          operationID: { type: "string" },
+          ban: {
+            type: "object",
+            properties: { cleared: { type: "number" }, kept: { type: "number" }, failed: { type: "number" } },
+            required: ["cleared", "kept", "failed"],
+            additionalProperties: false,
+          },
+          covered: { type: "array", items: { type: "string" } },
+          continued: { type: "string", enum: ["sent", "prevented", "not-requested", "unsupported", "already"] },
+          incomplete: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                step: { type: "string" },
+                status: { type: "string" },
+                detail: { type: "string" },
+              },
+              required: ["step", "status", "detail"],
+              additionalProperties: false,
+            },
+          },
+          enforcedBy: { type: "array", items: { type: "string" } },
+          reason: { type: "string" },
+        },
+        required: ["ok", "durable", "receipt", "already", "operationID", "ban", "covered", "continued", "incomplete", "enforcedBy"],
         additionalProperties: false,
       },
     },

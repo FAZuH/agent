@@ -278,6 +278,12 @@ export interface ChainHandle {
   /** True when this session is inside a cancelled abort scope. */
   isAborted(sessionID: string): boolean
   /**
+   * Drop the cancelled marks one released operation's uncovered scope leaves
+   * behind. Coverage is the caller's fact: a session another active operation
+   * covers is never passed here, so its mark stays.
+   */
+  unmarkAborted(sessionIDs: string[]): void
+  /**
    * Hold every release already inside its final execution check. An abort cannot
    * know its descendants before it scans, so it holds releases for the length of
    * that one host call; a held release re-checks the cancelled set when it wakes.
@@ -1045,6 +1051,9 @@ export function attachChain(deps: ChainDeps): ChainHandle {
     },
     isAborted(sessionID: string): boolean {
       return cancelled.has(budgetKey(sessionID))
+    },
+    unmarkAborted(sessionIDs: string[]): void {
+      for (const sessionID of sessionIDs) cancelled.delete(budgetKey(sessionID))
     },
     holdReleases(): () => void {
       releaseHolds++
