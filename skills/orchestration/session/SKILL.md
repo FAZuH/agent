@@ -23,6 +23,8 @@ is the single source of truth.
   where the work stands and what was decided.
 - **After compaction or fork:** re-read the spec and `checkpoint.md`; they are
   the canonical summary.
+- **Before resuming a gated action:** follow @gate recovery. Look up the
+  recorded prompt before deciding whether approval exists.
 - **Mid-task:** check the deviation log for what already changed.
 
 ## Writing a plan / spec
@@ -81,6 +83,11 @@ its entry format.
 - `## Interrupted procedures`, one entry per interrupted procedure, updated
   in place and never deleted until the procedure resumes and finishes. The
   @following-procedures skill owns the entry format.
+
+Keep the worker ledger in `## Subagent sessions` or the existing `## Forks`
+table. Record task/lane ID, attempt ID, session ID, editable files, and status.
+@orchestrate owns attempt changes and report correlation. Keep gate prompt IDs
+and guarded scopes in the Gate log, not a separate answer store.
 
 ## Tickets & specs (mattpocock)
 
@@ -148,8 +155,7 @@ create it per @scratch before writing the packet.
   `docs/adr/`.
 - The packet is not a second architecture memory. When @scratch-finish
   archives the workspace, the packet goes with it.
-- Execution-mode neutral: workers are fresh subagent spawns today; a
-  session-fork flow could consume the same packet unchanged.
+- Resume and fork assignments use the same packet.
 
 ### Packet template
 
@@ -162,6 +168,9 @@ Spec: `.scratch/<slug>/spec.md`, task truth lives there.
 
 ## Objective
 <one or two sentences: the ticket's done-state>
+
+## Assignment
+<task/lane ID, attempt ID, target, intended change, editable files>
 
 ## Base commit
 `<sha>`, the work under review is `<sha>..<working tree>`
@@ -229,6 +238,8 @@ Spec: `.scratch/<slug>/spec.md`, task truth lives there.
 
 Pass the projection plus the packet path in each delegation prompt; the
 worker reads the full packet only when it needs more.
+Reuse these fields for the assignment contract. Add only role-specific
+constraints and the current delta instead of repeating the whole packet.
 
 | Worker | Projection carries |
 |---|---|
@@ -243,8 +254,9 @@ Raw research transcripts stay in their findings file (`docs/research/`).
 When dispatching N>1 children from one packet, pre-render one projection file
 per child into the workspace (`projections/<role>.md`) and pass the file path
 in each dispatch prompt instead of pasting inline. Inline briefs drift apart
-across children; files stay comparable and diffable, and a re-dispatch reuses
-the file unchanged.
+across children; files stay comparable and diffable. Reuse their scope and
+context on re-dispatch, but refresh the attempt ID for a replacement or
+materially revised assignment.
 
 ### Completion criteria
 

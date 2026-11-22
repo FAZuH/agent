@@ -1,4 +1,4 @@
-/** Stop and tool ban mechanics. Scratch state, fabricated ctx, no host. */
+/** Subtree discovery and tool ban mechanics. Scratch state, fabricated ctx, no host. */
 import { afterAll, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -11,19 +11,16 @@ mkdirSync(scratch, { recursive: true })
 
 const { isToolBanned, readToolBans, unbanTool } = await import("../../../lib/jev/tool-ban.ts")
 const { banTool } = await import("../../../lib/jev/tool-ban.ts")
-const { subagentsOf, stopSessionTree, liftToolBan } = await import("./tool-ban-actions.ts")
+const { descendantScan, liftToolBan } = await import("./tool-ban-actions.ts")
 
 function ctx(children: Array<{ id: string; parentID: string }> = []) {
   const interrupted: any[] = []
-  const notices: any[] = []
   return {
     interrupted,
-    notices,
     api: {
       session: {
         list: async () => children,
         interrupt: async (input: any) => interrupted.push(input),
-        synthetic: async (input: any) => notices.push(input),
       },
     },
   }
@@ -37,28 +34,30 @@ describe("subagent enumeration", () => {
       { id: "sub1a", parentID: "sub1" },
       { id: "other", parentID: "elsewhere" },
     ])
-    const found = await subagentsOf(c.api, "main")
-    expect(found).toContain("sub1")
-    expect(found).toContain("sub2")
-    expect(found).toContain("sub1a")
-    expect(found).not.toContain("other")
-    expect(found).not.toContain("main")
+    const found = await descendantScan(c.api, "main")
+    expect(found.ok).toBe(true)
+    expect(found.ok && found.ids).toEqual(["sub1", "sub2", "sub1a"])
   })
-})
 
-describe("stopSessionTree", () => {
-  test("interrupts parent (resume:false) + subagents and leaves a notice", async () => {
-    const c = ctx([{ id: "sub1", parentID: "main" }])
-    await stopSessionTree(c.api, "main")
-    expect(c.interrupted.some((i) => i.sessionID === "main" && i.resume === false)).toBe(true)
-    expect(c.interrupted.some((i) => i.sessionID === "sub1" && i.resume === false)).toBe(true)
-    expect(c.notices.length).toBe(1)
-  })
-  test("reuses the injected abortSession when provided", async () => {
+  test("an empty subtree is a successful scan, not a failure", async () => {
     const c = ctx([])
-    let aborted = 0
-    await stopSessionTree(c.api, "main", { abortSession: async () => { aborted++ } })
-    expect(aborted).toBe(1)
+    expect(await descendantScan(c.api, "main")).toEqual({ ok: true, ids: [] })
+  })
+
+  test("a missing, failing or malformed listing is a discovery failure, never an empty subtree", async () => {
+    const missing = { session: {} }
+    expect(await descendantScan(missing, "main")).toEqual({ ok: false, reason: "the host has no session listing" })
+
+    const failing = { session: { list: async () => { throw new Error("down") } } }
+    expect(await descendantScan(failing, "main")).toEqual({ ok: false, reason: "the session listing failed" })
+
+    const malformed = { session: { list: async () => "nope" } }
+    expect(await descendantScan(malformed, "main")).toEqual({ ok: false, reason: "the host returned no session listing" })
+  })
+
+  test("a wrapped listing is read from its data field", async () => {
+    const wrapped = { session: { list: async () => ({ data: [{ id: "sub1", parentID: "main" }] }) } }
+    expect(await descendantScan(wrapped, "main")).toEqual({ ok: true, ids: ["sub1"] })
   })
 })
 

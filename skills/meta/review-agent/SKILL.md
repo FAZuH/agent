@@ -89,6 +89,11 @@ End every review by handing the fixes to the next agent:
 
 - Invoke the @handoff skill and write its document to the OS temp directory,
   never into the repo.
+- If the `handoff` skill is unavailable, write the document yourself with the
+  same shape. Deliver the report as your final in-session message; never use
+  `branch_report` for it: in a session tree under a fork, that tool resolves
+  its target through the fork chain and misdelivers to the fork-origin
+  session instead of the spawner.
 - Name the fixed point or target path, the branch, the spec source, and
   every finding under its own heading with file path, line, and
   reason.

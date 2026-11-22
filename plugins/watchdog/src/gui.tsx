@@ -1,11 +1,14 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { MenuItem, Panel, Plugin, Style } from "@opencode/plugin/gui"
 import { createJevView, type Approval, type ToolBanInfo, type SettingsInfo } from "./gui-controller.ts"
+import { createWatchdogView, type WatchdogStatusInfo, type WatchdogSettingsInfo, type WatchdogOperationInfo } from "./watchdog-controller.ts"
+import { JEV_FEATURES } from "./feature-families.ts"
 import { Contract } from "../../../lib/jev/rpc.ts"
 import { auditFieldLabel, groupLabel, settingMeta } from "../../../lib/jev/setting-meta.ts"
 import { filterSettings } from "./gui-search.ts"
 
 const TAB = { id: "jev-view-v1", title: "Jev", closable: "compact" as const }
+const WATCHDOG_TAB = { id: "watchdog-view-v1", title: "Watchdog", closable: "compact" as const }
 const CSS = `
 .fazuh-jev { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; min-width: 0; padding: 12px; }
 .fazuh-jev button { cursor: pointer; }
@@ -89,6 +92,22 @@ const CSS = `
 .fazuh-jev-inline { display: flex; align-items: center; gap: 6px; }
 .fazuh-jev-secret { display: flex; align-items: center; gap: 8px; }
 .fazuh-jev-secret-state { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; color: #e0a458; min-width: 44px; }
+.fazuh-wd { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; min-width: 0; padding: 12px; }
+.fazuh-wd button { cursor: pointer; }
+.fazuh-wd button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.fazuh-wd [data-component="text-input-v2"]:focus-visible, .fazuh-wd [data-component="select-v2"]:focus-visible { outline: 2px solid var(--v2-border-border-focus, #e0a458); outline-offset: -1px; }
+.fazuh-wd-scroll { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; overflow-y: auto; padding: 0 2px 24px; margin-top: -12px; }
+.fazuh-wd-status { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.fazuh-wd-chip { border: 1px solid var(--border-weak-base); border-radius: 6px; padding: 4px 8px; font-size: 12px; line-height: 1.5; }
+.fazuh-wd-chip b { font-weight: 600; }
+.fazuh-wd-chip[data-tone=warn] { border-color: #e0a458; }
+.fazuh-wd-note { margin: 0; font-size: 12px; opacity: .75; line-height: 1.5; }
+.fazuh-wd-ovr { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #e0a458; }
+.fazuh-wd-ops { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
+.fazuh-wd-op { border: 1px solid var(--border-weak-base); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; flex-shrink: 0; }
+.fazuh-wd-op-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.fazuh-wd-op-head b { font-family: monospace; color: #e0a458; }
+.fazuh-wd-op small { display: block; opacity: .65; line-height: 1.5; }
 `
 
 function clock(ts: unknown): string {
@@ -149,21 +168,22 @@ function FieldRow(props: { title: string; description: string; children: any }) 
   )
 }
 
-function BoolField(props: { title: string; description: string; checked: boolean; onToggle: () => void }) {
+function BoolField(props: { title: string; description: string; checked: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
     <FieldRow title={props.title} description={props.description}>
-      <input type="checkbox" aria-label={props.title} checked={props.checked} onChange={props.onToggle} />
+      <input type="checkbox" aria-label={props.title} checked={props.checked} disabled={props.disabled} onChange={props.onToggle} />
     </FieldRow>
   )
 }
 
-function SelectField(props: { title: string; description: string; value: string; options: Array<[string, string]>; onSelect: (v: string) => void }) {
+function SelectField(props: { title: string; description: string; value: string; options: Array<[string, string]>; onSelect: (v: string) => void; disabled?: boolean }) {
   return (
     <FieldRow title={props.title} description={props.description}>
       <select
         data-component="select-v2"
         aria-label={props.title}
         value={props.value}
+        disabled={props.disabled}
         onChange={(event) => props.onSelect(event.currentTarget.value)}
       >
         <For each={props.options}>{([value, label]) => <option value={value}>{label}</option>}</For>
@@ -172,7 +192,7 @@ function SelectField(props: { title: string; description: string; value: string;
   )
 }
 
-function TextField(props: { ui: any; title: string; description: string; value: string | number; onSave: (v: string) => void; kind?: "text" | "number" }) {
+function TextField(props: { ui: any; title: string; description: string; value: string | number; onSave: (v: string) => void; kind?: "text" | "number"; disabled?: boolean }) {
   const Button = props.ui.Button
   const [draft, setDraft] = createSignal(String(props.value ?? ""))
   const commit = () => props.onSave(draft())
@@ -184,10 +204,11 @@ function TextField(props: { ui: any; title: string; description: string; value: 
           type={props.kind ?? "text"}
           aria-label={props.title}
           value={draft()}
+          disabled={props.disabled}
           onInput={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") commit() }}
+          onKeyDown={(event) => { if (event.key === "Enter" && !props.disabled) commit() }}
         />
-        <Button size="small" onClick={commit}>Save</Button>
+        <Button size="small" disabled={props.disabled} onClick={commit}>Save</Button>
       </div>
     </FieldRow>
   )
@@ -195,7 +216,7 @@ function TextField(props: { ui: any; title: string; description: string; value: 
 
 /** A credential is never read back: the password field starts empty and is
  *  cleared after saving. Only a presence flag is shown. */
-function SecretField(props: { ui: any; title: string; description: string; present: boolean; onSave: (v: string) => void }) {
+function SecretField(props: { ui: any; title: string; description: string; present: boolean; onSave: (v: string) => void; disabled?: boolean }) {
   const Button = props.ui.Button
   const [draft, setDraft] = createSignal("")
   const save = () => {
@@ -215,10 +236,11 @@ function SecretField(props: { ui: any; title: string; description: string; prese
             aria-label={`New ${props.title}`}
             placeholder={props.present ? "replace" : "paste value"}
             value={draft()}
+            disabled={props.disabled}
             onInput={(event) => setDraft(event.currentTarget.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") save() }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !props.disabled) save() }}
           />
-          <Button size="small" onClick={save}>Save</Button>
+          <Button size="small" disabled={props.disabled} onClick={save}>Save</Button>
         </div>
       </div>
     </FieldRow>
@@ -273,6 +295,7 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
     {
       update: setState,
       error: (description) => props.ctx.toast.show({ title: "Jev", description, variant: "error" }),
+      warning: (description) => props.ctx.toast.show({ title: "Jev", description, variant: "warning" }),
     },
   )
   onCleanup(controller.dispose)
@@ -280,7 +303,9 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
 
   const status = () => state().status
   const settings = () => state().settings
-  const features = () => status()?.features ?? []
+  // The Jev page keeps its own family (#18); the Watchdog features render on
+  // the Watchdog page, so neither page lists the other's hooks.
+  const features = () => (status()?.features ?? []).filter((feature: any) => (JEV_FEATURES as readonly string[]).includes(feature.key))
   const running = (key: string) => state().busy === key
   const recent = () =>
     filterRows(state().rows, { hook: hookFilter(), badge: badgeFilter(), query: query() }).slice(0, limit())
@@ -654,7 +679,18 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
                 void controller.setSetting({ scope: "state", key, value })
               const putFeature = (feature: string, key: string, value: boolean | string | number) =>
                 void controller.setSetting({ scope: "feature", feature, key, value })
-              const filtered = () => filterSettings(settingsQuery(), cfg.config)
+              // Only the Jev family's groups render here (#18); the Watchdog
+              // page owns hook_session_ban, hook_supervisor and
+              // hook_abort_receipts.
+              const jevConfig = (): SettingsInfo["config"] => {
+                const next: SettingsInfo["config"] = {}
+                for (const feature of JEV_FEATURES) {
+                  const fields = cfg.config[feature]
+                  if (fields) next[feature] = fields
+                }
+                return next
+              }
+              const filtered = () => filterSettings(settingsQuery(), jevConfig())
               return (
                 <>
                   <Show when={filtered().connection.length > 0}>
@@ -726,15 +762,6 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
                         <Show when={filtered().secrets.includes("endpoint")}>
                           <SecretField ui={ui} title="Endpoint" description="Full URL of the decisions or chat endpoint." present={cfg.secrets.endpointPresent} onSave={(v) => putState("endpoint", v)} />
                         </Show>
-                        <Show when={filtered().secrets.includes("supervisorEndpoint")}>
-                          <SecretField
-                            ui={ui}
-                            title="Supervisor endpoint"
-                            description="Endpoint for the supervisor's review call."
-                            present={cfg.secrets.supervisorEndpointPresent}
-                            onSave={(v) => putFeature("hook_supervisor", "endpoint", v)}
-                          />
-                        </Show>
                       </div>
                     </div>
                   </Show>
@@ -742,7 +769,7 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
                   <For each={Object.entries(cfg.config)}>
                     {([feature, fields]) => {
                       const matchedKeys = () => filtered().groups.find((group) => group.feature === feature)?.fields.map((field) => field.key) ?? []
-                      const visible = () => Object.entries(fields).filter(([k]) => k !== "alertWebhook" && !(feature === "hook_supervisor" && k === "endpoint") && matchedKeys().includes(k))
+                      const visible = () => Object.entries(fields).filter(([k]) => k !== "alertWebhook" && matchedKeys().includes(k))
                       return (
                         <Show when={visible().length > 0}>
                           <div class="fazuh-jev-settings-section">
@@ -780,6 +807,231 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
   )
 }
 
+/**
+ * The Watchdog page (#18): its own enablement, the chain controls it owns,
+ * review status, and recovery. It renders with Jev off and with no provider
+ * configured, because nothing here reads Jev's provider status: the page's
+ * identity is separate from the shared library it reuses.
+ */
+function WatchdogView(props: { ctx: any; server: any; sessionID: string }) {
+  const ui = props.ctx.ui
+  const [state, setState] = createSignal({
+    loading: true,
+    error: undefined as string | undefined,
+    status: undefined as WatchdogStatusInfo | undefined,
+    settings: undefined as WatchdogSettingsInfo | undefined,
+    operations: [] as WatchdogOperationInfo[],
+    operationsReadable: true,
+    deliveryReadable: true,
+    busy: undefined as string | undefined,
+  })
+  const rpc = props.server.client.rpc(Contract)
+  const controller = createWatchdogView(
+    {
+      watchdogStatus: (input) => rpc.watchdogStatus(input),
+      getWatchdogSettings: (input) => rpc.getWatchdogSettings(input),
+      setWatchdogSetting: (input) => rpc.setWatchdogSetting(input),
+      setWatchdogSecret: (input) => rpc.setWatchdogSecret(input),
+      abortOperations: (input) => rpc.abortOperations(input),
+      releaseOperation: (input) => rpc.releaseOperation(input),
+      subscribe: (listener) => rpc.events.on("changed", (event: any) => listener({ reason: String(event?.data?.reason ?? "") })),
+    },
+    {
+      update: setState,
+      error: (description) => props.ctx.toast.show({ title: "Watchdog", description, variant: "error" }),
+      warning: (description) => props.ctx.toast.show({ title: "Watchdog", description, variant: "warning" }),
+    },
+  )
+  onCleanup(controller.dispose)
+  createEffect(() => void controller.load())
+
+  const status = () => state().status
+  const settings = () => state().settings
+  const running = (key: string) => state().busy === key
+  // Criterion 13: off by default, and every control below the enablement
+  // switch is disabled until the operator turns the page on.
+  const off = () => settings() !== undefined && !settings().on
+  const activeOperations = () => state().operations.filter((row) => row.released === undefined)
+  const overridden = (field: string) => (settings()?.envOverrides ?? []).includes(field)
+
+  const put = (key: string, value: boolean | string | number) => void controller.setSetting(key, value)
+  const ALL_NODES = ["jev", "parent", "supervisor", "human"] as const
+  const persistedNodes = () => {
+    const csv = settings()?.persisted.nodes.trim()
+    if (!csv) return [...ALL_NODES]
+    const stored = csv.split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean)
+    return stored.length > 0 ? stored : [...ALL_NODES]
+  }
+  const toggleNode = (node: string) => {
+    const current = persistedNodes()
+    const next = current.includes(node) ? current.filter((entry) => entry !== node) : [...current, node]
+    put("nodes", next.join(","))
+  }
+  const chainText = () => {
+    const chain = status()?.chain
+    if (!chain) return "Capability unknown"
+    if (chain.status === "passed") return `Review chain available: ${chain.reason}`
+    if (chain.status === "off") return "Review chain off: the WATCHDOG_CHAIN switch is not set"
+    return `Review chain unavailable: ${chain.reason}`
+  }
+
+  return (
+    <section class="fazuh-wd" aria-label="Watchdog">
+      <Show when={state().loading && !status()}>
+        <p role="status">Loading Watchdog…</p>
+      </Show>
+      <Show when={state().error}>
+        <div class="fazuh-jev-alert" role="alert">
+          <span>{state().error}</span>
+          <ui.Button onClick={() => void controller.load()}>Retry</ui.Button>
+        </div>
+      </Show>
+      <Show when={!state().operationsReadable}>
+        <div class="fazuh-jev-alert" role="alert">
+          <span>Abort records could not be read: {state().status?.reason ?? "the record file is broken"}. Recovery actions below may not cover every operation.</span>
+        </div>
+      </Show>
+
+      <div class="fazuh-jev-nav">
+        <span class="fazuh-jev-title">Watchdog</span>
+        <Show when={settings()}>
+          <ui.Button
+            variant="contrast"
+            size="small"
+            busy={running("watchdog:on")}
+            onClick={() => put("on", !settings().on)}
+          >
+            {settings().on ? "Turn Watchdog off" : "Turn Watchdog on"}
+          </ui.Button>
+        </Show>
+      </div>
+
+      <Show when={settings()} keyed>
+        {(cfg) => {
+          const watch = status()
+          return (
+            <div class="fazuh-wd-scroll" role="group" aria-label="Watchdog status and controls">
+              <div class="fazuh-wd-status">
+                <span class="fazuh-wd-chip"><b>Pending review</b> {watch?.pending.inFlight ?? 0} in flight · {watch?.pending.durable ?? 0} durable</span>
+                <span class="fazuh-wd-chip"><b>Admission waiting</b> {watch?.pending.waiting ?? 0}</span>
+                <span class="fazuh-wd-chip" data-tone={watch?.chain && watch.chain.status !== "passed" ? "warn" : undefined}>
+                  <b>Review</b> {watch?.chain ? watch.chain.status : "unknown"}
+                </span>
+                <span class="fazuh-wd-chip"><b>Effective bans</b> {watch?.effective.activeOperations ?? 0} operations covering {watch?.effective.sessionsCovered ?? 0} sessions</span>
+                <span class="fazuh-wd-chip"><b>Incomplete containment</b> {watch?.effective.incompleteOperations ?? 0}</span>
+              </div>
+              <Show when={watch?.pending.durableUnreadable}>
+                <p class="fazuh-wd-note" role="status">The durable review ledger could not be read, so the durable pending count is unknown, not zero.</p>
+              </Show>
+              <p class="fazuh-wd-note">{chainText()}{watch?.chain && watch.chain.wired ? " (a passing gate file activates it)" : ""}</p>
+
+              <div class="fazuh-jev-settings-section">
+                <div class="fazuh-jev-settings-section-title">Chain controls</div>
+                <div data-component="settings-list">
+                  <BoolField title="Jev review node" description={`Model review of producing-session calls.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.jev} disabled={off()} onToggle={() => toggleNode("jev")} />
+                  <BoolField title="Parent review node" description={`Review of subagent sessions.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.parent} disabled={off()} onToggle={() => toggleNode("parent")} />
+                  <BoolField title="Supervisor review node" description={`Independent reviewer for high-risk calls.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.supervisor} disabled={off()} onToggle={() => toggleNode("supervisor")} />
+                  <BoolField title="Human review node" description={`Asks you directly when configured nodes refuse.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.human} disabled={off()} onToggle={() => toggleNode("human")} />
+                  <SelectField
+                    title="Chain timing"
+                    description={`Blocking holds each call until its review returns; nonblocking batches without holds.${overridden("timing") ? " Environment override active." : ""}`}
+                    value={cfg.effective.timing}
+                    options={[["blocking", "Blocking"], ["nonblocking", "Nonblocking"]]}
+                    disabled={off()}
+                    onSelect={(v) => put("timing", v)}
+                  />
+                  <TextField ui={ui} title="Admission cap" description={`Most in-flight reviews one producing session may hold.${overridden("sessionCap") ? " Environment override active." : ""}`} value={cfg.effective.sessionCap} kind="number" disabled={off()} onSave={(v) => put("sessionCap", Number(v))} />
+                  <TextField ui={ui} title="Jev batch max" description={`Most Jev items collected into one review.${overridden("jevBatchMax") ? " Environment override active." : ""}`} value={cfg.effective.jevBatchMax} kind="number" disabled={off()} onSave={(v) => put("jevBatchMax", Number(v))} />
+                  <TextField ui={ui} title="Jev collection window" description={`Milliseconds Jev items collect before review.${overridden("jevBatchMs") ? " Environment override active." : ""}`} value={cfg.effective.jevBatchMs} kind="number" disabled={off()} onSave={(v) => put("jevBatchMs", Number(v))} />
+                  <TextField ui={ui} title="Supervisor batch max" description={`Most supervisor items collected into one review.${overridden("supervisorBatchMax") ? " Environment override active." : ""}`} value={cfg.effective.supervisorBatchMax} kind="number" disabled={off()} onSave={(v) => put("supervisorBatchMax", Number(v))} />
+                  <TextField ui={ui} title="Supervisor collection window" description={`Milliseconds supervisor items collect before review.${overridden("supervisorBatchMs") ? " Environment override active." : ""}`} value={cfg.effective.supervisorBatchMs} kind="number" disabled={off()} onSave={(v) => put("supervisorBatchMs", Number(v))} />
+                </div>
+              </div>
+
+              <div class="fazuh-jev-settings-section">
+                <div class="fazuh-jev-settings-section-title">Watchdog secrets</div>
+                <div data-component="settings-list">
+                  <SecretField ui={ui} title="Receipts webhook" description="Webhook that receives abort receipts; write-only, it is never read back." present={cfg.receiptsWebhookPresent} disabled={off()} onSave={(v) => void controller.setSecret("receiptsWebhook", v)} />
+                  <SecretField ui={ui} title="Supervisor endpoint" description="Endpoint for the supervisor's review call; write-only." present={cfg.supervisorEndpointPresent} disabled={off()} onSave={(v) => void controller.setSecret("supervisorEndpoint", v)} />
+                </div>
+              </div>
+
+              <div class="fazuh-jev-section">
+                <strong>Overlapping abort operations</strong>
+                <p class="fazuh-wd-note">Releasing one operation keeps every other covering operation's ban in force: a session covered by two operations stays effectively blocked until each one is released.</p>
+                <For
+                  each={watch?.effective.overlapping ?? []}
+                  fallback={<span class="fazuh-jev-empty">No session is covered by more than one active operation.</span>}
+                >
+                  {(row) => (
+                    <span class="fazuh-wd-chip" data-tone="warn">{row.sessionID} · covered by {row.operations} active operations</span>
+                  )}
+                </For>
+              </div>
+
+              <div class="fazuh-jev-section">
+                <strong>Abort operations</strong>
+                <Show when={!state().deliveryReadable}>
+                  <p class="fazuh-wd-note" role="status">The delivery queue could not be read: receipt and notice states are unknown, not absent.</p>
+                </Show>
+                <div class="fazuh-wd-ops">
+                  <For
+                    each={state().operations}
+                    fallback={<span class="fazuh-jev-empty">No abort operations recorded.{state().operationsReadable ? "" : " The record file could not be read."}</span>}
+                  >
+                    {(operation) => (
+                      <div class="fazuh-wd-op">
+                        <div class="fazuh-wd-op-head">
+                          <b>{operation.id}</b>
+                          <span>{operation.released === undefined ? "active" : "released"}</span>
+                        </div>
+                        <small>
+                          Session {operation.sessionID} · {operation.scope.length} session{operation.scope.length === 1 ? "" : "s"} in scope · {operation.cause}
+                        </small>
+                        <Show when={operation.incomplete.length > 0}>
+                          <small>Containment incomplete: {operation.incomplete.map((row) => row.step).join(", ")}</small>
+                        </Show>
+                        <Show when={operation.delivery}>
+                          {(delivery) => (
+                            <small>Receipt {delivery().receipt} · {delivery().attempts} attempt{delivery().attempts === 1 ? "" : "s"} · {delivery().notice}</small>
+                          )}
+                        </Show>
+                        <div class="fazuh-jev-actions">
+                          <ui.Button
+                            size="small"
+                            disabled={!!state().busy || operation.released !== undefined}
+                            busy={running(`release:${operation.id}`)}
+                            onClick={() => void controller.release(operation.id, false)}
+                          >
+                            Release
+                          </ui.Button>
+                          <ui.Button
+                            size="small"
+                            variant="contrast"
+                            disabled={!!state().busy || operation.released !== undefined}
+                            busy={running(`release:${operation.id}`)}
+                            onClick={() => void controller.release(operation.id, true)}
+                          >
+                            Release &amp; continue
+                          </ui.Button>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
+
+              <p class="fazuh-wd-note">
+                Migration: {cfg.migration.present ? `${cfg.migration.stored} stored setting${cfg.migration.stored === 1 ? "" : "s"}, ${cfg.migration.invalid} corrected` : "no stored Watchdog scope yet, defaults in force"} · {cfg.migration.defaulted} defaulted.
+              </p>
+            </div>
+          )
+        }}
+      </Show>
+    </section>
+  )
+}
+
 export default Plugin.define({
   setup(ctx) {
     ctx.add(Style, CSS)
@@ -808,6 +1060,33 @@ export default Plugin.define({
         icon: "shield" as const,
         opened: ctx.layout.state(`${ctx.id}:${TAB.id}`, session) !== "closed",
         run: () => ctx.layout.open(`${ctx.id}:${TAB.id}`, session),
+      }
+    })
+    ctx.add(Panel, {
+      id: WATCHDOG_TAB.id,
+      region: "side",
+      mobile: { title: WATCHDOG_TAB.title, order: 52, kind: "menu", icon: "eye" },
+      list: (input) => (input.open.includes(WATCHDOG_TAB.id) ? [WATCHDOG_TAB] : []),
+      render: (props) => (
+        <Show
+          when={ctx.servers.get(props.session.server.id)}
+          keyed
+          fallback={<p role="status">Connecting to Watchdog…</p>}
+        >
+          {(server) => <WatchdogView ctx={ctx} server={server} sessionID={props.session.id} />}
+        </Show>
+      ),
+    })
+    ctx.add(MenuItem, () => {
+      const session = ctx.sessions.current()
+      if (!session) return undefined
+      return {
+        menu: "session.panel" as const,
+        id: WATCHDOG_TAB.id,
+        title: WATCHDOG_TAB.title,
+        icon: "eye" as const,
+        opened: ctx.layout.state(`${ctx.id}:${WATCHDOG_TAB.id}`, session) !== "closed",
+        run: () => ctx.layout.open(`${ctx.id}:${WATCHDOG_TAB.id}`, session),
       }
     })
   },

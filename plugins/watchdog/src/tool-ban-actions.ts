@@ -1,37 +1,36 @@
 /**
- * Stop a tool call's whole execution tree immediately.
- * VERIFIED host APIs only (see /tmp/opencode/jev-stop-session-research.md):
- *  - ctx.session.interrupt({sessionID, resume?}) — targets ONE session, no cascade.
- *  - ctx.session.list/get to enumerate sessions; parent linkage via parentID.
- *  - ctx.session.synthetic for the user notice.
- * There is NO plugin API to abort a shell directly, NO standalone "resume"
- * method, and NO fiber interrupt primitive. "Stop the shell" is achieved by
- * interrupting the session whose tool fiber is running; host Fiber.interruptAll
- * tears the tool fiber down (prior Q9). interrupt(resume:false) avoids promoting
- * a pending steer input, so a terminal stop does not auto-continue the agent.
+ * Subtree discovery and tool-ban lifting for the abort and lift routes.
  *
- * "Resume main only": no resume API exists. The closest achievable behavior is
- * to clear the tool ban and leave the main session to be driven by the next user
- * message; subagents are NOT restarted (the main session does that itself).
+ * The stop itself lives in `abort.ts`: it is one durable operation per abort, so
+ * there is no second, weaker stop here to reach by mistake.
+ *
+ * A session is stopped by interrupting the session whose tool fiber runs; the
+ * host has no plugin API to cancel one shell, no standalone resume, and no fiber
+ * interrupt primitive (capability report C3). There is also no resume API: the
+ * closest achievable behaviour is to lift the ban and let the next user message
+ * drive the session, and subagents are never restarted here.
  */
 import { logCall } from "../../../lib/jev/state.ts"
 import { isToolBanned } from "../../../lib/jev/tool-ban.ts"
 import { banTool, unbanTool } from "../../../lib/jev/tool-ban.ts"
 
-export interface StopDeps {
-  ctx: any
-  /** Reuse the session-ban durable session ban instead of duplicating it when on. */
-  abortSession?: (sessionID: string, by: "user", cause: string) => Promise<unknown>
-}
+/**
+ * A descendant listing. `ok:false` is a discovery failure, never an empty set:
+ * a caller that cannot enumerate cannot claim the subtree is covered.
+ */
+export type DescendantScan = { ok: true; ids: string[] } | { ok: false; reason: string }
 
 /** Enumerate child + descendant sessions of a parent from ctx.session.list. */
-export async function subagentsOf(ctx: any, parentID: string): Promise<string[]> {
+export async function descendantScan(ctx: any, parentID: string): Promise<DescendantScan> {
   let all: any[]
   try {
-    const result = typeof ctx?.session?.list === "function" ? await ctx.session.list({}) : []
-    all = Array.isArray(result) ? result : Array.isArray((result as any)?.data) ? (result as any).data : []
+    if (typeof ctx?.session?.list !== "function") return { ok: false, reason: "the host has no session listing" }
+    const result = await ctx.session.list({})
+    if (Array.isArray(result)) all = result
+    else if (Array.isArray((result as any)?.data)) all = (result as any).data
+    else return { ok: false, reason: "the host returned no session listing" }
   } catch {
-    return []
+    return { ok: false, reason: "the session listing failed" }
   }
   const byParent = new Map<string, string[]>()
   for (const row of all) {
@@ -50,37 +49,7 @@ export async function subagentsOf(ctx: any, parentID: string): Promise<string[]>
       queue.push(child)
     }
   }
-  return out
-}
-
-/** Stop the parent session and every subagent, then leave a user notice. */
-export async function stopSessionTree(ctx: any, sessionID: string, deps: Omit<StopDeps, "ctx"> = {}): Promise<string[]> {
-  const subagents = await subagentsOf(ctx, sessionID)
-  if (deps.abortSession) {
-    try {
-      await deps.abortSession(sessionID, "user", "jev block: stop session tree")
-    } catch (error) {
-      logCall({ hook: "hook_tool_risk", sessionID, error: error instanceof Error ? error.message : String(error) })
-    }
-  }
-  // Interrupt the parent last with resume:false so no steer input is promoted.
-  for (const child of subagents) {
-    try {
-      await ctx?.session?.interrupt?.({ sessionID: child, resume: false })
-    } catch {}
-  }
-  try {
-    await ctx?.session?.interrupt?.({ sessionID, resume: false })
-  } catch {}
-  try {
-    await ctx?.session?.synthetic?.({
-      sessionID,
-      text: "jev: this call was blocked and the session (including its subagents) was stopped. Use Lift tool ban to lift the tool ban, then continue from the main session.",
-      delivery: "queue",
-    })
-  } catch {}
-  logCall({ hook: "hook_tool_risk", sessionID, detail: `session tree stopped; subagents=${subagents.length}` })
-  return subagents
+  return { ok: true, ids: out }
 }
 
 /** Lift the tool ban for a session and its subagents. No resume API exists here;

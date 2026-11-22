@@ -66,17 +66,69 @@ export interface JevRPC {
   reject(input: { token: string }): Promise<{ ok: boolean }>
   approveAll(input: {}): Promise<{ ok: boolean; count: number }>
   rejectAll(input: {}): Promise<{ ok: boolean; count: number }>
-  stopSession(input: { sessionID: string }): Promise<{ ok: boolean; subagents: string[] }>
-  liftToolBan(input: { sessionID: string }): Promise<{ ok: boolean; count: number }>
-  liftToolBanAndResume(input: { sessionID: string }): Promise<{ ok: boolean; count: number }>
+  stopSession(input: { sessionID: string }): Promise<StopSessionResult>
+  liftToolBan(input: { sessionID: string }): Promise<{ ok: boolean; count: number; error?: string }>
+  liftToolBanAndResume(input: { sessionID: string }): Promise<{ ok: boolean; count: number; error?: string }>
   listToolBans(input: {}): Promise<{ toolBans: ToolBanInfo[] }>
   setEnabled(input: { on: boolean }): Promise<{ ok: boolean }>
   setFeature(input: { key: string; on: boolean }): Promise<{ ok: boolean }>
+  // Optional so the panel still renders against a server without the abort methods.
+  abortOperations?(input: {}): Promise<{ ok: boolean; reason?: string; operations: AbortOperationInfo[] }>
+  abortOperation?(input: { sessionID: string }): Promise<AbortOperationResult>
   // Optional so the panel still renders against a server without the Settings methods.
   getSettings?(input: {}): Promise<SettingsInfo>
   setSetting?(input: SetSettingInput): Promise<{ ok: boolean; error?: string }>
   setSecret?(input: SetSecretInput): Promise<{ ok: boolean; error?: string }>
   subscribe(listener: (event: { reason: string }) => void): () => void
+}
+
+/** One abort operation's result, as both stop and abort report it. */
+export interface AbortOperationResult {
+  ok: boolean
+  sealed: boolean
+  durable: boolean
+  receipt: boolean
+  ban: { written: number; failed: number }
+  operationID: string
+  scope: string[]
+  incomplete: ContainerStepInfo[]
+  /**
+   * What the answer can vouch for: `known` is the operation's own report,
+   * `none` is a request that never ran, `unknown` is a throw after the abort
+   * may have written identity or a ban. On `unknown` the flags and counts are
+   * placeholders and the surface reports the failure, not a clean negative.
+   */
+  outcome: "known" | "none" | "unknown"
+  /**
+   * The admission surfaces that consult a ban right now (`chain`,
+   * `session-ban`, `cards`, `tool-risk`), read after the operation resolved.
+   * Empty means no hook enforces this ban in this process, and the surface says
+   * so rather than implying it.
+   */
+  enforcedBy: string[]
+  /** Present when `enforcedBy` is empty: this ban is not live-enforced. */
+  warning?: string
+  error?: string
+}
+
+/** The stop route's answer: the same operation report, so nothing is swallowed. */
+export type StopSessionResult = AbortOperationResult
+
+/** One abort operation as the panel reads it: identity, scope and what is left. */
+export interface AbortOperationInfo {
+  id: string
+  sessionID: string
+  scope: string[]
+  source: string
+  cause: string
+  at: number
+  incomplete: ContainerStepInfo[]
+}
+
+export interface ContainerStepInfo {
+  step: string
+  status: string
+  detail: string
 }
 
 export interface ToolBanInfo {
@@ -102,6 +154,8 @@ export interface JevViewState {
 export interface JevDialogs {
   update(state: JevViewState): void
   error(message: string): void
+  /** A stop that returned but did not fully do what the user asked. */
+  warning(message: string): void
 }
 
 /** RPC errors cross the bridge as plain objects; read their message, not String(). */
@@ -120,6 +174,32 @@ export function errorText(error: unknown, depth = 0): string {
     }
   }
   return String(error)
+}
+
+/**
+ * What a stop's receipt leaves unsaid, or null when it said everything the user
+ * needs: the record is durable, every containment step stopped as asked, and an
+ * admission hook enforces the ban right now. A stop is the one action where the
+ * difference between "asked" and "in force" matters, so a partial result is
+ * reported, never reduced to `ok`.
+ */
+export function stopWarning(result: StopSessionResult): string | null {
+  if (result.outcome !== "known") {
+    const what = result.outcome === "none" ? "never ran" : "may have run before it failed"
+    return `The stop ${what}. ${result.error ?? "Its effects cannot be verified; check the abort records before retrying."}`
+  }
+  if (!result.ok) return `The stop was not recorded. ${result.error ?? "The store refused the record."}`
+  const parts: string[] = []
+  if (!result.durable) parts.push("the abort record did not reach disk")
+  if (!result.sealed) parts.push("the session is not sealed against a restart")
+  for (const row of result.incomplete) parts.push(`${row.step} did not stop as asked (${row.status})`)
+  if (!result.enforcedBy.length) {
+    // The server owns this fact; the fallback covers a consumer that built the
+    // result itself.
+    parts.push(result.warning ?? "no admission hook is active, so this ban is not enforced in this process")
+  }
+  if (!parts.length) return null
+  return `Stopped, with limits: ${parts.join("; ")}.`
 }
 
 export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
@@ -168,12 +248,12 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
     if (!disposed) void load({ log: !paused })
   })
 
-  async function mutate(key: string, run: () => Promise<{ ok: boolean }>) {
+  async function mutate(key: string, run: () => Promise<{ ok: boolean; error?: string }>) {
     if (disposed) return
     update({ ...state, busy: key })
     try {
       const result = await run()
-      if (!result.ok) dialogs.error("That change was not applied.")
+      if (!result.ok) dialogs.error(result.error ?? "That change was not applied.")
       await load()
     } catch (error) {
       dialogs.error(errorText(error))
@@ -236,7 +316,29 @@ export function createJevView(rpc: JevRPC, dialogs: JevDialogs) {
     reject: (token: string) => mutate(`reject:${token}`, () => rpc.reject({ token })),
     approveAll: () => bulk("approveAll", () => rpc.approveAll({})),
     rejectAll: () => bulk("rejectAll", () => rpc.rejectAll({})),
-    stopSession: (sessionID: string) => mutate(`stop:${sessionID}`, () => rpc.stopSession({ sessionID })),
+    /**
+     * The unified stop. Not `mutate`: its result carries what the receipt shows,
+     * and a stop that was not sealed, stopped short, or has no hook enforcing it
+     * must say so instead of passing as a plain success.
+     */
+    stopSession: async (sessionID: string) => {
+      if (disposed) return
+      const key = `stop:${sessionID}`
+      update({ ...state, busy: key })
+      try {
+        const result = await rpc.stopSession({ sessionID })
+        const warning = stopWarning(result)
+        if (warning) dialogs.warning(warning)
+        await load()
+      } catch (error) {
+        // The request crossed the bridge, so the operation may have run: saying
+        // it failed would be as wrong as saying it stopped.
+        dialogs.error(`The stop could not be confirmed: ${errorText(error)} Check the abort records before retrying.`)
+        await load()
+      } finally {
+        if (!disposed) update({ ...state, busy: undefined })
+      }
+    },
     liftToolBan: (sessionID: string) => mutate(`liftToolBan:${sessionID}`, () => rpc.liftToolBan({ sessionID })),
     liftToolBanAndResume: (sessionID: string) =>
       mutate(`liftToolBanAndResume:${sessionID}`, () => rpc.liftToolBanAndResume({ sessionID })),

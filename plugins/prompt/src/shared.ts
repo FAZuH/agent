@@ -54,6 +54,8 @@ export interface Prompt {
   answeredAt?: number
   /** When the user dismissed the prompts without answering them. */
   dismissedAt?: number
+  deferredAt?: number
+  revision?: number
 }
 
 const NOT_ANSWERED = "Not answered"

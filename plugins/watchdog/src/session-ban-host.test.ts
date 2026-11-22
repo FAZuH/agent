@@ -25,7 +25,7 @@ const store = await import("./session-ban-state.ts")
 const rules = await import("./session-ban.ts")
 const stateModule = await import("../../../lib/jev/state.ts")
 
-const { createAdmissionHost, attach, register, start, callKey, SUBAGENT, EVENT_TYPES } = hostModule
+const { createAdmissionHost, attach, register, start, callKey, clearBanOrUnknown, resetOpenPrompts, revokeOpenPrompts, SUBAGENT, EVENT_TYPES } = hostModule
 const { fingerprint, verdict } = rules
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
@@ -47,6 +47,10 @@ interface FakeCtx {
   tool: any
   feed: (event: any) => Promise<void>
   close: () => void
+  /** The abort signal each event subscription was given. */
+  signals: AbortSignal[]
+  /** How many subscriptions were ended by their signal. */
+  aborted: number
 }
 
 function subscription(): { stream: any; push: (event: any) => Promise<void>; close: () => void } {
@@ -109,20 +113,32 @@ function fakeCtx(): FakeCtx {
     tool,
     feed: events.push,
     close: events.close,
+    signals: [],
+    aborted: 0,
   }
+  /** The host's own deregistration: a `Registration` with an async `dispose`. */
+  const registration = (remove: () => void) => ({ dispose: async () => remove() })
   api.ctx = {
     tool: {
       transform: async (fn: (editor: any) => void) => {
         api.transforms += 1
         fn(editor)
+        return registration(() => {})
       },
       hook: async (name: string, fn: (event: any) => any) => {
         hooks[name] = fn
+        // A disposal from a replaced generation must not remove its successor.
+        return registration(() => {
+          if (hooks[name] === fn) delete hooks[name]
+        })
       },
     },
     permission: {
       hook: async (name: string, fn: (event: any) => any) => {
         permission[name] = fn
+        return registration(() => {
+          if (permission[name] === fn) delete permission[name]
+        })
       },
       reply: async (input: any) => {
         api.replies.push(input)
@@ -130,9 +146,19 @@ function fakeCtx(): FakeCtx {
       list: async () => api.pending,
     },
     event: {
-      subscribe: (options: { types?: string[] }) => {
+      subscribe: (options: { types?: string[]; signal?: AbortSignal }) => {
         api.subscribed += 1
         api.types = options?.types ?? null
+        const signal = options?.signal
+        if (signal) {
+          api.signals.push(signal)
+          signal.addEventListener?.("abort", () => {
+            api.aborted += 1
+            // One queue serves the fake feed, so it closes only when every
+            // subscriber has ended.
+            if (api.aborted >= api.subscribed) events.close()
+          })
+        }
         return events.stream
       },
     },
@@ -271,6 +297,156 @@ describe("flag off", () => {
   })
 })
 
+// ——— repeated setup ———
+
+describe("a replaced provider", () => {
+  test("hands an already-dispatched call to the live provider, never undecided", async () => {
+    const api = fakeCtx()
+    const parentID = "ses_two_setups"
+    const first = await start(api.ctx, () => true)
+    const stale = api.permission.evaluate
+    const second = await start(api.ctx, () => true)
+    const live = api.permission.evaluate
+    try {
+      expect(stale).not.toBe(live)
+      // No disposal happened here: the token alone retires it, and a retired
+      // handle is not evidence that anything enforces the ban.
+      expect(first.attached()).toBe(false)
+      expect(second.attached()).toBe(true)
+
+      // The live generation refuses a call it never observed: its documented
+      // fail-closed answer, and the answer the abort path relies on.
+      const liveEvent = assertEvent(parentID, "msg_live", "call_live")
+      expect((await live(liveEvent)).effect).toBe("deny")
+      expect(liveEvent.effect).toBe("deny")
+
+      // A call only the retired provider observed still needs an answer, and the
+      // host need not replay it to the replacement: the retired callback hands it
+      // to the live provider, whose own fail-closed reason names the missing
+      // entry. Returning nothing would leave the host's default to release it.
+      const staleEvent = assertEvent(parentID, "msg_stale", "call_stale")
+      const handed = await stale(staleEvent)
+      expect(handed?.effect).toBe("deny")
+      expect(handed?.reason).toContain("no admission record")
+      expect(staleEvent.effect).toBe("deny")
+
+      // A call both providers observed is judged by the live one on its own
+      // evidence, and the retired callback replays that judgment.
+      await api.tool.execute(
+        { prompt: "summarize the parser" },
+        { sessionID: parentID, messageID: "msg_ok", id: "call_ok", agent: "general" },
+      )
+      expect((await live(assertEvent(parentID, "msg_ok", "call_ok"))).effect).toBe("allow")
+      const staleOk = assertEvent(parentID, "msg_ok", "call_ok")
+      expect((await stale(staleOk))?.effect).toBe("allow")
+      expect(staleOk.effect).toBe("allow")
+    } finally {
+      second.dispose()
+      first.dispose()
+      api.close()
+    }
+  })
+
+  test("a decision that finds its generation retired delegates instead of stopping", async () => {
+    // The retirement lands inside the decision's own await: the first provider is
+    // parked reading the prompt when the second registration replaces it. The
+    // parked call must still be judged — by the live provider — not dropped.
+    const api = fakeCtx()
+    const parentID = "ses_mid_decision"
+    let release: (() => void) | null = null
+    let entered = false
+    const first = await start(api.ctx, () => true, {
+      readPrompt: async () => {
+        entered = true
+        await new Promise<void>((resolve) => (release = resolve))
+        return "summarize the parser"
+      },
+    })
+    const stale = api.permission.evaluate
+    try {
+      await api.tool.execute(
+        { prompt: "summarize the parser" },
+        { sessionID: parentID, messageID: "msg_mid", id: "call_mid", agent: "general" },
+      )
+      const inFlight = assertEvent(parentID, "msg_mid", "call_mid")
+      let decision: any = null
+      const pending = stale(inFlight).then((answer: any) => {
+        decision = answer
+      })
+      for (let tick = 0; tick < 200 && !entered; tick++) await sleep(2)
+      expect(entered).toBe(true)
+      expect(decision).toBeNull()
+
+      // The replacement registers while the first decision is parked.
+      const second = await start(api.ctx, () => true)
+      try {
+        release!()
+        await pending
+        // The live provider has no entry for this call: its own fail-closed
+        // answer, not the retired provider's silence.
+        expect(decision?.effect).toBe("deny")
+        expect(decision?.reason).toContain("no admission record")
+        expect(inFlight.effect).toBe("deny")
+      } finally {
+        second.dispose()
+      }
+    } finally {
+      first.dispose()
+      api.close()
+    }
+  })
+
+  test("disposing a replaced handle stops its wires and keeps its successor's", async () => {
+    const api = fakeCtx()
+    const first = await start(api.ctx, () => true)
+    const second = await start(api.ctx, () => true)
+    const liveEnforce = api.permission.evaluate
+    try {
+      expect(api.subscribed).toBe(2)
+      // Each registration was given the documented way to end its feed.
+      expect(api.signals).toHaveLength(2)
+
+      first.dispose()
+      expect(api.signals[0]?.aborted).toBe(true)
+      expect(api.aborted).toBe(1)
+      // A stale disposal must not remove the current generation's hooks.
+      expect(api.permission.evaluate).toBe(liveEnforce)
+      expect(typeof api.hooks["execute.after"]).toBe("function")
+      // Idempotent: a second call disposes nothing new.
+      first.dispose()
+      expect(api.aborted).toBe(1)
+
+      second.dispose()
+      expect(api.permission.evaluate).toBeUndefined()
+      expect(api.aborted).toBe(2)
+    } finally {
+      api.close()
+    }
+  })
+
+  test("turning the switch off retires the provider into the handover refusal", async () => {
+    const api = fakeCtx()
+    const first = await start(api.ctx, () => true)
+    const stale = api.permission.evaluate
+    const off = await start(api.ctx, () => false)
+    try {
+      expect(first.attached()).toBe(false)
+      expect(off.attached()).toBe(false)
+      // The old callback is still registered (nothing disposed it), and the
+      // switch alone is not what retires it. No provider replaces it, so there is
+      // nobody to hand the call to: it is refused, never released unjudged.
+      const event = assertEvent("ses_switch_off", "msg_1", "call_1")
+      const decision = await stale(event)
+      expect(decision?.effect).toBe("deny")
+      expect(String(decision?.reason)).toContain("enforcement handover is in progress")
+      expect(event.effect).toBe("deny")
+    } finally {
+      off.dispose()
+      api.close()
+    }
+  })
+})
+
 // ——— M9 / M10: the observer and the store ———
 
 describe("observer", () => {
@@ -312,6 +488,55 @@ describe("observer", () => {
         { sessionID: "ses_oversized", messageID: "msg_big", id: "call_big", agent: "general" },
       )
       expect(Object.keys(tasks("ses_oversized")).length).toBe(1)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("the shared gate refuses this provider on its own, without the review chain", async () => {
+    // This module has no review chain at all: every admission here is this
+    // provider's. A gate only the chain honoured would leave it open.
+    const parentID = "ses_gate_provider"
+    const reason = "an unconfirmed abort's ban could not be restored at startup, so this call is not admitted"
+    const { api, dispose, call } = await wired({ blocked: (id) => (id === parentID ? reason : null) })
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      const event = assertEvent(parentID, "msg_1", "call_1")
+      const decision = await api.permission.evaluate(event)
+      expect(decision.effect).toBe("deny")
+      expect(decision.reason).toContain("could not be restored")
+      expect(event.effect).toBe("deny")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("a scoped refusal leaves a session outside its scope admitted", async () => {
+    const blocked = "ses_gate_scope_a"
+    const outside = "ses_gate_scope_b"
+    const reason = "an unconfirmed abort's ban could not be restored at startup, so this call is not admitted"
+    const { api, dispose, call } = await wired({ blocked: (id) => (id === blocked ? reason : null) })
+    try {
+      await call("summarize the parser", "msg_1", "call_1", blocked)
+      await call("summarize the parser", "msg_1", "call_1", outside)
+      expect((await api.permission.evaluate(assertEvent(blocked, "msg_1", "call_1"))).effect).toBe("deny")
+      // The outside session is a normal call: the gate names exactly its scope.
+      expect((await api.permission.evaluate(assertEvent(outside, "msg_1", "call_1"))).effect).toBe("allow")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("a global refusal leaves no session admitted, not only the recorded ones", async () => {
+    const { api, dispose, call } = await wired({
+      blocked: () => "the abort operation record is corrupt, so this call is not admitted",
+    })
+    try {
+      const sessionID = "ses_gate_global"
+      await call("summarize the parser", "msg_1", "call_1", sessionID)
+      const decision = await api.permission.evaluate(assertEvent(sessionID, "msg_1", "call_1"))
+      expect(decision.effect).toBe("deny")
+      expect(decision.reason).toContain("the abort operation record is corrupt")
     } finally {
       dispose()
     }
@@ -400,6 +625,273 @@ describe("enforcement", () => {
       const untouched = await api.permission.evaluate(other)
       expect(untouched.decision).toBe("allow")
       expect(other.effect).toBe("allow")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("the verdict is taken in the block that reads the gate, so a queued mark cannot land between them", async () => {
+    // The read is the last step before this provider answers the call. A read that
+    // queues work is the hazard: if the answer travelled back across an await, that
+    // work would run between the read and the verdict, and an abort that started in
+    // it would find the call already released. The verdict must be taken in the
+    // block that read the gate.
+    const parentID = "ses_release_block"
+    const { markAbortStarted, abortStarted, resetAbortMarks } = await import("./abort.ts")
+    const seen: boolean[] = []
+    let reads = 0
+    const { api, dispose, call } = await wired({
+      blocked: () => {
+        reads += 1
+        // The second read is the one before the verdict; the first is the entry.
+        if (reads === 2) void Promise.resolve().then(() => markAbortStarted([parentID]))
+        return null
+      },
+      evaluate: (input: any, records: any[], sessionBan: any) => {
+        seen.push(abortStarted(parentID))
+        return rules.verdict(input, records, sessionBan)
+      },
+    })
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      const event = assertEvent(parentID, "msg_1", "call_1")
+      const decision = await api.permission.evaluate(event)
+      expect(decision.decision).toBe("allow")
+      // Decided before the queued mark ran, and the mark did run.
+      expect(seen).toEqual([false])
+      expect(abortStarted(parentID)).toBe(true)
+    } finally {
+      resetAbortMarks()
+      dispose()
+    }
+  })
+
+  test("an abort that lands while the prompt is being read refuses the allow", async () => {
+    // readPrompt is an await, and this provider is an admission path of its own:
+    // with the chain off it is the only one, so the shared gate is asked again
+    // before the verdict's allow can take effect.
+    let blocked: string | null = null
+    let release: (() => void) | null = null
+    let reading: (() => void) | null = null
+    const readStarted = new Promise<void>((resolve) => (reading = resolve))
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const api = fakeCtx()
+    const host = createAdmissionHost({
+      ctx: api.ctx,
+      blocked: () => blocked,
+      readPrompt: async () => {
+        reading?.()
+        await gate
+        return null
+      },
+    })
+    await attach(api.ctx, host)
+    const parentID = "ses_await_abort"
+    try {
+      await api.tool.execute({ prompt: "summarize the parser" }, { sessionID: parentID, messageID: "msg_a", id: "call_a", agent: "general" })
+      const event = assertEvent(parentID, "msg_a", "call_a")
+      const pending = api.permission.evaluate(event)
+      await readStarted
+      // The abort begins and its ban lands before the read returns.
+      blocked = "an abort covers this session, so this call is not admitted"
+      release?.()
+      const decision = await pending
+      expect(decision.decision).not.toBe("allow")
+      expect(event.effect).toBe("deny")
+      expect(String(event.message ?? "")).toContain("an abort covers this session")
+    } finally {
+      host.close()
+      api.close()
+    }
+  })
+
+  test("a discovery hold opened during the prompt read keeps the release waiting", async () => {
+    // The entry gate ran before this hold existed, so its answer is stale. The
+    // read is the last await before the call is released, and an abort that starts
+    // inside it marks only its own session while an undiscovered descendant stays
+    // unmarked. The release must wait the hold out and then read the restriction
+    // again; releasing on the entry answer would admit the descendant.
+    let blocked: string | null = null
+    let holding = false
+    let holdPromise: Promise<void> | null = null
+    let releaseHold: (() => void) | null = null
+    let releaseRead: (() => void) | null = null
+    let reading: (() => void) | null = null
+    const readStarted = new Promise<void>((resolve) => (reading = resolve))
+    const readGate = new Promise<void>((resolve) => (releaseRead = resolve))
+    const api = fakeCtx()
+    const host = createAdmissionHost({
+      ctx: api.ctx,
+      blocked: () => blocked,
+      hold: () => holdPromise ?? Promise.resolve(),
+      holdInForce: () => holding,
+      readPrompt: async () => {
+        reading?.()
+        await readGate
+        return null
+      },
+    })
+    await attach(api.ctx, host)
+    const parentID = "ses_hold_in_read"
+    try {
+      await api.tool.execute({ prompt: "summarize the parser" }, { sessionID: parentID, messageID: "msg_hr", id: "call_hr", agent: "general" })
+      const event = assertEvent(parentID, "msg_hr", "call_hr")
+      let settled: any = null
+      const pending = api.permission.evaluate(event).then((answer: any) => {
+        settled = answer
+      })
+      await readStarted
+
+      // The abort starts while the prompt is being read.
+      holding = true
+      holdPromise = new Promise<void>((resolve) => (releaseHold = resolve))
+      releaseRead!()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      // Waiting, not deciding: the entry answer was read before the hold opened.
+      expect(settled).toBeNull()
+
+      // The scan returns and names this descendant.
+      blocked = "an abort covers this session, so this call is not admitted"
+      holding = false
+      releaseHold!()
+      await pending
+      expect(settled.decision).not.toBe("allow")
+      expect(event.effect).toBe("deny")
+      expect(String(event.message ?? "")).toContain("an abort covers this session")
+    } finally {
+      host.close()
+      api.close()
+    }
+  })
+
+  test("an admission waits out a discovery hold instead of admitting inside it", async () => {
+    // A pending abort marks only its selected session before the scan, so a
+    // descendant's identity is unknown until the listing returns. The gate has
+    // nothing to say about it yet, which is exactly why this route must wait.
+    let blocked: string | null = null
+    let release: (() => void) | null = null
+    const discovery = new Promise<void>((resolve) => (release = resolve))
+    const { api, dispose, call } = await wired({ blocked: () => blocked, hold: () => discovery })
+    const parentID = "ses_discovery_wait"
+    try {
+      await call("summarize the parser", "msg_w1", "call_w1", parentID)
+      const event = assertEvent(parentID, "msg_w1", "call_w1")
+      let decision: any = null
+      const pending = api.permission.evaluate(event).then((answer: any) => {
+        decision = answer
+      })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      // Nothing decided while the scan is in flight: this is a wait, not a pass.
+      expect(decision).toBeNull()
+
+      // The scan ends and the abort's scope now covers this session.
+      blocked = "an abort covers this session, so this call is not admitted"
+      release!()
+      await pending
+      expect(decision.decision).not.toBe("allow")
+      expect(event.effect).toBe("deny")
+      expect(String(event.message ?? "")).toContain("an abort covers this session")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("disposing the provider retires a decision that is already in flight", async () => {
+    // The call is parked inside its own decision when the handle is disposed. Its
+    // generation must be dead by then: a disposed host that still looked current
+    // would apply the allow it computed from its own entries instead of refusing
+    // or delegating, and the call would run on a provider nobody owns.
+    const api = fakeCtx()
+    const parentID = "ses_disposed_mid"
+    let release: (() => void) | null = null
+    let entered = false
+    const handle = await start(api.ctx, () => true, {
+      readPrompt: async () => {
+        entered = true
+        await new Promise<void>((resolve) => (release = resolve))
+        return null
+      },
+    })
+    const evaluate = api.permission.evaluate
+    try {
+      await api.tool.execute(
+        { prompt: "summarize the parser" },
+        { sessionID: parentID, messageID: "msg_killed", id: "call_killed", agent: "general" },
+      )
+      const event = assertEvent(parentID, "msg_killed", "call_killed")
+      let decision: any = null
+      const pending = evaluate(event).then((answer: any) => {
+        decision = answer
+      })
+      for (let tick = 0; tick < 200 && !entered; tick++) await sleep(2)
+      expect(entered).toBe(true)
+      expect(decision).toBeNull()
+
+      // Disposed mid-decision, with no provider registered to replace it.
+      handle.dispose()
+      expect(handle.attached()).toBe(false)
+      expect(handle.enforcing()).toBe(false)
+      release!()
+      await pending
+      expect(decision?.effect).toBe("deny")
+      expect(String(decision?.reason)).toContain("enforcement handover is in progress")
+      expect(event.effect).toBe("deny")
+    } finally {
+      api.close()
+    }
+  })
+
+  test("a provider whose feed failed still refuses a call, and says so", async () => {
+    // The permission hook attached, the event feed did not. The full rule needs
+    // both, but the permission hook alone can still refuse: a posture that called
+    // this provider inactive would contradict the callback in front of it.
+    const api = fakeCtx()
+    delete api.ctx.event.subscribe
+    const handle = await start(api.ctx, () => true)
+    try {
+      expect(handle.attached()).toBe(false)
+      expect(handle.enforcing()).toBe(true)
+      const event = assertEvent("ses_feed_lost", "msg_feed", "call_feed")
+      const decision = await api.permission.evaluate(event)
+      expect(decision.effect).toBe("deny")
+      expect(event.effect).toBe("deny")
+    } finally {
+      handle.dispose()
+      api.close()
+    }
+  })
+
+  test("a hold opened during the wait's own yield keeps the admission waiting", async () => {
+    // The depth-zero race at this surface: no hold is open when `enforce` asks,
+    // so `hold` returns at once — and the caller's await still yields. The abort
+    // below opens its hold in that gap after marking only its own session, so the
+    // gate would read clean. The probe must put the admission back to waiting.
+    let blocked: string | null = null
+    let depth = 0
+    let release: (() => void) | null = null
+    const hold = async (): Promise<void> => {
+      if (depth > 0) await new Promise<void>((resolve) => (release = resolve))
+    }
+    const { api, dispose, call } = await wired({ blocked: () => blocked, hold, holdInForce: () => depth > 0 })
+    const parentID = "ses_gap_wait"
+    try {
+      await call("summarize the parser", "msg_gap", "call_gap", parentID)
+      const event = assertEvent(parentID, "msg_gap", "call_gap")
+      let decision: any = null
+      const pending = api.permission.evaluate(event).then((answer: any) => {
+        decision = answer
+      })
+      // The abort opens its hold in the gap between the wait and the gate read.
+      depth = 1
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(decision).toBeNull()
+
+      blocked = "an abort covers this session, so this call is not admitted"
+      depth = 0
+      release!()
+      await pending
+      expect(decision.decision).not.toBe("allow")
+      expect(String(event.message ?? "")).toContain("an abort covers this session")
     } finally {
       dispose()
     }
@@ -847,6 +1339,22 @@ async function openHold(host: any, call: any, parentID: string, prompt = "summar
   return { event, decision }
 }
 
+/**
+ * A held call whose third assert of the same key is admitted, so the prompt its
+ * hold opened is granted instead of left for a stale reject.
+ */
+async function wiredGrant() {
+  let calls = 0
+  return wired({
+    evaluate: (input: any, records: any[], sessionBan: any) => {
+      calls += 1
+      return calls <= 2
+        ? verdict(input, records, sessionBan)
+        : { effect: "allow", row: "5", reason: "the same task, after a user turn", generation: 2, retire: false }
+    },
+  })
+}
+
 describe("hold and settlement", () => {
   test("a hold asks the host and writes the call key digest onto the event", async () => {
     const { api, host, dispose, call } = await wired({})
@@ -917,6 +1425,45 @@ describe("hold and settlement", () => {
     }
   })
 
+  test("calls whose identity parts join to the same string never share an entry", async () => {
+    // Joined with a separator, `b|c` + `d` and `b` + `c|d` are one string, so a
+    // concatenated key would let the second call find the first one's approved
+    // entry and replay its answer without the fingerprint check. The key is one
+    // JSON array of the parts, so the two calls stay two calls.
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_identity_collide"
+    const prompt = "summarize the parser"
+    try {
+      await call(prompt, "msg_1", "call_1", parentID)
+      await host.enforce(assertEvent(parentID, "msg_1", "call_1"))
+      await host.abort({ parentID, fingerprint: fingerprint(prompt), scope: "task", by: "user", cause: "interrupt" })
+
+      // One call is held and approved by the human.
+      await call(prompt, "b|c", "d", parentID)
+      const approved = assertEvent(parentID, "b|c", "d")
+      expect((await host.enforce(approved)).decision).toBe("hold")
+      await answer(api, parentID, approved, "once")
+      await until(() => auditLines(parentID).some((line) => line.event === "hold_approved"))
+
+      // The other call must not inherit that approval.
+      await call(prompt, "b", "c|d", parentID)
+      const other = assertEvent(parentID, "b", "c|d")
+      const decision = await host.enforce(other)
+      // It is a first-time call: the host asks the human. Under a concatenated
+      // key it would be an allow replays of the approved call.
+      expect(decision.decision).toBe("hold")
+      expect(other.effect).toBe("ask")
+
+      // The key itself: an array of the parts, and only strings identify a call.
+      expect(callKey("ses_id", "b|c", "d")).not.toBe(callKey("ses_id", "b", "c|d"))
+      expect(callKey("ses_id", 1 as any, "d")).toBe("")
+      expect(callKey("ses_id", "b", { nested: 1 } as any)).toBe("")
+      expect(callKey("", "b", "d")).toBe("")
+    } finally {
+      dispose()
+    }
+  })
+
   test("always mints for this call but is audited as a downgrade, so nothing persists", async () => {
     const { api, host, dispose, call } = await wired({})
     const parentID = "ses_hold_always"
@@ -958,6 +1505,111 @@ describe("hold and settlement", () => {
     }
   })
 
+  test("a grant reply that throws is audited as unobserved, never a host refusal", async () => {
+    const { api, host, dispose, call } = await wiredGrant()
+    const parentID = "ses_grant_threw"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      api.ctx.permission.reply = async (input: any) => {
+        api.replies.push(input)
+        throw new Error("the transport failed")
+      }
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).decision).toBe("allow")
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_uncancellable"))
+
+      // The once was attempted once; nothing about its outcome was observed.
+      expect(api.replies).toHaveLength(1)
+      expect(api.replies[0]).toMatchObject({ sessionID: parentID, requestID: id, decision: "once" })
+      const line = auditLines(parentID).find((item) => item.event === "hold_uncancellable")
+      expect(String(line?.detail)).toContain("the call was admitted; no reply outcome was observed")
+      expect(String(line?.detail)).not.toContain("refused")
+      // The prompt was not closed by a refusal that never happened: the record
+      // still stands for the next abort, which observes the same nothing.
+      expect(await revokeOpenPrompts([parentID])).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 1,
+        unsupported: 0,
+        openDetail: [{ requestID: id, reason: "no-outcome" }],
+      })
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a host with no reply primitive grants nothing and says the outcome was unobserved", async () => {
+    const { api, host, dispose, call } = await wiredGrant()
+    const parentID = "ses_grant_unsupported"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      delete (api.ctx.permission as any).reply
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).decision).toBe("allow")
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_uncancellable"))
+
+      // No call reached the host, so the audit says nothing was observed.
+      expect(api.replies).toEqual([])
+      const line = auditLines(parentID).find((item) => item.event === "hold_uncancellable")
+      expect(String(line?.detail)).toContain("the call was admitted; no reply outcome was observed")
+      expect(String(line?.detail)).not.toContain("refused")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a grant reply the host declined keeps the refused wording", async () => {
+    const { api, host, dispose, call } = await wiredGrant()
+    const parentID = "ses_grant_refused"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      // The host took the call and answered `false`: the one observed refusal.
+      api.ctx.permission.reply = async () => false
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).decision).toBe("allow")
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_uncancellable"))
+
+      const line = auditLines(parentID).find((item) => item.event === "hold_uncancellable")
+      expect(String(line?.detail)).toContain("the call was admitted; the self-reply was refused")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a grant the host takes closes the prompt with no audit", async () => {
+    const { api, host, dispose, call } = await wiredGrant()
+    const parentID = "ses_grant_closed"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).decision).toBe("allow")
+      // The grant is fire-and-forget: the reply lands a tick later, so the
+      // negative audit check waits for the reply first.
+      await until(() => api.replies.length === 1)
+
+      expect(api.replies[0]).toMatchObject({ sessionID: parentID, requestID: id, decision: "once" })
+      expect(auditLines(parentID).some((item) => item.event === "hold_uncancellable")).toBe(false)
+      // The host took the grant, so no prompt of this session is left to find.
+      expect(await revokeOpenPrompts([parentID])).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 0,
+        unsupported: 0,
+        openDetail: [],
+      })
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
   test("the deadline self-rejects a solo request with a message and audits hold_expired", async () => {
     const timers: { fn: () => void; ms: number }[] = []
     const { api, host, dispose, call } = await wired({
@@ -983,6 +1635,10 @@ describe("hold and settlement", () => {
       expect(api.replies[0]).toMatchObject({ sessionID: parentID, requestID: id, decision: "reject" })
       expect(api.replies[0].message).toContain("expired after 60000 ms")
       expect(auditLines(parentID).find((line) => line.event === "hold_expired").perId).toBe(id)
+      // The ordinary expiry is the one deny Jev owns, and the wording says so.
+      expect(String(auditLines(parentID).find((line) => line.event === "hold_expired").detail)).toContain(
+        "Jev rejected the call",
+      )
 
       // The host's frame for Jev's own reject carries no author: it must not be
       // read back as a human's answer.
@@ -1031,7 +1687,8 @@ describe("hold and settlement", () => {
     }
   })
 
-  test("a second pending permission in the session skips the self-reject", async () => {    const timers: { fn: () => void; ms: number }[] = []
+  test("a second pending permission in the session skips the self-reject", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
     const { api, host, dispose, call } = await wired({
       holdMs: 60_000,
       schedule: (fn: () => void, ms: number) => {
@@ -1060,6 +1717,319 @@ describe("hold and settlement", () => {
       expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).effect).toBe("ask")
       expect(deniedCalls(parentID)).toEqual([callKey(parentID, "msg_1", "call_1")])
     } finally {
+      dispose()
+    }
+  })
+
+  test("a human reject during the parked expiry stands, with no Jev-rejected line", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
+    const { api, host, dispose, call } = await wired({
+      holdMs: 60_000,
+      schedule: (fn: () => void, ms: number) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+    })
+    const parentID = "ses_expire_human_reject"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      const pending = [{ id, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message }]
+      // Park the expiry's one yield: the pending-list read.
+      let releaseList: (() => void) | null = null
+      api.ctx.permission.list = async () => {
+        await new Promise<void>((resolve) => {
+          releaseList = resolve
+        })
+        return pending
+      }
+      timers[0].fn()
+      for (let turn = 0; turn < 400 && !releaseList; turn++) await sleep(2)
+
+      await api.feed(repliedFrame(parentID, id, "reject"))
+      releaseList!()
+      await until(() => auditLines(parentID).some((line) => line.event === "hold_rejected"))
+      await sleep(10)
+
+      // The human's reject is the settlement. Jev sent no reply and expired
+      // nothing, so no line may claim either.
+      expect(api.replies).toEqual([])
+      const line = auditLines(parentID).find((item) => item.event === "hold_rejected")
+      expect(String(line?.detail)).toContain("a human rejected the call")
+      expect(auditLines(parentID).some((item) => item.event === "hold_expired")).toBe(false)
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).effect).toBe("deny")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a human once during the parked expiry mints, and the deny never lands", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
+    const { api, host, dispose, call } = await wired({
+      holdMs: 60_000,
+      schedule: (fn: () => void, ms: number) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+    })
+    const parentID = "ses_expire_human_once"
+    const prompt = "summarize the parser"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      const pending = [{ id, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message }]
+      let releaseList: (() => void) | null = null
+      api.ctx.permission.list = async () => {
+        await new Promise<void>((resolve) => {
+          releaseList = resolve
+        })
+        return pending
+      }
+      timers[0].fn()
+      for (let turn = 0; turn < 400 && !releaseList; turn++) await sleep(2)
+
+      await api.feed(repliedFrame(parentID, id, "once"))
+      await until(() => auditLines(parentID).some((line) => line.event === "hold_approved"))
+      releaseList!()
+      await sleep(20)
+
+      // The approval is the settlement: it mints, the expiry fabricates
+      // nothing, and no reply of Jev's was ever sent.
+      expect(api.replies).toEqual([])
+      const line = auditLines(parentID).find((item) => item.event === "hold_approved")
+      expect(String(line?.detail)).toContain("generation 2")
+      expect(auditLines(parentID).some((item) => item.event === "hold_expired")).toBe(false)
+      expect(tasks(parentID)[fingerprint(prompt)].generation).toBe(2)
+      const after = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(after.effect).toBe("allow")
+      expect(after.generation).toBe(2)
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a once the covering gate refuses keeps its refusal line, and the expiry claims nothing", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
+    let covering = false
+    const { api, host, dispose, call } = await wired({
+      holdMs: 60_000,
+      schedule: (fn: () => void, ms: number) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      blocked: () => (covering ? "a covering refusal is in force" : null),
+    })
+    const parentID = "ses_expire_gate_refused"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      const pending = [{ id, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message }]
+      let releaseList: (() => void) | null = null
+      api.ctx.permission.list = async () => {
+        await new Promise<void>((resolve) => {
+          releaseList = resolve
+        })
+        return pending
+      }
+      timers[0].fn()
+      for (let turn = 0; turn < 400 && !releaseList; turn++) await sleep(2)
+
+      covering = true
+      await api.feed(repliedFrame(parentID, id, "once"))
+      // The covering gate decides at once, so the refusal line lands during
+      // the park: the once's fate is on the record before the expiry resumes.
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_reply_refused"))
+      releaseList!()
+      await sleep(20)
+
+      expect(api.replies).toEqual([])
+      expect(String(auditLines(parentID).find((item) => item.event === "hold_reply_refused")?.detail)).toContain(
+        "the approval was not minted: a covering refusal is in force",
+      )
+      expect(auditLines(parentID).some((item) => item.event === "hold_answer_pending")).toBe(false)
+      expect(auditLines(parentID).some((item) => item.event === "hold_expired")).toBe(false)
+      // The covering refusal denies the next assert; the refused once mints nothing.
+      const after = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(after.effect).toBe("deny")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a gated once whose mint lands before the expiry resumes stands on its own", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
+    let holdParked = false
+    let releaseGateNow: (() => void) | null = null
+    const { api, host, dispose, call } = await wired({
+      holdMs: 60_000,
+      schedule: (fn: () => void, ms: number) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      hold: () =>
+        holdParked
+          ? new Promise<void>((resolve) => {
+              releaseGateNow = resolve
+            })
+          : Promise.resolve(),
+    })
+    const parentID = "ses_expire_gate_short"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      const pending = [{ id, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message }]
+      let releaseList: (() => void) | null = null
+      api.ctx.permission.list = async () => {
+        await new Promise<void>((resolve) => {
+          releaseList = resolve
+        })
+        return pending
+      }
+      holdParked = true
+      timers[0].fn()
+      for (let turn = 0; turn < 400 && !releaseList; turn++) await sleep(2)
+
+      // The once lands inside the park, and its mint parks on the discovery
+      // hold. The scan ends first, so the mint lands before the expiry resumes.
+      await api.feed(repliedFrame(parentID, id, "once"))
+      for (let turn = 0; turn < 400 && !releaseGateNow; turn++) await sleep(2)
+      releaseGateNow!()
+      await until(() => auditLines(parentID).some((line) => line.event === "hold_approved"))
+      releaseList!()
+      await sleep(10)
+
+      // The approval stands; the expiry neither fabricated a reject nor named
+      // an answer that had already minted.
+      expect(api.replies).toEqual([])
+      expect(auditLines(parentID).some((line) => line.event === "hold_answer_pending")).toBe(false)
+      expect(auditLines(parentID).some((line) => line.event === "hold_expired")).toBe(false)
+      holdParked = false
+      const after = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(after.effect).toBe("allow")
+      expect(after.generation).toBe(2)
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a once still gated at the deadline is named, never turned into a Jev reject", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
+    let holdParked = false
+    let releaseGateNow: (() => void) | null = null
+    const { api, host, dispose, call } = await wired({
+      holdMs: 60_000,
+      schedule: (fn: () => void, ms: number) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      hold: () =>
+        holdParked
+          ? new Promise<void>((resolve) => {
+              releaseGateNow = resolve
+            })
+          : Promise.resolve(),
+    })
+    const parentID = "ses_expire_gate_long"
+    const prompt = "summarize the parser"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+      const pending = [{ id, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message }]
+      let releaseList: (() => void) | null = null
+      api.ctx.permission.list = async () => {
+        await new Promise<void>((resolve) => {
+          releaseList = resolve
+        })
+        return pending
+      }
+      holdParked = true
+      timers[0].fn()
+      for (let turn = 0; turn < 400 && !releaseList; turn++) await sleep(2)
+
+      // The once lands inside the park and its mint parks on the discovery
+      // hold. The list releases while the admission is still gated.
+      await api.feed(repliedFrame(parentID, id, "once"))
+      for (let turn = 0; turn < 400 && !releaseGateNow; turn++) await sleep(2)
+      releaseList!()
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_answer_pending"))
+
+      // The expiry names the answer it found and claims no Jev action: no
+      // reject was sent, no deny was settled, and nothing vanished.
+      expect(api.replies).toEqual([])
+      const line = auditLines(parentID).find((item) => item.event === "hold_answer_pending")
+      expect(String(line?.detail)).toContain("a human answered the hold before the deadline; the approval was still being admitted")
+      expect(auditLines(parentID).some((item) => item.event === "hold_expired")).toBe(false)
+      expect(deniedCalls(parentID)).toEqual([callKey(parentID, "msg_1", "call_1")])
+
+      // The gate lifts: the once mints, and the record shows it.
+      releaseGateNow!()
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_approved"))
+      expect(tasks(parentID)[fingerprint(prompt)].generation).toBe(2)
+      holdParked = false
+      const after = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(after.effect).toBe("allow")
+      expect(after.generation).toBe(2)
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a frame that closes the record before the deadline takes the expiry's reply with it", async () => {
+    const timers: { fn: () => void; ms: number }[] = []
+    let holdParked = false
+    let releaseGateNow: (() => void) | null = null
+    const { api, host, dispose, call } = await wired({
+      holdMs: 60_000,
+      schedule: (fn: () => void, ms: number) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      hold: () =>
+        holdParked
+          ? new Promise<void>((resolve) => {
+              releaseGateNow = resolve
+            })
+          : Promise.resolve(),
+    })
+    const parentID = "ses_expire_frame_first"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const id = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, id))
+
+      // The human answers before the deadline, and the approval's admission
+      // parks on an open discovery hold, so the record closes while the entry
+      // is still held.
+      holdParked = true
+      await api.feed(repliedFrame(parentID, id, "once"))
+      for (let turn = 0; turn < 400 && !releaseGateNow; turn++) await sleep(2)
+
+      // The deadline fires while the answer is still being admitted. The
+      // attempt re-reads the closed record: no reject is sent for a request
+      // the host already answered, and the expiry names the pending answer.
+      timers[0].fn()
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_answer_pending"))
+      expect(api.replies).toEqual([])
+      expect(auditLines(parentID).some((item) => item.event === "hold_expired")).toBe(false)
+
+      releaseGateNow!()
+      await until(() => auditLines(parentID).some((item) => item.event === "hold_approved"))
+      holdParked = false
+      const after = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(after.effect).toBe("allow")
+      expect(after.generation).toBe(2)
+    } finally {
+      resetOpenPrompts()
       dispose()
     }
   })
@@ -1348,6 +2318,387 @@ describe("approval", () => {
   })
 })
 
+describe("a late reply", () => {
+  const COVERED = "an abort covers this session, so this call is not admitted"
+
+  test("an approval after the ban is refused: no generation, the hold stays, the refusal is recorded", async () => {
+    // The frame arrives after the ban is written. The reply path mints what
+    // admits the call, so it runs the same admission every release does.
+    let blocked: string | null = null
+    const { api, host, dispose, call } = await wired({ blocked: () => blocked })
+    const parentID = "ses_late_reply_ban"
+    const prompt = "summarize the parser"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const before = tasks(parentID)[fingerprint(prompt)].generation
+      blocked = COVERED
+
+      await answer(api, parentID, event, "once")
+      await until(() => auditLines(parentID).some((line) => line.event === "hold_reply_refused"))
+
+      // Nothing minted: the persisted generation is the one the hold opened under.
+      expect(tasks(parentID)[fingerprint(prompt)].generation).toBe(before)
+      expect(auditLines(parentID).some((line) => line.event === "hold_approved")).toBe(false)
+      const refused = auditLines(parentID).find((line) => line.event === "hold_reply_refused")
+      expect(String(refused.detail)).toContain(COVERED)
+      expect(String(refused.perId)).toMatch(/^per_/)
+
+      // The hold stays open, and the next assert faces the gate again.
+      blocked = null
+      const again = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(again.effect).toBe("ask")
+      expect(again.decision).toBe("hold")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("an approval during discovery waits the scan out and is refused when it covers the session", async () => {
+    // The descendants are unknown until the scan returns, so a reply inside that
+    // window must wait for the hold and then read the restriction. Deciding on a
+    // scope that is not written yet is the late approval this closes.
+    let blocked: string | null = null
+    let parked = false
+    let holdGate: Promise<void> = Promise.resolve()
+    let releaseHold: (() => void) | null = null
+    const { api, host, dispose, call } = await wired({
+      blocked: () => blocked,
+      hold: () => holdGate,
+      holdInForce: () => parked,
+    })
+    const parentID = "ses_late_reply_discovery"
+    const prompt = "summarize the parser"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const before = tasks(parentID)[fingerprint(prompt)].generation
+
+      parked = true
+      holdGate = new Promise<void>((resolve) => (releaseHold = resolve))
+      await answer(api, parentID, event, "once")
+      await sleep(10)
+      // Parked: the reply has been decided neither way, and nothing was minted.
+      expect(tasks(parentID)[fingerprint(prompt)].generation).toBe(before)
+      expect(auditLines(parentID).some((line) => line.event === "hold_reply_refused")).toBe(false)
+
+      // Discovery returns and names the session, so the reply is refused.
+      blocked = COVERED
+      parked = false
+      releaseHold?.()
+      await until(() => auditLines(parentID).some((line) => line.event === "hold_reply_refused"))
+
+      expect(tasks(parentID)[fingerprint(prompt)].generation).toBe(before)
+      expect(auditLines(parentID).some((line) => line.event === "hold_approved")).toBe(false)
+      expect(String(auditLines(parentID).find((line) => line.event === "hold_reply_refused").detail)).toContain(COVERED)
+    } finally {
+      dispose()
+    }
+  })
+})
+
+describe("unified abort and native holds", () => {
+  test("an open hold is revoked and its prompt rejected", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_hold"
+    const prompt = "summarize the parser"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      const before = tasks(parentID)[fingerprint(prompt)].generation
+
+      const result = await revokeOpenPrompts([parentID])
+      expect(result).toEqual({ revoked: 1, failed: 0, unconfirmed: 0, unsupported: 0, openDetail: [] })
+      // The prompt is what the host opened, so refusing it is the only route that
+      // ends it: the entry alone cannot close it.
+      expect(api.replies).toEqual([{ sessionID: parentID, requestID: perId, decision: "reject" }])
+      expect(
+        auditLines(parentID).some((line) => line.event === "deny" && String(line.detail).includes("revocation:abort")),
+      ).toBe(true)
+
+      // A late answer to the same prompt mints nothing, and the call stays denied.
+      await api.feed(repliedFrame(parentID, perId, "once"))
+      await sleep(10)
+      expect(tasks(parentID)[fingerprint(prompt)].generation).toBe(before)
+      expect(auditLines(parentID).some((line) => line.event === "hold_approved")).toBe(false)
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).effect).toBe("deny")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a hold with no correlated prompt is unconfirmed, never a claimed release", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_unnamed"
+    try {
+      await openHold(host, call, parentID)
+      const result = await revokeOpenPrompts([parentID])
+      // Nothing was asked, so there is no prompt to reject and no proof none
+      // opened: the count says exactly that.
+      expect(result).toEqual({ revoked: 0, failed: 0, unconfirmed: 1, unsupported: 0, openDetail: [{ requestID: null, reason: "unnamed" }] })
+      expect(api.replies).toEqual([])
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a reply the host received and declined is reported as a refusal", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_refused"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      // The host took the call and answered `false`: that is the one observed
+      // refusal, and the only one the receipt may attribute to the host.
+      api.ctx.permission.reply = async () => false
+      const result = await revokeOpenPrompts([parentID])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 1,
+        unconfirmed: 0,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "refused" }],
+      })
+      expect(String(auditLines(parentID).find((line) => line.event === "hold_uncancellable").detail)).toContain(
+        "the self-reply was refused",
+      )
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a reply that throws is unobserved, never a claimed host refusal", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_threw"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      api.ctx.permission.reply = async () => {
+        throw new Error("the transport failed")
+      }
+      const result = await revokeOpenPrompts([parentID])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 1,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "no-outcome" }],
+      })
+      expect(String(auditLines(parentID).find((line) => line.event === "hold_uncancellable").detail)).toContain(
+        "no reply outcome was observed",
+      )
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a reject skipped for another pending permission is a local fact, not a refusal", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_skip_pending"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      api.pending = [
+        { id: perId, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message },
+        { id: nextPerId(), sessionID: parentID, action: "shell", resources: ["bash"] },
+      ]
+      const result = await revokeOpenPrompts([parentID])
+      expect(api.replies).toEqual([])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 1,
+        unconfirmed: 0,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "skipped-pending" }],
+      })
+      expect(auditLines(parentID).some((line) => line.event === "hold_fanout_skipped")).toBe(true)
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a reject skipped because the pending list is unreadable says so locally", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_skip_unreadable"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      api.ctx.permission.list = async () => {
+        throw new Error("the list is down")
+      }
+      const result = await revokeOpenPrompts([parentID])
+      expect(api.replies).toEqual([])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 1,
+        unconfirmed: 0,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "skipped-unreadable" }],
+      })
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a host with no reply primitive is unsupported, and the entry is still denied", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_unsupported"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      delete (api.ctx.permission as any).reply
+      const result = await revokeOpenPrompts([parentID])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 0,
+        unsupported: 1,
+        openDetail: [{ requestID: perId, reason: "unsupported" }],
+      })
+      // The release is still refused: the entry cannot be answered.
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).effect).toBe("deny")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a hold outside the scope is left alone", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_scope"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      await api.feed(askedFrame(parentID, event.message))
+      const result = await revokeOpenPrompts(["ses_somewhere_else"])
+      expect(result).toEqual({ revoked: 0, failed: 0, unconfirmed: 0, unsupported: 0, openDetail: [] })
+      expect(api.replies).toEqual([])
+      // Still open and still asking.
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).effect).toBe("ask")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a named prompt whose reply surface fails is unconfirmed by its request id", async () => {
+    // The abort cannot initiate a reply here, so nothing was attempted and no
+    // closure was observed. The prompt is named, and saying it was never named
+    // would send an operator looking for a prompt that has a request id.
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_surface"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      Object.defineProperty(api.ctx.permission, "reply", {
+        configurable: true,
+        get() {
+          throw new Error("the host's reply surface failed")
+        },
+      })
+
+      const result = await revokeOpenPrompts([parentID])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 1,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "no-outcome" }],
+      })
+      // The entry is still denied: the abort's own protection never depended on
+      // the reply surface.
+      expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).effect).toBe("deny")
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a prompt whose own reply is in flight is reported by its request id", async () => {
+    // The hold deadline started the reply, so `jevReplied` is set while this
+    // abort looks: the registry must not start a second one or claim the prompt
+    // was never named.
+    const { api, host, dispose, call } = await wired({ holdMs: 5 })
+    const parentID = "ses_revoke_in_flight"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      let release: (() => void) | null = null
+      api.ctx.permission.reply = async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+      }
+      await api.feed(askedFrame(parentID, event.message, perId))
+      for (let turn = 0; turn < 400 && !release; turn++) await sleep(5)
+      expect(release).not.toBeNull()
+
+      const result = await revokeOpenPrompts([parentID])
+      expect(result).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 1,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "in-flight" }],
+      })
+
+      // The tenant of the record is the reply already in flight: releasing it is
+      // what closes the prompt.
+      release!()
+      await sleep(10)
+      expect(await revokeOpenPrompts([parentID])).toEqual({
+        revoked: 0,
+        failed: 0,
+        unconfirmed: 0,
+        unsupported: 0,
+        openDetail: [],
+      })
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+
+  test("a confirmed revocation clears the record, so the next abort reports clean", async () => {
+    // The refusal below leaves the record standing, and only a confirmed
+    // rejection or the host's own answer removes it. A later abort that found the
+    // record still there would claim a prompt the host already closed.
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_revoke_confirmed"
+    try {
+      const { event } = await openHold(host, call, parentID)
+      const perId = nextPerId()
+      await api.feed(askedFrame(parentID, event.message, perId))
+      const refuse = api.ctx.permission.reply
+      api.ctx.permission.reply = async () => false
+      expect(await revokeOpenPrompts([parentID])).toEqual({
+        revoked: 0,
+        failed: 1,
+        unconfirmed: 0,
+        unsupported: 0,
+        openDetail: [{ requestID: perId, reason: "refused" }],
+      })
+
+      api.ctx.permission.reply = refuse
+      expect(await revokeOpenPrompts([parentID])).toEqual({ revoked: 1, failed: 0, unconfirmed: 0, unsupported: 0, openDetail: [] })
+      expect(await revokeOpenPrompts([parentID])).toEqual({ revoked: 0, failed: 0, unconfirmed: 0, unsupported: 0, openDetail: [] })
+    } finally {
+      resetOpenPrompts()
+      dispose()
+    }
+  })
+})
+
 describe("failed seal", () => {
   test("a tombstone the store refused is held in memory", async () => {
     let failWrites = false
@@ -1575,9 +2926,7 @@ describe("hold failure", () => {
       const id = nextPerId()
       await api.feed(askedFrame(parentID, event.message, id))
       api.pending = [{ id, sessionID: parentID, action: SUBAGENT, resources: ["general"], message: event.message }]
-      api.ctx.permission.reply = async () => {
-        throw new Error("refused")
-      }
+      api.ctx.permission.reply = async () => false
 
       timers[0].fn()
       await until(() => auditLines(parentID).some((line) => line.event === "hold_uncancellable"))
@@ -2305,7 +3654,7 @@ describe("clearing the session ban", () => {
       const before = store.readSnapshot(parentID).snap!
       expect(before.sessionBan?.kind).toBe("parent")
 
-      expect(host.clearSessionBan(parentID)).toBe(true)
+      expect(host.clearSessionBan(parentID)).toBe("cleared")
 
       const after = store.readSnapshot(parentID).snap!
       expect(after.sessionBan).toBeUndefined()
@@ -2338,9 +3687,62 @@ describe("clearing the session ban", () => {
       await call("write the changelog", "msg_2", "call_2", parentID)
       expect((await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))).row).toBe("sessionBan")
 
-      expect(host.clearSessionBan(parentID)).toBe(true)
+      expect(host.clearSessionBan(parentID)).toBe("absent")
       await call("draft a spec", "msg_3", "call_3", parentID)
       expect((await api.permission.evaluate(assertEvent(parentID, "msg_3", "call_3"))).row).not.toBe("sessionBan")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("lift refuses a durable abort ban and leaves it in place", async () => {
+    const { api, host, dispose, call } = await wired({})
+    const parentID = "ses_clear_subtree"
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      expect(store.writeSubtreeBan(parentID, "abort: op_test", 1_700_000_000_000)).toBe(true)
+
+      expect(host.clearSessionBan(parentID)).toBe("refused")
+      expect(store.readSnapshot(parentID).snap?.sessionBan?.kind).toBe("subtree")
+      expect(auditLines(parentID).some((line) => line.event === "session_ban_kept")).toBe(true)
+
+      // The session stays stopped: row 6 denies whatever admission comes next.
+      await call("write the changelog", "msg_2", "call_2", parentID)
+      const decision = await api.permission.evaluate(assertEvent(parentID, "msg_2", "call_2"))
+      expect(decision.effect).toBe("deny")
+      expect(decision.row).toBe("6")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("a legacy session stop never replaces a durable abort ban with a retirable one", async () => {
+    const { host, dispose, call } = await wired({})
+    const parentID = "ses_abort_keeps_subtree"
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      expect(store.writeSubtreeBan(parentID, "abort: op_test", 1_700_000_000_000)).toBe(true)
+
+      const receipt = await host.abortSession(parentID, "user", "stop the run")
+      // The session is durably stopped, and it is stopped by the abort's ban.
+      expect(receipt.durable).toBe(true)
+      expect(store.readSnapshot(parentID).snap?.sessionBan?.kind).toBe("subtree")
+      expect(auditLines(parentID).some((line) => line.event === "session_ban_kept")).toBe(true)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("an unreadable snapshot is a refused lift, never a clean no-op", async () => {
+    const { host, dispose, call } = await wired({})
+    const parentID = "ses_clear_unreadable"
+    try {
+      await call("summarize the parser", "msg_1", "call_1", parentID)
+      const { snapshot } = store.parentPaths(parentID)
+      writeFileSync(snapshot, "{ not json")
+      expect(host.clearSessionBan(parentID)).toBe("unreadable")
+      // The bytes are left for the recovery that can still read them.
+      expect(readFileSync(snapshot, "utf8")).toBe("{ not json")
     } finally {
       dispose()
     }
@@ -2352,7 +3754,7 @@ describe("clearing the session ban", () => {
     try {
       await call("summarize the parser", "msg_1", "call_1", parentID)
       expect(store.readSnapshot(parentID).snap?.sessionBan).toBeUndefined()
-      expect(host.clearSessionBan(parentID)).toBe(true)
+      expect(host.clearSessionBan(parentID)).toBe("absent")
       expect(store.readSnapshot(parentID).snap?.sessionBan).toBeUndefined()
     } finally {
       dispose()
@@ -2364,5 +3766,28 @@ describe("clearing the session ban", () => {
     const handle = await register(api.ctx)
     expect(typeof handle.clearSessionBan).toBe("function")
     handle.dispose()
+  })
+
+  test("a host that never attached reports unknown, never an absent ban", async () => {
+    // `setup` catches a failed start and leaves no handle: that is a host that
+    // observed nothing, so the lift must not treat it as a clean session.
+    expect(clearBanOrUnknown(null, "ses_never_attached")).toBe("unknown")
+  })
+
+  test("a host that is off knows nothing about ban state, so a lift is unknown", async () => {
+    const dir = join(scratch, "off-clear")
+    const previous = process.env.OPENCODE_JEV_SESSION_BAN_DIR
+    process.env.OPENCODE_JEV_SESSION_BAN_DIR = dir
+    try {
+      const api = fakeCtx()
+      const handle = await start(api.ctx, () => false)
+      // Not `absent`: an off host observed no state at all, and a caller must
+      // never lift a tool ban on the strength of a guess.
+      expect(handle.clearSessionBan("ses_off_clear")).toBe("unknown")
+      expect(existsSync(dir)).toBe(false)
+      handle.dispose()
+    } finally {
+      process.env.OPENCODE_JEV_SESSION_BAN_DIR = previous
+    }
   })
 })

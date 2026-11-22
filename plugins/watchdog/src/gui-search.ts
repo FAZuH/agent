@@ -49,7 +49,6 @@ const SECRET_ROWS: readonly RowText[] = [
   { key: "apiKey", title: "API key", description: "Provider key. Write-only: it is never read back." },
   { key: "alertWebhook", title: "Alert webhook", description: "Discord webhook for alerts; empty turns it off." },
   { key: "endpoint", title: "Endpoint", description: "Full URL of the decisions or chat endpoint." },
-  { key: "supervisorEndpoint", title: "Supervisor endpoint", description: "Endpoint for the supervisor's review call.", alias: "endpoint" },
 ]
 
 function matches(row: RowText, query: string): boolean {

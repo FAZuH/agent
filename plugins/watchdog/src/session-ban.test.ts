@@ -592,6 +592,83 @@ for (let i = 0; i < 100; i++) writeTask(${JSON.stringify(parent)}, "child-" + i,
   })
 })
 
+describe("the abort release seam on the ban store", () => {
+  test("an attributed row persists and clears only for its own operation", () => {
+    const parent = "ses_attr"
+    expect(store.writeSubtreeBan(parent, "abort: operator abort", NOW, "op_mine")).toBe(true)
+    // The attribution survives a reopen read; it is what a release keys on.
+    expect(store.readSnapshot(parent).snap?.sessionBan).toMatchObject({ kind: "subtree", operation: "op_mine" })
+
+    // Another active operation's row is an independent restriction.
+    const other = "ses_attr_other"
+    store.writeSubtreeBan(other, "abort: operator abort", NOW, "op_live")
+    expect(store.clearSubtreeBan(other, "op_mine")).toBe("kept")
+    expect(store.readSnapshot(other).snap?.sessionBan?.operation).toBe("op_live")
+
+    expect(store.clearSubtreeBan(parent, "op_mine")).toBe("cleared")
+    expect(store.readSnapshot(parent).snap?.sessionBan).toBeUndefined()
+    // The clear is idempotent: a retried release answers absent, not failed.
+    expect(store.clearSubtreeBan(parent, "op_mine")).toBe("absent")
+  })
+
+  test("a row whose operation is already released is debris, not a restriction", () => {
+    // B-then-A overlap: the ancestor's later write replaced the child's row, so
+    // the row names an operation that is itself released by the time the
+    // child's release sweeps the session.
+    const parent = "ses_debris"
+    store.writeSubtreeBan(parent, "abort: operator abort", NOW, "op_released_anc")
+    // Without the released ids, the row is not this release's to lift.
+    expect(store.clearSubtreeBan(parent, "op_child")).toBe("kept")
+    expect(store.clearSubtreeBan(parent, "op_child", ["op_released_anc"])).toBe("cleared")
+    expect(store.readSnapshot(parent).snap?.sessionBan).toBeUndefined()
+    // A live operation named in the list is still a restriction: the list is
+    // released ids, not a blanket clear.
+    const live = "ses_debris_live"
+    store.writeSubtreeBan(live, "abort: operator abort", NOW, "op_still_live")
+    expect(store.clearSubtreeBan(live, "op_child", ["op_released_anc"])).toBe("kept")
+  })
+
+  test("another family's rows stay, whatever their kind or cause", () => {
+    const base = (parentID: string, sessionBan: SessionBan) => ({ v: 1, parentID, frontierSeq: 0, eventCursor: 0, tasks: {}, sessionBan })
+    // The session-ban host's own parent-kind row: the approvable one a release
+    // must not lift.
+    const parentKind = "ses_family_parent"
+    writeFileSync(
+      store.parentPaths(parentKind).snapshot,
+      JSON.stringify(base(parentKind, { kind: "parent", atSeq: 1, cause: "session: user: stopped the session", at: NOW })),
+      "utf8",
+    )
+    expect(store.clearSubtreeBan(parentKind, "op_mine")).toBe("kept")
+
+    // The task family's subtree row shares the kind but not the cause.
+    const taskKind = "ses_family_task"
+    writeFileSync(
+      store.parentPaths(taskKind).snapshot,
+      JSON.stringify(base(taskKind, { kind: "subtree", atSeq: 1, cause: "task abc123: budget reached", at: NOW })),
+      "utf8",
+    )
+    expect(store.clearSubtreeBan(taskKind, "op_mine")).toBe("kept")
+    expect(store.readSnapshot(taskKind).snap?.sessionBan?.cause).toContain("task")
+  })
+
+  test("legacy rows attribute by the abort family's fixed cause prefixes", () => {
+    const aborted = "ses_legacy_abort"
+    store.writeSubtreeBan(aborted, "abort: operator abort", NOW)
+    expect(store.clearSubtreeBan(aborted, "op_mine")).toBe("cleared")
+
+    const recovered = "ses_legacy_recovery"
+    store.writeSubtreeBan(recovered, "recovery: the abort ban was not confirmed", NOW)
+    expect(store.clearSubtreeBan(recovered, "op_mine")).toBe("cleared")
+  })
+
+  test("an unreadable store fails the clear and the row stands", () => {
+    const parent = "ses_clear_failed"
+    store.writeSubtreeBan(parent, "abort: operator abort", NOW, "op_mine")
+    writeFileSync(store.parentPaths(parent).snapshot, "{ not json", "utf8")
+    expect(store.clearSubtreeBan(parent, "op_mine")).toBe("failed")
+  })
+})
+
 describe("frontier", () => {
   test("only user enqueues advance", () => {
     const enqueue = (seq: number, type: string) => ({

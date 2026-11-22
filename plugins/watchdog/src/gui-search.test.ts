@@ -6,7 +6,7 @@ import { filterSettings } from "./gui-search.ts"
 
 const gui = readFileSync(new URL("./gui.tsx", import.meta.url), "utf8")
 
-const RENDERED_FEATURE_FIELDS = 47
+const RENDERED_FEATURE_FIELDS = 50
 const search = (query: string) => filterSettings(query, FEATURE_DEFAULTS)
 
 describe("Jev Settings search filter", () => {
@@ -65,7 +65,7 @@ describe("Jev Settings search filter", () => {
   test("an empty query keeps every rendered row", () => {
     const result = search("")
     expect(result.connection).toHaveLength(12)
-    expect(result.secrets).toHaveLength(4)
+    expect(result.secrets).toHaveLength(3)
     expect(result.groups.flatMap((group) => group.fields)).toHaveLength(RENDERED_FEATURE_FIELDS)
     expect(result.empty).toBe(false)
   })
@@ -92,7 +92,7 @@ describe("Jev Settings search wiring and scroll gap", () => {
   })
 
   test("the view filters with the pure helper and shows an empty state", () => {
-    expect(gui).toMatch(/filterSettings\(settingsQuery\(\), cfg\.config\)/)
+    expect(gui).toMatch(/filterSettings\(settingsQuery\(\), jevConfig\(\)\)/)
     expect(gui).toContain("No settings match the search.")
   })
 

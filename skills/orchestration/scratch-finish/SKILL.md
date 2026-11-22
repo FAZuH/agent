@@ -28,7 +28,11 @@ Otherwise archive only when every condition holds:
 - the work is merged/shared (commits landed or PR merged) or the user
   confirms it is complete;
 - verification passed (tests, lint, build, browser check, whatever the spec
-  demands).
+  demands);
+- reports for every current task/attempt are collected and required checks
+  have terminal results;
+- no task-owned writer remains active. Wait for it or stop it safely before
+  archive. Leave unrelated children and reusable idle reviewer sessions alone.
 
 If any condition is false, do **not** archive. Report what remains and keep
 the workspace in place.
@@ -42,6 +46,7 @@ the workspace in place.
    the content).
 4. Mark open tickets `Status: resolved`.
 5. Delete the now-stale `checkpoint.md`.
+   Do not create a new resume checkpoint solely to delete it during archive.
 6. Leave the archived doc untouched from then on, except to fix factual
    errors.
 

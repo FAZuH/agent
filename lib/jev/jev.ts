@@ -61,6 +61,12 @@ export class JevError extends Error {
   constructor(
     message: string,
     readonly kind: "no-key" | "http" | "timeout" | "network" | "shape" | "bad-answer" = "network",
+    /**
+     * A fixed code for this failure. Logs record this and never `message`: a
+     * message names what failed for a human, so a later edit could interpolate
+     * a provider-controlled value into it. The code cannot.
+     */
+    readonly reason: string = kind,
   ) {
     super(message)
     this.name = "JevError"
@@ -190,8 +196,9 @@ function rekey(reply: Record<string, any>, questions: Record<string, JevQuestion
     return Object.fromEntries(asked.map((id, i) => [id, reply[got[i]]]))
   }
   throw new JevError(
-    `Jev answered ${got.length} of ${asked.length} questions, keyed ${got.map((k) => JSON.stringify(k)).join(", ")}`,
+    `Jev answered ${got.length} of ${asked.length} questions under unrecognized ids`,
     "bad-answer",
+    "answer-keys",
   )
 }
 
@@ -287,7 +294,9 @@ function parseAnswersReply(
   try {
     parsed = JSON.parse(stripped)
   } catch {
-    throw new JevError(`Jev ${protocol} reply was not JSON: ${stripped.slice(0, 200)}`, "shape")
+    // The reply is model text, so it is not quoted back: its size is the only
+    // detail that helps and the only one that cannot carry content.
+    throw new JevError(`Jev ${protocol} reply was not JSON (${stripped.length} chars)`, "shape", "reply-not-json")
   }
   if (!parsed?.answers || typeof parsed.answers !== "object") {
     throw new JevError(`Jev ${protocol} reply had no answers object`, "shape")
@@ -307,14 +316,14 @@ function parseAnswersReply(
 }
 
 export function normalize(id: string, question: JevQuestion, answer: any, thresholds: Thresholds): Decision {
-  if (!answer || typeof answer !== "object") throw new JevError(`${id}: no answer object`, "bad-answer")
+  if (!answer || typeof answer !== "object") throw new JevError(`${id}: no answer object`, "bad-answer", "no-answer")
   if (answer.type !== question.type) {
-    throw new JevError(`${id}: asked ${question.type}, got ${String(answer.type)}`, "bad-answer")
+    throw new JevError(`${id}: asked ${question.type}, got a different answer type`, "bad-answer", "answer-type")
   }
 
   if (question.type === "noul") {
     const p = Number(answer.noul)
-    if (!Number.isFinite(p) || p < 0 || p > 1) throw new JevError(`${id}: noul out of range`, "bad-answer")
+    if (!Number.isFinite(p) || p < 0 || p > 1) throw new JevError(`${id}: noul out of range`, "bad-answer", "noul-range")
     // A noul carries no separate confidence field: distance from a coin flip is
     // it. Measuring P(yes) against minProbability instead would call 0.97
     // confident but 0.03 not, which is backwards.
@@ -332,31 +341,31 @@ export function normalize(id: string, question: JevQuestion, answer: any, thresh
 
   const labels = labelsOf(question.criteria)
   if (question.type === "choice" && labels.length < 2) {
-    throw new JevError(`${id}: a choice needs at least 2 labelled options`, "shape")
+    throw new JevError(`${id}: a choice needs at least 2 labelled options`, "shape", "criteria-shape")
   }
   if (question.type === "score" && labels.length < 2) {
-    throw new JevError(`${id}: a score needs at least 2 ordered levels`, "shape")
+    throw new JevError(`${id}: a score needs at least 2 ordered levels`, "shape", "criteria-shape")
   }
 
   const probs = answer.probabilities
-  if (!probs || typeof probs !== "object") throw new JevError(`${id}: no probabilities`, "bad-answer")
+  if (!probs || typeof probs !== "object") throw new JevError(`${id}: no probabilities`, "bad-answer", "no-probabilities")
   const table = probs as Record<string, number>
   if (question.type === "choice") {
     const missing = labels.filter((l) => !(l in table))
     if (Object.keys(table).length !== labels.length || missing.length) {
-      throw new JevError(`${id}: probabilities do not match the choice options`, "bad-answer")
+      throw new JevError(`${id}: probabilities do not match the choice options`, "bad-answer", "probability-keys")
     }
   } else if (Object.keys(table).length !== labels.length) {
     // A score's keys are level indices 0..n-1, so only the count is checkable.
-    throw new JevError(`${id}: probabilities do not match the ${labels.length} score levels`, "bad-answer")
+    throw new JevError(`${id}: probabilities do not match the ${labels.length} score levels`, "bad-answer", "probability-keys")
   }
   let total = 0
-  for (const [k, v] of Object.entries(table)) {
-    if (!Number.isFinite(v) || v < 0 || v > 1) throw new JevError(`${id}: probability for ${k} out of range`, "bad-answer")
+  for (const v of Object.values(table)) {
+    if (!Number.isFinite(v) || v < 0 || v > 1) throw new JevError(`${id}: a probability value is out of range`, "bad-answer", "probability-range")
     total += v
   }
   if (Math.abs(total - 1) > Math.min(0.05, 0.0051 * labels.length)) {
-    throw new JevError(`${id}: probabilities sum to ${total.toFixed(3)}, not ~1`, "bad-answer")
+    throw new JevError(`${id}: probabilities sum to ${total.toFixed(3)}, not ~1`, "bad-answer", "probability-sum")
   }
 
   const ranked = Object.entries(table).sort((a, b) => b[1] - a[1])
@@ -365,21 +374,21 @@ export function normalize(id: string, question: JevQuestion, answer: any, thresh
   if (question.type === "score") {
     const legend = answer.legend
     if (!legend || typeof legend !== "object" || Object.keys(legend).length !== labels.length) {
-      throw new JevError(`${id}: score legend must cover every level`, "bad-answer")
+      throw new JevError(`${id}: score legend must cover every level`, "bad-answer", "legend-incomplete")
     }
     const score = Number(answer.score)
     if (!Number.isFinite(score) || score < 0 || score > labels.length - 1) {
-      throw new JevError(`${id}: score ${String(answer.score)} outside 0..${labels.length - 1}`, "bad-answer")
+      throw new JevError(`${id}: score outside 0..${labels.length - 1}`, "bad-answer", "score-range")
     }
     return { id, kind: "score", value: score, margin, confident: margin >= thresholds.minMargin }
   }
 
   const choice = answer.choice
   if (typeof choice !== "string" || !(choice in table)) {
-    throw new JevError(`${id}: choice ${String(choice)} is not one of the options`, "bad-answer")
+    throw new JevError(`${id}: choice is not one of the options`, "bad-answer", "choice-unknown")
   }
   if (table[choice] !== ranked[0][1]) {
-    throw new JevError(`${id}: choice is not the highest-probability option`, "bad-answer")
+    throw new JevError(`${id}: choice is not the highest-probability option`, "bad-answer", "choice-margin")
   }
   const top = table[choice]
   const confidence = Number.isFinite(Number(answer.confidence)) ? Number(answer.confidence) : undefined
@@ -542,22 +551,33 @@ export async function ask(
   }
 
   const elapsedMs = Date.now() - started
-  let decisions: Decision[]
+  const decisions: Decision[] = []
+  // Named so the rejection row can say which question failed without carrying
+  // any of its answer text.
+  let rejectedID = ""
   try {
-    decisions = Object.entries(questions).map(([id, q]) => normalize(id, q, answers[id], thresholds))
+    for (const [id, q] of Object.entries(questions)) {
+      rejectedID = id
+      decisions.push(normalize(id, q, answers[id], thresholds))
+    }
   } catch (error) {
-    // Logged, not swallowed: the raw reply is the only way to see what the
-    // model actually returned, and a validation failure is a finding about the
-    // prompt rather than a bug in this plugin.
+    // Logged, not swallowed, and never with the payload or the error message.
+    // The row is fixed wording plus our own ids and a closed reason code: the
+    // prompt, the task history, the arguments and every provider-controlled
+    // value stay out. `message` explains the failure to a human, so it is not
+    // something to persist — a later edit could interpolate answer text into it,
+    // and callers that pass `log: false` treat a reject as an expected outcome.
     logCall({
       hook: opts.hook,
       protocol: state.protocol,
       model: state.model,
       endpoint: state.endpoint,
+      failure: "answer-rejected",
+      id: rejectedID,
+      reason: error instanceof JevError ? error.reason : "unclassified",
       questions: Object.fromEntries(Object.entries(questions).map(([id, q]) => [id, q.type])),
-      sent,
-      received: typeof answers === "object" ? answers : String(answers).slice(0, 400),
-      error: error instanceof JevError ? error.message : String(error),
+      answered: answers && typeof answers === "object" ? Object.keys(answers).filter((id) => id in questions).length : 0,
+      error: "the model's answer could not be validated",
       inputTokens,
       elapsedMs,
     })

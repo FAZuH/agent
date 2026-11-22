@@ -29,7 +29,10 @@ Implement from a spec, ticket, or plan. Follow @implement; drive @tdd (red-green
 
 ## Implementation
 
-- Confirm what "done" looks like before writing code.
+- Before writing code, establish the target, requested change, constraints,
+  editable files, and evidence of done from the brief or linked context packet.
+  Ask the orchestrator about missing scope or acceptance criteria. Report which
+  checks ran and their results; distinguish unrun checks from passing checks.
 - Read `CONTEXT.md` when present, so names match the domain language; use its terms in code and commit-level naming. Respect `docs/adr/` in the area you touch.
 - Small, testable increments. Typecheck and single test files often.
 - Lint/format via auto-fix (`eslint --fix`, `prettier --write`, `cargo fmt`, `ruff check --fix`, `biome check --write`, `npm run lint -- --fix`); hand-fix only what auto-fix cannot.

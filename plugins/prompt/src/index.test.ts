@@ -6,7 +6,7 @@
  *   bun test src/index.test.ts
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -87,6 +87,218 @@ afterAll(() => {
 })
 
 describe("tools", () => {
+  test("prompt_list paginates newest first with default and explicit limits", async () => {
+    const sessionID = "ses_list_pages"
+    const records = Array.from({ length: 12 }, (_, index) => ({
+      id: `page-${index}`,
+      sessionID,
+      at: index,
+      title: `Decision ${index}`,
+    }))
+    store.writePrompts(sessionID, records)
+    const list = tools.find((tool) => tool.name === "prompt_list")
+
+    const first = JSON.parse((await list.execute({}, { sessionID })).content)
+    const second = JSON.parse((await list.execute({ offset: first.nextOffset }, { sessionID })).content)
+    const limited = JSON.parse((await list.execute({ limit: 1, offset: 1 }, { sessionID })).content)
+
+    expect(first.prompts.map((prompt: any) => prompt.id)).toEqual([
+      "page-11",
+      "page-10",
+      "page-9",
+      "page-8",
+      "page-7",
+      "page-6",
+      "page-5",
+      "page-4",
+      "page-3",
+      "page-2",
+    ])
+    expect(first.nextOffset).toBe(10)
+    expect(second.prompts.map((prompt: any) => prompt.id)).toEqual(["page-1", "page-0"])
+    expect(second.nextOffset).toBeNull()
+    expect(limited.prompts.map((prompt: any) => prompt.id)).toEqual(["page-10"])
+    expect(limited.nextOffset).toBe(2)
+  })
+
+  test("prompt_list continues on the next page when the combined records exceed the byte budget", async () => {
+    const sessionID = "ses_list_bytes"
+    const body = "x".repeat(35_000)
+    store.writePrompts(sessionID, [
+      { id: "older", sessionID, at: 1, title: "Older", prompts: { questions: [{ title: "Older", body }] } },
+      { id: "newer", sessionID, at: 2, title: "Newer", prompts: { questions: [{ title: "Newer", body }] } },
+    ])
+    const list = tools.find((tool) => tool.name === "prompt_list")
+
+    const first = await list.execute({}, { sessionID })
+    const second = await list.execute({ offset: JSON.parse(first.content).nextOffset }, { sessionID })
+
+    expect(Buffer.byteLength(first.content)).toBeLessThanOrEqual(64_000)
+    expect(JSON.parse(first.content).prompts.map((prompt: any) => prompt.id)).toEqual(["newer"])
+    expect(JSON.parse(first.content).nextOffset).toBe(1)
+    expect(JSON.parse(second.content).prompts.map((prompt: any) => prompt.id)).toEqual(["older"])
+    expect(JSON.parse(second.content).nextOffset).toBeNull()
+  })
+
+  test("prompt_list marks a record too large for its output budget without modifying it", async () => {
+    const sessionID = "ses_list_large"
+    store.appendPrompt({
+      id: "large-question",
+      sessionID,
+      at: 1,
+      title: "Review attachment",
+      prompts: { questions: [{ title: "Review attachment", body: "🧩".repeat(40_000) }] },
+    })
+    const file = join(dir, "prompts", `${sessionID}.json`)
+    const before = readFileSync(file, "utf8")
+    const list = tools.find((tool) => tool.name === "prompt_list")
+
+    const result = await list.execute({}, { sessionID })
+
+    expect(Buffer.byteLength(result.content)).toBeLessThanOrEqual(64_000)
+    expect(JSON.parse(result.content)).toEqual({
+      prompts: [{ id: "large-question", status: "pending", contentOmitted: true }],
+      nextOffset: null,
+    })
+    expect(readFileSync(file, "utf8")).toBe(before)
+  })
+
+  test.each([
+    { limit: 0 },
+    { limit: 51 },
+    { offset: -1 },
+    { offset: 0.5 },
+    { promptID: 42 },
+    { sessionID: "ses_private" },
+  ])("prompt_list rejects invalid filters %j", async (input) => {
+    const list = tools.find((tool) => tool.name === "prompt_list")
+    const result = JSON.parse((await list.execute(input, { sessionID: "ses_list_invalid" })).content)
+    expect(result.error).toBeDefined()
+  })
+
+  test("prompt_list refuses a missing caller session", async () => {
+    const list = tools.find((tool) => tool.name === "prompt_list")
+    expect((await list.execute({}, {})).content).toContain("no session")
+  })
+
+  test("prompt_list cannot find a foreign prompt by id or fabricate a missing record", async () => {
+    store.appendPrompt({
+      id: "foreign-decision",
+      sessionID: "ses_foreign_lookup",
+      at: 1,
+      title: "Private decision",
+      answers: { "0": "Private answer" },
+      answeredAt: 2,
+    })
+    const list = tools.find((tool) => tool.name === "prompt_list")
+
+    const result = JSON.parse(
+      (await list.execute({ promptID: "foreign-decision" }, { sessionID: "ses_empty_lookup" })).content,
+    )
+
+    expect(result).toEqual({ prompts: [], nextOffset: null })
+  })
+
+  test.each(["pending", "answered", "dismissed", "deferred"])(
+    "prompt_list filters %s status and prompt id after RPC transitions",
+    async (status) => {
+      const sessionID = `ses_list_${status}`
+      store.appendPrompt({
+        id: "recover-state",
+        sessionID,
+        at: 1,
+        title: "Deploy?",
+        prompts: { questions: [{ title: "Deploy?", body: "Confirm scope" }] },
+      })
+      store.appendPrompt({ id: "other-prompt", sessionID, at: 2, title: "Unrelated" })
+      const transitions: Record<string, () => Promise<any>> = {
+        pending: async () => {},
+        answered: () =>
+          handlers.answer({ sessionID, promptID: "recover-state", answers: { "0": "Only staging" } }),
+        dismissed: () => handlers.dismiss({ sessionID, promptID: "recover-state" }),
+        deferred: () => handlers.defer({ sessionID, promptID: "recover-state" }),
+      }
+      await transitions[status]!()
+      const list = tools.find((tool) => tool.name === "prompt_list")
+
+      const result = JSON.parse(
+        (await list.execute({ promptID: "recover-state", status }, { sessionID })).content,
+      )
+      const mismatch = JSON.parse(
+        (await list.execute({ promptID: "recover-state", status: "unknown" }, { sessionID })).content,
+      )
+      const excluded = JSON.parse(
+        (
+          await list.execute(
+            { promptID: "recover-state", status: status === "pending" ? "answered" : "pending" },
+            { sessionID },
+          )
+        ).content,
+      )
+
+      expect(result.prompts).toHaveLength(1)
+      expect(result.prompts[0].id).toBe("recover-state")
+      expect(result.prompts[0].status).toBe(status)
+      expect(result.prompts[0].answers).toEqual(status === "answered" ? { "0": "Only staging" } : undefined)
+      expect(mismatch.error).toContain("status")
+      expect(excluded.prompts).toEqual([])
+    },
+  )
+
+  test("prompt_list keeps answered and dismissed outcomes after later deferrals", async () => {
+    const sessionID = "ses_list_terminal"
+    store.writePrompts(sessionID, [
+      {
+        id: "answered",
+        sessionID,
+        at: 1,
+        title: "Answered",
+        answeredAt: 1,
+        answers: { "0": "Staging only" },
+      },
+      { id: "dismissed", sessionID, at: 2, title: "Dismissed", dismissedAt: 2 },
+    ])
+    await handlers.defer({ sessionID, promptID: "answered" })
+    await handlers.defer({ sessionID, promptID: "dismissed" })
+    const host = await setupHost()
+    const list = host.tools.find((tool) => tool.name === "prompt_list")
+
+    const result = JSON.parse((await list.execute({}, { sessionID })).content)
+
+    expect(result.prompts.map((prompt: any) => prompt.status)).toEqual(["dismissed", "answered"])
+    expect(result.prompts[1].answers).toEqual({ "0": "Staging only" })
+  })
+
+  test("prompt_list returns stored content only from the caller session without side effects", async () => {
+    const record = {
+      id: "recovery-pending",
+      sessionID: "ses_recovery",
+      at: 1,
+      title: "Choose destination",
+      prompts: {
+        procedures: [{ title: "Check backup", steps: ["Verify snapshot"] }],
+        questions: [{ title: "Choose destination", body: "Local or remote?" }],
+      },
+    }
+    store.appendPrompt(record)
+    store.appendPrompt({ ...record, id: "private-record", sessionID: "ses_private" })
+    const file = join(dir, "prompts", "ses_recovery.json")
+    const before = readFileSync(file, "utf8")
+    const eventsBefore = emits.length
+    const messagesBefore = prompts.length
+    const list = tools.find((tool) => tool.name === "prompt_list")
+
+    const result = JSON.parse((await list.execute({}, { sessionID: "ses_recovery" })).content)
+
+    expect(result).toEqual({
+      prompts: [{ ...record, status: "pending" }],
+      nextOffset: null,
+    })
+    expect(readFileSync(file, "utf8")).toBe(before)
+    expect(emits.length).toBe(eventsBefore)
+    expect(prompts.length).toBe(messagesBefore)
+  })
+
   test("prompt_user is non-blocking by default", () => {
     const tool = tools.find((item) => item.name === "prompt_user")
     expect(tool?.input.properties.block.default).toBe(false)
@@ -370,6 +582,78 @@ describe("tools", () => {
     expect(result.ok).toBe(false)
     expect(result.reason).toContain("no longer available")
   })
+
+  test.each([
+    { responseStatus: 200, mutation: "none", expectedStatus: "pending", reopened: true, cleared: true },
+    { responseStatus: 409, mutation: "none", expectedStatus: "deferred", reopened: false, cleared: false },
+    { responseStatus: 200, mutation: "defer", expectedStatus: "deferred", reopened: true, cleared: false },
+    { responseStatus: 200, mutation: "answer", expectedStatus: "answered", reopened: true, cleared: false },
+    { responseStatus: 200, mutation: "dismiss", expectedStatus: "dismissed", reopened: true, cleared: false },
+  ])(
+    "reopening with HTTP $responseStatus and intervening $mutation persists $expectedStatus",
+    async ({ responseStatus, mutation, expectedStatus, reopened, cleared }) => {
+      const sessionID = `ses_reopen_deferred_${responseStatus}_${mutation}`
+      const promptID = "deferred-decision"
+      store.appendPrompt({
+        id: promptID,
+        sessionID,
+        at: 1,
+        title: "Choose target",
+        prompts: { questions: [{ title: "Choose target", body: "Staging or production?" }] },
+      })
+      await handlers.defer({ sessionID, promptID })
+      const deferredAt = store.readPrompts(sessionID)[0]!.deferredAt
+      expect(deferredAt).toBeGreaterThan(0)
+      const priorState = process.env.XDG_STATE_HOME
+      const priorOff = process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
+      const originalFetch = globalThis.fetch
+      const tmp = mkdtempSync(join(tmpdir(), "prompt-reopen-deferred-"))
+      mkdirSync(join(tmp, "opencode"), { recursive: true })
+      writeFileSync(
+        join(tmp, "opencode", "service.json"),
+        JSON.stringify({ url: "http://127.0.0.1:4199", password: "x" }),
+      )
+      process.env.XDG_STATE_HOME = tmp
+      delete process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
+      const response = Promise.withResolvers<Response>()
+      const requested = Promise.withResolvers<void>()
+      const clock = spyOn(Date, "now").mockReturnValue(deferredAt!)
+      globalThis.fetch = (async () => {
+        requested.resolve()
+        return response.promise
+      }) as typeof fetch
+      try {
+        const reopening = handlers.reopen({ sessionID, promptID })
+        await requested.promise
+        const transitions: Record<string, () => Promise<any>> = {
+          none: async () => {},
+          defer: () => handlers.defer({ sessionID, promptID }),
+          answer: () => handlers.answer({ sessionID, promptID, answers: { "0": "Staging only" } }),
+          dismiss: () => handlers.dismiss({ sessionID, promptID }),
+        }
+        await transitions[mutation]!()
+        response.resolve(new Response("", { status: responseStatus }))
+        const result = await reopening
+        const freshHost = await setupHost()
+        const list = freshHost.tools.find((tool) => tool.name === "prompt_list")
+        const listed = JSON.parse((await list.execute({ status: expectedStatus }, { sessionID })).content)
+        const persisted = JSON.parse(readFileSync(join(dir, "prompts", `${sessionID}.json`), "utf8"))
+
+        expect(result.ok).toBe(reopened)
+        expect(listed.prompts.map((prompt: any) => prompt.id)).toEqual([promptID])
+        expect(persisted[0].deferredAt).toBe(cleared ? undefined : deferredAt)
+        expect(persisted[0].answers).toEqual(mutation === "answer" ? { "0": "Staging only" } : undefined)
+      } finally {
+        clock.mockRestore()
+        globalThis.fetch = originalFetch
+        if (priorState === undefined) delete process.env.XDG_STATE_HOME
+        else process.env.XDG_STATE_HOME = priorState
+        if (priorOff === undefined) delete process.env.OPENCODE_PROMPT_NO_NATIVE_FORM
+        else process.env.OPENCODE_PROMPT_NO_NATIVE_FORM = priorOff
+        rmSync(tmp, { recursive: true, force: true })
+      }
+    },
+  )
 
   test("reopening another card closes the one on screen first", async () => {
     const priorState = process.env.XDG_STATE_HOME

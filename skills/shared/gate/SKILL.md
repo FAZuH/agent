@@ -12,7 +12,7 @@ An **approval gate** is a step where an action proceeds only with user approval.
 
 ## Run mode
 
-- `interactive`: the default. Gates fire via the `question` tool. Question forms propagate to the user even from a subagent, so any agent can gate.
+- `interactive`: the default. Use @prompt-user to present gates and recover their stored status and answers.
 - `auto`: the user pre-approved the scoped action set. `normal` and `subagent` gates skip; `always` still fires.
 
 **Auto never comes from the agent itself.** Only from the user, by scope:
@@ -27,8 +27,8 @@ In doubt: interactive. Agents never self-grant auto.
 
 | Class | Interactive | Auto | Subagent context |
 |---|---|---|---|
-| `always` | ask | **ask (still fires)** | ask (question propagates to top) |
-| `normal` | ask | **skip** (auto-resolution, log) | ask (question propagates) |
+| `always` | ask | **ask (still fires)** | ask through @prompt-user |
+| `normal` | ask | **skip** (auto-resolution, log) | ask through @prompt-user |
 | `subagent` | ask | skip (auto-resolution, log) | **skip (delegation covered it)** |
 
 - `always`: irreversible, destructive, global, or convention-changing (push, config edits, publishing, deletions, closed-vocabulary changes). Never skipped.
@@ -72,7 +72,25 @@ State the auto-resolution as a concrete action, never "proceed": what file/comma
 
 ### Asking
 
-State **what / why / blast radius**, then Approve / Edit / Abort. Batch same-class gates into one question. Re-gate on drift: approval voids if scope grew after granting.
+State what changes, why, and the affected scope, then Approve / Edit / Abort.
+Batch same-class gates into one prompt.
+
+Before mutation, recheck the relevant approval scope and action preconditions.
+Unrelated edits do not void approval. If scope grows or a relevant precondition
+changes, resolve that change before acting. Existing explicit approval in the
+conversation remains valid for its original scope. Do not ask for it again.
+If authorization is unknown, do not mutate.
+
+### Recovery
+
+Record the prompt ID and guarded scope when a gate fires. After resume or
+compaction, use @prompt-user's lookup procedure to recover stored status and
+answers. The prompt store owns answers. Do not create a second answer store.
+
+Pending, deferred, and dismissed prompts are not approval. Reuse an existing
+pending card instead of creating a duplicate. An answered prompt grants approval
+only if its answer explicitly approves the action. A recovered approval covers
+only the original guarded scope. Recheck its scope and preconditions before mutation.
 
 ## Gate log
 
@@ -83,11 +101,15 @@ Entry format (append `- (none yet)` → entries):
 ```markdown
 ## Gate log
 - (none yet)
-- [2026-09-02] commit-approval (normal); skipped (auto): committed 3 groups with inferred messages
-- [2026-09-02] new-scope (always); fired: approved ("viz")
+- [2026-09-02] commit-approval (normal); scope: 3 reviewed groups; skipped (auto): committed approved groups
+- [2026-09-02] new-scope (always); scope: add "viz"; prompt: <promptID>; fired: answered, approved
 ```
 
-Fields: date, gate id, class, then `fired: <outcome>` / `skipped (auto | delegated): <auto-resolution taken>` / `failed: <reason>`. Log mode switches too (`/gate auto` → interactive) so a compacted session recovers the mode.
+Fields: date, gate ID, class, guarded scope, prompt ID when fired, and outcome:
+`fired: <status>` / `skipped (auto | delegated): <auto-resolution taken>` /
+`failed: <reason>`. For conversational approval, record its scope and reference
+instead of inventing a prompt ID. Log mode switches too so a compacted session
+recovers the mode.
 
 No `.scratch/` workspace: keep the log in working notes. Auto runs always end with a "Gates skipped" list in the report. A skip is never silent.
 
@@ -95,4 +117,6 @@ No `.scratch/` workspace: keep the log in working notes. Auto runs always end wi
 
 Approval gates only, in skills and agents that reference this skill. Verification steps (tests, CI, checklists) and interaction gates (quizzes) are not approval gates and do not reference it.
 
-Harness permission rules (`ask` / `allow` / `deny`) are a separate layer: a gate calls the `question` tool, not a permission prompt. Never implement a gate as a frontmatter `ask` rule (depth-2 `ask` prompts hang on v2; question forms propagate). See the hindsight memory (bank `agent::fazuh`, tag `topic:opencode-v2`) for the v2 behavior.
+Harness permission rules (`ask` / `allow` / `deny`) are a separate layer.
+@prompt-user owns the gate's presentation and lookup, not permission prompts.
+Never implement a gate as a frontmatter `ask` rule.

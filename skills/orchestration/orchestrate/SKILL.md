@@ -93,7 +93,8 @@ never improvise a workflow.
 ## Delegation rules
 
 - Once a subagent owns a task, do not duplicate its work. Wait for its report
-  and act on it.
+  and act on it. After asynchronous dispatch, continue independent work.
+  End the turn only when waiting. Use report events instead of progress polling.
 - Resume before spawning: answer the decision under Continuing a child's work.
   For a continuing unit the existing child's id is the default, not the
   exception.
@@ -115,6 +116,36 @@ never improvise a workflow.
   the child's work as fact; the child falsifies any fact gating its work
   before acting on it.
 
+### Assignment contract and attempts
+
+Each assignment names the target, intended change, constraints, editable files,
+and evidence of done. Reuse the @session context packet and pass only the
+role projection and assignment delta.
+
+Keep a stable task or lane ID. Add an attempt ID to the brief, report contract,
+and session ledger. Ordinary follow-ups keep that attempt. A replacement or
+materially revised assignment gets a new attempt.
+
+Match reports to both IDs before accepting completion. A stale report can
+supply evidence, but cannot settle the current attempt. Stop or isolate the
+old writer before assigning a replacement to its files.
+
+If dispatch returns an unknown outcome, inspect session state and landed work
+before retrying. Unknown is neither failure nor success. After three confirmed
+failed starts in one retry chain, stop and report the blocker. Honor any
+stricter task limit. A scheduled backoff is not a failed start.
+
+## Coordination
+
+Use @board for cross-session questions, handoffs, and status. Keep ownership
+and dependencies in Board tasks, and discussion in their threads. Add question,
+handoff, or status wording only when native task state does not express it.
+Board messages do not grant approval or replace the assignment contract.
+
+For a consequential, ambiguous choice, optionally request two independent
+analyses. Compare their assumptions and evidence, not votes or confidence
+scores. Ask the user only when a consequential choice remains unresolved.
+
 ## Continuing a child's work (`sessionID`, forks)
 
 Every task result returns the child's `sessionID`. Three moves, warmest first:
@@ -127,9 +158,9 @@ Every task result returns the child's `sessionID`. Three moves, warmest first:
 | Unrelated work, a second role in parallel, or a dead id | **Spawn fresh**. |
 
 A fork copies the source's transcript, agent, and model into a new session, so
-it needs no brief. Neither fork replaces a cold role handoff: `implement`,
-`review`, and `document` work still starts as a subagent when no session owns
-the context.
+it needs only the assignment contract and current delta. Neither fork replaces
+a cold role handoff. `implement`, `review`, and `document` work still starts as
+a subagent when no session owns the context.
 
 ### Resume
 
@@ -144,10 +175,8 @@ Resume eagerly: no hop limit. The `context-watch` plugin warns on usage and the
 child's own auto-compaction handles growth, so a long session is not a reason
 to re-spawn.
 
-If a foreground resume aborts (`subagent` tool error mid-call), relaunch the
-same resume with `background: true` — background launch survives; on
-2026-10-22 three foreground resumes aborted in a row where the background
-relaunch of the identical call succeeded.
+If a resume aborts mid-call, inspect its state before retrying. Resume the
+existing session when it still owns the unit.
 
 A long-resumed child can come back as `Subagent completed without a text
 response`. **Check the tree before believing it**: `git diff --stat` against the
@@ -196,16 +225,15 @@ re-report.
   refused.
 - A fork keeps the source's agent unless `agent` switches it; the switch
   rewrites the system prompt, so the shared prefix stops caching.
-- One ledger row per fork in the session record: fork id, source, lane, file
-  scope, deadline, status.
+- One ledger row per fork in the session record: fork ID, source, task/lane ID,
+  attempt ID, file scope, deadline, and status.
 - Width follows `/branch-settings maxForks`, shared by both tools. When it
   refuses, wait for a report or raise the setting; never retry in a loop.
 - Keep working after dispatch. A `<branch sessionID=… parent=…>` prompt is that
-  lane's report: match the fork id, append it to the ledger, and read it as
-  findings for the lane you assigned.
-- No report at the deadline: poll `GET /api/session/<fork>`; null is busy,
-  `succeeded`/`failed` is terminal. Two missed deadlines is a failed lane:
-  record it, then resume or respawn.
+  lane's report. Match its fork, task/lane, and attempt before accepting it.
+  Append it to the ledger.
+- At a missed deadline, inspect session state once. Busy is not failure.
+  Diagnose a stall before recovery, and apply the attempt rules above.
 - Silent forks produce no report and hold no slot. Use them only when nothing
   needs to come back.
 

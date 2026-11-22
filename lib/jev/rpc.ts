@@ -183,6 +183,104 @@ export const Contract = {
         additionalProperties: false,
       },
     },
+    abortOperations: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          reason: { type: "string" },
+          deliveryReadable: { type: "boolean" },
+          operations: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                sessionID: { type: "string" },
+                scope: { type: "array", items: { type: "string" } },
+                source: { type: "string" },
+                cause: { type: "string" },
+                at: { type: "number" },
+                released: { type: "number" },
+                continuedAt: { type: "number" },
+                incomplete: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      step: { type: "string" },
+                      status: { type: "string" },
+                      detail: { type: "string" },
+                    },
+                    required: ["step", "status", "detail"],
+                    additionalProperties: false,
+                  },
+                },
+                delivery: {
+                  type: "object",
+                  properties: {
+                    receipt: { type: "string", enum: ["queued", "delivered", "failed", "no-endpoint"] },
+                    attempts: { type: "number" },
+                    notice: { type: "string", enum: ["queued", "absent", "suppressed", "delivered", "failed"] },
+                  },
+                  required: ["receipt", "attempts", "notice"],
+                  additionalProperties: false,
+                },
+              },
+              required: ["id", "sessionID", "scope", "source", "cause", "at", "incomplete"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["ok", "operations", "deliveryReadable"],
+        additionalProperties: false,
+      },
+    },
+    abortOperation: {
+      input: {
+        type: "object",
+        properties: { sessionID: { type: "string" } },
+        required: ["sessionID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          sealed: { type: "boolean" },
+          durable: { type: "boolean" },
+          receipt: { type: "boolean" },
+          ban: {
+            type: "object",
+            properties: { written: { type: "number" }, failed: { type: "number" } },
+            required: ["written", "failed"],
+            additionalProperties: false,
+          },
+          operationID: { type: "string" },
+          scope: { type: "array", items: { type: "string" } },
+          error: { type: "string" },
+          outcome: { type: "string" },
+          enforcedBy: { type: "array", items: { type: "string" } },
+          warning: { type: "string" },
+          incomplete: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                step: { type: "string" },
+                status: { type: "string" },
+                detail: { type: "string" },
+              },
+              required: ["step", "status", "detail"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["ok", "sealed", "durable", "receipt", "ban", "operationID", "scope", "incomplete", "outcome", "enforcedBy"],
+        additionalProperties: false,
+      },
+    },
     listToolBans: {
       input: { type: "object", properties: {}, additionalProperties: false },
       output: {
@@ -218,8 +316,81 @@ export const Contract = {
       },
       output: {
         type: "object",
-        properties: { ok: { type: "boolean" }, subagents: { type: "array", items: { type: "string" } } },
-        required: ["ok", "subagents"],
+        properties: {
+          ok: { type: "boolean" },
+          sealed: { type: "boolean" },
+          durable: { type: "boolean" },
+          receipt: { type: "boolean" },
+          ban: {
+            type: "object",
+            properties: { written: { type: "number" }, failed: { type: "number" } },
+            required: ["written", "failed"],
+            additionalProperties: false,
+          },
+          operationID: { type: "string" },
+          scope: { type: "array", items: { type: "string" } },
+          error: { type: "string" },
+          outcome: { type: "string" },
+          enforcedBy: { type: "array", items: { type: "string" } },
+          warning: { type: "string" },
+          incomplete: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                step: { type: "string" },
+                status: { type: "string" },
+                detail: { type: "string" },
+              },
+              required: ["step", "status", "detail"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["ok", "sealed", "durable", "receipt", "ban", "operationID", "scope", "incomplete", "outcome", "enforcedBy"],
+        additionalProperties: false,
+      },
+    },
+    releaseOperation: {
+      input: {
+        type: "object",
+        properties: { operationID: { type: "string" }, continue: { type: "boolean" } },
+        required: ["operationID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          durable: { type: "boolean" },
+          receipt: { type: "boolean" },
+          already: { type: "boolean" },
+          operationID: { type: "string" },
+          ban: {
+            type: "object",
+            properties: { cleared: { type: "number" }, kept: { type: "number" }, failed: { type: "number" } },
+            required: ["cleared", "kept", "failed"],
+            additionalProperties: false,
+          },
+          covered: { type: "array", items: { type: "string" } },
+          continued: { type: "string", enum: ["sent", "prevented", "not-requested", "unsupported", "already"] },
+          incomplete: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                step: { type: "string" },
+                status: { type: "string" },
+                detail: { type: "string" },
+              },
+              required: ["step", "status", "detail"],
+              additionalProperties: false,
+            },
+          },
+          enforcedBy: { type: "array", items: { type: "string" } },
+          reason: { type: "string" },
+        },
+        required: ["ok", "durable", "receipt", "already", "operationID", "ban", "covered", "continued", "incomplete", "enforcedBy"],
         additionalProperties: false,
       },
     },
@@ -232,7 +403,7 @@ export const Contract = {
       },
       output: {
         type: "object",
-        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        properties: { ok: { type: "boolean" }, count: { type: "number" }, error: { type: "string" } },
         required: ["ok", "count"],
         additionalProperties: false,
       },
@@ -246,7 +417,7 @@ export const Contract = {
       },
       output: {
         type: "object",
-        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        properties: { ok: { type: "boolean" }, count: { type: "number" }, error: { type: "string" } },
         required: ["ok", "count"],
         additionalProperties: false,
       },
@@ -292,8 +463,9 @@ export const Contract = {
               webhookPresent: { type: "boolean" },
               endpointPresent: { type: "boolean" },
               supervisorEndpointPresent: { type: "boolean" },
+              receiptsWebhookPresent: { type: "boolean" },
             },
-            required: ["keyPresent", "webhookPresent", "endpointPresent", "supervisorEndpointPresent"],
+            required: ["keyPresent", "webhookPresent", "endpointPresent", "supervisorEndpointPresent", "receiptsWebhookPresent"],
             additionalProperties: false,
           },
           config: { type: "object", additionalProperties: { type: "object", additionalProperties: true } },
@@ -343,6 +515,160 @@ export const Contract = {
         type: "object",
         properties: {
           key: { type: "string", enum: ["apiKey", "alertWebhook"] },
+          value: { type: "string" },
+        },
+        required: ["key", "value"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, error: { type: "string" } },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
+    watchdogStatus: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          on: { type: "boolean" },
+          chain: {
+            type: ["object", "null"],
+            properties: {
+              status: { type: "string", enum: ["passed", "absent", "blocked", "malformed", "off"] },
+              reason: { type: "string" },
+              wired: { type: "boolean" },
+            },
+            required: ["status", "reason", "wired"],
+            additionalProperties: false,
+          },
+          pending: {
+            type: "object",
+            properties: {
+              inFlight: { type: "number" },
+              waiting: { type: "number" },
+              durable: { type: "number" },
+              durableUnreadable: { type: "boolean" },
+            },
+            required: ["inFlight", "waiting", "durable", "durableUnreadable"],
+            additionalProperties: false,
+          },
+          effective: {
+            type: "object",
+            properties: {
+              activeOperations: { type: "number" },
+              sessionsCovered: { type: "number" },
+              overlapping: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: { sessionID: { type: "string" }, operations: { type: "number" } },
+                  required: ["sessionID", "operations"],
+                  additionalProperties: false,
+                },
+              },
+              incompleteOperations: { type: "number" },
+            },
+            required: ["activeOperations", "sessionsCovered", "overlapping", "incompleteOperations"],
+            additionalProperties: false,
+          },
+          recordsReadable: { type: "boolean" },
+          reason: { type: "string" },
+        },
+        required: ["ok", "on", "pending", "effective", "recordsReadable"],
+        additionalProperties: false,
+      },
+    },
+    getWatchdogSettings: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          on: { type: "boolean" },
+          persisted: {
+            type: "object",
+            properties: {
+              nodes: { type: "string" },
+              timing: { type: "string", enum: ["blocking", "nonblocking"] },
+              sessionCap: { type: "number" },
+              jevBatchMax: { type: "number" },
+              jevBatchMs: { type: "number" },
+              supervisorBatchMax: { type: "number" },
+              supervisorBatchMs: { type: "number" },
+            },
+            required: ["nodes", "timing", "sessionCap", "jevBatchMax", "jevBatchMs", "supervisorBatchMax", "supervisorBatchMs"],
+            additionalProperties: false,
+          },
+          effective: {
+            type: "object",
+            properties: {
+              timing: { type: "string", enum: ["blocking", "nonblocking"] },
+              sessionCap: { type: "number" },
+              jevBatchMax: { type: "number" },
+              jevBatchMs: { type: "number" },
+              supervisorBatchMax: { type: "number" },
+              supervisorBatchMs: { type: "number" },
+              nodes: {
+                type: "object",
+                properties: {
+                  jev: { type: "boolean" },
+                  parent: { type: "boolean" },
+                  supervisor: { type: "boolean" },
+                  human: { type: "boolean" },
+                },
+                required: ["jev", "parent", "supervisor", "human"],
+                additionalProperties: false,
+              },
+            },
+            required: ["timing", "sessionCap", "jevBatchMax", "jevBatchMs", "supervisorBatchMax", "supervisorBatchMs", "nodes"],
+            additionalProperties: false,
+          },
+          envOverrides: { type: "array", items: { type: "string" } },
+          receiptsWebhookPresent: { type: "boolean" },
+          supervisorEndpointPresent: { type: "boolean" },
+          migration: {
+            type: "object",
+            properties: {
+              present: { type: "boolean" },
+              stored: { type: "number" },
+              defaulted: { type: "number" },
+              invalid: { type: "number" },
+            },
+            required: ["present", "stored", "defaulted", "invalid"],
+            additionalProperties: false,
+          },
+        },
+        required: ["on", "persisted", "effective", "envOverrides", "receiptsWebhookPresent", "supervisorEndpointPresent", "migration"],
+        additionalProperties: false,
+      },
+    },
+    setWatchdogSetting: {
+      input: {
+        type: "object",
+        properties: {
+          key: {
+            type: "string",
+            enum: ["on", "nodes", "timing", "sessionCap", "jevBatchMax", "jevBatchMs", "supervisorBatchMax", "supervisorBatchMs"],
+          },
+          value: { type: ["boolean", "string", "number"] },
+        },
+        required: ["key", "value"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, error: { type: "string" } },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
+    setWatchdogSecret: {
+      input: {
+        type: "object",
+        properties: {
+          key: { type: "string", enum: ["receiptsWebhook", "supervisorEndpoint"] },
           value: { type: "string" },
         },
         required: ["key", "value"],

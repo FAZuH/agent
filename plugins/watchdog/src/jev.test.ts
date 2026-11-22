@@ -273,10 +273,15 @@ describe("verdict outcomes", () => {
     expect(out.message).toContain("P=0.87")
   })
 
-  test("abort stops the session and notifies, distinct from deny", () => {
+  test("abort starts the operation, distinct from deny, and asserts no record of its own", () => {
     const out = verdictOutcome("abort", 0.91, info)!
     expect(out.effect).toBe("abort")
     expect(out.message).toContain("P=0.91")
+    // Written before the operation runs, so it cannot claim the record the
+    // operation may fail to write; only its result reports that.
+    expect(out.message).toContain("starts now")
+    expect(out.message).not.toContain("is recorded")
+    expect(out.message).not.toContain("was stopped and the user was notified")
   })
 
   test("an unknown verdict fails closed to propagate, never allow", () => {
@@ -840,8 +845,10 @@ describe("call toasts", () => {
 
   test("the global switch, then the feature's own, gates a toast", () => {
     clearState()
-    // Every feature defaults to toasting; the global switch is off by default.
-    expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast === true)).toBe(true)
+    // Every feature that ships a toast setting defaults it on; a feature with
+    // no toast setting has nothing to gate. The global switch is off by
+    // default.
+    expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast !== false)).toBe(true)
     expect(toastsOn("hook_tool_risk")).toBe(false)
     saveState({ toast: true })
     expect(toastsOn("hook_tool_risk")).toBe(true)
@@ -1254,13 +1261,83 @@ describe("jev-abort command", () => {
     expect(host.calls).toEqual([])
   })
 
-  test("aborts the session on the session target", async () => {
+  test("stops the session tree through the unified operation, not the legacy host call", async () => {
+    const host = fakeHost()
+    const asked: string[] = []
+    const outcome = {
+      ok: true,
+      sealed: true,
+      durable: true,
+      receipt: true,
+      ban: { written: 1, failed: 0 },
+      operation: { id: "op_cmd", sessionID: "ses_x", scope: ["ses_x"], source: "human", cause: "user command", at: 1 },
+      containment: [
+        { step: "scope", status: "done", detail: "discovered 0 owned descendants" },
+        { step: "ban", status: "done", detail: "durable subtree ban written for 1 of 1 sessions" },
+        { step: "interrupt", status: "done", detail: "interrupted 1 of 1 sessions" },
+      ],
+      incomplete: [],
+    } as any
+    const message = await runAbort("ses_x", "session", {
+      enabled: () => true,
+      read: (() => snapshot([])) as any,
+      host,
+      abortSession: async (sessionID: string) => {
+        asked.push(sessionID)
+        return outcome
+      },
+      enforced: () => true,
+    })
+    // The legacy host call is never reached: a retirable parent-kind ban is not
+    // what a session stop means.
+    expect(host.calls).toEqual([])
+    expect(asked).toEqual(["ses_x"])
+    expect(message).toContain("session")
+    expect(message).toContain("1 session covered")
+    expect(message).toContain("durable subtree ban was written for all 1 session")
+    expect(message).toContain("interrupted 1 of 1 sessions")
+    expect(message).toContain("durable: an ordinary user turn and a restart do not release it")
+  })
+
+  test("a session stop states the failed discovery instead of a clean stop", async () => {
+    const outcome = {
+      ok: true,
+      sealed: false,
+      durable: true,
+      receipt: true,
+      ban: { written: 1, failed: 1 },
+      operation: { id: "op_cmd2", sessionID: "ses_x", scope: ["ses_x", "ses_c"], source: "human", cause: "user command", at: 1 },
+      containment: [
+        { step: "scope", status: "failed", detail: "the session listing failed; this session's descendants are unknown, so only the selected session is held" },
+        { step: "ban", status: "failed", detail: "durable subtree ban written for 1 of 2 sessions" },
+        { step: "interrupt", status: "failed", detail: "interrupted 0 of 2 sessions; 2 refused" },
+      ],
+      incomplete: [
+        { step: "scope", status: "failed", detail: "the session listing failed" },
+        { step: "ban", status: "failed", detail: "durable subtree ban written for 1 of 2 sessions" },
+        { step: "interrupt", status: "failed", detail: "interrupted 0 of 2 sessions; 2 refused" },
+      ],
+    } as any
+    const message = await runAbort("ses_x", "session", {
+      enabled: () => true,
+      read: (() => snapshot([])) as any,
+      host: fakeHost(),
+      abortSession: async () => outcome,
+      // No admission hook is active here, so the record is all there is.
+      enforced: () => false,
+    })
+    expect(message).toContain("discovery failed")
+    expect(message).toContain("written for 1 of 2 sessions")
+    expect(message).toContain("Containment incomplete")
+    expect(message).toContain("No admission hook is active in this process")
+    expect(message).not.toContain("The stop is durable")
+  })
+
+  test("refuses a session stop when the unified operation is not wired", async () => {
     const host = fakeHost()
     const message = await runAbort("ses_x", "session", { enabled: () => true, read: (() => snapshot([])) as any, host })
-    expect(host.calls[0][0]).toBe("session")
-    expect(host.calls[0].slice(1)).toEqual(["ses_x", "user", "user command"])
-    expect(message).toContain("session")
-    expect(message).toContain("1 session interrupted")
+    expect(message).toContain("not available in this process")
+    expect(host.calls).toEqual([])
   })
 
   test("refuses when the host handle is missing", async () => {
@@ -1282,7 +1359,7 @@ describe("jev-abort command", () => {
     expect(sent[0].text).toBe(result.content)
   })
 
-  test("sends one message for an abort: the host's own notice", async () => {
+  test("sends the session stop once, and the line is the operation's own report", async () => {
     clearState()
     setFeature("hook_session_ban", true)
     const sent: any[] = []
@@ -1292,18 +1369,20 @@ describe("jev-abort command", () => {
     try {
       await jevPlugin.setup(ctx)
       const result = await commands["jev-abort"].execute({ sessionID: "ses_cmd", prompt: { text: "session" } })
-      expect(result.content).toContain("ses_cmd stopped")
+      // The unified operation records the stop; this host has no listing and no
+      // interrupt, so the line must say so rather than claim a clean stop.
+      expect(result.content).toContain("ses_cmd aborted")
+      expect(result.content).toContain("discovery failed")
       expect(result.content).not.toContain("hook_session_ban is off")
-      // The host already told the session, so the command stays quiet: one
-      // message, and it is not the returned line.
+      // Nothing else notified this session, so the command speaks, once.
       expect(sent.length).toBe(1)
-      expect(sent[0].delivery).toBe("queue")
-      expect(sent[0].text).toContain("Jev aborted this session")
-      expect(sent[0].text).not.toBe(result.content)
+      expect(sent[0].resume).toBe(false)
+      expect(sent[0].text).toBe(result.content)
     } finally {
       setFeature("hook_session_ban", false)
       clearState()
       rmSync(join(scratch, "session-ban"), { recursive: true, force: true })
+      rmSync(join(scratch, "abort-operations.json"), { force: true })
     }
   })
 
@@ -1479,5 +1558,62 @@ describe("opencode protocol", () => {
     await expect(
       ask({ task: "x" }, { pick: choice }, { ctx, state: openState({ model: "" }), log: false }),
     ).rejects.toThrow(/\/jev-model/)
+  })
+
+  // A rejection is the one row written without the caller's consent: it is
+  // logged even under `log: false`. Nothing provider-controlled may ride along.
+  describe("rejection diagnostics", () => {
+    const MARK = "CANARY7f3c9a"
+    const TOKEN = "sk-live-CANARYTOKEN0000"
+    const brief = { type: "score" as const, instructions: "how much", criteria: ["none", "lots"] }
+    const shapes = [
+      { name: "type", question: choice, reason: "answer-type", answer: { type: `${MARK} ${TOKEN}`, probabilities: { a: 1, b: 0, c: 0 } } },
+      { name: "choice", question: choice, reason: "choice-unknown", answer: { type: "choice", choice: `${MARK} ${TOKEN}`, probabilities: { a: 0.9, b: 0.05, c: 0.05 } } },
+      { name: "score", question: score, reason: "score-range", answer: { type: "score", score: `${MARK} ${TOKEN}`, probabilities: { "0": 0.9, "1": 0.05, "2": 0.05 } } },
+      { name: "key", question: brief, reason: "probability-range", answer: { type: "score", probabilities: { "0": 0.9, [`${MARK} ${TOKEN}`]: "x" } } },
+    ]
+
+    const reject = async (shape: (typeof shapes)[number], log: boolean, hook: string) => {
+      const ctx: any = {
+        experimental: {
+          generate: {
+            text: async () => ({ text: JSON.stringify({ answers: { pick: shape.answer } }) }),
+          },
+        },
+      }
+      const caught = await ask({ task: "a task" }, { pick: shape.question }, { ctx, state: openState(), log, hook, thresholds }).then(
+        () => null,
+        (error: any) => error,
+      )
+      expect(caught).toBeInstanceOf(JevError)
+      // The human-facing message is fixed wording too: no answer value in it.
+      expect(String(caught.message)).not.toContain(MARK)
+      expect(String(caught.message)).not.toContain(TOKEN)
+      const rows = readCallLog(100_000).filter((row: any) => row.hook === hook)
+      expect(rows).toHaveLength(1)
+      return rows[0]
+    }
+
+    for (const shape of shapes) {
+      for (const log of [false, true]) {
+        test(`a ${shape.name} answer rejected under log:${log} logs ids and a reason only`, async () => {
+          const row = await reject(shape, log, `canary_${shape.name}_${log}`)
+          expect(row.failure).toBe("answer-rejected")
+          expect(row.reason).toBe(shape.reason)
+          expect(row.id).toBe("pick")
+          expect(row.questions).toEqual({ pick: shape.question.type })
+          expect(row.answered).toBe(1)
+          expect(row.sent).toBeUndefined()
+          expect(row.received).toBeUndefined()
+          expect(row.error).toBe("the model's answer could not be validated")
+          // Nothing provider-controlled in the row, and nothing in the log.
+          expect(JSON.stringify(row)).not.toContain(MARK)
+          expect(JSON.stringify(row)).not.toContain(TOKEN)
+          const log_ = JSON.stringify(readCallLog(100_000))
+          expect(log_).not.toContain(MARK)
+          expect(log_).not.toContain(TOKEN)
+        })
+      }
+    }
   })
 })

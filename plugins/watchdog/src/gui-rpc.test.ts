@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { describe, expect, test } from "bun:test"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -9,6 +9,7 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { jevRpcHandlers, logRows, setJevEmitter, statusSnapshot } = await import("./gui-rpc.ts")
 const { STATE_FILE, LOG_FILE, APPROVALS_FILE, logCall } = await import("../../../lib/jev/state.ts")
+const { CHAIN_BUDGET_FILE, chainStateHome } = await import("./chain.ts")
 
 test("statusSnapshot projects safe config fields and masks the endpoint", () => {
   writeFileSync(
@@ -241,7 +242,7 @@ test("liftTool ban clears the tool ban and the session ban", async () => {
   const cleared: string[] = []
   const handlers = jevRpcHandlers({
     liftToolBan: async () => 2,
-    clearSessionBan: (sessionID) => { cleared.push(sessionID); return true },
+    clearSessionBan: (sessionID) => { cleared.push(sessionID); return "cleared" },
   })
   const result = await (handlers as any).liftToolBan({ sessionID: "ses_batch_01" })
   expect(result).toEqual({ ok: true, count: 2 })
@@ -253,7 +254,7 @@ test("liftTool banAndResume clears both bans then resumes once with the Continue
   const resumed: string[] = []
   const handlers = jevRpcHandlers({
     liftToolBan: async () => 1,
-    clearSessionBan: () => { order.push("clearSessionBan"); return true },
+    clearSessionBan: () => { order.push("clearSessionBan"); return "cleared" },
     resumeSession: async (sessionID, text) => { order.push("resumeSession"); resumed.push(`${sessionID}|${text}`) },
   })
   const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_batch_02" })
@@ -266,9 +267,462 @@ test("liftToolBanAndResume still clears both bans when no resume dep is wired", 
   const cleared: string[] = []
   const handlers = jevRpcHandlers({
     liftToolBan: async () => 1,
-    clearSessionBan: (sessionID) => { cleared.push(sessionID); return true },
+    clearSessionBan: (sessionID) => { cleared.push(sessionID); return "cleared" },
   })
   const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_no_resume" })
   expect(result).toEqual({ ok: true, count: 1 })
   expect(cleared).toEqual(["ses_no_resume"])
+})
+
+test("an abort operation reports coverage, durability and incompleteness separately", async () => {
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => ["chain", "cards"],
+    abortSession: async () => ({
+      ok: true,
+      sealed: false,
+      durable: true,
+      receipt: false,
+      ban: { written: 1, failed: 1 },
+      operation: { id: "op_rpc1", scope: ["ses_rpc_root", "ses_rpc_child"] },
+      incomplete: [
+        { step: "scope", status: "failed", detail: "the session listing failed" },
+        { step: "receipt", status: "failed", detail: "the receipt write failed" },
+      ],
+    }),
+  })
+  const result = await (handlers as any).abortOperation({ sessionID: "ses_rpc_root" })
+  // No single flag stands for "contained": each one says what actually held.
+  expect(result).toEqual({
+    ok: true,
+    sealed: false,
+    durable: true,
+    receipt: false,
+    ban: { written: 1, failed: 1 },
+    operationID: "op_rpc1",
+    scope: ["ses_rpc_root", "ses_rpc_child"],
+    incomplete: [
+      { step: "scope", status: "failed", detail: "the session listing failed" },
+      { step: "receipt", status: "failed", detail: "the receipt write failed" },
+    ],
+    outcome: "known",
+    enforcedBy: ["chain", "cards"],
+  })
+})
+
+test("an abort with every admission path off names that nothing enforces it", async () => {
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => [],
+    abortSession: async () => ({
+      ok: true,
+      sealed: true,
+      durable: true,
+      receipt: true,
+      ban: { written: 1, failed: 0 },
+      operation: { id: "op_rpc_off", scope: ["ses_rpc_off"] },
+      incomplete: [],
+    }),
+  })
+  const result = await (handlers as any).abortOperation({ sessionID: "ses_rpc_off" })
+  // Sealed stays factual about the record; the posture says nobody reads it.
+  expect(result.sealed).toBe(true)
+  expect(result.enforcedBy).toEqual([])
+  expect(result.warning).toContain("not enforced")
+})
+
+test("an active surface is listed and carries no warning", async () => {
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => ["chain"],
+    abortSession: async () => ({
+      ok: true,
+      sealed: true,
+      durable: true,
+      receipt: true,
+      ban: { written: 1, failed: 0 },
+      operation: { id: "op_rpc_on", scope: ["ses_rpc_on"] },
+      incomplete: [],
+    }),
+  })
+  const result = await (handlers as any).abortOperation({ sessionID: "ses_rpc_on" })
+  expect(result.enforcedBy).toEqual(["chain"])
+  expect(result.warning).toBeUndefined()
+})
+
+test("the posture is sampled after the operation, so a mid-abort change is what the answer reports", async () => {
+  let posture = ["chain"]
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => posture,
+    abortSession: async () => {
+      // The gate file is removed while the abort runs: by the time it answers,
+      // nothing consults the ban any more.
+      posture = []
+      return {
+        ok: true,
+        sealed: true,
+        durable: true,
+        receipt: true,
+        ban: { written: 1, failed: 0 },
+        operation: { id: "op_rpc_flip", scope: ["ses_rpc_flip"] },
+        incomplete: [],
+      }
+    },
+  })
+  const result = await (handlers as any).abortOperation({ sessionID: "ses_rpc_flip" })
+  expect(result.enforcedBy).toEqual([])
+  expect(result.warning).toContain("not enforced")
+})
+
+test("the panel's stop is the unified operation and reports a failed discovery, never a clean success", async () => {
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => ["chain"],
+    abortSession: async () => ({
+      ok: true,
+      sealed: false,
+      durable: true,
+      receipt: true,
+      ban: { written: 1, failed: 0 },
+      operation: { id: "op_rpc_stop", scope: ["ses_rpc_stop"] },
+      incomplete: [{ step: "scope", status: "failed", detail: "the session listing failed" }],
+    }),
+  })
+  const result = await (handlers as any).stopSession({ sessionID: "ses_rpc_stop" })
+  // The stop no longer answers from a swallowed helper: the rows are the report.
+  expect(result.ok).toBe(true)
+  expect(result.operationID).toBe("op_rpc_stop")
+  expect(result.sealed).toBe(false)
+  expect(result.incomplete).toEqual([{ step: "scope", status: "failed", detail: "the session listing failed" }])
+})
+
+test("an abort that throws reports its outcome as unknown, never as a clean negative", async () => {
+  const handlers = jevRpcHandlers({
+    abortSession: async () => {
+      throw new Error("the host vanished")
+    },
+  })
+  const result = await (handlers as any).abortOperation({ sessionID: "ses_rpc_throw" })
+  expect(result.ok).toBe(false)
+  // The operation may have written identity or a ban before it threw, so the
+  // flags and counts are placeholders and the answer says so.
+  expect(result.outcome).toBe("unknown")
+  expect(result.error).toContain("cannot be verified")
+  expect(result.error).toContain("identity")
+  // The host's own message never travels.
+  expect(JSON.stringify(result)).not.toContain("vanished")
+})
+
+test("an abort with no session or no route says nothing ran", async () => {
+  const handlers = jevRpcHandlers({})
+  const result = await (handlers as any).abortOperation({ sessionID: "ses_rpc_none" })
+  expect(result.outcome).toBe("none")
+  expect(result.ok).toBe(false)
+  // Nothing ran, so no ban exists to enforce and no warning is owed.
+  expect(result.enforcedBy).toEqual([])
+  expect(result.warning).toBeUndefined()
+})
+
+test("an unreadable operation store is reported, never an empty list", async () => {
+  const { abortFile } = await import("./abort.ts")
+  writeFileSync(abortFile(), "{ not json")
+  const handlers = jevRpcHandlers({})
+  const result = await (handlers as any).abortOperations({})
+  expect(result.ok).toBe(false)
+  expect(result.reason).toBe("corrupt")
+  expect(result.operations).toEqual([])
+})
+
+test("a durable abort ban makes the lift a reported refusal, not a success", async () => {
+  const resumed: string[] = []
+  let toolLifts = 0
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => {
+      toolLifts++
+      return 1
+    },
+    clearSessionBan: () => "refused",
+    resumeSession: async (sessionID, text) => resumed.push(`${sessionID}|${text}`),
+  })
+  const lifted = await (handlers as any).liftToolBan({ sessionID: "ses_lift_refused" })
+  expect(lifted.ok).toBe(false)
+  // Nothing was lifted: the tool ban stays because the ban state is not clear.
+  expect(lifted.count).toBe(0)
+  // The error states the restriction and the one action that can lift it: the
+  // release of the operation that wrote the ban, not this switch.
+  expect(lifted.error).toContain("a durable abort ban is in place")
+  expect(lifted.error).toContain("only that operation's release can lift it")
+  expect(lifted.error).not.toContain("no operation that releases it")
+  expect(lifted.error).not.toContain("#16")
+  expect(lifted.error).not.toContain("clears it")
+
+  // The resume route refuses too, and sends no continuation on top of the ban.
+  const resumedResult = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_lift_refused" })
+  expect(resumedResult.ok).toBe(false)
+  expect(resumed).toEqual([])
+  expect(toolLifts).toBe(0)
+})
+
+test("an unreadable session ban store refuses the lift and names the read failure", async () => {
+  const resumed: string[] = []
+  let toolLifts = 0
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => {
+      toolLifts++
+      return 0
+    },
+    clearSessionBan: () => "unreadable",
+    resumeSession: async (sessionID, text) => resumed.push(`${sessionID}|${text}`),
+  })
+  const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_lift_unreadable" })
+  expect(result.ok).toBe(false)
+  expect(result.count).toBe(0)
+  expect(result.error).toContain("cannot be read")
+  expect(resumed).toEqual([])
+  // An unreadable state lifts nothing at all: the tool ban is still there.
+  expect(toolLifts).toBe(0)
+})
+
+test("a session-ban host that is off reports unknown, and nothing is lifted or resumed", async () => {
+  const resumed: string[] = []
+  let toolLifts = 0
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => {
+      toolLifts++
+      return 2
+    },
+    clearSessionBan: () => "unknown",
+    resumeSession: async (sessionID, text) => resumed.push(`${sessionID}|${text}`),
+  })
+  const lifted = await (handlers as any).liftToolBan({ sessionID: "ses_lift_unknown" })
+  expect(lifted.ok).toBe(false)
+  expect(lifted.count).toBe(0)
+  expect(lifted.error).toContain("not available")
+  // Not `absent`: an off host proves nothing about the ban, so no tool ban goes.
+  expect(toolLifts).toBe(0)
+  const resumedResult = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_lift_unknown" })
+  expect(resumedResult.ok).toBe(false)
+  expect(resumed).toEqual([])
+})
+
+test("an abort landing between the lift and the send suppresses the continuation", async () => {
+  const resumed: string[] = []
+  let lifts = 0
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => {
+      lifts++
+      return 1
+    },
+    clearSessionBan: () => "cleared",
+    // The check is taken after the lift, which is where a concurrent abort lands.
+    sessionBlocked: () => lifts > 0,
+    resumeSession: async (sessionID, text) => resumed.push(`${sessionID}|${text}`),
+  })
+  const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_lift_raced" })
+  expect(result.ok).toBe(false)
+  expect(result.error).toContain("an abort covers this session")
+  expect(resumed).toEqual([])
+})
+
+test("an abort queued during the awaited check still suppresses the continuation", async () => {
+  const resumed: string[] = []
+  let marked = false
+  const handlers = jevRpcHandlers({
+    liftToolBan: async () => 1,
+    clearSessionBan: () => "cleared",
+    // The heavier read yields; the queued microtask is the abort marking its own
+    // session in that gap, before the RPC resumes.
+    sessionBlocked: async () => {
+      queueMicrotask(() => {
+        marked = true
+      })
+      return false
+    },
+    sessionBlockedNow: () => marked,
+    resumeSession: async (sessionID, text) => resumed.push(`${sessionID}|${text}`),
+  })
+  const result = await (handlers as any).liftToolBanAndResume({ sessionID: "ses_lift_queued" })
+  expect(result.ok).toBe(false)
+  expect(result.error).toContain("an abort covers this session")
+  expect(resumed).toEqual([])
+})
+
+test("a session with no ban lifts cleanly", async () => {
+  const handlers = jevRpcHandlers({ liftToolBan: async () => 0, clearSessionBan: () => "absent" })
+  expect(await (handlers as any).liftToolBan({ sessionID: "ses_lift_absent" })).toEqual({ ok: true, count: 0 })
+})
+
+test("the release answer is the operation's own receipt plus the live posture", async () => {
+  const reasons: string[] = []
+  setJevEmitter((event) => reasons.push(event.reason))
+  const handlers = jevRpcHandlers({
+    enforcedBy: () => ["chain", "cards"],
+    releaseOperation: async () => ({
+      ok: true,
+      durable: true,
+      receipt: true,
+      already: false,
+      ban: { cleared: 1, kept: 1, failed: 0 },
+      covered: ["ses_rpc_rel_child"],
+      continued: "sent",
+      incomplete: [],
+    }),
+  })
+  const result = await (handlers as any).releaseOperation({ operationID: "op_rpc_rel", continue: true })
+  expect(result).toEqual({
+    ok: true,
+    durable: true,
+    receipt: true,
+    already: false,
+    operationID: "op_rpc_rel",
+    ban: { cleared: 1, kept: 1, failed: 0 },
+    covered: ["ses_rpc_rel_child"],
+    continued: "sent",
+    incomplete: [],
+    enforcedBy: ["chain", "cards"],
+  })
+  // The panel refreshes off the same event the release emits.
+  expect(reasons).toContain("releaseOperation op_rpc_rel")
+  setJevEmitter(undefined)
+})
+
+test("a release with no route or no id says nothing ran", async () => {
+  const noRoute = jevRpcHandlers({})
+  const refused = await (noRoute as any).releaseOperation({ operationID: "op_rpc_no_route", continue: true })
+  expect(refused.ok).toBe(false)
+  expect(refused.reason).toContain("no release operation is available")
+  expect(refused.continued).toBe("prevented")
+
+  const handlers = jevRpcHandlers({
+    releaseOperation: async () => ({
+      ok: true,
+      durable: true,
+      receipt: true,
+      already: false,
+      ban: { cleared: 0, kept: 0, failed: 0 },
+      covered: [],
+      continued: "not-requested",
+      incomplete: [],
+    }),
+  })
+  const noId = await (handlers as any).releaseOperation({ operationID: "", continue: false })
+  expect(noId.ok).toBe(false)
+  expect(noId.reason).toContain("no abort operation was named")
+  expect(noId.continued).toBe("not-requested")
+  expect(noId.enforcedBy).toEqual([])
+})
+
+test("a release that throws reports its state as unverifiable, never a clean negative", async () => {
+  const handlers = jevRpcHandlers({
+    releaseOperation: async () => {
+      throw new Error("the host vanished")
+    },
+  })
+  const result = await (handlers as any).releaseOperation({ operationID: "op_rpc_rel_throw", continue: true })
+  expect(result.ok).toBe(false)
+  // The release may have landed before the throw: the answer claims nothing.
+  expect(result.reason).toContain("cannot be verified")
+  expect(result.continued).toBe("prevented")
+  expect(JSON.stringify(result)).not.toContain("vanished")
+})
+
+test("the operations list carries a release and its continuation", async () => {
+  const { abortFile } = await import("./abort.ts")
+  writeFileSync(
+    abortFile(),
+    JSON.stringify({
+      v: 1,
+      operations: [
+        {
+          operation: { id: "op_rows_live", sessionID: "ses_rows_live", scope: ["ses_rows_live"], source: "human", cause: "operator abort", at: 5 },
+          containment: [{ step: "receipt", status: "done", detail: "the operation record carries this receipt" }],
+        },
+        {
+          operation: { id: "op_rows_rel", sessionID: "ses_rows_rel", scope: ["ses_rows_rel"], source: "human", cause: "operator abort", at: 6, released: 7, continuedAt: 8 },
+          containment: [{ step: "receipt", status: "done", detail: "the operation record carries this receipt" }],
+        },
+      ],
+    }),
+  )
+  const handlers = jevRpcHandlers({})
+  const result = await (handlers as any).abortOperations({})
+  expect(result.ok).toBe(true)
+  const released = result.operations.find((operation: any) => operation.id === "op_rows_rel")
+  expect(released.released).toBe(7)
+  expect(released.continuedAt).toBe(8)
+  const live = result.operations.find((operation: any) => operation.id === "op_rows_live")
+  expect(live.released).toBeUndefined()
+  expect(live.continuedAt).toBeUndefined()
+})
+
+test("an unreadable delivery queue is its own state on the listing, never queued-absence", async () => {
+  const { abortFile } = await import("./abort.ts")
+  const { DELIVERY_FILE } = await import("./delivery.ts")
+  writeFileSync(
+    abortFile(),
+    JSON.stringify({
+      v: 1,
+      operations: [
+        {
+          operation: { id: "op_rows_unreadable", sessionID: "ses_rows_unreadable", scope: ["ses_rows_unreadable"], source: "human", cause: "operator abort", at: 5 },
+          containment: [{ step: "receipt", status: "done", detail: "the operation record carries this receipt" }],
+        },
+      ],
+    }),
+  )
+  // A delivery file that cannot be parsed is unreadable, not an empty queue.
+  writeFileSync(join(chainStateHome(), DELIVERY_FILE), "{ not json")
+  const handlers = jevRpcHandlers({})
+  const result = await (handlers as any).abortOperations({})
+  expect(result.ok).toBe(true)
+  expect(result.deliveryReadable).toBe(false)
+  // No row invents a receipt status: the unreadable state is the listing's
+  // own field, and a row without delivery stays absent rather than faked.
+  expect(result.operations).toHaveLength(1)
+  expect(result.operations[0].delivery).toBeUndefined()
+
+  // A readable store with no row for this operation is honest absence: the
+  // feature never queued it, and the listing says so by omission, not by
+  // collapsing an error.
+  rmSync(join(chainStateHome(), DELIVERY_FILE), { force: true })
+  const again = await (handlers as any).abortOperations({})
+  expect(again.deliveryReadable).toBe(true)
+  expect(again.operations[0].delivery).toBeUndefined()
+})
+
+describe("watchdogStatus durable ledger honesty", () => {
+  const ledgerPath = () => join(chainStateHome(), CHAIN_BUDGET_FILE)
+
+  test("a missing ledger is zero pending, readable", async () => {
+    rmSync(ledgerPath(), { force: true })
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durable).toBe(0)
+    expect(status.pending.durableUnreadable).toBe(false)
+  })
+
+  test("a valid ledger counts its unresolved entries", async () => {
+    writeFileSync(
+      ledgerPath(),
+      JSON.stringify({ sessions: { keyOne: [{ id: "wd_a" }, { id: "wd_b" }], keyTwo: [{ id: "wd_c" }] } }),
+    )
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durable).toBe(3)
+    expect(status.pending.durableUnreadable).toBe(false)
+  })
+
+  test("a corrupt ledger is reported unreadable, never as a silent zero", async () => {
+    writeFileSync(ledgerPath(), "{not json")
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durableUnreadable).toBe(true)
+  })
+
+  test("a ledger that exists but cannot be opened is reported unreadable", async () => {
+    // A directory where the file should be: every read fails with EISDIR,
+    // which is an unreadable ledger, not a missing one.
+    rmSync(ledgerPath(), { force: true })
+    mkdirSync(ledgerPath(), { recursive: true })
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durableUnreadable).toBe(true)
+    rmSync(ledgerPath(), { recursive: true, force: true })
+  })
 })

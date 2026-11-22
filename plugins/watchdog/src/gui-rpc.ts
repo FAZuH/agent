@@ -6,7 +6,20 @@
  */
 import { grant, readApprovals, rejectApproval } from "../../../lib/jev/approve.ts"
 import { readToolBans } from "../../../lib/jev/tool-ban.ts"
+import { incompleteContainment, readAbortRecords } from "./abort.ts"
+import { readDeliveryRows } from "./delivery.ts"
+import { CHAIN_BUDGET_FILE, chainStateHome } from "./chain.ts"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import type { ClearBanResult } from "./session-ban-host.ts"
 import { applySecret, applySetting, settingsSnapshot, type SetSecretInput, type SetSettingInput } from "./jev-settings.ts"
+import {
+  applyWatchdogSecret,
+  applyWatchdogSetting,
+  watchdogSnapshot,
+  type SetWatchdogSecretInput,
+  type SetWatchdogSettingInput,
+} from "./watchdog-settings.ts"
 import {
   FEATURES,
   STATE_FILE,
@@ -70,6 +83,13 @@ const LOG_FIELDS = [
   "rules",
   "rawVerdict",
   "decisionNote",
+  // Abort operation rows: identity, scope size and the incomplete step names.
+  "operationID",
+  "scope",
+  "incomplete",
+  "shape",
+  "source",
+  "cause",
 ] as const
 
 export function statusSnapshot() {
@@ -122,6 +142,112 @@ export function logRows(limit = 30, sessionID?: string) {
   })
 }
 
+/**
+ * Every abort operation this machine recorded, with the containment it could not
+ * complete. Read server-side: the projection is the record's own redacted fields,
+ * never a prompt, argument or model reply.
+ */
+export function abortOperationRows() {
+  const read = readAbortRecords()
+  // A store that cannot be read is not an empty set: the caller must be able to
+  // tell "no operations" from "the record file is broken". The delivery store
+  // is still reported on its own merit: its readability is a fact about it,
+  // not about the operation records.
+  if (!read.ok) return { ok: false as const, reason: read.reason, operations: [], deliveryReadable: readDeliveryRows().ok }
+  // Delivery rows are a parallel store keyed by the same operation ids. In a
+  // readable store a missing row means the feature never queued this
+  // operation, so its receipt stays absent rather than invented; a store that
+  // cannot be read is the listing's own `deliveryReadable: false` state and
+  // no row gets a delivery field at all.
+  const delivery = readDeliveryRows()
+  const byOperation = new Map(delivery.ok ? delivery.rows.map((row) => [row.operationID, row]) : [])
+  return {
+    ok: true as const,
+    deliveryReadable: delivery.ok,
+    operations: read.records.map((record) => {
+      const row = byOperation.get(record.operation.id)
+      return {
+        id: record.operation.id,
+        sessionID: record.operation.sessionID,
+        scope: record.operation.scope,
+        source: record.operation.source,
+        cause: record.operation.cause,
+        at: record.operation.at,
+        ...(typeof record.operation.released === "number" ? { released: record.operation.released } : {}),
+        ...(typeof record.operation.continuedAt === "number" ? { continuedAt: record.operation.continuedAt } : {}),
+        incomplete: incompleteContainment(record.containment).map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
+        ...(row ? { delivery: { receipt: row.receipt.status, attempts: row.receipt.attempts, notice: row.notice } } : {}),
+      }
+    }),
+  }
+}
+
+/**
+ * The Watchdog page's status projection (#18): its own enablement, the chain's
+ * capability verdict, live and durable review counts, and the effective-ban
+ * picture with its overlaps. Every field is a status, a count or the operation
+ * listing's own redacted ids — never a prompt, argument, credential or
+ * transcript. The overlap rows are the page's reason a released session can
+ * still be blocked: releasing one operation leaves every other covering
+ * operation's ban in force.
+ */
+export function watchdogStatusRows(deps: JevRpcDeps) {
+  const state = loadState()
+  const chain = deps.chainStatus?.() ?? null
+  const stats = deps.chainStats?.() ?? null
+  const operations = abortOperationRows()
+  const active = operations.ok ? operations.operations.filter((row) => typeof row.released !== "number") : []
+  const coverage = new Map<string, number>()
+  for (const row of active) {
+    if (!Array.isArray(row.scope)) continue
+    for (const id of row.scope) coverage.set(id, (coverage.get(id) ?? 0) + 1)
+  }
+  const overlapping = [...coverage.entries()].filter(([, count]) => count > 1).map(([sessionID, count]) => ({ sessionID, operations: count }))
+  return {
+    ok: true as const,
+    on: state.watchdog.on,
+    chain: chain ? { status: chain.status, reason: chain.reason, wired: chain.wired } : null,
+    pending: {
+      inFlight: stats?.pending ?? 0,
+      waiting: stats?.waiting ?? 0,
+      ...durableLedgerCount(),
+    },
+    effective: {
+      activeOperations: active.length,
+      sessionsCovered: coverage.size,
+      overlapping,
+      incompleteOperations: active.filter((row) => Array.isArray(row.incomplete) && row.incomplete.length > 0).length,
+    },
+    recordsReadable: operations.ok,
+    ...(operations.ok ? {} : { reason: operations.reason }),
+  }
+}
+
+/**
+ * The durable budget ledger's unresolved count. An unreadable ledger is
+ * reported as unreadable, never as zero: "no pending reviews" and "the
+ * ledger cannot be read" are different operator facts.
+ */
+function durableLedgerCount(): { durable: number; durableUnreadable: boolean } {
+  try {
+    const text = readFileSync(join(chainStateHome(), CHAIN_BUDGET_FILE), "utf8")
+    const parsed = JSON.parse(text) as { sessions?: Record<string, unknown> }
+    const sessions = parsed?.sessions
+    if (!sessions || typeof sessions !== "object" || Array.isArray(sessions)) return { durable: 0, durableUnreadable: true }
+    let durable = 0
+    for (const entries of Object.values(sessions)) {
+      if (!Array.isArray(entries)) return { durable: 0, durableUnreadable: true }
+      durable += entries.length
+    }
+    return { durable, durableUnreadable: false }
+  } catch (error) {
+    // A missing ledger is an empty budget. Anything else (corrupt bytes, an
+    // unreadable file) is an unreadable ledger, never a silent zero.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { durable: 0, durableUnreadable: false }
+    return { durable: 0, durableUnreadable: true }
+  }
+}
+
 /** The blocked calls a human can still act on, oldest first. */
 export function pendingApprovals() {
   const state = loadState()
@@ -138,22 +264,188 @@ export function pendingApprovals() {
 export interface JevRpcDeps {
   /** Resolve a session title for the expanded call detail. Failures are ignored. */
   sessionTitle?: (sessionID: string) => Promise<string | undefined>
-  /** Stop a session tree after a block. */
-  stopSession?: (sessionID: string) => Promise<string[]>
   /** Lift the tool ban on a session + subagents. */
   liftToolBan?: (sessionID: string) => Promise<number>
-  /** Remove the session ban left by an abort. */
-  clearSessionBan?: (sessionID: string) => boolean
+  /** Remove the legacy session ban left by a stop. A durable abort ban is refused. */
+  clearSessionBan?: (sessionID: string) => ClearBanResult
+  /** True when an abort or a durable ban covers the session right now. May await. */
+  sessionBlocked?: (sessionID: string) => boolean | Promise<boolean>
+  /**
+   * The same question, answering synchronously. Called at the send boundary and
+   * must not await: the continuation is dispatched in the same step.
+   */
+  sessionBlockedNow?: (sessionID: string) => boolean
   /** Start one new turn with the Continue text. */
   resumeSession?: (sessionID: string, text: string) => Promise<void>
+  /**
+   * The admission surfaces that consult a ban right now, in the order a call
+   * meets them: `chain`, `session-ban`, `cards`, `tool-risk`. Empty means no
+   * hook enforces a ban in this process. Read per request.
+   */
+  enforcedBy?: () => string[]
+  /** Run one abort operation over a session and its owned descendants. */
+  abortSession?: (sessionID: string) => Promise<{
+    ok: boolean
+    sealed: boolean
+    durable: boolean
+    receipt: boolean
+    ban: { written: number; failed: number }
+    operation: { id: string; scope: string[] }
+    incomplete: Array<{ step: string; status: string; detail: string }>
+  }>
+  /**
+   * Release one abort operation by id, with optional selected-session
+   * continuation. The one public release: the panel and headless clients
+   * cannot disagree about what it did.
+   */
+  releaseOperation?: (request: { operationID: string; continue?: boolean }) => Promise<{
+    ok: boolean
+    durable: boolean
+    receipt: boolean
+    already: boolean
+    ban: { cleared: number; kept: number; failed: number }
+    covered: string[]
+    continued: "sent" | "prevented" | "not-requested" | "unsupported" | "already"
+    incomplete: Array<{ step: string; status: string; detail: string }>
+    reason?: string
+  }>
+  /**
+   * The chain's capability verdict for the Watchdog page: the two-condition
+   * activation state, its reason, and whether a passing gate file appearing
+   * later could still activate this deployment.
+   */
+  chainStatus?: () => { status: string; reason: string; wired: boolean } | null
+  /** The live chain counts: reviews in flight and calls parked for a slot. */
+  chainStats?: () => { pending: number; waiting: number } | null
 }
 
 const CONTINUE_TEXT = "Continue the interrupted task."
+const BLOCKED_RESUME = "an abort covers this session; nothing was resumed"
 
-async function liftBothBans(sessionID: string, deps: JevRpcDeps): Promise<number> {
+/**
+ * What one abort answer can vouch for. `known` is the operation's own report,
+ * `none` is a request that never ran, and `unknown` is a throw after the
+ * operation may have written identity or a ban: on that path the zero fields
+ * below are placeholders, never a statement that nothing happened.
+ */
+export type AbortOutcomeShape = "known" | "none" | "unknown"
+
+/**
+ * Spoken when no admission surface is active. The record can be sealed and still
+ * guard nothing, so the answer names the posture instead of leaving a consumer to
+ * read `sealed` as live blocking.
+ */
+const NO_ENFORCEMENT = "no admission hook is active, so this ban is not enforced in this process"
+
+/**
+ * One abort request, answered from the operation's own report. Both `stopSession`
+ * and `abortOperation` land here: a stop is the same durable operation as a
+ * verdict's, so the panel cannot be told a clean stop after a failed discovery.
+ *
+ * `enforcedBy` is sampled after the operation resolves, never before: an abort can
+ * take seconds, and a gate file or a hook can change inside it. Sampling first
+ * would label the answer with a state the caller no longer has.
+ */
+async function runAbortOperation(sessionID: string, reason: string | undefined, deps: JevRpcDeps) {
+  const posture = () => deps.enforcedBy?.() ?? []
+  if (!sessionID || !deps.abortSession) return abortRefused(undefined, "none", posture())
+  try {
+    const outcome = await deps.abortSession(sessionID)
+    const enforcedBy = posture()
+    changed(reason ?? `abortOperation ${outcome.operation.id}`)
+    return {
+      ok: outcome.durable,
+      sealed: outcome.sealed,
+      durable: outcome.durable,
+      receipt: outcome.receipt,
+      ban: outcome.ban,
+      operationID: outcome.operation.id,
+      scope: outcome.operation.scope,
+      incomplete: outcome.incomplete.map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
+      outcome: "known" as const,
+      enforcedBy,
+      ...(enforcedBy.length === 0 ? { warning: NO_ENFORCEMENT } : {}),
+    }
+  } catch {
+    // Part of the abort may have happened before the throw: identity or a ban
+    // can already be on disk, so the zero fields are placeholders and `outcome`
+    // says the effects are unverifiable.
+    return abortRefused("the abort failed; its identity and ban state cannot be verified", "unknown", posture())
+  }
+}
+
+/**
+ * One release request through the public contract. The answer is the release
+ * operation's own receipt, verbatim fields plus the live posture, so the panel
+ * and a headless client read the same facts. A request that never ran answers
+ * `ok: false` with its reason, never a zeroed success.
+ */
+async function runReleaseOperation(operationID: string, wantContinue: boolean, deps: JevRpcDeps) {
+  const posture = () => deps.enforcedBy?.() ?? []
+  if (!operationID || !deps.releaseOperation)
+    return { ok: false, durable: false, receipt: false, already: false, operationID: "", ban: { cleared: 0, kept: 0, failed: 0 }, covered: [] as string[], continued: wantContinue ? ("prevented" as const) : ("not-requested" as const), incomplete: [] as Array<{ step: string; status: string; detail: string }>, enforcedBy: posture(), reason: deps.releaseOperation ? "no abort operation was named" : "no release operation is available in this process" }
+  try {
+    const outcome = await deps.releaseOperation({ operationID, continue: wantContinue })
+    changed(`releaseOperation ${operationID}`)
+    return {
+      ok: outcome.ok,
+      durable: outcome.durable,
+      receipt: outcome.receipt,
+      already: outcome.already,
+      operationID,
+      ban: outcome.ban,
+      covered: outcome.covered,
+      continued: outcome.continued,
+      incomplete: outcome.incomplete.map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
+      enforcedBy: posture(),
+      ...(outcome.reason ? { reason: outcome.reason } : {}),
+    }
+  } catch {
+    // The release may have landed before the throw: the record and the rows are
+    // whatever they are, and this answer claims nothing about either.
+    return { ok: false, durable: false, receipt: false, already: false, operationID, ban: { cleared: 0, kept: 0, failed: 0 }, covered: [] as string[], continued: wantContinue ? ("prevented" as const) : ("not-requested" as const), incomplete: [] as Array<{ step: string; status: string; detail: string }>, enforcedBy: posture(), reason: "the release failed; its record and restriction state cannot be verified" }
+  }
+}
+
+/**
+ * A refusal a consumer can read. The zero fields are placeholders unless
+ * `outcome` is `none`; `enforcedBy` is always the live posture, so an empty list
+ * carries the warning even here.
+ */
+function abortRefused(error: string | undefined, outcome: AbortOutcomeShape, enforcedBy: string[]) {
+  return {
+    ok: false,
+    sealed: false,
+    durable: false,
+    receipt: false,
+    ban: { written: 0, failed: 0 },
+    operationID: "",
+    scope: [] as string[],
+    incomplete: [] as Array<{ step: string; status: string; detail: string }>,
+    outcome,
+    enforcedBy,
+    ...(outcome !== "none" && enforcedBy.length === 0 ? { warning: NO_ENFORCEMENT } : {}),
+    ...(error ? { error } : {}),
+  }
+}
+
+/**
+ * Lift the tool ban and the legacy session ban. The session-ban state is read
+ * and settled first, because the tool ban must not disappear while the RPC
+ * claims nothing was lifted: a refused, unreadable or unknown state lifts
+ * nothing at all. `unknown` is a host that is off or never attached, which is
+ * not evidence of an absent ban either way.
+ */
+async function liftBothBans(sessionID: string, deps: JevRpcDeps): Promise<{ ok: boolean; count: number; error?: string }> {
+  const ban = deps.clearSessionBan ? deps.clearSessionBan(sessionID) : "unknown"
+  // A durable abort ban answers to its operation, not to this switch: the
+  // error names the action that can lift it instead of claiming none exists.
+  if (ban === "refused")
+    return { ok: false, count: 0, error: "a durable abort ban is in place; it persists, and only that operation's release can lift it" }
+  if (ban === "unreadable") return { ok: false, count: 0, error: "the session ban state cannot be read, so nothing was lifted" }
+  if (ban === "unknown") return { ok: false, count: 0, error: "the session-ban host is not available, so nothing was lifted" }
   const count = deps.liftToolBan ? await deps.liftToolBan(sessionID) : 0
-  deps.clearSessionBan?.(sessionID)
-  return count
+  return { ok: true, count }
 }
 
 /**
@@ -164,24 +456,57 @@ export function jevRpcHandlers(deps: JevRpcDeps = {}) {
   return {
     listToolBans: async () => ({ toolBans: readToolBans() }),
     status: async () => statusSnapshot(),
-    stopSession: async (input: any) => {
-      const sessionID = String(input?.sessionID ?? "")
-      const subagents = deps.stopSession ? await deps.stopSession(sessionID) : []
-      changed("stop")
-      return { ok: true, subagents }
+    watchdogStatus: async () => watchdogStatusRows(deps),
+    getWatchdogSettings: async () => watchdogSnapshot(),
+    setWatchdogSetting: async (input: any) => {
+      const result = applyWatchdogSetting({
+        key: String(input?.key ?? ""),
+        value: typeof input === "object" && input !== null ? (input as Record<string, unknown>).value : undefined,
+      })
+      if (result.ok) changed("watchdog")
+      return result
     },
+    setWatchdogSecret: async (input: any) => {
+      const result = applyWatchdogSecret({
+        key: String(input?.key ?? "") as SetWatchdogSecretInput["key"],
+        value: String(input?.value ?? ""),
+      })
+      if (result.ok) changed("watchdog")
+      return result
+    },
+    stopSession: async (input: any) => await runAbortOperation(String(input?.sessionID ?? ""), "stop", deps),
     liftToolBan: async (input: any) => {
       const sessionID = String(input?.sessionID ?? "")
-      const count = await liftBothBans(sessionID, deps)
+      const result = await liftBothBans(sessionID, deps)
       changed("liftToolBan")
-      return { ok: true, count }
+      return result
     },
     liftToolBanAndResume: async (input: any) => {
       const sessionID = String(input?.sessionID ?? "")
-      const count = await liftBothBans(sessionID, deps)
+      const result = await liftBothBans(sessionID, deps)
+      // The lift awaits the tool-ban write, so an abort can land inside it and
+      // cover this session. This first check may itself await a heavier read, so
+      // it cannot be the last one.
+      const blocked = result.ok && (await (deps.sessionBlocked?.(sessionID) ?? false))
+      if (blocked) {
+        changed("liftToolBanAndResume")
+        return { ok: false, count: result.count, error: BLOCKED_RESUME }
+      }
+      if (!result.ok) {
+        changed("liftToolBanAndResume")
+        return result
+      }
+      // The send boundary: this check and the dispatch are one synchronous step.
+      // `sessionBlockedNow` must answer without awaiting, so a queued microtask
+      // that runs an abort's own mark cannot land between the answer and the
+      // prompt. A covered session gets no continuation.
+      if (deps.sessionBlockedNow?.(sessionID)) {
+        changed("liftToolBanAndResume")
+        return { ok: false, count: result.count, error: BLOCKED_RESUME }
+      }
       await deps.resumeSession?.(sessionID, CONTINUE_TEXT)
       changed("liftToolBanAndResume")
-      return { ok: true, count }
+      return result
     },
     log: async (input: any) => {
       const sessionID = typeof input?.sessionID === "string" && input.sessionID ? input.sessionID : undefined
@@ -208,6 +533,10 @@ export function jevRpcHandlers(deps: JevRpcDeps = {}) {
       return { rows }
     },
     approvals: async () => ({ approvals: pendingApprovals() }),
+    abortOperations: async () => abortOperationRows(),
+    abortOperation: async (input: any) => await runAbortOperation(String(input?.sessionID ?? ""), undefined, deps),
+    releaseOperation: async (input: any) =>
+      await runReleaseOperation(String(input?.operationID ?? ""), input?.continue === true, deps),
     approve: async (input: any) => {
       const token = String(input?.token ?? "")
       const sessionID = String(input?.sessionID ?? "")

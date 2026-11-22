@@ -67,34 +67,48 @@ while true; do
     [ -f "$STATE/$b" ] || pend "FILE EVENT: $b appeared" "$STATE/$b"
   done
 
-  # 2) children: outcome transitions + stalls
+  # 2) children: outcome transitions + stalls. A terminal outcome whose newest
+  #    message postdates its .done marker means the lane was revived on the same
+  #    session id (outcomes never flip back to busy): watch for a second
+  #    completion instead of re-firing the settled report.
   while read -r s; do
     [ -n "$s" ] || continue
     out=$(opencode2 api get "/api/session/$s" 2>/dev/null | jq -r '.data.outcome // "busy"' 2>/dev/null)
+    last=$(opencode2 api get "/api/session/$s/message" 2>/dev/null | jq '[.data[]?.time.created] | max // 0' 2>/dev/null)
+    case "${last:-0}" in ''|0) last=0 ;; esac  # api hiccup this pass: skip, never false-alarm on it
+    dm="$STATE/$s.done"
     if [ "$out" = "succeeded" ] || [ "$out" = "failed" ]; then
-      [ -f "$STATE/$s.done" ] || pend "child $s finished (outcome=$out). Read its report, integrate into the session record, re-dispatch if failed (then rm $STATE/$s.done)" "$STATE/$s.done"
+      if [ "$last" -gt 0 ] && [ -f "$dm" ] && [ $(( last / 1000 )) -gt "$(stat -c %Y "$dm")" ]; then
+        # revived and worked after its settled report: quiet past the stall
+        # bound means it may have completed again with the outcome still stale
+        if [ $(( now - last / 1000 )) -ge "$STALL_AFTER" ]; then
+          sm="$STATE/$s.revived"
+          mt=$(stat -c %Y "$sm" 2>/dev/null || echo 0)
+          if [ ! -f "$sm" ] || [ $(( now - mt )) -ge 3600 ]; then
+            pend "child $s (revived, outcome=$out) went quiet after new work. Check for an unreported completion, integrate it, then touch (never rm) $dm to reset the baseline" "$sm"
+          fi
+        fi
+      elif [ ! -f "$dm" ]; then
+        pend "child $s finished (outcome=$out). Read its report, integrate into the session record, re-dispatch if failed, then touch (never rm) $dm" "$dm"
+      fi
     else
       # busy: stall detection via newest message timestamp
-      last=$(opencode2 api get "/api/session/$s/message" 2>/dev/null | jq '[.data[]?.time.created] | max // 0' 2>/dev/null)
-      case "${last:-0}" in
-        ''|0) : ;;  # api hiccup this pass: skip, never false-alarm on it
-        *)
-          prev=$(cat "$STATE/$s.lastmsg" 2>/dev/null || echo 0)
-          if [ "$last" -gt "$prev" ] 2>/dev/null; then
-            echo "$last" > "$STATE/$s.lastmsg"
-            rm -f "$STATE/$s.stalled"
-          else
-            idle=$(( now - last / 1000 ))
-            sm="$STATE/$s.stalled"
-            if [ "$idle" -ge "$STALL_AFTER" ]; then
-              mt=$(stat -c %Y "$sm" 2>/dev/null || echo 0)
-              # alert once per stall episode; re-notify hourly while stalled
-              if [ ! -f "$sm" ] || [ $(( now - mt )) -ge 3600 ]; then
-                pend "child $s idle ${idle}s. Verify liveness before any interrupt; long builds are normal" "$sm"
-              fi
-            fi
-          fi ;;
-      esac
+      prev=$(cat "$STATE/$s.lastmsg" 2>/dev/null || echo 0)
+      if [ "$last" -gt "$prev" ] 2>/dev/null; then
+        [ "$last" -gt 0 ] && echo "$last" > "$STATE/$s.lastmsg"
+        rm -f "$STATE/$s.stalled" "$STATE/$s.revived"
+      else
+        [ "$last" -eq 0 ] && continue
+        idle=$(( now - last / 1000 ))
+        sm="$STATE/$s.stalled"
+        if [ "$idle" -ge "$STALL_AFTER" ]; then
+          mt=$(stat -c %Y "$sm" 2>/dev/null || echo 0)
+          # alert once per stall episode; re-notify hourly while stalled
+          if [ ! -f "$sm" ] || [ $(( now - mt )) -ge 3600 ]; then
+            pend "child $s idle ${idle}s. Verify liveness before any interrupt; long builds are normal" "$sm"
+          fi
+        fi
+      fi
     fi
   done < "$CHILDREN_FILE"
 

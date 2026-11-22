@@ -2,17 +2,17 @@
 
 Use when a subagent spawn returns aborted ("Tool execution interrupted",
 "Endpoint is unavailable") or the server restarts mid-flight. Never re-spawn
-blindly: check the transient signatures below first. One retry there; the
-wreckage procedure only if the retry fails too.
+blindly: inspect session state and landed work before retrying an unknown
+dispatch. Apply the transient signatures below only after that inspection.
 
-## Transient signatures (retry the dispatch once, then classify)
+## Transient signatures
 
 - `Agent not found: <name>` right after a server restart while the agent file
   exists on disk (`~/.config/opencode/agents/<name>.md`) → registry not
-  reloaded yet; retry the spawn once before calling it a routing error.
+  reloaded yet. If no child started, retry once before calling it a routing error.
 - Dispatch dies with `context deadline exceeded` or
-  `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → transient provider hop; retry the
-  dispatch once.
+  `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR` → inspect for an existing child
+  before retrying. Resume it if it started; otherwise retry the dispatch once.
 - Any DNS-signed failure (`ENOTFOUND <provider-host>`) → the provider router
   may sit behind a private network; check that path before anything else.
 - A child reports completion with no text: **check the tree first**. Work
@@ -29,9 +29,11 @@ wreckage procedure only if the retry fails too.
 
 1. **Assess landed state before respawning.** Killed agents leave work on
    disk. Check: `git status --short`, the repo's fast compile/check equivalent,
-   and any `.scratch` artifacts the agent was working from.
+   and any `.scratch` artifacts the agent was working from. Stop or isolate a
+   live old writer before replacing it. Follow @orchestrate for task/attempt IDs.
 2. **Classify the wreckage:**
-   - *Nothing landed* → re-send the original brief unchanged.
+   - *Nothing landed* → resume the original assignment if its session remains
+     usable. A replacement keeps the scope/context but receives a new attempt ID.
    - *Partial* → send a resume-brief (template below).
    - *Looks complete but no report* → run the acceptance gates yourself; if
      green, mark the ticket done from evidence.
