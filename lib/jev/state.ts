@@ -209,10 +209,37 @@ export interface JevState {
    * or partial file cannot unconfigure a feature.
    */
   config: Record<string, Record<string, ConfigValue>>
+  /**
+   * The Watchdog page's own scope (#18): its enablement and the chain
+   * controls it owns. Persisted here because the state file is the one store
+   * both surfaces already share; the page's identity is its own panel, and
+   * nothing in this field makes the page depend on Jev's provider or hooks.
+   * `nodes` empty means every review node is on; the values mirror the
+   * chain's enforcement defaults, which chain.ts still clamps on read.
+   */
+  watchdog: WatchdogSettings
   /** Call-log cap: logCall keeps at most this many lines, pruned to the tail. */
   logMax: number
   // skillCriteria and rosterHash live in jev-data.json, not here. See
   // loadData/saveData: this interface stays syncable-only.
+}
+
+/** The persisted Watchdog scope: page enablement plus the chain controls. */
+export interface WatchdogSettings {
+  /** The page's own switch, independent of Jev's `enabled`. Off by default. */
+  on: boolean
+  /** Review nodes this deployment runs; empty is every node on. */
+  nodes: string[]
+  /** Chain timing: blocking holds calls, nonblocking batches without holds. */
+  timing: "blocking" | "nonblocking"
+  /** Most in-flight reviews one producing session may hold. */
+  sessionCap: number
+  /** Jev review batch: most items, and the collection window in ms. */
+  jevBatchMax: number
+  jevBatchMs: number
+  /** Supervisor review batch: most items, and the collection window in ms. */
+  supervisorBatchMax: number
+  supervisorBatchMs: number
 }
 
 /**
@@ -236,6 +263,20 @@ export const DEFAULTS: JevState = {
   sidebarSubject: true,
   features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_session_ban: false, hook_supervisor: false, hook_abort_receipts: false },
   config: FEATURE_DEFAULTS,
+  // The values mirror the chain's enforcement defaults (chain.ts
+  // CHAIN_DEFAULTS): an unmigrated file reads as the same behavior the env
+  // defaults produced, never a new posture. Off by default: the page ships
+  // disabled until the operator turns it on.
+  watchdog: {
+    on: false,
+    nodes: [],
+    timing: "blocking",
+    sessionCap: 4,
+    jevBatchMax: 1,
+    jevBatchMs: 0,
+    supervisorBatchMax: 1,
+    supervisorBatchMs: 0,
+  },
   logMax: 500,
 }
 
@@ -259,6 +300,34 @@ export const SKILL_CRITERIA_VERSION = 1
 
 const num = (raw: unknown, fallback: number): number =>
   typeof raw === "number" && Number.isFinite(raw) ? raw : fallback
+
+/**
+ * The Watchdog scope's migration reader. A file written before #18 carries
+ * no `watchdog` object and reads as the off-by-default scope with the chain's
+ * own default values — never a new posture. A partial or corrupt object keeps
+ * every field it states validly and defaults the rest, so one bad number can
+ * neither unconfigure the rest nor throw the whole state read.
+ */
+export function watchdogMap(raw: unknown): WatchdogSettings {
+  const stored = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  const count = (value: unknown, fallback: number, min: number): number => {
+    const rounded = Math.round(num(value, fallback))
+    return Number.isFinite(rounded) && rounded >= min ? rounded : fallback
+  }
+  const nodes = Array.isArray(stored.nodes)
+    ? stored.nodes.map((entry) => String(entry ?? "").trim().toLowerCase()).filter((entry) => ["jev", "parent", "supervisor", "human"].includes(entry))
+    : DEFAULTS.watchdog.nodes
+  return {
+    on: stored.on === true,
+    nodes,
+    timing: stored.timing === "nonblocking" ? "nonblocking" : "blocking",
+    sessionCap: count(stored.sessionCap, DEFAULTS.watchdog.sessionCap, 1),
+    jevBatchMax: count(stored.jevBatchMax, DEFAULTS.watchdog.jevBatchMax, 1),
+    jevBatchMs: count(stored.jevBatchMs, DEFAULTS.watchdog.jevBatchMs, 0),
+    supervisorBatchMax: count(stored.supervisorBatchMax, DEFAULTS.watchdog.supervisorBatchMax, 1),
+    supervisorBatchMs: count(stored.supervisorBatchMs, DEFAULTS.watchdog.supervisorBatchMs, 0),
+  }
+}
 
 /**
  * Fill every known feature, so an old or partial state file cannot silently
@@ -430,6 +499,21 @@ export function loadState(): JevState {
     features: featureMap(raw.features, raw.gate),
     config: featureConfigMap(merged),
     logMax: Math.max(10, Math.round(num(raw.logMax, DEFAULTS.logMax))),
+    watchdog: watchdogMap(raw.watchdog),
+  }
+}
+
+/**
+ * The parsed state file as it sits on disk, before any fill or migration
+ * reads it. Migration reporting compares this with the filled result; the
+ * value never round-trips into settings consumers.
+ */
+export function readRawState(): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(STATE_FILE, "utf8"))
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined
+  } catch {
+    return undefined
   }
 }
 

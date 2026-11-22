@@ -50,7 +50,7 @@ describe("Jev Desktop Settings tab wiring", () => {
   test("secret values are never bound to a rendered input value", () => {
     expect(gui, "secret inputs must be password fields").toContain('type="password"')
     expect(gui, "alertWebhook must be hidden in the per-feature loop").toContain('k !== "alertWebhook"')
-    expect(gui, "supervisor endpoint must be hidden in the per-feature loop").toContain('feature === "hook_supervisor" && k === "endpoint"')
+    expect(gui, "the Jev settings loop only copies the Jev family's groups, so the supervisor endpoint and receipts webhook groups never render here").toMatch(/for \(const feature of JEV_FEATURES\) \{[\s\S]{0,160}?next\[feature\] = fields/)
     expect(gui).not.toMatch(/value=\{[^\n]*(apiKey|alertWebhook|secrets\.)/)
   })
 })

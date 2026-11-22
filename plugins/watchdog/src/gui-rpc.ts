@@ -8,8 +8,18 @@ import { grant, readApprovals, rejectApproval } from "../../../lib/jev/approve.t
 import { readToolBans } from "../../../lib/jev/tool-ban.ts"
 import { incompleteContainment, readAbortRecords } from "./abort.ts"
 import { readDeliveryRows } from "./delivery.ts"
+import { CHAIN_BUDGET_FILE, chainStateHome } from "./chain.ts"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import type { ClearBanResult } from "./session-ban-host.ts"
 import { applySecret, applySetting, settingsSnapshot, type SetSecretInput, type SetSettingInput } from "./jev-settings.ts"
+import {
+  applyWatchdogSecret,
+  applyWatchdogSetting,
+  watchdogSnapshot,
+  type SetWatchdogSecretInput,
+  type SetWatchdogSettingInput,
+} from "./watchdog-settings.ts"
 import {
   FEATURES,
   STATE_FILE,
@@ -167,6 +177,72 @@ export function abortOperationRows() {
   }
 }
 
+/**
+ * The Watchdog page's status projection (#18): its own enablement, the chain's
+ * capability verdict, live and durable review counts, and the effective-ban
+ * picture with its overlaps. Every field is a status, a count or the operation
+ * listing's own redacted ids — never a prompt, argument, credential or
+ * transcript. The overlap rows are the page's reason a released session can
+ * still be blocked: releasing one operation leaves every other covering
+ * operation's ban in force.
+ */
+export function watchdogStatusRows(deps: JevRpcDeps) {
+  const state = loadState()
+  const chain = deps.chainStatus?.() ?? null
+  const stats = deps.chainStats?.() ?? null
+  const operations = abortOperationRows()
+  const active = operations.ok ? operations.operations.filter((row) => typeof row.released !== "number") : []
+  const coverage = new Map<string, number>()
+  for (const row of active) {
+    if (!Array.isArray(row.scope)) continue
+    for (const id of row.scope) coverage.set(id, (coverage.get(id) ?? 0) + 1)
+  }
+  const overlapping = [...coverage.entries()].filter(([, count]) => count > 1).map(([sessionID, count]) => ({ sessionID, operations: count }))
+  return {
+    ok: true as const,
+    on: state.watchdog.on,
+    chain: chain ? { status: chain.status, reason: chain.reason, wired: chain.wired } : null,
+    pending: {
+      inFlight: stats?.pending ?? 0,
+      waiting: stats?.waiting ?? 0,
+      ...durableLedgerCount(),
+    },
+    effective: {
+      activeOperations: active.length,
+      sessionsCovered: coverage.size,
+      overlapping,
+      incompleteOperations: active.filter((row) => Array.isArray(row.incomplete) && row.incomplete.length > 0).length,
+    },
+    recordsReadable: operations.ok,
+    ...(operations.ok ? {} : { reason: operations.reason }),
+  }
+}
+
+/**
+ * The durable budget ledger's unresolved count. An unreadable ledger is
+ * reported as unreadable, never as zero: "no pending reviews" and "the
+ * ledger cannot be read" are different operator facts.
+ */
+function durableLedgerCount(): { durable: number; durableUnreadable: boolean } {
+  try {
+    const text = readFileSync(join(chainStateHome(), CHAIN_BUDGET_FILE), "utf8")
+    const parsed = JSON.parse(text) as { sessions?: Record<string, unknown> }
+    const sessions = parsed?.sessions
+    if (!sessions || typeof sessions !== "object" || Array.isArray(sessions)) return { durable: 0, durableUnreadable: true }
+    let durable = 0
+    for (const entries of Object.values(sessions)) {
+      if (!Array.isArray(entries)) return { durable: 0, durableUnreadable: true }
+      durable += entries.length
+    }
+    return { durable, durableUnreadable: false }
+  } catch (error) {
+    // A missing ledger is an empty budget. Anything else (corrupt bytes, an
+    // unreadable file) is an unreadable ledger, never a silent zero.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { durable: 0, durableUnreadable: false }
+    return { durable: 0, durableUnreadable: true }
+  }
+}
+
 /** The blocked calls a human can still act on, oldest first. */
 export function pendingApprovals() {
   const state = loadState()
@@ -228,6 +304,14 @@ export interface JevRpcDeps {
     incomplete: Array<{ step: string; status: string; detail: string }>
     reason?: string
   }>
+  /**
+   * The chain's capability verdict for the Watchdog page: the two-condition
+   * activation state, its reason, and whether a passing gate file appearing
+   * later could still activate this deployment.
+   */
+  chainStatus?: () => { status: string; reason: string; wired: boolean } | null
+  /** The live chain counts: reviews in flight and calls parked for a slot. */
+  chainStats?: () => { pending: number; waiting: number } | null
 }
 
 const CONTINUE_TEXT = "Continue the interrupted task."
@@ -367,6 +451,24 @@ export function jevRpcHandlers(deps: JevRpcDeps = {}) {
   return {
     listToolBans: async () => ({ toolBans: readToolBans() }),
     status: async () => statusSnapshot(),
+    watchdogStatus: async () => watchdogStatusRows(deps),
+    getWatchdogSettings: async () => watchdogSnapshot(),
+    setWatchdogSetting: async (input: any) => {
+      const result = applyWatchdogSetting({
+        key: String(input?.key ?? ""),
+        value: typeof input === "object" && input !== null ? (input as Record<string, unknown>).value : undefined,
+      })
+      if (result.ok) changed("watchdog")
+      return result
+    },
+    setWatchdogSecret: async (input: any) => {
+      const result = applyWatchdogSecret({
+        key: String(input?.key ?? "") as SetWatchdogSecretInput["key"],
+        value: String(input?.value ?? ""),
+      })
+      if (result.ok) changed("watchdog")
+      return result
+    },
     stopSession: async (input: any) => await runAbortOperation(String(input?.sessionID ?? ""), "stop", deps),
     liftToolBan: async (input: any) => {
       const sessionID = String(input?.sessionID ?? "")

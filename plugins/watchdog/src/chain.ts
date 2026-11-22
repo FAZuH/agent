@@ -291,6 +291,11 @@ export interface ChainHandle {
    */
   holdReleases(): () => void
   /**
+   * The live counts the Watchdog page reports: reviews this runtime holds,
+   * and calls parked waiting for a producing session's slot.
+   */
+  stats(): { pending: number; waiting: number }
+  /**
    * Settle the outstanding reviews of one abort scope. `settled` counts queued
    * entries resolved unresolved; `started` counts generations already running,
    * which no primitive cancels (C3) and whose late answer is discarded.
@@ -1045,6 +1050,18 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       capacityWaiters.clear()
       // A held release wakes too: it re-checks `alive()` and ends unresolved.
       for (const wake of holdWaiters.splice(0)) wake()
+    },
+    /**
+     * The live counts the Watchdog page reports: reviews this runtime holds,
+     * and calls parked waiting for a producing session's slot. A retired or
+     * detached runtime answers zero: its waits have all been ended.
+     */
+    stats(): { pending: number; waiting: number } {
+      let pending = 0
+      for (const entries of owned.values()) pending += entries.length
+      let waiting = 0
+      for (const list of capacityWaiters.values()) waiting += list.length
+      return { pending, waiting }
     },
     markAborted(sessionIDs: string[]): void {
       for (const sessionID of sessionIDs) cancelled.add(budgetKey(sessionID))

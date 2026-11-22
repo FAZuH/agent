@@ -462,8 +462,9 @@ export const Contract = {
               webhookPresent: { type: "boolean" },
               endpointPresent: { type: "boolean" },
               supervisorEndpointPresent: { type: "boolean" },
+              receiptsWebhookPresent: { type: "boolean" },
             },
-            required: ["keyPresent", "webhookPresent", "endpointPresent", "supervisorEndpointPresent"],
+            required: ["keyPresent", "webhookPresent", "endpointPresent", "supervisorEndpointPresent", "receiptsWebhookPresent"],
             additionalProperties: false,
           },
           config: { type: "object", additionalProperties: { type: "object", additionalProperties: true } },
@@ -513,6 +514,160 @@ export const Contract = {
         type: "object",
         properties: {
           key: { type: "string", enum: ["apiKey", "alertWebhook"] },
+          value: { type: "string" },
+        },
+        required: ["key", "value"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, error: { type: "string" } },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
+    watchdogStatus: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          on: { type: "boolean" },
+          chain: {
+            type: ["object", "null"],
+            properties: {
+              status: { type: "string", enum: ["passed", "absent", "blocked", "malformed", "off"] },
+              reason: { type: "string" },
+              wired: { type: "boolean" },
+            },
+            required: ["status", "reason", "wired"],
+            additionalProperties: false,
+          },
+          pending: {
+            type: "object",
+            properties: {
+              inFlight: { type: "number" },
+              waiting: { type: "number" },
+              durable: { type: "number" },
+              durableUnreadable: { type: "boolean" },
+            },
+            required: ["inFlight", "waiting", "durable", "durableUnreadable"],
+            additionalProperties: false,
+          },
+          effective: {
+            type: "object",
+            properties: {
+              activeOperations: { type: "number" },
+              sessionsCovered: { type: "number" },
+              overlapping: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: { sessionID: { type: "string" }, operations: { type: "number" } },
+                  required: ["sessionID", "operations"],
+                  additionalProperties: false,
+                },
+              },
+              incompleteOperations: { type: "number" },
+            },
+            required: ["activeOperations", "sessionsCovered", "overlapping", "incompleteOperations"],
+            additionalProperties: false,
+          },
+          recordsReadable: { type: "boolean" },
+          reason: { type: "string" },
+        },
+        required: ["ok", "on", "pending", "effective", "recordsReadable"],
+        additionalProperties: false,
+      },
+    },
+    getWatchdogSettings: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          on: { type: "boolean" },
+          persisted: {
+            type: "object",
+            properties: {
+              nodes: { type: "string" },
+              timing: { type: "string", enum: ["blocking", "nonblocking"] },
+              sessionCap: { type: "number" },
+              jevBatchMax: { type: "number" },
+              jevBatchMs: { type: "number" },
+              supervisorBatchMax: { type: "number" },
+              supervisorBatchMs: { type: "number" },
+            },
+            required: ["nodes", "timing", "sessionCap", "jevBatchMax", "jevBatchMs", "supervisorBatchMax", "supervisorBatchMs"],
+            additionalProperties: false,
+          },
+          effective: {
+            type: "object",
+            properties: {
+              timing: { type: "string", enum: ["blocking", "nonblocking"] },
+              sessionCap: { type: "number" },
+              jevBatchMax: { type: "number" },
+              jevBatchMs: { type: "number" },
+              supervisorBatchMax: { type: "number" },
+              supervisorBatchMs: { type: "number" },
+              nodes: {
+                type: "object",
+                properties: {
+                  jev: { type: "boolean" },
+                  parent: { type: "boolean" },
+                  supervisor: { type: "boolean" },
+                  human: { type: "boolean" },
+                },
+                required: ["jev", "parent", "supervisor", "human"],
+                additionalProperties: false,
+              },
+            },
+            required: ["timing", "sessionCap", "jevBatchMax", "jevBatchMs", "supervisorBatchMax", "supervisorBatchMs", "nodes"],
+            additionalProperties: false,
+          },
+          envOverrides: { type: "array", items: { type: "string" } },
+          receiptsWebhookPresent: { type: "boolean" },
+          supervisorEndpointPresent: { type: "boolean" },
+          migration: {
+            type: "object",
+            properties: {
+              present: { type: "boolean" },
+              stored: { type: "number" },
+              defaulted: { type: "number" },
+              invalid: { type: "number" },
+            },
+            required: ["present", "stored", "defaulted", "invalid"],
+            additionalProperties: false,
+          },
+        },
+        required: ["on", "persisted", "effective", "envOverrides", "receiptsWebhookPresent", "supervisorEndpointPresent", "migration"],
+        additionalProperties: false,
+      },
+    },
+    setWatchdogSetting: {
+      input: {
+        type: "object",
+        properties: {
+          key: {
+            type: "string",
+            enum: ["on", "nodes", "timing", "sessionCap", "jevBatchMax", "jevBatchMs", "supervisorBatchMax", "supervisorBatchMs"],
+          },
+          value: { type: ["boolean", "string", "number"] },
+        },
+        required: ["key", "value"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { ok: { type: "boolean" }, error: { type: "string" } },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    },
+    setWatchdogSecret: {
+      input: {
+        type: "object",
+        properties: {
+          key: { type: "string", enum: ["receiptsWebhook", "supervisorEndpoint"] },
           value: { type: "string" },
         },
         required: ["key", "value"],

@@ -6740,3 +6740,135 @@ describe("repeated setup", () => {
     }
   })
 })
+
+describe("watchdog page settings (ticket #18)", () => {
+  const call = (sessionID: string, id: string, command: string) => ({ sessionID, tool: "shell", input: { command }, id })
+
+  test("a persisted admission cap paces calls with no environment override", async () => {
+    arm()
+    nodes("human")
+    // The page's persisted scope is the only cap source: beforeEach pins every
+    // WATCHDOG_CHAIN* environment variable to unset, and this case sets none.
+    const base = state.loadState()
+    state.saveState({ ...base, watchdog: { ...base.watchdog, on: true, sessionCap: 1 } })
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w80", "c80a", "ls a")))
+    await cardsOpen(1)
+    const second = settle(wrapper(call("ses_w80", "c80b", "ls b")))
+    await ticks(10)
+
+    const waits = since().filter((row) => row.waiting === true)
+    expect(waits).toHaveLength(1)
+    expect(waits[0].event).toBe("chain_admission")
+
+    const settings = await host.calls.rpc[0].handlers.getWatchdogSettings({})
+    expect(settings.on).toBe(true)
+    expect(settings.effective.sessionCap).toBe(1)
+    // The pacing came from the persisted scope, not from an environment cap.
+    expect(settings.envOverrides).not.toContain("sessionCap")
+
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await first).toBe("allowed")
+    await cardsOpen(2)
+    await host.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "allow" } } })
+    expect(await second).toBe("allowed")
+  })
+
+  test("the environment still outranks the persisted page value", async () => {
+    arm()
+    nodes("human")
+    const base = state.loadState()
+    state.saveState({ ...base, watchdog: { ...base.watchdog, sessionCap: 1 } })
+    process.env.WATCHDOG_CHAIN_CAP = "3"
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+
+    const calls = [
+      settle(wrapper(call("ses_w81", "c81a", "ls a"))),
+      settle(wrapper(call("ses_w81", "c81b", "ls b"))),
+      settle(wrapper(call("ses_w81", "c81c", "ls c"))),
+    ]
+    await cardsOpen(3)
+
+    const settings = await host.calls.rpc[0].handlers.getWatchdogSettings({})
+    expect(settings.effective.sessionCap).toBe(3)
+    expect(settings.envOverrides).toContain("sessionCap")
+    expect(settings.persisted.sessionCap).toBe(1)
+    // No call waited: the persisted cap of 1 was overridden, not enforced.
+    expect(since().some((row) => row.waiting === true)).toBe(false)
+
+    for (const card of posted) {
+      await host.push({ type: "form.replied", data: { id: card.card.id, answer: { decision: "allow" } } })
+    }
+    expect(await Promise.all(calls)).toEqual(["allowed", "allowed", "allowed"])
+  })
+
+  test("watchdogStatus reports the capability verdict, live counts, and durable ledger", async () => {
+    arm()
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+
+    const idle = await handlers.watchdogStatus({})
+    expect(idle.on).toBe(false)
+    expect(idle.chain).toEqual({ status: "passed", reason: "the capability gate passed", wired: true })
+    expect(idle.pending.inFlight).toBe(0)
+    expect(idle.pending.waiting).toBe(0)
+    expect(idle.pending.durable).toBe(0)
+    expect(idle.pending.durableUnreadable).toBe(false)
+    expect(idle.effective.activeOperations).toBe(0)
+    expect(idle.effective.overlapping).toEqual([])
+    expect(idle.recordsReadable).toBe(true)
+
+    const wrapper = gate(host.hooks)
+    const first = settle(wrapper(call("ses_w82", "c82a", "ls a")))
+    await cardsOpen(1)
+    const busy = await handlers.watchdogStatus({})
+    // The page switch is off (page state only) while a review is live: the
+    // status the page renders must carry the real counts in this state.
+    expect(busy.on).toBe(false)
+    expect(busy.pending.inFlight).toBe(1)
+    expect(busy.pending.durable).toBe(1)
+    expect(busy.pending.durableUnreadable).toBe(false)
+
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await first).toBe("allowed")
+    const settledStatus = await handlers.watchdogStatus({})
+    expect(settledStatus.pending.inFlight).toBe(0)
+    expect(settledStatus.pending.durable).toBe(0)
+  })
+
+  test("an unarmed deployment reports the chain off, and a persisted switch is still only page state", async () => {
+    const base = state.loadState()
+    state.saveState({ ...base, watchdog: { ...base.watchdog, on: true } })
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const status = await host.calls.rpc[0].handlers.watchdogStatus({})
+    expect(status.on).toBe(true)
+    expect(status.chain).toEqual({ status: "off", reason: "the capability switch is off", wired: false })
+    // The page's switch is not a third activation gate: with no operator switch
+    // and no gate file, the chain registers no wrapper at all, exactly as
+    // before the page existed.
+    expect(host.hooks["execute.before"] ?? []).toHaveLength(0)
+    expect(host.calls.checks).toHaveLength(0)
+  })
+
+  test("armed with no node list anywhere, the default all-on posture still reviews", async () => {
+    // No `nodes()` call, no persisted list: the migrated default nodes are
+    // empty, and the documented default is every node on. The supervisor
+    // answers through the fake generate hook, so a review only happens if
+    // the default nodes survived the migration.
+    arm()
+    const host = fakeHost({ generate: (request) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    const outcome = await gate(host.hooks)(call("ses_w84", "c84", "ls build"))
+    expect(outcome).toBeUndefined()
+    const decision = since().find((row) => row.event === "chain_decision")
+    expect(decision?.verdict).toBe("allow")
+  })
+})

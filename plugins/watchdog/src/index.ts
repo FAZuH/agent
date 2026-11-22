@@ -32,6 +32,7 @@ import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState
 import { attachCardEvents, cardRouteActiveNow, heldQuestionCards, markCardRouteActive, onBeforeExecute, questionCardsOn, releaseHeldCard, resetCardRoute, type CardDeps, type GateDecision } from "./question-cards.ts"
 import { resourcesOf } from "./actions.ts"
 import { attachChain, auditSession, chainStateHome, CHAIN_BUDGET_FILE, CHAIN_DEFAULTS, CHAIN_ENABLE_SWITCH, CHAIN_GATE_FILE, CHAIN_GATE_PASSED, type ChainEvent, type ChainHandle, type ChainHistory, type ChainLedger, type ChainLimits, type ChainNodes, type LedgerEntry, type NodeVerdict, type ReviewItem } from "./chain.ts"
+import * as WATCHDOG_CONFIG from "./watchdog-config.ts"
 
 
 /**
@@ -1679,45 +1680,24 @@ function chainEnabled(): boolean {
 }
 
 /** Admission pacing, from the environment until the Watchdog page (#18) owns it. */
-export const CHAIN_CAP_ENV = "WATCHDOG_CHAIN_CAP"
-export const CHAIN_TIMING_ENV = "WATCHDOG_CHAIN_TIMING"
-export const CHAIN_BATCH_MAX_ENV = "WATCHDOG_CHAIN_BATCH_MAX"
-export const CHAIN_BATCH_MS_ENV = "WATCHDOG_CHAIN_BATCH_MS"
-export const CHAIN_JEV_BATCH_MAX_ENV = "WATCHDOG_CHAIN_JEV_BATCH_MAX"
-export const CHAIN_JEV_BATCH_MS_ENV = "WATCHDOG_CHAIN_JEV_BATCH_MS"
-export const CHAIN_REPAIR_MAX_ENV = "WATCHDOG_CHAIN_REPAIR_MAX"
-export const CHAIN_TRANSPORT_ATTEMPTS_ENV = "WATCHDOG_CHAIN_TRANSPORT_ATTEMPTS"
-export const CHAIN_TRANSPORT_BACKOFF_ENV = "WATCHDOG_CHAIN_TRANSPORT_BACKOFF_MS"
+export const CHAIN_CAP_ENV = WATCHDOG_CONFIG.CHAIN_CAP_ENV
+export const CHAIN_TIMING_ENV = WATCHDOG_CONFIG.CHAIN_TIMING_ENV
+export const CHAIN_BATCH_MAX_ENV = WATCHDOG_CONFIG.CHAIN_BATCH_MAX_ENV
+export const CHAIN_BATCH_MS_ENV = WATCHDOG_CONFIG.CHAIN_BATCH_MS_ENV
+export const CHAIN_JEV_BATCH_MAX_ENV = WATCHDOG_CONFIG.CHAIN_JEV_BATCH_MAX_ENV
+export const CHAIN_JEV_BATCH_MS_ENV = WATCHDOG_CONFIG.CHAIN_JEV_BATCH_MS_ENV
+export const CHAIN_REPAIR_MAX_ENV = WATCHDOG_CONFIG.CHAIN_REPAIR_MAX_ENV
+export const CHAIN_TRANSPORT_ATTEMPTS_ENV = WATCHDOG_CONFIG.CHAIN_TRANSPORT_ATTEMPTS_ENV
+export const CHAIN_TRANSPORT_BACKOFF_ENV = WATCHDOG_CONFIG.CHAIN_TRANSPORT_BACKOFF_ENV
 
 /**
- * The chain's pacing settings. An unset or unusable variable keeps the
- * conservative default: a guessed cap or window would silently change admission
- * behavior, so only a value the operator actually wrote is used.
+ * The chain's pacing settings, owned by the Watchdog page (#18): the
+ * environment wins when set (an env-armed deployment keeps behaving exactly
+ * as before), a persisted page value takes over the moment the override is
+ * removed, and only a value the operator actually wrote is used.
  */
 export function chainLimits(): ChainLimits {
-  const num = (name: string, fallback: number, min: number): number => {
-    const raw = Number(process.env[name])
-    return Number.isFinite(raw) && raw >= min ? Math.floor(raw) : fallback
-  }
-  return {
-    sessionCap: num(CHAIN_CAP_ENV, CHAIN_DEFAULTS.sessionCap, 1),
-    jevBatch: {
-      max: num(CHAIN_JEV_BATCH_MAX_ENV, CHAIN_DEFAULTS.jevBatch.max, 1),
-      ms: num(CHAIN_JEV_BATCH_MS_ENV, CHAIN_DEFAULTS.jevBatch.ms, 0),
-    },
-    supervisorBatch: {
-      max: num(CHAIN_BATCH_MAX_ENV, CHAIN_DEFAULTS.supervisorBatch.max, 1),
-      ms: num(CHAIN_BATCH_MS_ENV, CHAIN_DEFAULTS.supervisorBatch.ms, 0),
-    },
-    repair: {
-      max: num(CHAIN_REPAIR_MAX_ENV, CHAIN_DEFAULTS.repair.max, 0),
-    },
-    transport: {
-      attempts: num(CHAIN_TRANSPORT_ATTEMPTS_ENV, CHAIN_DEFAULTS.transport.attempts, 1),
-      backoffMs: num(CHAIN_TRANSPORT_BACKOFF_ENV, CHAIN_DEFAULTS.transport.backoffMs, 0),
-    },
-    timing: process.env[CHAIN_TIMING_ENV] === "nonblocking" ? "nonblocking" : "blocking",
-  }
+  return WATCHDOG_CONFIG.watchdogLimits()
 }
 
 /**
@@ -1781,28 +1761,15 @@ function reportChainStatus(runtime: ChainRuntime, status: ChainStatus, failure: 
   else logCall({ hook: "hook_watchdog_chain", protection: "active", wired: true })
 }
 
-function chainList(value: string | undefined): string[] {
-  return String(value ?? "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-}
-
 /**
- * The chain's node controls. Every node is on unless `WATCHDOG_CHAIN_NODES`
- * names a subset; `WATCHDOG_CHAIN_HUMAN_ONLY` adds actions only a human may
- * authorize. Both are environment settings until the Watchdog page (#18) owns
- * the controls.
+ * The chain's node controls, owned by the Watchdog page (#18): the
+ * `WATCHDOG_CHAIN_NODES` environment list wins when set, the persisted page
+ * list otherwise, and an unconfigured page means every node on.
+ * `WATCHDOG_CHAIN_HUMAN_ONLY` stays environment-only: it is an action
+ * allowlist, not one of the page's controls.
  */
 export function chainNodes(): ChainNodes {
-  const on = new Set(chainList(process.env.WATCHDOG_CHAIN_NODES ?? "jev,parent,supervisor,human").map((entry) => entry.toLowerCase()))
-  return {
-    jev: on.has("jev"),
-    parent: on.has("parent"),
-    supervisor: on.has("supervisor"),
-    human: on.has("human"),
-    humanOnly: chainList(process.env.WATCHDOG_CHAIN_HUMAN_ONLY).map(normalizeAction),
-  }
+  return WATCHDOG_CONFIG.watchdogNodes()
 }
 
 /** The refusal a live abort gives. It lasts until the operation's release. */
@@ -2806,6 +2773,14 @@ export default {
               releaseOperation: (request: { operationID: string; continue?: boolean }) =>
                 releaseSessionTree(ctx, chainRuntime, request),
               enforcedBy: () => enforcementPosture(),
+              // The page's capability read: the chain's own two-condition
+              // verdict, never a second gate. `wired` says whether a passing
+              // gate file appearing later could still activate this deployment.
+              chainStatus: () => {
+                const status = chainStatus()
+                return { status, reason: CHAIN_STATUS_REASON[status], wired: status !== "off" }
+              },
+              chainStats: () => chainRuntime?.chain?.stats() ?? null,
             }),
           )
           setJevEmitter((event) => registration.events.emit("changed", event))

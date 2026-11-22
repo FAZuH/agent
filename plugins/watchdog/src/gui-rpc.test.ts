@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { describe, expect, test } from "bun:test"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -9,6 +9,7 @@ process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
 const { jevRpcHandlers, logRows, setJevEmitter, statusSnapshot } = await import("./gui-rpc.ts")
 const { STATE_FILE, LOG_FILE, APPROVALS_FILE, logCall } = await import("../../../lib/jev/state.ts")
+const { CHAIN_BUDGET_FILE, chainStateHome } = await import("./chain.ts")
 
 test("statusSnapshot projects safe config fields and masks the endpoint", () => {
   writeFileSync(
@@ -648,4 +649,45 @@ test("the operations list carries a release and its continuation", async () => {
   const live = result.operations.find((operation: any) => operation.id === "op_rows_live")
   expect(live.released).toBeUndefined()
   expect(live.continuedAt).toBeUndefined()
+})
+
+describe("watchdogStatus durable ledger honesty", () => {
+  const ledgerPath = () => join(chainStateHome(), CHAIN_BUDGET_FILE)
+
+  test("a missing ledger is zero pending, readable", async () => {
+    rmSync(ledgerPath(), { force: true })
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durable).toBe(0)
+    expect(status.pending.durableUnreadable).toBe(false)
+  })
+
+  test("a valid ledger counts its unresolved entries", async () => {
+    writeFileSync(
+      ledgerPath(),
+      JSON.stringify({ sessions: { keyOne: [{ id: "wd_a" }, { id: "wd_b" }], keyTwo: [{ id: "wd_c" }] } }),
+    )
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durable).toBe(3)
+    expect(status.pending.durableUnreadable).toBe(false)
+  })
+
+  test("a corrupt ledger is reported unreadable, never as a silent zero", async () => {
+    writeFileSync(ledgerPath(), "{not json")
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durableUnreadable).toBe(true)
+  })
+
+  test("a ledger that exists but cannot be opened is reported unreadable", async () => {
+    // A directory where the file should be: every read fails with EISDIR,
+    // which is an unreadable ledger, not a missing one.
+    rmSync(ledgerPath(), { force: true })
+    mkdirSync(ledgerPath(), { recursive: true })
+    const handlers = jevRpcHandlers({})
+    const status = await (handlers as any).watchdogStatus({})
+    expect(status.pending.durableUnreadable).toBe(true)
+    rmSync(ledgerPath(), { recursive: true, force: true })
+  })
 })

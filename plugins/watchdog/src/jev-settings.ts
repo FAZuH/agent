@@ -76,7 +76,7 @@ export function settingsSnapshot() {
     const stored = state.config[feature.key] ?? {}
     const fields: Record<string, ConfigValue> = {}
     for (const [key, fallback] of Object.entries(defaults)) {
-      const secret = key === "alertWebhook" || (feature.key === "hook_supervisor" && key === "endpoint")
+      const secret = key === "alertWebhook" || (feature.key === "hook_supervisor" && key === "endpoint") || (feature.key === "hook_abort_receipts" && key === "webhook")
       fields[key] = secret ? "" : (stored[key] ?? fallback)
     }
     config[feature.key] = fields
@@ -100,6 +100,7 @@ export function settingsSnapshot() {
       webhookPresent: webhook.length > 0,
       endpointPresent: state.endpoint.trim().length > 0,
       supervisorEndpointPresent: cfgStr("hook_supervisor", "endpoint").trim().length > 0,
+      receiptsWebhookPresent: cfgStr("hook_abort_receipts", "webhook").trim().length > 0,
     },
     config,
     features: Object.fromEntries(FEATURES.map((f) => [f.key, state.features[f.key] ?? true])),
