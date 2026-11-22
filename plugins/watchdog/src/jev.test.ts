@@ -845,8 +845,10 @@ describe("call toasts", () => {
 
   test("the global switch, then the feature's own, gates a toast", () => {
     clearState()
-    // Every feature defaults to toasting; the global switch is off by default.
-    expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast === true)).toBe(true)
+    // Every feature that ships a toast setting defaults it on; a feature with
+    // no toast setting has nothing to gate. The global switch is off by
+    // default.
+    expect(FEATURES.every((f) => FEATURE_DEFAULTS[f.key].toast !== false)).toBe(true)
     expect(toastsOn("hook_tool_risk")).toBe(false)
     saveState({ toast: true })
     expect(toastsOn("hook_tool_risk")).toBe(true)

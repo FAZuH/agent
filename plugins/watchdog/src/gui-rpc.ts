@@ -7,6 +7,7 @@
 import { grant, readApprovals, rejectApproval } from "../../../lib/jev/approve.ts"
 import { readToolBans } from "../../../lib/jev/tool-ban.ts"
 import { incompleteContainment, readAbortRecords } from "./abort.ts"
+import { readDeliveryRows } from "./delivery.ts"
 import type { ClearBanResult } from "./session-ban-host.ts"
 import { applySecret, applySetting, settingsSnapshot, type SetSecretInput, type SetSettingInput } from "./jev-settings.ts"
 import {
@@ -141,19 +142,28 @@ export function abortOperationRows() {
   // A store that cannot be read is not an empty set: the caller must be able to
   // tell "no operations" from "the record file is broken".
   if (!read.ok) return { ok: false as const, reason: read.reason, operations: [] }
+  // Delivery rows are a parallel store keyed by the same operation ids. A
+  // missing row means the feature never queued this operation, so its receipt
+  // stays absent rather than inventing a status.
+  const delivery = readDeliveryRows()
+  const byOperation = new Map(delivery.ok ? delivery.rows.map((row) => [row.operationID, row]) : [])
   return {
     ok: true as const,
-    operations: read.records.map((record) => ({
-      id: record.operation.id,
-      sessionID: record.operation.sessionID,
-      scope: record.operation.scope,
-      source: record.operation.source,
-      cause: record.operation.cause,
-      at: record.operation.at,
-      ...(typeof record.operation.released === "number" ? { released: record.operation.released } : {}),
-      ...(typeof record.operation.continuedAt === "number" ? { continuedAt: record.operation.continuedAt } : {}),
-      incomplete: incompleteContainment(record.containment).map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
-    })),
+    operations: read.records.map((record) => {
+      const row = byOperation.get(record.operation.id)
+      return {
+        id: record.operation.id,
+        sessionID: record.operation.sessionID,
+        scope: record.operation.scope,
+        source: record.operation.source,
+        cause: record.operation.cause,
+        at: record.operation.at,
+        ...(typeof record.operation.released === "number" ? { released: record.operation.released } : {}),
+        ...(typeof record.operation.continuedAt === "number" ? { continuedAt: record.operation.continuedAt } : {}),
+        incomplete: incompleteContainment(record.containment).map((row) => ({ step: row.step, status: row.status, detail: row.detail })),
+        ...(row ? { delivery: { receipt: row.receipt.status, attempts: row.receipt.attempts, notice: row.notice } } : {}),
+      }
+    }),
   }
 }
 

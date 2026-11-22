@@ -216,6 +216,16 @@ export const Contract = {
                     additionalProperties: false,
                   },
                 },
+                delivery: {
+                  type: "object",
+                  properties: {
+                    receipt: { type: "string", enum: ["queued", "delivered", "failed", "no-endpoint"] },
+                    attempts: { type: "number" },
+                    notice: { type: "string", enum: ["queued", "absent", "suppressed", "delivered", "failed"] },
+                  },
+                  required: ["receipt", "attempts", "notice"],
+                  additionalProperties: false,
+                },
               },
               required: ["id", "sessionID", "scope", "source", "cause", "at", "incomplete"],
               additionalProperties: false,

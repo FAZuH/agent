@@ -6,7 +6,7 @@ import { filterSettings } from "./gui-search.ts"
 
 const gui = readFileSync(new URL("./gui.tsx", import.meta.url), "utf8")
 
-const RENDERED_FEATURE_FIELDS = 47
+const RENDERED_FEATURE_FIELDS = 50
 const search = (query: string) => filterSettings(query, FEATURE_DEFAULTS)
 
 describe("Jev Settings search filter", () => {

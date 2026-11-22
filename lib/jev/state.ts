@@ -58,6 +58,7 @@ export const FEATURES: Feature[] = [
   { key: "hook_tool_standard", label: "Tool standard", what: "Scores every rule in the rules file against each tool call" },
   { key: "hook_session_ban", label: "Session ban", what: "Holds a subagent replacement of an aborted task: once or reject, never always" },
   { key: "hook_supervisor", label: "Supervisor", what: "Investigates a Jev propagate inside the native hold with bounded read-only evidence" },
+  { key: "hook_abort_receipts", label: "Abort receipts", what: "Sends one deduplicated webhook receipt per abort and queues a no-wake notice for the direct parent" },
 ]
 
 /**
@@ -69,6 +70,7 @@ export const LEGACY_FEATURE_KEYS: Record<string, string[]> = {
   hook_skill_pick: ["pick_skill"],
   hook_tool_risk: ["hook_risk", "risk_hook"],
   hook_tool_standard: [],
+  hook_abort_receipts: [],
   hook_session_ban: ["hook_no_respawn"],
 }
 
@@ -83,6 +85,7 @@ export const LEGACY_CONFIG_CARRY: Record<string, string[]> = {
   hook_tool_risk: ["timeout", "toast"],
   hook_tool_standard: [],
   hook_session_ban: ["holdMs", "bindGraceMs", "admissionWindowMs", "toast", "toastOutcomes"],
+  hook_abort_receipts: [],
 }
 
 /**
@@ -144,6 +147,11 @@ export const FEATURE_DEFAULTS: Record<string, Record<string, ConfigValue>> = {
     batchMs: 30000,
     batchMax: 10,
   },
+  // Delivery is strictly post-containment and best-effort: an empty webhook
+  // means the receipt is queued and named "no-endpoint", never faked. Retries
+  // are bounded by maxAttempts with retryDelayMs between passes; the receiver
+  // dedups on operationID because a lost ack can re-POST the same receipt.
+  hook_abort_receipts: { webhook: "", maxAttempts: 3, retryDelayMs: 2000 },
 }
 
 export interface JevState {
@@ -226,7 +234,7 @@ export const DEFAULTS: JevState = {
   sidebar: true,
   sidebarCount: 5,
   sidebarSubject: true,
-  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_session_ban: false, hook_supervisor: false },
+  features: { hook_skill_pick: false, hook_tool_risk: false, hook_tool_standard: false, hook_session_ban: false, hook_supervisor: false, hook_abort_receipts: false },
   config: FEATURE_DEFAULTS,
   logMax: 500,
 }

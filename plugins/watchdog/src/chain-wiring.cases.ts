@@ -151,6 +151,7 @@ const state = await import("../../../lib/jev/state.ts")
 const { banTool } = await import("../../../lib/jev/tool-ban.ts")
 const { chainStateHome, CHAIN_BUDGET_FILE, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
 const { readAbortRecords, appendAbortRecord, resetAbortMarks, RELEASE_CONTINUE_TEXT } = await import("./abort.ts")
+const { setReceiptTransport, readDeliveryRows, DELIVERY_FILE } = await import("./delivery.ts")
 const { resetCardRoute } = await import("./question-cards.ts")
 const { resetOpenPrompts } = await import("./session-ban-host.ts")
 const { readSnapshot, parentPaths, writeSnapshot, writeSubtreeBan, removeParent } = await import("./session-ban-state.ts")
@@ -361,6 +362,8 @@ interface Host {
     checks: any[]
     projected: any[]
     synthetic: number
+    /** Every synthetic write the plugin asked for, with the request it sent. */
+    syntheticNotes: Array<{ sessionID: string; text: string; delivery?: string }>
     interrupts: Array<{ sessionID: string; resume?: boolean }>
     /** Every turn the plugin asked the host to start. */
     prompts: Array<{ sessionID: string; text: string }>
@@ -430,7 +433,7 @@ function fakeHost(options: HostOptions = {}): Host {
   let aborted = 0
   const generateHooks: Array<(event: any) => any> = []
   const subscriptions: Subscription[] = []
-  const calls: Host["calls"] = { generate: [], context: [], checks: [], projected: [], synthetic: 0, interrupts: [], prompts: [], replies: [], rpc: [] }
+  const calls: Host["calls"] = { generate: [], context: [], checks: [], projected: [], synthetic: 0, syntheticNotes: [], interrupts: [], prompts: [], replies: [], rpc: [] }
   const context = options.context ?? MESSAGES
   const options_rejectFeed = options.rejectFeed === true
   // The subagent tool as the host holds it. `wrapSubagent` installs the
@@ -576,8 +579,9 @@ function fakeHost(options: HostOptions = {}): Host {
       prompt: async (request: any) => {
         calls.prompts.push({ sessionID: String(request?.sessionID ?? ""), text: String(request?.text ?? "") })
       },
-      synthetic: async () => {
+      synthetic: async (request: any) => {
         calls.synthetic += 1
+        calls.syntheticNotes.push({ sessionID: String(request?.sessionID ?? ""), text: String(request?.text ?? ""), delivery: request?.delivery })
       },
     },
     command: {
@@ -4359,6 +4363,197 @@ describe("abort operation", () => {
     expect(later).toBe("allowed")
     // No continuation was requested, and the late card sent none either.
     expect(host.calls.prompts).toEqual([])
+  })
+})
+
+describe("abort delivery", () => {
+  const ROOT = "ses_dl_root"
+  const CHILD = "ses_dl_child"
+  const GRAND = "ses_dl_grand"
+
+  /** One child with its own child: the scope is two sessions, the receipt is one. */
+  const lineage = () => ({
+    sessions: [{ id: ROOT }, { id: CHILD, parentID: ROOT }, { id: GRAND, parentID: CHILD }],
+  })
+
+  const enable = () => {
+    state.setFeature("hook_abort_receipts", true)
+    state.setFeatureConfig("hook_abort_receipts", "webhook", "http://127.0.0.1:9/unused")
+    // One attempt per pass: a failed POST reads failed without a retry timer,
+    // so a case never leaves one scheduled behind its own finally.
+    state.setFeatureConfig("hook_abort_receipts", "maxAttempts", 1)
+  }
+  const disable = () => state.setFeature("hook_abort_receipts", false)
+
+  /**
+   * The transport seam: every POST the plugin issued, with the body parsed, and
+   * a park switch that holds a POST open so a case can race a second abort.
+   */
+  const receiptRecorder = () => {
+    const posts: Array<{ url: string; body: any }> = []
+    const waits: Array<() => void> = []
+    let parked = false
+    return {
+      posts,
+      transport: async (url: string, body: string) => {
+        posts.push({ url, body: JSON.parse(body) })
+        if (parked) await new Promise<void>((resolve) => waits.push(resolve))
+        return true
+      },
+      parkAll: () => {
+        parked = true
+      },
+      releaseAll: () => {
+        parked = false
+        for (const resolve of waits.splice(0)) resolve()
+      },
+    }
+  }
+
+  test("one abort sends one receipt and one parent notice, never one per descendant", async () => {
+    arm()
+    nodes("human")
+    enable()
+    const rec = receiptRecorder()
+    setReceiptTransport(rec.transport)
+    try {
+      const host = fakeHost(lineage())
+      await plugin.setup(host.ctx)
+      const result = await host.calls.rpc[0].handlers.abortOperation({ sessionID: CHILD })
+      expect(result.ok).toBe(true)
+      expect(result.scope).toEqual([CHILD, GRAND])
+      await ticks(10)
+
+      // One logical receipt for the whole two-session operation.
+      expect(rec.posts.length).toBe(1)
+      expect(rec.posts[0].body.event).toBe("abort_receipt")
+      expect(rec.posts[0].body.scope).toBe(2)
+      // The scope is a count, and the endpoint never travels with the body.
+      expect(JSON.stringify(rec.posts[0].body)).not.toContain(GRAND)
+      expect(JSON.stringify(rec.posts[0].body)).not.toContain("127.0.0.1")
+
+      // The notice is one queue write to the host-recorded direct parent, and
+      // no turn was ever started for it.
+      expect(host.calls.prompts).toEqual([])
+      expect(host.calls.syntheticNotes.length).toBe(1)
+      expect(host.calls.syntheticNotes[0].sessionID).toBe(ROOT)
+      expect(host.calls.syntheticNotes[0].delivery).toBe("queue")
+      expect(host.calls.syntheticNotes[0].text).toContain(CHILD)
+      expect(host.calls.syntheticNotes[0].text).toContain("no turn was started and nothing was resumed")
+      expect(host.calls.syntheticNotes[0].text).not.toContain("127.0.0.1")
+
+      // The statuses are observable through the operation listing.
+      const listed = await host.calls.rpc[0].handlers.abortOperations({})
+      const row = listed.operations.find((entry: any) => entry.sessionID === CHILD)
+      expect(row.delivery).toEqual({ receipt: "delivered", attempts: 1, notice: "delivered" })
+    } finally {
+      setReceiptTransport(null)
+      disable()
+    }
+  })
+
+  test("a parent aborted while delivery is parked gets no notice for its child", async () => {
+    arm()
+    nodes("human")
+    enable()
+    const rec = receiptRecorder()
+    rec.parkAll()
+    setReceiptTransport(rec.transport)
+    try {
+      const host = fakeHost(lineage())
+      await plugin.setup(host.ctx)
+      // The child's receipt POST parks inside the pump.
+      await host.calls.rpc[0].handlers.abortOperation({ sessionID: CHILD })
+      await ticks(4)
+      expect(rec.posts.length).toBe(1)
+
+      // The parent is aborted while that delivery is still parked. Its own
+      // receipt is queued behind the parked pass, so no second post yet.
+      await host.calls.rpc[0].handlers.abortOperation({ sessionID: ROOT })
+      await ticks(4)
+      expect(rec.posts.length).toBe(1)
+
+      // Released, both passes settle: the child's notice finds a parent that
+      // is itself being aborted, and the parent's own row has no parent.
+      rec.releaseAll()
+      await ticks(10)
+      expect(rec.posts.length).toBe(2)
+      const read = readDeliveryRows()
+      expect(read.ok).toBe(true)
+      if (!read.ok) throw new Error("unreachable")
+      const childRow = read.rows.find((row) => row.sessionID === CHILD)
+      expect(childRow?.notice).toBe("suppressed")
+      const parentRow = read.rows.find((row) => row.sessionID === ROOT)
+      expect(parentRow?.notice).toBe("absent")
+      // Neither operation wrote a notice, and neither started a turn.
+      expect(host.calls.syntheticNotes).toEqual([])
+      expect(host.calls.prompts).toEqual([])
+    } finally {
+      rec.releaseAll()
+      setReceiptTransport(null)
+      disable()
+    }
+  })
+
+  test("a parked receipt transport never delays containment", async () => {
+    arm()
+    nodes("human")
+    enable()
+    const rec = receiptRecorder()
+    rec.parkAll()
+    setReceiptTransport(rec.transport)
+    try {
+      const host = fakeHost(lineage())
+      await plugin.setup(host.ctx)
+      const result = await host.calls.rpc[0].handlers.abortOperation({ sessionID: CHILD })
+      // The abort operation resolved with its containment complete while the
+      // receipt POST is still parked.
+      expect(result.ok).toBe(true)
+      expect(result.sealed).toBe(true)
+      await ticks(4)
+      expect(rec.posts.length).toBe(1)
+      const read = readDeliveryRows()
+      expect(read.ok).toBe(true)
+      if (!read.ok) throw new Error("unreachable")
+      expect(read.rows[0].receipt.status).toBe("queued")
+
+      rec.releaseAll()
+      await ticks(10)
+      const settled = readDeliveryRows()
+      expect(settled.ok).toBe(true)
+      if (!settled.ok) throw new Error("unreachable")
+      expect(settled.rows[0].receipt.status).toBe("delivered")
+    } finally {
+      rec.releaseAll()
+      setReceiptTransport(null)
+      disable()
+    }
+  })
+
+  test("the delivery feature is off by default: an abort posts nothing and queues no row", async () => {
+    arm()
+    nodes("human")
+    disable()
+    const rec = receiptRecorder()
+    setReceiptTransport(rec.transport)
+    try {
+      const host = fakeHost(lineage())
+      await plugin.setup(host.ctx)
+      const result = await host.calls.rpc[0].handlers.abortOperation({ sessionID: CHILD })
+      expect(result.ok).toBe(true)
+      await ticks(10)
+      expect(rec.posts.length).toBe(0)
+      expect(host.calls.prompts).toEqual([])
+      expect(host.calls.syntheticNotes).toEqual([])
+      const read = readDeliveryRows()
+      expect(read.ok).toBe(true)
+      if (!read.ok) throw new Error("unreachable")
+      expect(read.rows.length).toBe(0)
+      expect(existsSync(join(chainStateHome(), DELIVERY_FILE))).toBe(false)
+    } finally {
+      setReceiptTransport(null)
+      disable()
+    }
   })
 })
 

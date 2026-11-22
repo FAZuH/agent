@@ -26,6 +26,7 @@ import { attachSupervisor, SUPERVISOR_HOLD_REASON, supervisorHandoff, type Super
 import { createBatchRunner, resolveSupervisorMode, type BatchRunner, type SupervisorMode } from "./supervisor-batch.ts"
 import { clearSubtreeBan, readSnapshot, writeSubtreeBan, type SnapshotRead } from "./session-ban-state.ts"
 import { abortNotice, abortStarted, abortSubtree, appendAbortRecord, awaitReleaseHold, clearAbortMarks, containDeny, durabilitySentence, markAbortStarted, readAbortRecords, reconcileAbortRecords, recoveryCovers, recoveryReason, releaseHoldOpen, releaseOperation, releaseWhenClear, replaceAbortRecord, retainUncoveredAbortMarks, type AbortIO, type AbortOutcome, type AbortSource, type RecoveryBlock, type ReleaseIO, type ReleaseOutcome } from "./abort.ts"
+import { enqueueAbortDelivery, queueAbortDelivery, receiptTransport, type DeliveryIO } from "./delivery.ts"
 import type { TaskRecord } from "./session-ban.ts"
 import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/jev/state.ts"
 import { attachCardEvents, cardRouteActiveNow, heldQuestionCards, markCardRouteActive, onBeforeExecute, questionCardsOn, releaseHeldCard, resetCardRoute, type CardDeps, type GateDecision } from "./question-cards.ts"
@@ -2200,7 +2201,75 @@ export async function abortSessionTree(
   runtime: ChainRuntime | null,
   request: { sessionID: string; source: AbortSource; cause: string },
 ): Promise<AbortOutcome> {
-  return await abortSubtree(abortIO(ctx, runtime), request)
+  const outcome = await abortSubtree(abortIO(ctx, runtime), request)
+  // Strictly post-containment, never awaited: the receipt and the notice are
+  // best-effort facts about a stop that already happened, and an outage or an
+  // exhausted retry budget must not delay, block or reverse any of it.
+  afterAbortDelivery(ctx, outcome)
+  return outcome
+}
+
+/**
+ * The host-recorded direct parent of one session, from the same listing the
+ * descendant scan reads. A root, a missing row or a failed listing answers
+ * null: no parent is invented to receive a notice.
+ */
+async function directParentOf(ctx: any, sessionID: string): Promise<string | null> {
+  try {
+    if (typeof ctx?.session?.list !== "function") return null
+    const result = await ctx.session.list({})
+    const all = Array.isArray(result) ? result : Array.isArray((result as any)?.data) ? (result as any).data : []
+    const row = all.find((entry: any) => String(entry?.id ?? "") === sessionID)
+    const parent = String(row?.parentID ?? "")
+    return parent || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The host half of one delivery pass: the parent lookup, the no-wake queue
+ * write, the receipt POST through the module transport seam, and the
+ * configured bounds. `delivery.ts` decides what delivery means.
+ */
+function deliveryIO(ctx: any): DeliveryIO {
+  const F = "hook_abort_receipts"
+  return {
+    parentOf: (sessionID) => directParentOf(ctx, sessionID),
+    notice: async (parentID, text) => {
+      // The queue write, never a turn: this is the same primitive the abort's
+      // own operator notice uses, and it is the only one the notice touches.
+      const send = ctx?.session?.synthetic
+      if (typeof send !== "function") return false
+      try {
+        await send.call(ctx.session, { sessionID: parentID, text, delivery: "queue" })
+        return true
+      } catch {
+        return false
+      }
+    },
+    post: (url, body) => receiptTransport()(url, body),
+    endpoint: () => cfgStr(F, "webhook").trim(),
+    maxAttempts: () => cfgNum(F, "maxAttempts"),
+    retryDelayMs: () => cfgNum(F, "retryDelayMs"),
+    schedule: (run, ms) => {
+      setTimeout(run, ms)
+    },
+    now: () => Date.now(),
+    audit: (row) => logCall({ hook: F, ...row }),
+  }
+}
+
+/**
+ * Queue one abort's operator receipt and parent notice, then fire the pump.
+ * The feature switch is re-read here, so flipping it needs no restart; off
+ * means nothing is queued and nothing is attempted.
+ */
+function afterAbortDelivery(ctx: any, outcome: AbortOutcome): void {
+  if (!featureOn("hook_abort_receipts")) return
+  const io = deliveryIO(ctx)
+  const queued = queueAbortDelivery(io, outcome)
+  if (queued === "queued") void enqueueAbortDelivery(io)
 }
 
 /**

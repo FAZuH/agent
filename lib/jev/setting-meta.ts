@@ -52,6 +52,9 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   nonBlocking: "Runs calls at once with no hold or card and judges each session's calls in one batch; implies standalone.",
   batchMs: "Milliseconds per non-blocking batch window.",
   batchMax: "Most calls in one non-blocking batch before an early flush.",
+  webhook: "POSTs one redacted receipt per abort operation; empty queues the receipt and names it no-endpoint.",
+  maxAttempts: "Most POST attempts for one receipt before it reads failed; a receiver dedups on the operation id.",
+  retryDelayMs: "Milliseconds between receipt attempts; delivery is best-effort and never delays containment.",
 }
 
 const field = (label: string, key: string): SettingMeta => ({
@@ -132,6 +135,14 @@ export const SETTING_META: Record<string, FeatureSettingMeta> = {
       batchMs: field("Batch window", "batchMs"),
       batchMax: field("Batch size", "batchMax"),
       toast: field("Toast", "toast"),
+    },
+  },
+  hook_abort_receipts: {
+    group: "Abort receipts",
+    fields: {
+      webhook: field("Receipt webhook", "webhook"),
+      maxAttempts: field("Receipt attempts", "maxAttempts"),
+      retryDelayMs: field("Retry delay", "retryDelayMs"),
     },
   },
 }
