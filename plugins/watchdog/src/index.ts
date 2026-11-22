@@ -1684,6 +1684,9 @@ export const CHAIN_BATCH_MAX_ENV = "WATCHDOG_CHAIN_BATCH_MAX"
 export const CHAIN_BATCH_MS_ENV = "WATCHDOG_CHAIN_BATCH_MS"
 export const CHAIN_JEV_BATCH_MAX_ENV = "WATCHDOG_CHAIN_JEV_BATCH_MAX"
 export const CHAIN_JEV_BATCH_MS_ENV = "WATCHDOG_CHAIN_JEV_BATCH_MS"
+export const CHAIN_REPAIR_MAX_ENV = "WATCHDOG_CHAIN_REPAIR_MAX"
+export const CHAIN_TRANSPORT_ATTEMPTS_ENV = "WATCHDOG_CHAIN_TRANSPORT_ATTEMPTS"
+export const CHAIN_TRANSPORT_BACKOFF_ENV = "WATCHDOG_CHAIN_TRANSPORT_BACKOFF_MS"
 
 /**
  * The chain's pacing settings. An unset or unusable variable keeps the
@@ -1704,6 +1707,13 @@ export function chainLimits(): ChainLimits {
     supervisorBatch: {
       max: num(CHAIN_BATCH_MAX_ENV, CHAIN_DEFAULTS.supervisorBatch.max, 1),
       ms: num(CHAIN_BATCH_MS_ENV, CHAIN_DEFAULTS.supervisorBatch.ms, 0),
+    },
+    repair: {
+      max: num(CHAIN_REPAIR_MAX_ENV, CHAIN_DEFAULTS.repair.max, 0),
+    },
+    transport: {
+      attempts: num(CHAIN_TRANSPORT_ATTEMPTS_ENV, CHAIN_DEFAULTS.transport.attempts, 1),
+      backoffMs: num(CHAIN_TRANSPORT_BACKOFF_ENV, CHAIN_DEFAULTS.transport.backoffMs, 0),
     },
     timing: process.env[CHAIN_TIMING_ENV] === "nonblocking" ? "nonblocking" : "blocking",
   }
@@ -2350,7 +2360,7 @@ function attachSupervisorHost(ctx: any): boolean {
     })
     return Boolean(supervisorHost)
   } catch (error) {
-    logCall({ hook: "hook_supervisor", error: error instanceof JevError ? error.message : String(error) })
+    logCall({ hook: "hook_supervisor", error: error instanceof JevError ? error.reason : String(error) })
     return false
   }
 }
@@ -2681,7 +2691,7 @@ export default {
           )
           setJevEmitter((event) => registration.events.emit("changed", event))
         } catch (error) {
-          logCall({ hook: "rpc", error: error instanceof JevError ? error.message : String(error) })
+          logCall({ hook: "rpc", error: error instanceof JevError ? error.reason : String(error) })
         }
       }
 
@@ -2701,7 +2711,7 @@ export default {
             logCall({
               hook: "hook_tool_risk",
               sessionID: String(event?.sessionID ?? ""),
-              error: error instanceof JevError ? error.message : String(error),
+              error: error instanceof JevError ? error.reason : String(error),
             })
             // Default fails open on a Jev problem; supervisor modes fail closed
             // so an exception cannot leave a call without a judgement.
@@ -2854,7 +2864,7 @@ export default {
         // calls — posture and reality would disagree. So it is disposed and
         // retired: no provider is registered, and posture says exactly that.
         replaced?.dispose()
-        logCall({ hook: "hook_session_ban", error: error instanceof JevError ? error.message : String(error) })
+        logCall({ hook: "hook_session_ban", error: error instanceof JevError ? error.reason : String(error) })
       }
 
       // The review chain (see `chain.ts`). The wrapper's presence tracks the
@@ -3033,7 +3043,7 @@ export default {
                   try {
                     await ctx.session.synthetic({ sessionID: input.sessionID, text, resume: false })
                   } catch (error) {
-                    logCall({ hook: name, error: error instanceof JevError ? error.message : String(error) })
+                    logCall({ hook: name, error: error instanceof JevError ? error.reason : String(error) })
                   }
                 }
                 return { content: text }

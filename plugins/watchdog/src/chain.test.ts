@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test"
 
-const { attachChain, userHistory, budgetKey, CHAIN_DEFAULTS } = await import("./chain.ts")
+const { attachChain, userHistory, budgetKey, CHAIN_DEFAULTS, replyFailure, repairFeedback } = await import("./chain.ts")
 import type { ChainDeps, ChainEvent, ReviewItem } from "./chain.ts"
 
 const EVENT: ChainEvent = {
@@ -462,6 +462,331 @@ describe("supervisor result validation", () => {
     expect(decision.allow).toBe(false)
     expect(decision.verdict).toBe("deny")
     expect(log.human).toHaveLength(0)
+  })
+})
+
+describe("feedback repair", () => {
+  test("a rejected reply earns one feedback round: the re-ask names a fixed category and repeats the same items", async () => {
+    const prompts: string[] = []
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: (r: any) => {
+        asked++
+        prompts.push(r.prompt)
+        return asked === 1 ? `Sure! Here is the review you asked for: ${allowReply(firstId(r))}` : allowReply(firstId(r))
+      },
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(2)
+    expect(decision.allow).toBe(true)
+    expect(log.human).toHaveLength(0)
+    const [first, second] = prompts
+    expect(second).toContain("not a usable review result: malformed")
+    // The same unresolved batch: the base prompt unchanged, the feedback appended.
+    expect(second.startsWith(first)).toBe(true)
+    expect(idsIn(second)).toEqual(idsIn(first))
+    // None of the rejected reply's own words travel back.
+    expect(second).not.toContain("Sure!")
+    expect(second).not.toContain("review you asked for")
+  })
+
+  test("the repair bound caps the asks at one plus max, and exhaustion escalates without allowing", async () => {
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: () => {
+        asked++
+        return "not a review result"
+      },
+      human: "deny",
+      limits: limitsWith({ repair: { max: 2 } }),
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(3)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("deny")
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("repair at zero asks once and escalates", async () => {
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: () => {
+        asked++
+        return "not a review result"
+      },
+      human: "deny",
+      limits: limitsWith({ repair: { max: 0 } }),
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(1)
+    expect(decision.verdict).toBe("deny")
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("an unknown-id reply names its category in the re-ask", async () => {
+    const prompts: string[] = []
+    let asked = 0
+    const { chain } = makeChain({
+      jev: "propagate",
+      generate: (r: any) => {
+        asked++
+        prompts.push(r.prompt)
+        return asked === 1
+          ? JSON.stringify({ results: [{ id: `wd_${"f".repeat(24)}.1`, verdict: "allow", reason: "x" }] })
+          : allowReply(firstId(r))
+      },
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(2)
+    expect(prompts[1]).toContain("not a usable review result: unknown-id")
+    expect(decision.allow).toBe(true)
+  })
+
+  test("replyFailure names the first broken rule, from a closed set", () => {
+    const id = "wd_0123456789abcdef01234567.1"
+    expect(replyFailure("no braces here", [id])).toBe("malformed")
+    expect(replyFailure(`Here you go: {"results":[{"id":"${id}","verdict":"allow"}]}`, [id])).toBe("malformed")
+    expect(replyFailure(`{"results":[{"id":"wd_${"f".repeat(24)}.1","verdict":"allow"}]}`, [id])).toBe("unknown-id")
+    expect(replyFailure(`{"results":[{"id":"${id}","verdict":"allow"},{"id":"${id}","verdict":"deny"}]}`, [id])).toBe("duplicate-id")
+    expect(replyFailure(`{"results":[{"id":"${id}","verdict":"maybe"}]}`, [id])).toBe("invalid-verdict")
+    expect(replyFailure(`{"results":[{"id":"${id}","verdict":"allow"}]}`, [id, "wd_0123456789abcdef01234567.2"])).toBe("missing-id")
+    // The feedback block carries the category and the schema, nothing else.
+    for (const category of ["malformed", "unknown-id", "duplicate-id", "invalid-verdict", "missing-id"]) {
+      const block = repairFeedback(category)
+      expect(block).toContain(`not a usable review result: ${category}`)
+      expect(block).toContain('{"results":[{"id":"<item id>","verdict":"allow|deny|abort|propagate","reason":"..."}]}')
+    }
+  })
+
+  test("a partial answer map invalidates the whole reply and the re-ask concerns every item", async () => {
+    const { schedule, fireAll } = handScheduler()
+    const prompts: string[] = []
+    let asked = 0
+    const { chain } = makeChain({
+      jev: "propagate",
+      nodes: { human: false },
+      limits: limitsWith({ sessionCap: 8, supervisorBatch: { max: 4, ms: 100 } }),
+      schedule,
+      generate: (r: any) => {
+        asked++
+        prompts.push(r.prompt)
+        const ids = idsIn(r.prompt)
+        if (asked === 1) return JSON.stringify({ results: [{ id: ids[0], verdict: "allow", reason: "x" }] })
+        return allowAll(r)
+      },
+    })
+    const calls = [CALL("ses_repair_batch", "ls a"), CALL("ses_repair_batch", "ls b")].map((event) => chain.admit(event))
+    await settle()
+    fireAll()
+    const decisions = await Promise.all(calls)
+    expect(asked).toBe(2)
+    // One row for one item of two is not a stage result: the whole reply went.
+    expect(idsIn(prompts[1])).toEqual(idsIn(prompts[0]))
+    expect(idsIn(prompts[1])).toHaveLength(2)
+    for (const decision of decisions) expect(decision.allow).toBe(true)
+  })
+
+  test("the parent stage repairs the same way and its recovered allow authorizes", async () => {
+    let asked = 0
+    const { chain, log } = makeChain({
+      linkage: { parentID: "ses_parent_repair" },
+      jev: "propagate",
+      parentGenerate: (r: any) => {
+        asked++
+        return asked === 1 ? "not json" : allowReply(idsIn(r.prompt)[0])
+      },
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(2)
+    expect(decision.allow).toBe(true)
+    expect(log.generate).toHaveLength(0)
+    expect(log.human).toHaveLength(0)
+  })
+})
+
+describe("transport retries", () => {
+  test("a dropped transport is retried and the recovered reply authorizes", async () => {
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: (r: any) => {
+        asked++
+        if (asked === 1) throw new Error("the generation transport failed")
+        return allowReply(firstId(r))
+      },
+      human: "deny",
+      limits: limitsWith({ transport: { attempts: 2, backoffMs: 0 } }),
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(2)
+    expect(decision.allow).toBe(true)
+    expect(log.human).toHaveLength(0)
+  })
+
+  test("transport exhaustion tries the configured attempts, then escalates without allowing", async () => {
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: () => {
+        asked++
+        throw new Error("the generation transport failed")
+      },
+      human: "deny",
+      limits: limitsWith({ transport: { attempts: 3, backoffMs: 0 } }),
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(3)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("deny")
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("retries wait on the configured linear backoff", async () => {
+    const waits: number[] = []
+    const schedule = (ms: number, fire: () => void) => {
+      waits.push(ms)
+      const timer = setTimeout(fire, ms)
+      return () => clearTimeout(timer)
+    }
+    let asked = 0
+    const { chain } = makeChain({
+      jev: "propagate",
+      generate: () => {
+        asked++
+        throw new Error("down")
+      },
+      human: "deny",
+      limits: limitsWith({ transport: { attempts: 3, backoffMs: 40 } }),
+      schedule,
+    })
+    await chain.admit(EVENT)
+    expect(asked).toBe(3)
+    expect(waits).toEqual([40, 80])
+  })
+
+  test("a retry re-sends the same prompt and items; no host check or reviewed tool runs again", async () => {
+    const requests: any[] = []
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: (r: any) => {
+        asked++
+        requests.push(r)
+        if (asked === 1) throw new Error("down")
+        return allowReply(firstId(r))
+      },
+      limits: limitsWith({ transport: { attempts: 2, backoffMs: 0 } }),
+    })
+    const decision = await chain.admit(EVENT)
+    expect(asked).toBe(2)
+    expect(requests[1].prompt).toBe(requests[0].prompt)
+    expect(requests[1].items).toEqual(requests[0].items)
+    expect(requests[1].sessionID).toBe(requests[0].sessionID)
+    expect(decision.allow).toBe(true)
+    expect(log.precheck).toHaveLength(1)
+    expect(log.recheck).toHaveLength(1)
+  })
+
+  test("a retry that recovers into a rejected reply still repairs, and the whole path stays bounded", async () => {
+    let asked = 0
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: () => {
+        asked++
+        if (asked === 1) throw new Error("down")
+        if (asked === 2) return "not json"
+        throw new Error("down again")
+      },
+      human: "deny",
+      limits: limitsWith({ transport: { attempts: 2, backoffMs: 0 }, repair: { max: 1 } }),
+    })
+    const decision = await chain.admit(EVENT)
+    // Round 1: transport threw once, recovered into a malformed reply. Round 2:
+    // both transport tries threw. No budget left anywhere: unavailable.
+    expect(asked).toBe(4)
+    expect(decision.allow).toBe(false)
+    expect(log.human).toHaveLength(1)
+  })
+})
+
+describe("parent unavailability", () => {
+  test("a lineage that cannot be read at routing writes the parent-unavailable row and advances to the human", async () => {
+    const { chain, log } = makeChain({
+      linkage: () => {
+        throw new Error("session lookup failed")
+      },
+      jev: "propagate",
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.verdict).toBe("deny")
+    const row = log.audit.find((r: any) => r.event === "chain_stage" && r.stage === "parent" && r.verdict === "unavailable")
+    expect(row).toBeTruthy()
+    expect(row.reason).toBe("the host lineage could not be read")
+    expect(row.itemID).toBe(decision.itemID)
+    expect(row.sessionID).toBe(EVENT.sessionID)
+    expect(row.tool).toBe("shell")
+    expect(log.audit.some((r: any) => r.stage === "supervisor")).toBe(false)
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("the lineage is read again at generation: a failure there is unavailable Parent review, never Supervisor", async () => {
+    let reads = 0
+    const { chain, log } = makeChain({
+      linkage: () => {
+        reads++
+        if (reads === 1) return { parentID: "ses_parent_l2" }
+        throw new Error("session lookup failed at generation")
+      },
+      jev: "propagate",
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(reads).toBe(2)
+    expect(log.parent).toHaveLength(0)
+    expect(decision.allow).toBe(true)
+    expect(stages(log)).toEqual([
+      ["chain_stage", "jev", "propagate"],
+      ["chain_stage", "parent", "unavailable"],
+      ["chain_stage", "human", "allow"],
+      ["chain_decision", "final", "allow"],
+    ])
+  })
+})
+
+describe("the jev answer map", () => {
+  test("an answer naming an id that was never asked authorizes nothing", async () => {
+    const { chain, log } = makeChain({
+      jevBatch: async (batch: any) => new Map([[`wd_${"f".repeat(24)}.9`, "allow"], [batch.items[0].id, "propagate"]]),
+      nodes: { supervisor: false, parent: false },
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.verdict).toBe("deny")
+    const row = log.audit.find((r: any) => r.event === "chain_stage" && r.stage === "jev")
+    // The item follows its own row, never the unknown id's.
+    expect(row.verdict).toBe("propagate")
+    expect(log.human).toHaveLength(1)
+  })
+
+  test("a thrown batch settles the item unavailable and escalates", async () => {
+    const { chain, log } = makeChain({
+      jevBatch: async () => {
+        throw new Error("the decision model is down")
+      },
+      nodes: { supervisor: false, parent: false },
+      human: "deny",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.verdict).toBe("deny")
+    const row = log.audit.find((r: any) => r.event === "chain_stage" && r.stage === "jev")
+    expect(row.verdict).toBe("unavailable")
+    expect(log.human).toHaveLength(1)
   })
 })
 
@@ -1488,6 +1813,32 @@ describe("abort scope", () => {
     // The late allow re-decided nothing: the entry was already settled.
     expect(rows().map((row: any) => row.verdict)).toEqual(["unavailable"])
   })
+
+  test("an abort that lands while a repair round is pending ends unresolved; the late allow decides nothing", async () => {
+    let asked = 0
+    let releaseRepair: (() => void) | null = null
+    const { chain, log } = makeChain({
+      jev: "propagate",
+      generate: (r: any) => {
+        asked++
+        if (asked === 1) return "not a review result"
+        return new Promise<string>((resolve) => {
+          releaseRepair = () => resolve(allowReply(firstId(r)))
+        })
+      },
+      human: "deny",
+    })
+    const pending = chain.admit(CALL("ses_abort_repair", "ls a"))
+    for (let turn = 0; turn < 50 && !releaseRepair; turn++) await settle(1)
+    // The first reply was rejected and the repair round is the pending ask.
+    expect(asked).toBe(2)
+    chain.markAborted(["ses_abort_repair"])
+    releaseRepair!()
+    const decision = await pending
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("unresolved")
+    expect(log.audit.some((row: any) => row.event === "chain_decision" && row.verdict === "allow")).toBe(false)
+  })
 })
 
 describe("the durable ledger", () => {
@@ -1598,6 +1949,45 @@ describe("the durable ledger", () => {
     answers[0]("deny")
     await pending
     expect(saved[saved.length - 1]).toEqual({})
+  })
+
+  test("a restored file cannot mint ownership under a key the chain never writes", async () => {
+    const saved: Array<Record<string, any>> = []
+    const ledger = {
+      load: () => ({
+        [KEY]: [{ id: LEDGER_ID, stage: "human", tool: "shell", action: "shell" }],
+        "not-a-budget-key": [{ id: `wd_${"1".repeat(24)}.1`, stage: "jev", tool: "shell", action: "shell" }],
+        [`sess_${"Z".repeat(24)}`]: [{ id: `wd_${"2".repeat(24)}.1`, stage: "jev", tool: "shell", action: "shell" }],
+        [`sess_${"0".repeat(23)}`]: [{ id: `wd_${"3".repeat(24)}.1`, stage: "jev", tool: "shell", action: "shell" }],
+      }),
+      save: (state: Record<string, any>) => saved.push(state),
+    }
+    const { chain, log } = makeChain({ jev: "deny", ledger })
+    expect((await chain.admit(CALL("ses_budget_99", "ls after"))).verdict).toBe("deny")
+    // Only the one key this chain could have written was loaded.
+    const rows = log.audit.filter((row: any) => row.event === "chain_admission")
+    expect(rows).toHaveLength(1)
+    expect(rows[0].sessionID).toBe(KEY)
+    expect(Object.keys(saved[saved.length - 1])).toEqual([KEY])
+  })
+
+  test("a restored entry's hostile display fields never reach the audit row", async () => {
+    const hostileTool = "x".repeat(5000)
+    const ledger = {
+      load: () => ({ [KEY]: [{ id: LEDGER_ID, stage: "jev", tool: hostileTool, action: "shell\u0000rm -rf /" }] }),
+      save: () => {},
+    }
+    const { chain, log } = makeChain({ jev: "deny", ledger })
+    await chain.admit(CALL("ses_budget_99", "ls after"))
+    const row = log.audit.find((entry: any) => entry.event === "chain_admission")
+    expect(row).toBeTruthy()
+    expect(row.tool).toBe("unrecorded")
+    expect(row.action).toBe("unrecorded")
+    // The raw hostile bytes appear nowhere in the audit.
+    const text = JSON.stringify(log.audit)
+    expect(text).not.toContain(hostileTool.slice(0, 100))
+    expect(text).not.toContain("rm -rf /")
+    expect(row.itemID).toBe(LEDGER_ID)
   })
 })
 

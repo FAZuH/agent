@@ -927,7 +927,9 @@ describe("the generation boundary", () => {
     await plugin.setup(host.ctx)
     const pending = gate(host.hooks)({ sessionID: "ses_w03", tool: "shell", input: { command: "ls" }, id: "call_3" })
     await cardsOpen(1)
-    expect(host.calls.generate).toHaveLength(1)
+    // The proof failure is a transport-level throw: the bounded retry asks once
+    // more before the stage reports itself unavailable.
+    expect(host.calls.generate).toHaveLength(2)
     await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
     await pending
   })
@@ -972,7 +974,9 @@ describe("the generation boundary", () => {
     nodes("supervisor,human")
     const host = fakeHost({
       generate: (request) => allowReply(request.prompt),
-      skipFilter: (index) => index === 1,
+      // Persistent for the second review's retry too: a host that does not
+      // filter this review does not filter its re-ask.
+      skipFilter: (index) => index >= 1,
     })
     await plugin.setup(host.ctx)
     const run = gate(host.hooks)

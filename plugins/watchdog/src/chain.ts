@@ -139,14 +139,35 @@ export interface BatchLimits {
 }
 
 /**
+ * Bounded feedback repair for a rejected stage reply. `max` counts the extra
+ * asks after the first, so one round never exceeds 1 + `max` asks of the judge.
+ */
+export interface RepairLimits {
+  max: number
+}
+
+/**
+ * Bounded transport attempts for one stage ask, first try included. The delay
+ * before a retry is `backoffMs` times the retries already made: linear, never
+ * exponential.
+ */
+export interface TransportLimits {
+  attempts: number
+  backoffMs: number
+}
+
+/**
  * Admission pacing for the whole chain. The cap counts unresolved call items per
- * producing session; batch limits bound each automated stage's round; timing
+ * producing session; batch limits bound each automated stage's round; repair and
+ * transport bound what one stage round may spend on a broken reply; timing
  * chooses whether a call waits for its review.
  */
 export interface ChainLimits {
   sessionCap: number
   jevBatch: BatchLimits
   supervisorBatch: BatchLimits
+  repair: RepairLimits
+  transport: TransportLimits
   timing: "blocking" | "nonblocking"
 }
 
@@ -154,11 +175,15 @@ export interface ChainLimits {
  * Conservative placeholders until the Watchdog page (#18) owns settings. Both
  * batch windows are off because batching delays every held call, so it is opted
  * into rather than assumed; no illustrative experiment value is promoted here.
+ * One repair round and one retry are enough to absorb a single broken reply or
+ * a single dropped transport, and no more.
  */
 export const CHAIN_DEFAULTS: ChainLimits = {
   sessionCap: 4,
   jevBatch: { max: 1, ms: 0 },
   supervisorBatch: { max: 1, ms: 0 },
+  repair: { max: 1 },
+  transport: { attempts: 2, backoffMs: 250 },
   timing: "blocking",
 }
 
@@ -522,6 +547,51 @@ export function parseSupervisorReply(text: string, expected: string[]): Map<stri
   return out
 }
 
+/**
+ * The closed category of a rejected reply: the feedback round names the first
+ * rule the reply broke and nothing else. The categories are fixed strings, so no
+ * reply text can travel back into a prompt or an audit row.
+ */
+export function replyFailure(text: string, expected: string[]): string {
+  const body = String(text ?? "").trim()
+  if (!body.startsWith("{") || !body.endsWith("}")) return "malformed"
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return "malformed"
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "malformed"
+  const results = (parsed as { results?: unknown }).results
+  if (!Array.isArray(results)) return "malformed"
+  const allowed = new Set(expected)
+  const seen = new Set<string>()
+  for (const row of results) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return "malformed"
+    const id = String((row as { id?: unknown }).id ?? "")
+    if (!allowed.has(id)) return "unknown-id"
+    if (seen.has(id)) return "duplicate-id"
+    seen.add(id)
+    if (!VERDICTS.includes(String((row as { verdict?: unknown }).verdict ?? "") as NodeVerdict)) return "invalid-verdict"
+  }
+  return seen.size === allowed.size ? "malformed" : "missing-id"
+}
+
+/**
+ * The feedback block appended to the base prompt for a repair round: a fixed
+ * category line and the same reply schema. The item blocks and ids stay the
+ * base prompt's, so the re-ask concerns the same unresolved batch and never
+ * echoes the rejected reply.
+ */
+export function repairFeedback(category: string): string {
+  return [
+    "",
+    `Your previous reply was not a usable review result: ${category}. It created no decision.`,
+    "Answer again with exactly one row per item id above, the same proposed calls under review:",
+    `{"results":[{"id":"<item id>","verdict":"allow|deny|abort|propagate","reason":"..."}]}`,
+  ].join("\n")
+}
+
 /** A batch window: at least one item, and a non-negative interval. */
 function bound(raw: BatchLimits | undefined, fallback: BatchLimits): BatchLimits {
   return {
@@ -563,6 +633,15 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       sessionCap: Math.max(1, Math.floor(Number(raw.sessionCap)) || CHAIN_DEFAULTS.sessionCap),
       jevBatch: bound(raw.jevBatch, CHAIN_DEFAULTS.jevBatch),
       supervisorBatch: bound(raw.supervisorBatch, CHAIN_DEFAULTS.supervisorBatch),
+      repair: {
+        // Garbage falls to 0: a bound nobody can read is the closed bound.
+        max: Math.max(0, Math.floor(Number(raw.repair?.max ?? CHAIN_DEFAULTS.repair.max)) || 0),
+      },
+      transport: {
+        // Garbage falls to 1: an unreadable attempt count is no retries.
+        attempts: Math.max(1, Math.floor(Number(raw.transport?.attempts ?? CHAIN_DEFAULTS.transport.attempts)) || 1),
+        backoffMs: Math.max(0, Math.floor(Number(raw.transport?.backoffMs ?? CHAIN_DEFAULTS.transport.backoffMs)) || 0),
+      },
       timing: raw.timing === "nonblocking" ? "nonblocking" : "blocking",
     }
   }
@@ -708,7 +787,11 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       deps.ledgerError?.("read")
       return false
     }
-    for (const [key, entries] of Object.entries(restored)) {
+    for (const [rawKey, entries] of Object.entries(restored)) {
+      // Only a key this runtime could have written is loadable: a hostile file
+      // cannot mint slot ownership under an arbitrary key.
+      if (!/^sess_[0-9a-f]{24}$/.test(rawKey)) continue
+      const key = rawKey
       if (!Array.isArray(entries) || !entries.length) continue
       const list = owned.get(key) ?? []
       for (const raw of entries) {
@@ -723,10 +806,12 @@ export function attachChain(deps: ChainDeps): ChainHandle {
         if (raw?.reported) continue
         deps.audit({
           event: "chain_admission",
-          itemID: entry.id,
+          // Display copies only: the file is untrusted, so nothing from it
+          // reaches the audit unsanitized. Internal matching keeps the raw id.
+          itemID: exactIdent(entry.id) ? entry.id : "unrecorded",
           sessionID: key,
-          tool: entry.tool,
-          action: entry.action,
+          tool: exactIdent(entry.tool) ? entry.tool : "unrecorded",
+          action: exactIdent(entry.action) ? entry.action : "unrecorded",
           stage: entry.stage === "admitted" ? "final" : entry.stage,
           verdict: "unresolved",
           restored: true,
@@ -860,6 +945,44 @@ export function attachChain(deps: ChainDeps): ChainHandle {
     return { join, flush, cancelAll, cancelScope }
   }
 
+  /**
+   * One stage ask through the result protocol: a transport throw is retried up
+   * to `transport.attempts` with linear backoff, and a reply that fails
+   * validation is re-asked with a fixed-category feedback block while repair
+   * budget remains. The stage result is a complete exact answer map or nothing:
+   * exhaustion is unavailable review, never a partial or defaulting allow. The
+   * rejected reply's text never re-enters a prompt.
+   */
+  const askStage = async (
+    items: ReviewItem[],
+    prompt: { text: string; fits: boolean },
+    send: (prompt: string) => Promise<string>,
+  ): Promise<Map<string, NodeVerdict> | null> => {
+    if (!prompt.fits) return null
+    const expected = items.map((item) => item.id)
+    const { repair, transport } = limits()
+    let text = prompt.text
+    for (let round = 0; ; round++) {
+      let reply: string | null = null
+      for (let attempt = 0; attempt < transport.attempts; attempt++) {
+        if (attempt > 0 && transport.backoffMs > 0) {
+          await new Promise<void>((resolve) => schedule(transport.backoffMs * attempt, resolve))
+        }
+        try {
+          reply = await send(text)
+          break
+        } catch {
+          reply = null
+        }
+      }
+      if (reply === null) return null
+      const verdicts = parseSupervisorReply(reply, expected)
+      if (verdicts) return verdicts
+      if (round >= repair.max) return null
+      text = `${prompt.text}${repairFeedback(replyFailure(reply, expected))}`
+    }
+  }
+
   const jevBatcher = createBatcher(
     () => limits().jevBatch,
     async (sessionID, items, history) => await deps.jev({ sessionID, items, history }),
@@ -867,24 +990,14 @@ export function attachChain(deps: ChainDeps): ChainHandle {
 
   const supervisorBatcher = createBatcher(
     () => limits().supervisorBatch,
-    async (sessionID, items, history) => {
-      const prompt = supervisorPrompt(items, history)
-      if (!prompt.fits) return new Map()
-      let reply: string
-      try {
-        reply = await deps.generate({ sessionID, prompt: prompt.text, items })
-      } catch {
-        return new Map()
-      }
-      return parseSupervisorReply(reply, items.map((item) => item.id)) ?? new Map()
-    },
+    async (sessionID, items, history) =>
+      (await askStage(items, supervisorPrompt(items, history), (prompt) => deps.generate({ sessionID, prompt, items }))) ?? new Map(),
   )
 
   const parentBatcher = createBatcher(
     () => limits().supervisorBatch,
     async (sessionID, items, history) => {
       const prompt = parentPrompt(items, history)
-      if (!prompt.fits) return new Map()
       let parentID = ""
       try {
         parentID = (await deps.linkage(sessionID)).parentID ?? ""
@@ -899,13 +1012,7 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       } catch {
         return new Map()
       }
-      let reply: string
-      try {
-        reply = await deps.parentGenerate({ parentID, prompt: prompt.text, items })
-      } catch {
-        return new Map()
-      }
-      return parseSupervisorReply(reply, items.map((item) => item.id)) ?? new Map()
+      return (await askStage(items, prompt, (text) => deps.parentGenerate({ parentID, prompt: text, items }))) ?? new Map()
     },
   )
 
@@ -1197,6 +1304,18 @@ export function attachChain(deps: ChainDeps): ChainHandle {
             linked = false
           }
           if (!linked) {
+            // The lineage read failed at routing, so the parent stage never
+            // started: the row records why, without entering the stage.
+            deps.audit({
+              event: "chain_stage",
+              itemID: item.id,
+              sessionID: item.display.sessionID,
+              tool: item.display.tool,
+              action: item.display.action,
+              stage: "parent",
+              verdict: "unavailable",
+              reason: "the host lineage could not be read",
+            })
             notes.push("parent unavailable: the host linkage could not be read")
           } else if (parentID) {
             if (!nodes.parent) notes.push("parent disabled")
