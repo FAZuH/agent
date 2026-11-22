@@ -9,7 +9,7 @@
  */
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -321,5 +321,70 @@ describe("pump notices", () => {
     expect(row.notice).toBe("delivered")
     expect(calls.posts.length).toBe(1)
     expect(calls.notices.length).toBe(1)
+  })
+})
+
+describe("pump survival and queue honesty (ticket #19 carry pairs)", () => {
+  test("a transport that throws is one failed attempt: the row persists, the pass resolves, the bounded successor is scheduled", async () => {
+    // The #17 carry: a throw used to escape the pass, so no write-back and no
+    // successor ever landed and the receipt sat queued forever with no retry.
+    const { io, calls } = fakeIO({ maxAttempts: 2 })
+    ;(io as any).post = async (url: string, body: string) => {
+      calls.posts.push({ url, body })
+      throw new Error("the transport dropped dead")
+    }
+    expect(queueAbortDelivery(io, outcome({ id: "op_throw" }))).toBe("queued")
+    await expect(pumpAbortDelivery(io)).resolves.toBeUndefined()
+    const first = readDeliveryRows().rows.find((entry) => entry.operationID === "op_throw")
+    expect(first?.receipt).toEqual({ status: "queued", attempts: 1, lastAt: 1000 })
+    expect(calls.posts).toHaveLength(1)
+    // The failed attempt owes its successor: the bounded retry contract.
+    expect(calls.scheduled).toHaveLength(1)
+
+    // The second throwing attempt exhausts the bound and the row reads failed.
+    await expect(pumpAbortDelivery(io)).resolves.toBeUndefined()
+    const second = readDeliveryRows().rows.find((entry) => entry.operationID === "op_throw")
+    expect(second?.receipt).toEqual({ status: "failed", attempts: 2, lastAt: 1000 })
+  })
+
+  test("a parent lookup or notice that throws is a failed notice; the receipt side still settles", async () => {
+    // The same escape in the notice half of the pass: a host whose session
+    // listing throws must not strand the row or the receipt attempt.
+    const thrown = fakeIO({ parentOf: async () => { throw new Error("the listing exploded") } })
+    expect(queueAbortDelivery(thrown.io, outcome({ id: "op_parent_throw" }))).toBe("queued")
+    await expect(pumpAbortDelivery(thrown.io)).resolves.toBeUndefined()
+    const parentRow = readDeliveryRows().rows.find((entry) => entry.operationID === "op_parent_throw")
+    expect(parentRow?.receipt.status).toBe("delivered")
+    expect(parentRow?.notice).toBe("failed")
+
+    const noticed = fakeIO({ parentOf: async () => "ses_parent_notice" })
+    ;(noticed.io as any).notice = async () => {
+      throw new Error("the queue write exploded")
+    }
+    expect(queueAbortDelivery(noticed.io, outcome({ id: "op_notice_throw" }))).toBe("queued")
+    await expect(pumpAbortDelivery(noticed.io)).resolves.toBeUndefined()
+    const noticeRow = readDeliveryRows().rows.find((entry) => entry.operationID === "op_notice_throw")
+    expect(noticeRow?.receipt.status).toBe("delivered")
+    expect(noticeRow?.notice).toBe("failed")
+  })
+
+  test("an unreadable queue file is unavailable, never an empty queue", async () => {
+    // The #17 carry: every read error used to read as "nothing owed". Only a
+    // missing file is empty; anything else must not lie about what it holds.
+    const path = join(scratch, "jev", DELIVERY_FILE)
+    rmSync(path, { force: true })
+    mkdirSync(path, { recursive: true })
+    try {
+      expect(readDeliveryRows()).toEqual({ ok: false })
+      const { io, calls } = fakeIO()
+      expect(queueAbortDelivery(io, outcome({ id: "op_unreadable" }))).toBe("unavailable")
+      expect(calls.audits).toContainEqual(expect.objectContaining({ event: "abort_delivery_queue", result: "unavailable" }))
+      // A pump pass over an unreadable queue attempts nothing and stays alive.
+      const pumped = fakeIO()
+      await expect(pumpAbortDelivery(pumped.io)).resolves.toBeUndefined()
+      expect(pumped.calls.posts).toEqual([])
+    } finally {
+      rmSync(path, { recursive: true, force: true })
+    }
   })
 })

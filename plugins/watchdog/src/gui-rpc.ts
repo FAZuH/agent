@@ -150,15 +150,20 @@ export function logRows(limit = 30, sessionID?: string) {
 export function abortOperationRows() {
   const read = readAbortRecords()
   // A store that cannot be read is not an empty set: the caller must be able to
-  // tell "no operations" from "the record file is broken".
-  if (!read.ok) return { ok: false as const, reason: read.reason, operations: [] }
-  // Delivery rows are a parallel store keyed by the same operation ids. A
-  // missing row means the feature never queued this operation, so its receipt
-  // stays absent rather than inventing a status.
+  // tell "no operations" from "the record file is broken". The delivery store
+  // is still reported on its own merit: its readability is a fact about it,
+  // not about the operation records.
+  if (!read.ok) return { ok: false as const, reason: read.reason, operations: [], deliveryReadable: readDeliveryRows().ok }
+  // Delivery rows are a parallel store keyed by the same operation ids. In a
+  // readable store a missing row means the feature never queued this
+  // operation, so its receipt stays absent rather than invented; a store that
+  // cannot be read is the listing's own `deliveryReadable: false` state and
+  // no row gets a delivery field at all.
   const delivery = readDeliveryRows()
   const byOperation = new Map(delivery.ok ? delivery.rows.map((row) => [row.operationID, row]) : [])
   return {
     ok: true as const,
+    deliveryReadable: delivery.ok,
     operations: read.records.map((record) => {
       const row = byOperation.get(record.operation.id)
       return {

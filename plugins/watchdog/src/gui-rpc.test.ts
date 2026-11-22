@@ -651,6 +651,41 @@ test("the operations list carries a release and its continuation", async () => {
   expect(live.continuedAt).toBeUndefined()
 })
 
+test("an unreadable delivery queue is its own state on the listing, never queued-absence", async () => {
+  const { abortFile } = await import("./abort.ts")
+  const { DELIVERY_FILE } = await import("./delivery.ts")
+  writeFileSync(
+    abortFile(),
+    JSON.stringify({
+      v: 1,
+      operations: [
+        {
+          operation: { id: "op_rows_unreadable", sessionID: "ses_rows_unreadable", scope: ["ses_rows_unreadable"], source: "human", cause: "operator abort", at: 5 },
+          containment: [{ step: "receipt", status: "done", detail: "the operation record carries this receipt" }],
+        },
+      ],
+    }),
+  )
+  // A delivery file that cannot be parsed is unreadable, not an empty queue.
+  writeFileSync(join(chainStateHome(), DELIVERY_FILE), "{ not json")
+  const handlers = jevRpcHandlers({})
+  const result = await (handlers as any).abortOperations({})
+  expect(result.ok).toBe(true)
+  expect(result.deliveryReadable).toBe(false)
+  // No row invents a receipt status: the unreadable state is the listing's
+  // own field, and a row without delivery stays absent rather than faked.
+  expect(result.operations).toHaveLength(1)
+  expect(result.operations[0].delivery).toBeUndefined()
+
+  // A readable store with no row for this operation is honest absence: the
+  // feature never queued it, and the listing says so by omission, not by
+  // collapsing an error.
+  rmSync(join(chainStateHome(), DELIVERY_FILE), { force: true })
+  const again = await (handlers as any).abortOperations({})
+  expect(again.deliveryReadable).toBe(true)
+  expect(again.operations[0].delivery).toBeUndefined()
+})
+
 describe("watchdogStatus durable ledger honesty", () => {
   const ledgerPath = () => join(chainStateHome(), CHAIN_BUDGET_FILE)
 

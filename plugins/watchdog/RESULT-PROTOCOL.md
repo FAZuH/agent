@@ -83,3 +83,43 @@ carry item ids, stages, verdicts, and fixed-category reasons. Jev failure logs
 record `JevError.reason` (a fixed code), never the message. Restored ledger
 entries are displayed sanitized; hostile keys and fields load nothing and show
 nothing.
+
+## Rollout limits and defaults
+
+The chain ships off. Activation needs both `WATCHDOG_CHAIN=1` and a
+`chain-gate.json` carrying `{"gate":"passed"}` in the Jev state directory, and
+the only writer that file has is `src/capability-gate.ts`. The measured
+capability report (ticket #10, CAPABILITY-REPORT.md) keeps the gate `blocked`:
+eight required capabilities, and every one failed, unverified, partial, or
+sourced from anything but a real-host run records as a gating limitation.
+
+Approved defaults (`CHAIN_DEFAULTS` in `src/chain.ts`, env names in
+`src/watchdog-config.ts`; an unset or unusable value falls back to the default):
+
+| Setting | Default | Environment override |
+| --- | --- | --- |
+| sessionCap | 4 | `WATCHDOG_CHAIN_CAP` |
+| jevBatch | `{max:1, ms:0}` | `WATCHDOG_CHAIN_JEV_BATCH_MAX`, `WATCHDOG_CHAIN_JEV_BATCH_MS` |
+| supervisorBatch | `{max:1, ms:0}` | `WATCHDOG_CHAIN_BATCH_MAX`, `WATCHDOG_CHAIN_BATCH_MS` |
+| repair.max | 1 | `WATCHDOG_CHAIN_REPAIR_MAX` |
+| transport | `{attempts:2, backoffMs:250}` | `WATCHDOG_CHAIN_TRANSPORT_ATTEMPTS`, `WATCHDOG_CHAIN_TRANSPORT_BACKOFF_MS` |
+| timing | `blocking` | `WATCHDOG_CHAIN_TIMING` |
+| nodes | all four on | `WATCHDOG_CHAIN_NODES` |
+| humanOnly | empty allowlist | `WATCHDOG_CHAIN_HUMAN_ONLY` (environment-only) |
+
+A batch window clamps to at least one item and a non-negative interval
+(`bound` in `src/chain.ts`). Fixed caps no setting raises:
+`SUPERVISOR_PROMPT_MAX` 24000 characters, `HUMAN_BRIEF_MAX` 1500 characters,
+`DESCENDANT_SCAN_MS` 5000 for one descendant listing (past it the scan is
+unavailable and containment is incomplete, never unbounded).
+
+Abort receipts (`hook_abort_receipts`) stay off by default; enabled, the
+default webhook is empty so nothing is sent, `maxAttempts` 3,
+`retryDelayMs` 2000.
+
+Values seen only in probes and test fixtures, such as batch windows in
+seconds or caps above four, are experiment bookkeeping, never approved
+defaults: no synthetic probe tunes a shipped number. A
+`WATCHDOG_CHAIN_TIMING=nonblocking` selection stays gated (C3: a started
+transient generation cannot be cancelled), so the call is held for
+authorization and the selection is reported, never passed.

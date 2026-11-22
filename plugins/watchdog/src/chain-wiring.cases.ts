@@ -152,6 +152,8 @@ const { banTool } = await import("../../../lib/jev/tool-ban.ts")
 const { chainStateHome, CHAIN_BUDGET_FILE, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
 const { readAbortRecords, appendAbortRecord, resetAbortMarks, RELEASE_CONTINUE_TEXT } = await import("./abort.ts")
 const { setReceiptTransport, readDeliveryRows, DELIVERY_FILE } = await import("./delivery.ts")
+const { writeCapabilityGate, REQUIRED_CAPABILITIES } = await import("./capability-gate.ts")
+const REQUIRED_GATE_IDS = REQUIRED_CAPABILITIES.map((entry: { id: string }) => entry.id)
 const { resetCardRoute } = await import("./question-cards.ts")
 const { resetOpenPrompts } = await import("./session-ban-host.ts")
 const { readSnapshot, parentPaths, writeSnapshot, writeSubtreeBan, removeParent } = await import("./session-ban-state.ts")
@@ -6870,5 +6872,440 @@ describe("watchdog page settings (ticket #18)", () => {
     expect(outcome).toBeUndefined()
     const decision = since().find((row) => row.event === "chain_decision")
     expect(decision?.verdict).toBe("allow")
+  })
+})
+
+describe("ticket #19: the composed integration pass", () => {
+  const call = (sessionID: string, id: string, command: string) => ({ sessionID, tool: "shell", input: { command }, id })
+
+  const banOf = (sessionID: string) => readSnapshot(sessionID).snap?.sessionBan
+
+  const operationIDOf = (sessionID: string) => {
+    const read = readAbortRecords()
+    if (!read.ok) throw new Error("unreachable")
+    const matches = read.records.filter((entry) => entry.operation.sessionID === sessionID)
+    return matches[matches.length - 1]!.operation.id
+  }
+
+  const enableReceipts = (over: Record<string, unknown> = {}) => {
+    state.setFeature("hook_abort_receipts", true)
+    state.setFeatureConfig("hook_abort_receipts", "webhook", "http://127.0.0.1:9/unused")
+    state.setFeatureConfig("hook_abort_receipts", "maxAttempts", over.maxAttempts ?? 1)
+    state.setFeatureConfig("hook_abort_receipts", "retryDelayMs", over.retryDelayMs ?? 1)
+  }
+  const disableReceipts = () => state.setFeature("hook_abort_receipts", false)
+
+  const recorder = (behavior: "deliver" | "throw" | "park") => {
+    const posts: Array<{ url: string; body: any }> = []
+    const waits: Array<() => void> = []
+    let parked = false
+    return {
+      posts,
+      parkAll: () => {
+        parked = true
+      },
+      releaseAll: () => {
+        parked = false
+        for (const resolve of waits.splice(0)) resolve()
+      },
+      transport: async (url: string, body: string) => {
+        posts.push({ url, body: JSON.parse(body) })
+        if (behavior === "throw") throw new Error("the receipt outage")
+        if (parked) await new Promise<void>((resolve) => waits.push(resolve))
+        return true
+      },
+    }
+  }
+
+  test("the writer's own gate file drives the chain: a blocked record refuses, a passed record activates", async () => {
+    // The fixtures below are synthetic sheets: they prove the writer's FILE
+    // FORM is what the chain consumes. No host capability is claimed here.
+    process.env.WATCHDOG_CHAIN = "1"
+    ungate()
+    const blocked = writeCapabilityGate(
+      JSON.stringify({
+        source: { kind: "real-host", date: "synthetic fixture" },
+        items: [{ capability: "c3_cancellation", verdict: "failed", note: "fixture: the host cannot cancel" }],
+      }),
+    )
+    expect(blocked.ok && blocked.gate).toBe("blocked")
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    expect(announcements()[0]?.reason).toBe("the capability gate has not passed")
+    // A blocked gate leaves the chain inert: the call passes through exactly
+    // as it would with no Watchdog, and nothing is judged or authorized.
+    const passedThrough = await gate(host.hooks)(call("ses_t19g", "cg19", "ls a")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(passedThrough).toBe("allowed")
+    expect(since().some((row) => row.event === "chain_stage")).toBe(false)
+
+    const verified = REQUIRED_GATE_IDS.map((id: string) => ({ capability: id, verdict: "verified", note: `fixture sheet: ${id}` }))
+    const passed = writeCapabilityGate(
+      JSON.stringify({ source: { kind: "real-host", date: "synthetic fixture" }, items: verified }),
+    )
+    expect(passed.ok && passed.gate).toBe("passed")
+    // The gate file is read per call, so the verdict written while the process
+    // runs activates the next call.
+    const wrapper = gate(host.hooks)
+    const held = settle(wrapper(call("ses_t19g", "cg19b", "ls b")))
+    await cardsOpen(1)
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await held).toBe("allowed")
+    const status = await host.calls.rpc[0].handlers.watchdogStatus({})
+    expect(status.chain).toEqual({ status: "passed", reason: "the capability gate passed", wired: true })
+    ungate()
+  })
+
+  test("the four races in one serialized flow: no stale authorization, no duplicate execution", async () => {
+    arm()
+    nodes("human")
+    enableReceipts()
+    const rec = recorder("deliver")
+    setReceiptTransport(rec.transport)
+    const ROOT = "ses_t19_r1r"
+    const CHILD = "ses_t19_r1c"
+    const SELF = "ses_t19_r1s"
+    const tree = {
+      sessions: [{ id: ROOT }, { id: CHILD, parentID: ROOT }, { id: SELF, parentID: ROOT }],
+      parentOf: (id: string) => (id === CHILD || id === SELF ? ROOT : null),
+    }
+    try {
+      const host = fakeHost(tree)
+      await plugin.setup(host.ctx)
+      const handlers = host.calls.rpc[0].handlers
+      const wrapper = gate(host.hooks)
+
+      // Race one, execution-versus-deny: two calls held in the child; a deny
+      // for the second cancels only that call and aborts nothing.
+      const one = settle(wrapper(call(CHILD, "cr1a", "ls a")))
+      await cardsOpen(1)
+      const two = settle(wrapper(call(CHILD, "cr1b", "ls b")))
+      await cardsOpen(2)
+      await host.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "deny" } } })
+      expect(await two).toContain("did not run")
+      const denyRow = since().find((row) => row.event === "chain_deny")
+      expect(denyRow?.shape).toBe("queued")
+      expect(host.calls.interrupts).toEqual([])
+      expect(banOf(CHILD)).toBeUndefined()
+
+      // Race two, abort-versus-allow: the abort lands while the first call is
+      // still held, so its card is cancelled and the scope is contained.
+      const aborted = await handlers.abortOperation({ sessionID: CHILD })
+      expect(aborted.ok).toBe(true)
+      expect(await one).toContain("did not run")
+      expect(banOf(CHILD)?.kind).toBe("subtree")
+
+      // Race three, reply-versus-cancellation: the late allow for the removed
+      // card decides nothing and authorizes nothing.
+      await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+      await ticks(8)
+      expect(since().some((row) => row.event === "chain_decision" && row.verdict === "allow")).toBe(false)
+      expect(posted).toHaveLength(2)
+      expect(host.calls.prompts).toEqual([])
+
+      // Race four, release-versus-abort: the ancestor's abort lands before the
+      // child's operation is released, so the release clears only its own rows
+      // and the continuation is prevented at the boundary.
+      const rootAbort = await handlers.abortOperation({ sessionID: ROOT })
+      expect(rootAbort.ok).toBe(true)
+      const released = await handlers.releaseOperation({ operationID: operationIDOf(CHILD), continue: true })
+      expect(released.ok).toBe(true)
+      expect(released.covered).toEqual([CHILD])
+      expect(released.continued).toBe("prevented")
+      expect(host.calls.prompts).toEqual([])
+
+      // One receipt per operation, one queue notice for the child's parent, and
+      // no wake anywhere: the ancestor has no parent, so its notice is absent.
+      await ticks(10)
+      expect(rec.posts).toHaveLength(2)
+      expect(host.calls.syntheticNotes).toHaveLength(1)
+      expect(host.calls.syntheticNotes[0].sessionID).toBe(ROOT)
+      expect(host.calls.syntheticNotes[0].delivery).toBe("queue")
+
+      // A restart over the same durable store keeps every restriction.
+      const after = fakeHost(tree)
+      await plugin.setup(after.ctx)
+      const childRefused = await latestGate(after.hooks)(call(CHILD, "cr1c", "ls c")).then(
+        () => "allowed",
+        (error: Error) => error.message,
+      )
+      expect(childRefused).toContain("did not run")
+      const selfRefused = await latestGate(after.hooks)(call(SELF, "cr1d", "ls d")).then(
+        () => "allowed",
+        (error: Error) => error.message,
+      )
+      expect(selfRefused).toContain("did not run")
+      expect(after.calls.prompts).toEqual([])
+    } finally {
+      setReceiptTransport(null)
+      disableReceipts()
+    }
+  })
+
+  test("one admission pipeline together: partial batch, bounded repair exhaustion, immutable decisions, sibling budgets, indefinite Human pending, restart restoration", async () => {
+    arm()
+    nodes("jev,supervisor,human")
+    process.env.WATCHDOG_CHAIN_CAP = "2"
+    process.env.WATCHDOG_CHAIN_JEV_BATCH_MAX = "2"
+    process.env.WATCHDOG_CHAIN_JEV_BATCH_MS = "100"
+    const base = state.loadState()
+    state.saveState({ ...base, endpoint: `http://127.0.0.1:${server.port}/decisions`, model: "test-model", protocol: "systemone" })
+    state.writeKey("test-key")
+    // The provider leaves the second and third items unanswered, so they
+    // propagate; the supervisor generate is malformed on every ask, so repair
+    // runs once and exhaustion escalates each item to the human.
+    omitAnswers = (payload) =>
+      (payload?.state?.calls ?? [])
+        .filter((entry: any) => entry?.input?.command === "ls y" || entry?.input?.command === "ls z")
+        .map((entry: any) => entry.id)
+    const garbage = () => "not a json object at all"
+    const host = fakeHost({ generate: garbage })
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+    const A = "ses_t19_pA"
+    const B = "ses_t19_pB"
+
+    // A partial batch decides the item it answered; the omitted item escalates.
+    const a1 = settle(wrapper(call(A, "cpa1", "ls x")))
+    const a2 = settle(wrapper(call(A, "cpa2", "ls y")))
+    expect(await a1).toBe("allowed")
+    await cardsOpen(1)
+    const a1ID = String((decisions[0]?.state?.calls ?? []).find((entry: any) => entry?.input?.command === "ls x")?.id ?? "")
+    expect(a1ID).not.toBe("")
+    const a2ID = String((decisions[0]?.state?.calls ?? []).find((entry: any) => entry?.input?.command === "ls y")?.id ?? "")
+    expect(a2ID).not.toBe("")
+
+    // The repair bound is one re-ask: two supervisor generates per item, then
+    // unavailability, then the human card. No original tool reruns anywhere.
+    const a3 = settle(wrapper(call(A, "cpa3", "ls z")))
+    await cardsOpen(2)
+    const supervisorAsks = host.calls.generate.filter((request: any) => idsIn(request.prompt).length > 0)
+    const a2Asks = supervisorAsks.filter((request: any) => idsIn(request.prompt).includes(a2ID))
+    expect(a2Asks).toHaveLength(2)
+
+    // The partial batch's accepted allow for a1 exists as exactly one
+    // decision row: nothing re-judges the settled item afterwards.
+    const a1Decisions = since().filter((row) => row.event === "chain_decision" && row.itemID === a1ID)
+    expect(a1Decisions).toHaveLength(1)
+    expect(a1Decisions[0].verdict).toBe("allow")
+
+    // The Human items pend indefinitely and keep their slots: the cap is two,
+    // both are held, and the third call in A waits at the budget instead.
+    await ticks(30)
+    expect(posted).toHaveLength(2)
+    const a4 = settle(wrapper(call(A, "cpa4", "ls w")))
+    await ticks(10)
+    expect(posted).toHaveLength(2)
+    const waiting = since().find((row) => row.waiting === true)
+    expect(waiting?.held).toBe(2)
+
+    // Sibling budgets are independent: B admits and decides while A is full.
+    const b1 = settle(wrapper(call(B, "cpb1", "ls b")))
+    expect(await b1).toBe("allowed")
+
+    // The human approves one pending item: its slot frees, and the waiting
+    // call is admitted and decided, never left waiting on a dead budget.
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await a2).toBe("allowed")
+    expect(await a4).toBe("allowed")
+
+    // An accepted decision is immutable: a duplicate reply for the answered
+    // card finds no hold, and the settled allow is never re-decided.
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "deny" } } })
+    await ticks(8)
+    const a2Decisions = since().filter((row) => row.event === "chain_decision" && row.itemID === a2ID)
+    expect(a2Decisions).toHaveLength(1)
+    expect(a2Decisions[0].verdict).toBe("allow")
+
+    // Restart with one item still pending: the hold resolves, the interrupted
+    // slot is reported once and kept until its own session continues, and a
+    // late card answer for the retired hold authorizes nothing. A same-host
+    // re-setup is the restart: the old runtime's pending hold is settled by
+    // the handover.
+    await plugin.setup(host.ctx)
+    expect(await a3).toContain("did not run")
+    const nextGate = latestGate(host.hooks)
+    const b2 = settle(nextGate(call(B, "cpb2", "ls c")))
+    expect(await b2).toBe("allowed")
+    const restored = since().filter((row) => row.restored === true)
+    expect(restored).toHaveLength(1)
+    for (const row of restored) {
+      expect(row.verdict).toBe("unresolved")
+      expect(String(row.reason)).toContain("not approved")
+    }
+    // The item pending across the restart is a3: its jev ask is the second
+    // decisions payload, and the late answer must decide nothing for it.
+    const a3ID = String(
+      (decisions.find((payload: any) => (payload?.state?.calls ?? []).some((entry: any) => entry?.input?.command === "ls z"))?.state?.calls ?? [])
+        .find((entry: any) => entry?.input?.command === "ls z")?.id ?? "",
+    )
+    expect(a3ID).not.toBe("")
+    await host.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "allow" } } })
+    await ticks(8)
+    expect(since().filter((row) => row.event === "chain_decision" && row.verdict === "allow").some((row) => row.itemID === a3ID)).toBe(false)
+
+    // Its own session continues: the dead slots are disposed and A is admitted
+    // again through the whole pipeline.
+    const a5 = settle(nextGate(call(A, "cpa5", "ls v")))
+    expect(await a5).toBe("allowed")
+  })
+
+  test("overlapping aborts through selected-only continuation, operation-scoped release, revocation, restart, and reconnect", async () => {
+    arm()
+    nodes("human")
+    const ROOT = "ses_t19_or"
+    const CHILD = "ses_t19_oc"
+    const SELF = "ses_t19_os"
+    const tree = {
+      sessions: [{ id: ROOT }, { id: CHILD, parentID: ROOT }, { id: SELF, parentID: ROOT }],
+      parentOf: (id: string) => (id === CHILD || id === SELF ? ROOT : null),
+    }
+    const host = fakeHost(tree)
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    const wrapper = gate(host.hooks)
+
+    // A cancelled job to keep dead: a held call in the child.
+    const held = settle(wrapper(call(CHILD, "cov1", "ls a")))
+    await cardsOpen(1)
+
+    // An old approval exists for the child before any abort.
+    const ttl = state.loadState().approveTtl
+    recordApproval(
+      { token: "tok_t19", sessionID: CHILD, action: "shell", resources: [], subject: "ls", reason: "review", ts: new Date().toISOString() },
+      ttl,
+    )
+
+    // Two independent operations: the child's own and the ancestor's subtree.
+    await handlers.abortOperation({ sessionID: CHILD })
+    await handlers.abortOperation({ sessionID: ROOT })
+    expect(await held).toContain("did not run")
+    const childOp = operationIDOf(CHILD)
+    const rootOp = operationIDOf(ROOT)
+
+    // Old approvals never resurrect: the recorded approval does not run the
+    // call through the covered scope.
+    const refused = await wrapper(call(CHILD, "cov2", "ls b")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(refused).toContain("did not run")
+
+    // The ancestor's release continues the selected session only, and lifts
+    // only itself: the child keeps its own operation's coverage.
+    const rootRelease = await handlers.releaseOperation({ operationID: rootOp, continue: true })
+    expect(rootRelease.continued).toBe("sent")
+    expect(host.calls.prompts).toEqual([{ sessionID: ROOT, text: RELEASE_CONTINUE_TEXT }])
+    expect(banOf(CHILD)?.kind).toBe("subtree")
+    expect(banOf(ROOT)).toBeUndefined()
+
+    // Reconnect and restart: a new runtime over the same store answers the
+    // retried release with "already" and never repeats the prompt.
+    const after = fakeHost(tree)
+    await plugin.setup(after.ctx)
+    const retried = await after.calls.rpc[0].handlers.releaseOperation({ operationID: rootOp, continue: true })
+    expect(retried.continued).toBe("already")
+    expect(after.calls.prompts).toEqual([])
+    // No cancelled job resurrects: the child is still covered by its own
+    // operation, and nothing was ever resumed for it.
+    const stillRefused = await latestGate(after.hooks)(call(CHILD, "cov3", "ls c")).then(
+      () => "allowed",
+      (error: Error) => error.message,
+    )
+    expect(stillRefused).toContain("did not run")
+
+    // No cancelled job resurrects: the tree runs again through the normal chain.
+    const final = await after.calls.rpc[0].handlers.releaseOperation({ operationID: childOp })
+    expect(final.continued).toBe("not-requested")
+    expect(after.calls.prompts).toEqual([])
+    const reopened = settle(latestGate(after.hooks)(call(CHILD, "cov4", "ls d")))
+    await cardsOpen(2)
+    await after.push({ type: "form.replied", data: { id: posted[1].card.id, answer: { decision: "allow" } } })
+    expect(await reopened).toBe("allowed")
+  })
+
+  test("a receipt outage never delays containment and stays bounded", async () => {
+    arm()
+    nodes("human")
+    enableReceipts({ maxAttempts: 2, retryDelayMs: 1 })
+    const rec = recorder("throw")
+    setReceiptTransport(rec.transport)
+    const ROOT = "ses_t19_outr"
+    const CHILD = "ses_t19_outc"
+    const GRAND = "ses_t19_outg"
+    const tree = { sessions: [{ id: ROOT }, { id: CHILD, parentID: ROOT }, { id: GRAND, parentID: CHILD }] }
+    try {
+      const host = fakeHost(tree)
+      await plugin.setup(host.ctx)
+      const handlers = host.calls.rpc[0].handlers
+
+      // Containment is sealed and durable before a single delivery pass ends.
+      const child = await handlers.abortOperation({ sessionID: CHILD })
+      expect(child.ok).toBe(true)
+      expect(banOf(CHILD)?.kind).toBe("subtree")
+      expect(banOf(GRAND)?.kind).toBe("subtree")
+
+      // The outage is bounded: two throwing attempts per receipt, then failed.
+      await ticks(30)
+      expect(rec.posts.length).toBeGreaterThanOrEqual(2)
+      const listed = await handlers.abortOperations({})
+      const childRow = listed.operations.find((entry: any) => entry.sessionID === CHILD)
+      expect(childRow.delivery).toEqual({ receipt: "failed", attempts: 2, notice: "delivered" })
+
+      // The parent notice still landed without waking or resuming the parent.
+      expect(host.calls.prompts).toEqual([])
+      expect(host.calls.syntheticNotes).toHaveLength(1)
+      expect(host.calls.syntheticNotes[0].sessionID).toBe(ROOT)
+      expect(host.calls.syntheticNotes[0].delivery).toBe("queue")
+    } finally {
+      setReceiptTransport(null)
+      disableReceipts()
+    }
+  })
+
+  test("notices under a parent abort are suppressed after the boundary, with no wake and no resume", async () => {
+    arm()
+    nodes("human")
+    enableReceipts({ maxAttempts: 1 })
+    const rec = recorder("park")
+    setReceiptTransport(rec.transport)
+    const ROOT = "ses_t19_pmr"
+    const CHILD = "ses_t19_pmc"
+    const GRAND = "ses_t19_pmg"
+    const tree = { sessions: [{ id: ROOT }, { id: CHILD, parentID: ROOT }, { id: GRAND, parentID: CHILD }] }
+    try {
+      const host = fakeHost(tree)
+      await plugin.setup(host.ctx)
+      const handlers = host.calls.rpc[0].handlers
+
+      // The child's delivery parks mid-pass, then the parent itself is
+      // aborted: the parked notice must not wake or resume the parent.
+      rec.parkAll()
+      const child = await handlers.abortOperation({ sessionID: GRAND })
+      expect(child.ok).toBe(true)
+      const parentAbort = await handlers.abortOperation({ sessionID: CHILD })
+      expect(parentAbort.ok).toBe(true)
+      rec.releaseAll()
+      await ticks(12)
+
+      // The grandchild's notice is suppressed by the boundary check: its
+      // direct parent was aborted while the receipt was parked. The child's
+      // own notice reaches its live parent as one queue write, never a wake.
+      expect(host.calls.syntheticNotes).toHaveLength(1)
+      expect(host.calls.syntheticNotes[0].sessionID).toBe(ROOT)
+      expect(host.calls.syntheticNotes[0].delivery).toBe("queue")
+      expect(host.calls.prompts).toEqual([])
+      const listed = await handlers.abortOperations({})
+      const grandRow = listed.operations.find((entry: any) => entry.sessionID === GRAND)
+      expect(grandRow.delivery).toEqual({ receipt: "delivered", attempts: 1, notice: "suppressed" })
+      const childRow = listed.operations.find((entry: any) => entry.sessionID === CHILD)
+      expect(childRow.delivery).toEqual({ receipt: "delivered", attempts: 1, notice: "delivered" })
+    } finally {
+      setReceiptTransport(null)
+      disableReceipts()
+    }
   })
 })

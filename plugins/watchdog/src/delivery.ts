@@ -147,15 +147,34 @@ export async function pumpAbortDelivery(io: DeliveryIO): Promise<void> {
   for (const row of rows) {
     if (row.receipt.status === "queued" && endpoint && row.receipt.attempts < max) {
       row.receipt = { ...row.receipt, attempts: row.receipt.attempts + 1, lastAt: now }
-      const ok = await io.post(endpoint, receiptBody(row))
+      // A transport that throws is one failed attempt, never an escaped pass:
+      // the row must still record its attempt, settle, and schedule its bound.
+      let ok = false
+      try {
+        ok = await io.post(endpoint, receiptBody(row))
+      } catch {
+        ok = false
+      }
       row.receipt.status = ok ? "delivered" : row.receipt.attempts >= max ? "failed" : "queued"
       wrote = true
       io.audit({ event: "abort_receipt_delivery", operationID: row.operationID, status: row.receipt.status, attempts: row.receipt.attempts })
       if (row.receipt.status === "queued") owed++
     }
     if (row.notice === "queued") {
-      const parent = await io.parentOf(row.sessionID)
-      if (!parent) {
+      // A lookup that throws is a failed notice, never an absent parent and
+      // never an escaped pass; the receipt side settles either way.
+      let parent: string | null = null
+      let failed = false
+      try {
+        parent = await io.parentOf(row.sessionID)
+      } catch {
+        failed = true
+      }
+      if (failed) {
+        row.notice = "failed"
+        wrote = true
+        io.audit({ event: "abort_notice", operationID: row.operationID, status: "failed" })
+      } else if (!parent) {
         row.notice = "absent"
         wrote = true
         io.audit({ event: "abort_notice", operationID: row.operationID, status: "absent" })
@@ -166,7 +185,12 @@ export async function pumpAbortDelivery(io: DeliveryIO): Promise<void> {
         wrote = true
         io.audit({ event: "abort_notice", operationID: row.operationID, status: "suppressed" })
       } else {
-        const sent = await io.notice(parent, noticeText(row))
+        let sent = false
+        try {
+          sent = await io.notice(parent, noticeText(row))
+        } catch {
+          sent = false
+        }
         row.notice = sent ? "delivered" : "failed"
         wrote = true
         io.audit({ event: "abort_notice", operationID: row.operationID, status: row.notice })
@@ -230,16 +254,17 @@ function deliveryFile(): string {
 type DeliveryRead = { ok: true; rows: DeliveryRow[] } | { ok: false }
 
 /**
- * The queue is its own file, beside the operation records. A file that cannot
- * be parsed is unavailable, never an empty queue: an unreadable queue must not
- * read as "nothing owed".
+ * The queue is its own file, beside the operation records. A missing file is
+ * the only empty queue; a file that cannot be read is unavailable, never
+ * "nothing owed", and a file that cannot be parsed is unavailable too.
  */
 export function readDeliveryRows(): DeliveryRead {
   let raw: string
   try {
     raw = readFileSync(deliveryFile(), "utf8")
-  } catch {
-    return { ok: true, rows: [] }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { ok: true, rows: [] }
+    return { ok: false }
   }
   let parsed: unknown
   try {

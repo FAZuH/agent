@@ -89,7 +89,7 @@ export interface WatchdogRPC {
   getWatchdogSettings(input: Record<string, never>): Promise<WatchdogSettingsInfo>
   setWatchdogSetting(input: { key: string; value: boolean | string | number }): Promise<{ ok: boolean; error?: string }>
   setWatchdogSecret(input: { key: "receiptsWebhook" | "supervisorEndpoint"; value: string }): Promise<{ ok: boolean; error?: string }>
-  abortOperations(input: Record<string, never>): Promise<{ ok: boolean; reason?: string; operations: WatchdogOperationInfo[] }>
+  abortOperations(input: Record<string, never>): Promise<{ ok: boolean; reason?: string; operations: WatchdogOperationInfo[]; deliveryReadable: boolean }>
   releaseOperation(input: { operationID: string; continue?: boolean }): Promise<ReleaseResult>
   subscribe(listener: (event: { reason: string }) => void): () => void
 }
@@ -101,6 +101,7 @@ export interface WatchdogViewState {
   settings?: WatchdogSettingsInfo
   operations: WatchdogOperationInfo[]
   operationsReadable: boolean
+  deliveryReadable: boolean
   busy?: string
 }
 
@@ -133,7 +134,7 @@ export function releaseWarning(result: ReleaseResult): string | null {
 export function createWatchdogView(rpc: WatchdogRPC, dialogs: WatchdogDialogs) {
   let disposed = false
   let generation = 0
-  let state: WatchdogViewState = { loading: false, operations: [], operationsReadable: true }
+  let state: WatchdogViewState = { loading: false, operations: [], operationsReadable: true, deliveryReadable: true }
 
   const update = (next: WatchdogViewState) => {
     state = next
@@ -156,6 +157,9 @@ export function createWatchdogView(rpc: WatchdogRPC, dialogs: WatchdogDialogs) {
         settings,
         operations: operations.ok ? operations.operations : [],
         operationsReadable: operations.ok,
+        // Never folded into the rows: an unreadable store is this state, and
+        // absent receipts mean "never queued" only when it is readable.
+        deliveryReadable: operations.deliveryReadable,
         loading: false,
       })
     } catch (error) {

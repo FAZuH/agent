@@ -145,6 +145,13 @@ test("the shipped Watchdog page carries the corrected alert gate, focus CSS, and
   expect(code).toContain("No session is covered by more than one active operation")
 })
 
+test("the shipped Watchdog page renders the unreadable delivery queue as its own state", () => {
+  const code = readFileSync(join(import.meta.dir, "../dist/gui-experimental.cjs"), "utf8")
+  expect(code).toContain("The delivery queue could not be read")
+  expect(code).toMatch(/get when\(\)\{return![a-z]+\(\)\.deliveryReadable\}/)
+  expect(code).toContain("deliveryReadable:!0")
+})
+
 test("the shipped Watchdog page is gated off by default and never binds a secret value", () => {
   const code = readFileSync(join(import.meta.dir, "../dist/gui-experimental.cjs"), "utf8")
   // The off gate travels into the bundle: every control below the enablement

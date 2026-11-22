@@ -190,6 +190,7 @@ export const Contract = {
         properties: {
           ok: { type: "boolean" },
           reason: { type: "string" },
+          deliveryReadable: { type: "boolean" },
           operations: {
             type: "array",
             items: {
@@ -232,7 +233,7 @@ export const Contract = {
             },
           },
         },
-        required: ["ok", "operations"],
+        required: ["ok", "operations", "deliveryReadable"],
         additionalProperties: false,
       },
     },

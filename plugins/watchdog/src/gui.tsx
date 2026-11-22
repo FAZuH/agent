@@ -822,6 +822,7 @@ function WatchdogView(props: { ctx: any; server: any; sessionID: string }) {
     settings: undefined as WatchdogSettingsInfo | undefined,
     operations: [] as WatchdogOperationInfo[],
     operationsReadable: true,
+    deliveryReadable: true,
     busy: undefined as string | undefined,
   })
   const rpc = props.server.client.rpc(Contract)
@@ -970,6 +971,9 @@ function WatchdogView(props: { ctx: any; server: any; sessionID: string }) {
 
               <div class="fazuh-jev-section">
                 <strong>Abort operations</strong>
+                <Show when={!state().deliveryReadable}>
+                  <p class="fazuh-wd-note" role="status">The delivery queue could not be read: receipt and notice states are unknown, not absent.</p>
+                </Show>
                 <div class="fazuh-wd-ops">
                   <For
                     each={state().operations}

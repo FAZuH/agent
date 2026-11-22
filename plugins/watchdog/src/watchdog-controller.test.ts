@@ -90,7 +90,7 @@ function harness(overrides: Partial<WatchdogRPC> = {}) {
     getWatchdogSettings: async () => settings,
     setWatchdogSetting: async () => ({ ok: true }),
     setWatchdogSecret: async () => ({ ok: true }),
-    abortOperations: async () => ({ ok: true, operations }),
+    abortOperations: async () => ({ ok: true, operations, deliveryReadable: true }),
     releaseOperation: async (input) => {
       releaseCalls.push(input)
       if (releaseError) throw releaseError
@@ -161,6 +161,7 @@ describe("WatchdogView controller", () => {
     expect(last.settings).toEqual(settings)
     expect(last.operations).toHaveLength(2)
     expect(last.operationsReadable).toBe(true)
+    expect(last.deliveryReadable).toBe(true)
   })
 
   test("a load failure lands as an error, never a payload", async () => {
@@ -172,11 +173,20 @@ describe("WatchdogView controller", () => {
   })
 
   test("unreadable abort records are a state, not an empty list", async () => {
-    const h = harness({ abortOperations: async () => ({ ok: false as const, reason: "the record file is broken", operations: [] }) })
+    const h = harness({ abortOperations: async () => ({ ok: false as const, reason: "the record file is broken", operations: [], deliveryReadable: false }) })
     await h.view.load()
     const last = h.states[h.states.length - 1]
     expect(last.operationsReadable).toBe(false)
     expect(last.operations).toEqual([])
+  })
+
+  test("an unreadable delivery queue is a state beside readable operations, never their absence", async () => {
+    const h = harness({ abortOperations: async () => ({ ok: true as const, operations, deliveryReadable: false }) })
+    await h.view.load()
+    const last = h.states[h.states.length - 1]
+    expect(last.operationsReadable).toBe(true)
+    expect(last.deliveryReadable).toBe(false)
+    expect(last.operations).toHaveLength(2)
   })
 
   test("one release click is exactly one releaseOperation call, however many sessions it covers", async () => {

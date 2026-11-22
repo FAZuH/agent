@@ -113,6 +113,14 @@ test("the page's status and controls come from the watchdog contract methods", (
   }
 })
 
+test("the page renders an unreadable delivery queue as a state, never as queued-absence", () => {
+  expect(gui).toMatch(/!state\(\)\.deliveryReadable/)
+  expect(gui).toMatch(/The delivery queue could not be read/)
+  // The per-row receipt line renders only from a present delivery row, so an
+  // unreadable store can never masquerade as "no receipt queued".
+  expect(gui).toMatch(/Show when=\{operation\.delivery\}/)
+})
+
 test("the GUI bundle stays clean of server-only modules: no fs reader crosses into the page", () => {
   const imports = gui.match(/^import .*$/gm) ?? []
   for (const line of imports) {
