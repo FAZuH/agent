@@ -34,6 +34,38 @@ const CALL: SupervisorCall = {
   text: "shell: cat src/config.ts",
 }
 
+describe("Jev release seam", () => {
+  test("the effect is applied in the block that reads the gate, before the read's own queued work", async () => {
+    // The judgment is the last await before this call is released. A gate that
+    // queues work is the hazard: if the admission answer travelled back across an
+    // await, that work would run between the read and the effect, and an abort
+    // that started in it would find the call already released.
+    const { releaseJevCall } = await import("./index.ts")
+    const { markAbortStarted, abortStarted, resetAbortMarks } = await import("./abort.ts")
+    const sessionID = "ses_jev_release_block"
+    const seen: boolean[] = []
+    const event: any = { sessionID, effect: "ask" }
+    try {
+      await releaseJevCall(
+        event,
+        () => {
+          seen.push(abortStarted(sessionID))
+          event.effect = "allow"
+        },
+        () => {
+          void Promise.resolve().then(() => markAbortStarted([sessionID]))
+          return null
+        },
+      )
+      expect(seen).toEqual([false])
+      expect(event.effect).toBe("allow")
+      expect(abortStarted(sessionID)).toBe(true)
+    } finally {
+      resetAbortMarks()
+    }
+  })
+})
+
 describe("supervisor handoff seam", () => {
   test("hands off every non-allow outcome, but only with a host and config", () => {
     expect(supervisorHandoff(CALL, "propagate", true, true)).toMatch(/^jev supervisor /)
@@ -145,7 +177,7 @@ describe("supervisor handoff seam", () => {
       command: { transform: async () => {} },
     }
     await plugin.setup(ctx)
-    const event: any = { action: "shell", sessionID: "ses_flag", resources: ["src/x.ts"], effect: "ask" }
+    const event: any = { source: { type: "tool", messageID: "msg_flag", id: "call_flag" }, action: "shell", sessionID: "ses_flag", resources: ["src/x.ts"], effect: "ask" }
     await evaluate(event)
     expect(event.effect).toBe("allow")
     const base2 = state.loadState()
@@ -171,7 +203,7 @@ describe("supervisor handoff seam", () => {
     const { resetCardRoute } = await import("./question-cards.ts")
     resetCardRoute()
     await plugin.setup(ctx)
-    const event: any = { action: "shell", sessionID: "ses_nohook", resources: ["src/x.ts"], effect: "ask" }
+    const event: any = { source: { type: "tool", messageID: "msg_nohook", id: "call_nohook" }, action: "shell", sessionID: "ses_nohook", resources: ["src/x.ts"], effect: "ask" }
     await evaluate(event)
     expect(event.effect).toBe("ask")
     expect(state.readLog(20).some((row: any) => String(row.skipped ?? "").includes("tool.execute.before hook missing"))).toBe(true)
@@ -334,7 +366,7 @@ describe("supervisor mode wiring", () => {
     }) as any
     try {
       const h = await harness()
-      const event: any = { action: "shell", sessionID: "ses_standalone", resources: ["src/x.ts"], effect: "allow" }
+      const event: any = { source: { type: "tool", messageID: "msg_standalone", id: "call_standalone" }, action: "shell", sessionID: "ses_standalone", resources: ["src/x.ts"], effect: "allow" }
       await h.evaluate(event)
       expect(event.effect).toBe("ask")
       expect(String(event.message)).toMatch(/^jev supervisor /)
@@ -351,11 +383,11 @@ describe("supervisor mode wiring", () => {
     try {
       const h = await harness()
       expect(h.toolHooks).not.toContain("execute.before")
-      const first: any = { action: "shell", sessionID: "ses_batch", resources: ["src/a.ts"], effect: "ask" }
+      const first: any = { source: { type: "tool", messageID: "msg_batch", id: "call_batch" }, action: "shell", sessionID: "ses_batch", resources: ["src/a.ts"], effect: "ask" }
       await h.evaluate(first)
       expect(first.effect).toBe("allow")
       expect(first.message).toBeUndefined()
-      const second: any = { action: "edit", sessionID: "ses_batch", resources: ["src/b.ts"], effect: "ask" }
+      const second: any = { source: { type: "tool", messageID: "msg_batch", id: "call_batch_2" }, action: "edit", sessionID: "ses_batch", resources: ["src/b.ts"], effect: "ask" }
       await h.evaluate(second)
       expect(second.effect).toBe("allow")
       await waitFor(() => decisionRows("ses_batch").length === 1)
@@ -371,7 +403,7 @@ describe("supervisor mode wiring", () => {
     setMode({ nonBlocking: true, batchMs: 15 })
     try {
       const h = await harness()
-      const event: any = { action: "shell", sessionID: "ses_timer", resources: ["src/a.ts"], effect: "ask" }
+      const event: any = { source: { type: "tool", messageID: "msg_timer", id: "call_timer" }, action: "shell", sessionID: "ses_timer", resources: ["src/a.ts"], effect: "ask" }
       await h.evaluate(event)
       expect(event.effect).toBe("allow")
       await waitFor(() => decisionRows("ses_timer").some((row: any) => row.detail.includes("non-blocking batch of 1 call")))
@@ -384,7 +416,7 @@ describe("supervisor mode wiring", () => {
     setMode({ nonBlocking: true })
     try {
       const h = await harness()
-      const event: any = { action: "shell", sessionID: "ses_end", resources: ["src/a.ts"], effect: "ask" }
+      const event: any = { source: { type: "tool", messageID: "msg_end", id: "call_end" }, action: "shell", sessionID: "ses_end", resources: ["src/a.ts"], effect: "ask" }
       await h.evaluate(event)
       expect(decisionRows("ses_end")).toHaveLength(0)
       h.feedEvent({ type: "session.deleted", data: { sessionID: "ses_end" } })
@@ -401,7 +433,7 @@ describe("supervisor mode wiring", () => {
       const h = await harness({ failLocation: () => failLocation })
       failLocation = true
       setMode({ standalone: true, root: "" }, true)
-      const event: any = { action: "shell", sessionID: "ses_no_host", resources: ["src/a.ts"], effect: "allow" }
+      const event: any = { source: { type: "tool", messageID: "msg_no_host", id: "call_no_host" }, action: "shell", sessionID: "ses_no_host", resources: ["src/a.ts"], effect: "allow" }
       await h.evaluate(event)
       expect(event.effect).toBe("deny")
       expect(String(event.message)).toContain("supervisor")
@@ -420,10 +452,10 @@ describe("supervisor mode wiring", () => {
       setMode({ nonBlocking: true, batchMax: 2 })
       expect(h.toolHooks).toContain("execute.before")
       await expect(h.invokeBefore({ tool: "shell", sessionID: "ses_toggle", input: {}, id: "call_toggle" })).resolves.toBeUndefined()
-      const first: any = { action: "shell", sessionID: "ses_toggle", resources: ["src/a.ts"], effect: "ask" }
+      const first: any = { source: { type: "tool", messageID: "msg_toggle", id: "call_toggle" }, action: "shell", sessionID: "ses_toggle", resources: ["src/a.ts"], effect: "ask" }
       await h.evaluate(first)
       expect(first.effect).toBe("allow")
-      const second: any = { action: "edit", sessionID: "ses_toggle", resources: ["src/b.ts"], effect: "ask" }
+      const second: any = { source: { type: "tool", messageID: "msg_toggle", id: "call_toggle_2" }, action: "edit", sessionID: "ses_toggle", resources: ["src/b.ts"], effect: "ask" }
       await h.evaluate(second)
       expect(second.effect).toBe("allow")
       await waitFor(() => decisionRows("ses_toggle").length === 1)
@@ -512,7 +544,13 @@ describe("native evaluate path host effects", () => {
     resetCardRoute()
     try {
       await plugin.setup(ctx)
-      const event: any = { action: "shell", sessionID: `ses_native_${verdict}`, resources: ["src/x.ts"], effect: "allow" }
+      const event: any = {
+        source: { type: "tool", messageID: `msg_native_${verdict}`, id: `call_native_${verdict}` },
+        action: "shell",
+        sessionID: `ses_native_${verdict}`,
+        resources: ["src/x.ts"],
+        effect: "allow",
+      }
       await evaluate(event)
       await new Promise((r) => setTimeout(r, 10))
       return { event, interrupted, notices }
@@ -530,11 +568,16 @@ describe("native evaluate path host effects", () => {
     expect(event.effect).toBe("ask")
   })
 
-  test("abort blocks at the host, stops the tree and notifies", async () => {
+  test("abort blocks at the host, runs the unified stop and names its own cause", async () => {
     const { event, interrupted, notices } = await drive("abort")
     expect(event.effect).toBe("deny")
     expect(interrupted).toContain("ses_native_abort")
-    expect(notices.some((n) => n.includes("jev abort"))).toBe(true)
+    // The notice is the operation's own receipt, not a blanket destructive-call
+    // claim: the cause here is the verdict, not "a tool call was destructive".
+    const text = notices.find((n) => n.includes("the Jev verdict aborted the session")) ?? ""
+    expect(text).toContain("the Jev verdict aborted the session")
+    expect(text).toContain("Containment incomplete")
+    expect(notices.some((n) => n.includes("genuinely destructive"))).toBe(false)
   })
 })
 
@@ -569,7 +612,7 @@ describe("trusted paths", () => {
       command: { transform: async () => {} },
     }
     await plugin.setup(ctx)
-    const event: any = { action: "shell", sessionID: "ses_trust", resources: ["/tmp/opencode/x.ts"], effect: "allow" }
+    const event: any = { source: { type: "tool", messageID: "msg_trust", id: "call_trust" }, action: "shell", sessionID: "ses_trust", resources: ["/tmp/opencode/x.ts"], effect: "allow" }
     await evaluate(event)
     expect(event.effect).toBe("allow")
     expect(state.readLog(500).some((row: any) => row.skipped === "trusted path")).toBe(true)
@@ -742,7 +785,7 @@ describe("tool ban bypass + listTool bans", () => {
       command: { transform: async () => {} },
     }
     await plugin.setup(ctx)
-    const event: any = { action: "shell", sessionID: "ses_banned", resources: ["/tmp/opencode/x.ts"], effect: "allow" }
+    const event: any = { source: { type: "tool", messageID: "msg_banned", id: "call_banned" }, action: "shell", sessionID: "ses_banned", resources: ["/tmp/opencode/x.ts"], effect: "allow" }
     await evaluate(event)
     // Trusted path would have skipped, but tool ban must force deny.
     expect(event.effect).toBe("deny")

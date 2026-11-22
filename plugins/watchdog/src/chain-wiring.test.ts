@@ -24,7 +24,7 @@ describe("chain wiring", () => {
     })
     const out = `${child.stdout.toString()}${child.stderr.toString()}`
     if (child.exitCode !== 0) throw new Error(`the chain wiring suite failed:\n${out}`)
-    // 40 cases today: a much smaller run means cases stopped being collected.
-    expect(Number(out.match(/(\d+) pass/)?.[1] ?? "0")).toBeGreaterThanOrEqual(35)
-  })
+    // 74 cases today: a much smaller run means cases stopped being collected.
+    expect(Number(out.match(/(\d+) pass/)?.[1] ?? "0")).toBeGreaterThanOrEqual(70)
+  }, 60_000)
 })

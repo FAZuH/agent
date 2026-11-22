@@ -65,6 +65,9 @@ export type AuditEvent =
   | "hold_refused_by_deny"
   | "hold_unrecorded"
   | "hold_revoked"
+  | "hold_reply_refused"
+  | "hold_answer_pending"
+  | "session_ban_kept"
 
 export interface AuditLine {
   event: AuditEvent
@@ -213,6 +216,32 @@ export function pruneSnapshot(parentID: string, now: number, ttlMs = TTL_MS): nu
     if (changed) writeSnapshot(parentID, snap)
     return changed
   })
+}
+
+/**
+ * The abort's durable restriction: a `subtree` session ban on one session.
+ *
+ * `subtree` is the only kind no approval, no later user turn and no expiry
+ * clears (row 6). A `parent` ban holds until a user item passes it and a human
+ * approval can admit a generation, so it cannot carry an abort. A corrupt or
+ * unreadable snapshot is never overwritten: that is a refusal, reported to the
+ * caller, not a fresh ban on top of lost evidence.
+ */
+export function writeSubtreeBan(sessionID: string, cause: string, at: number): boolean {
+  const id = String(sessionID ?? "")
+  if (!id) return false
+  try {
+    return withParentLock(id, () => {
+      const read = readSnapshot(id)
+      if (!read.ok && read.reason !== "missing") return false
+      const snap = read.snap ?? blank(id)
+      snap.sessionBan = { kind: "subtree", atSeq: snap.frontierSeq, cause: String(cause ?? "").slice(0, 200), at }
+      writeSnapshot(id, snap)
+      return true
+    })
+  } catch {
+    return false
+  }
 }
 
 /** Session deletion takes the whole parent with it, audit included. */

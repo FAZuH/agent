@@ -50,6 +50,7 @@ import {
   tombstoneState,
 } from "./session-ban.ts"
 import * as fsStore from "./session-ban-state.ts"
+import { releaseWhenClear, type HoldRevocation, type OpenPromptFact } from "./abort.ts"
 import { logCall } from "../../../lib/jev/state.ts"
 import {
   INBOX_ENQUEUED,
@@ -151,11 +152,50 @@ export interface HostOptions {
   holdMs?: number
   graceMs?: number
   capMs?: number
+  /**
+   * The shared admission gate: the refusal sentence when an abort, a durable
+   * abort ban or unrecovered enforcement covers this session. Read per call,
+   * because the session-ban provider is an admission path of its own: with the
+   * review chain off it is one of the few that run, and a covered session must
+   * be refused here exactly as it is refused there.
+   */
+  blocked?: (sessionID: string) => string | null
+  /**
+   * A pending abort's discovery hold. The descendants are unknown until its
+   * listing returns, so a call that lands inside that window must wait and then
+   * read the shared gate again instead of admitting on a scope not yet written.
+   */
+  hold?: () => Promise<void>
+  /**
+   * True while a discovery hold is open right now. `hold` resolves after a yield,
+   * and an abort can open a new hold in that gap while marking only its own
+   * session, so the provider re-waits until a probe taken after the yield finds
+   * nothing. Synchronous by design: it is read in the same block as the gate.
+   */
+  holdInForce?: () => boolean
+  /**
+   * True while this provider is the generation `setup` last registered. A later
+   * setup retires this one before it registers its own, and the host may not
+   * remove the old callbacks immediately (a hook already running, a feed frame
+   * already buffered), so every callback checks this and decides nothing when
+   * false. Without it two providers judge one call, and the retired one fails
+   * closed on entries only its own wrapper ever saw.
+   */
+  current?: () => boolean
 }
 
 export interface AdmissionHost {
+  /** Still the registered generation: false retires every callback below. */
+  current(): boolean
   observe(call: ObservedCall): void
   enforce(event: any): Promise<Decision>
+  /**
+   * A decision for a call whose generation has been retired: the live provider's
+   * own judgment, or a fail-closed refusal while none is attached. A retired
+   * callback always answers through this, so no already-dispatched call ends
+   * undecided.
+   */
+  retired(event: any): Promise<Decision>
   /** One `permission.asked` frame: correlate it to the hold whose marker it carries. */
   asked(event: any): void
   /** One `permission.replied` frame: settle the hold it answers, if it is ours. */
@@ -182,8 +222,8 @@ export interface AdmissionHost {
   applySessionBan(parentID: string, cause: string): Promise<void>
   /** Write the session ban, revoke the session's open calls, then interrupt it and its children. */
   abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
-  /** Remove the session ban so a replacement subagent is admitted again. */
-  clearSessionBan(parentID: string): boolean
+  /** Remove the legacy session ban so a replacement subagent is admitted again. */
+  clearSessionBan(parentID: string): ClearBanResult
   close(): void
 }
 
@@ -213,6 +253,14 @@ interface Entry {
   perId: string | null
   /** Jev issued the reply for `perId`: its own frame carries no author. */
   jevReplied: boolean
+  /**
+   * A rejection attempt owns this prompt from its first synchronous step, which
+   * is before the pending-list read. Without it an expiry and an abort both reach
+   * `jevReply`, and the host gets two answers for one request.
+   */
+  replyClaimed: boolean
+  /** A human answered once/always and that answer's admission is still in flight. */
+  answerPending: boolean
   /** The hold deadline. Cleared on settlement, so a stale timer writes nothing. */
   holdTimer: unknown
 }
@@ -234,10 +282,165 @@ interface ChildInfo {
   at: number
 }
 
-/** The parts of a call key. An incomplete triple identifies nothing. */
-export function callKey(sessionID: string, messageID: string, callID: string): string {
-  if (!sessionID || !messageID || !callID) return ""
-  return `${sessionID}|${messageID}|${callID}`
+/**
+ * The parts of a call key. An incomplete triple identifies nothing, and a part
+ * that is not a non-empty string identifies nothing either: a number or an
+ * object would otherwise collapse into a key another call already owns. The
+ * parts are encoded as one JSON array, never joined with a separator, so a
+ * separator inside a part cannot make two triples share a key.
+ */
+export function callKey(sessionID: unknown, messageID: unknown, callID: unknown): string {
+  const parts = [sessionID, messageID, callID]
+  if (!parts.every((part) => typeof part === "string" && part)) return ""
+  return JSON.stringify(parts)
+}
+
+/**
+ * What one attempt at closing a native prompt proved. `in-flight` is not an
+ * outcome: it is the record saying a reply this process did not start owns the
+ * prompt, so this attempt read nothing. The `skipped-*` outcomes are this
+ * process's own choice, never a host answer: no reject was sent.
+ * `closed-by-frame` is a correlated frame's closure observed by the record
+ * re-read, with no reply sent; `closed` is a reject the host took.
+ */
+type PromptOutcome =
+  | "closed"
+  | "closed-by-frame"
+  | "refused"
+  | "unsupported"
+  | "in-flight"
+  | "no-outcome"
+  | "skipped-pending"
+  | "skipped-unreadable"
+
+/**
+ * What one rejection attempt proved. `refused` is the host declining a reply it
+ * received; `no-outcome` is an attempt whose result was never observed; the
+ * `skipped-*` outcomes never reached the host at all. `closed` is a reject the
+ * host took; `closed-by-frame` is a correlated frame's closure, observed by the
+ * record re-read, with no reply sent.
+ */
+type RejectOutcome =
+  | "closed"
+  | "closed-by-frame"
+  | "refused"
+  | "no-outcome"
+  | "skipped-pending"
+  | "skipped-unreadable"
+
+/** What one host reply call proved: taken, explicitly declined, or unobserved. */
+type ReplyOutcome = "closed" | "refused" | "unknown"
+
+/**
+ * One native prompt this process opened and has not seen answered or rejected.
+ * Module level on purpose: a provider that is replaced clears its own holds, and
+ * the prompt it left on the host's screen stays open. Only a confirmed rejection
+ * or the host's own answer removes a record, so a later abort repeats what an
+ * earlier one could not close instead of reporting no holds.
+ */
+interface OpenPrompt {
+  parentID: string
+  /** The call this prompt belongs to: the key of the entry that opened it. */
+  callKey: string
+  /** The correlated host request id right now, or null until a frame names one. */
+  requestID: () => string | null
+  /** Whether a reply for this prompt is in flight, whoever started it. */
+  replyPending: () => boolean
+  /** Deny the owning entry, so no answer to this prompt can mint. */
+  deny: () => void
+  /**
+   * Ask the host to reject the prompt. The only route that closes one, and only
+   * when this process is the one replying.
+   */
+  reject: () => Promise<PromptOutcome>
+  /**
+   * The attempt in flight. Shared, so two aborts report one outcome: a second
+   * attempt on a prompt the first is already answering would read as a refusal
+   * that never happened.
+   */
+  attempt: Promise<PromptOutcome> | null
+}
+
+const openPrompts = new Map<string, OpenPrompt>()
+
+function trackPrompt(callKeyValue: string, prompt: Omit<OpenPrompt, "attempt">): void {
+  if (openPrompts.has(callKeyValue)) return
+  openPrompts.set(callKeyValue, { ...prompt, attempt: null })
+}
+
+/** The prompt is answered or rejected: nothing is outstanding for that call. */
+function closePrompt(callKeyValue: string): void {
+  openPrompts.delete(callKeyValue)
+}
+
+/** Drop every record. Tests only: the registry is process-lifetime by design. */
+export function resetOpenPrompts(): void {
+  openPrompts.clear()
+}
+
+/**
+ * Revoke the native prompts this process opened in `sessionIDs`, across every
+ * provider generation. This is the abort's inventory: instances come and go, so
+ * asking one of them would report no holds while an older prompt is still open.
+ *
+ * Each record is denied first (no answer can mint), then rejected through the
+ * provider that opened it. A record survives an attempt it could not confirm, so
+ * a repeated or overlapping abort keeps naming it.
+ */
+export async function revokeOpenPrompts(sessionIDs: string[]): Promise<HoldRevocation> {
+  const scope = new Set(sessionIDs)
+  const result: HoldRevocation = { revoked: 0, failed: 0, unconfirmed: 0, unsupported: 0, openDetail: [] }
+  const unconfirmed = (requestID: string | null, reason: OpenPromptFact["reason"]) => {
+    result.unconfirmed++
+    result.openDetail.push({ requestID, reason })
+  }
+  const open = (requestID: string | null, reason: OpenPromptFact["reason"]) => {
+    result.openDetail.push({ requestID, reason })
+  }
+  for (const [key, prompt] of [...openPrompts]) {
+    if (!scope.has(prompt.parentID)) continue
+    prompt.deny()
+    const requestID = prompt.requestID()
+    if (!requestID) {
+      unconfirmed(null, "unnamed")
+      continue
+    }
+    // A reply this process did not start owns the prompt: the attempt would read
+    // a refusal that never happened, so the record reports the request it can
+    // name and the reply in flight, never that no prompt was named.
+    if (!prompt.attempt && prompt.replyPending()) {
+      unconfirmed(requestID, "in-flight")
+      continue
+    }
+    const attempt = (prompt.attempt ??= prompt.reject().finally(() => {
+      prompt.attempt = null
+    }))
+    let outcome: PromptOutcome
+    try {
+      outcome = await attempt
+    } catch {
+      // The host's reply surface itself failed: no closure was observed, and the
+      // record stays for the next abort to try again.
+      outcome = "no-outcome"
+    }
+    if (outcome === "closed" || outcome === "closed-by-frame") {
+      // Either way the prompt is closed: this reject, or the host's own answer.
+      openPrompts.delete(key)
+      result.revoked++
+    } else if (outcome === "refused") {
+      result.failed++
+      open(requestID, "refused")
+    } else if (outcome === "unsupported") {
+      result.unsupported++
+      open(requestID, "unsupported")
+    } else if (outcome === "skipped-pending" || outcome === "skipped-unreadable") {
+      // A local skip is not a host answer: the reject was never sent.
+      result.failed++
+      open(requestID, outcome)
+    } else if (outcome === "in-flight") unconfirmed(requestID, "in-flight")
+    else unconfirmed(requestID, "no-outcome")
+  }
+  return result
 }
 
 export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
@@ -251,6 +454,9 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   const enabled = options.enabled ?? (() => true)
   const ctx = options.ctx
   const readPrompt = options.readPrompt ?? promptFromContext
+  const discoveryHold = options.hold
+  const holdInForce = options.holdInForce
+  const current = options.current ?? (() => true)
 
   const entries = new Map<string, Entry>()
   const calls = new Map<string, CallRecord>()
@@ -315,6 +521,9 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   // ——— 1. observation ———
 
   function observe(call: ObservedCall): void {
+    // A retired generation must not record a call the live provider will judge:
+    // its entry would never be settled by the live wrapper's admission.
+    if (!current()) return
     try {
       if (!enabled()) return
       const key = callKey(call.sessionID, call.messageID, call.callID)
@@ -337,6 +546,8 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
         holdMarker: null,
         perId: null,
         jevReplied: false,
+        replyClaimed: false,
+        answerPending: false,
         holdTimer: null,
       }
       entries.set(key, entry)
@@ -402,7 +613,24 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
 
   // ——— 2. enforcement ———
 
+  /**
+   * A retired provider still owes this call a decision. The host may have
+   * dispatched it here and never to the replacement, so silence would release it
+   * unjudged: it is handed to the live provider, and refused while none is
+   * attached. The identity check keeps a stale handle from recursing into itself.
+   */
+  async function retired(event: any): Promise<Decision> {
+    const live = liveEnforcer
+    if (live && live !== enforce) return await live(event)
+    return failClosed(event, null, HANDOVER_REFUSAL)
+  }
+
   async function enforce(event: any): Promise<Decision> {
+    // A replaced provider decides nothing on its own account: this process still
+    // enforces, but through the generation that replaced this one, which judges
+    // the same call. Deciding here would read entries only this provider's own
+    // wrapper saw and fail closed on a call the live one admits.
+    if (!current()) return retired(event)
     // Re-read here: a fail-closed hook must stop the moment it is turned off,
     // not at the next restart.
     if (!enabled()) {
@@ -411,16 +639,35 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     if (String(event?.action ?? "") !== SUBAGENT) {
       return { decision: "allow", row: "none", reason: "not a subagent call", generation: null, effect: "allow" }
     }
-    const key = callKey(String(event?.sessionID ?? ""), String(event?.source?.messageID ?? ""), String(event?.source?.id ?? ""))
-    if (!key) return failClosed(event, null, "the assert carries no call source")
-    const entry = entries.get(key)
+    // The shared gate outranks every other answer here. This provider is an
+    // admission path of its own, so it cannot rely on the review chain's check:
+    // with the chain off, this is the only place a covered session is refused.
+    const sessionID = String(event?.sessionID ?? "")
+    // Every branch below answers the call, so the gate and the answer are one
+    // step: an abort that starts in between cannot leave a settled or approved
+    // entry released, and the restriction outranks every other reason this
+    // provider could give.
+    let entry: Entry | undefined
+    const answered = await releaseGate(sessionID, (blocked): Decision | null => {
+      // The block is a retirement window too: a setup can replace this provider
+      // while the discovery hold is open, and this call still needs an answer.
+      if (!current()) return null
+      if (blocked) return failClosed(event, null, blocked)
+      const key = callKey(event?.sessionID, event?.source?.messageID, event?.source?.id)
+      if (!key) return failClosed(event, null, "the assert carries no call source")
+      entry = entries.get(key)
+      if (!entry) return failClosed(event, null, "no admission record for this call")
+      // Terminal evidence never reopens.
+      if (entry.settled?.effect === "deny") return apply(event, entry, entry.settled)
+      // A human answered this call already: a duplicate assert returns that
+      // answer instead of asking again.
+      if (entry.approved && entry.settled) return apply(event, entry, entry.settled)
+      if (!entry.fingerprint || !entry.durable) return failClosed(event, entry, "the call was never recorded")
+      return null
+    })
+    if (!current()) return retired(event)
+    if (answered) return answered
     if (!entry) return failClosed(event, null, "no admission record for this call")
-    // Terminal evidence never reopens.
-    if (entry.settled?.effect === "deny") return apply(event, entry, entry.settled)
-    // A human answered this call already: a duplicate assert returns that
-    // answer instead of asking again.
-    if (entry.approved && entry.settled) return apply(event, entry, entry.settled)
-    if (!entry.fingerprint || !entry.durable) return failClosed(event, entry, "the call was never recorded")
 
     const seen = await readPrompt(ctx, { sessionID: entry.parentID, messageID: entry.messageID, callID: entry.callID })
     if (seen !== null) {
@@ -437,26 +684,39 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
 
     const evidence = readEvidence(entry.parentID)
     const input = admissionInput(entry, evidence)
-    const decision = evaluate(input, evidence.records, evidence.sessionBan)
-    if (decision.effect === "allow") {
-      if (decision.retire) retire(entry.parentID, entry.fingerprint, decision.reason)
-      const opened = entry.holdRow !== null
-      const settled = apply(event, entry, { decision: "allow", row: decision.row, reason: decision.reason, generation: decision.generation, effect: "allow" })
-      // The evidence that raised the question is gone: the prompt has no answer
-      // left to want, so it is granted rather than left for a stale reject.
-      if (opened) {
-        clearHold(entry)
-        grantPrompt(entry)
+    // Reading the prompt is the last await before this call is released, and the
+    // verdict is reached from evidence read after it. The gate read and the
+    // verdict it decides are one step: an abort that begins before the read is in
+    // the answer, and one that begins after the release cannot overtake it.
+    const decided = await releaseGate(sessionID, (blocked): Decision | null => {
+      // Nothing in this block may deny, hold or allow on behalf of a retired
+      // generation: the live one does.
+      if (!current()) return null
+      if (blocked) return failClosed(event, entry, blocked)
+      const decision = evaluate(input, evidence.records, evidence.sessionBan)
+      if (decision.effect === "allow") {
+        if (decision.retire) retire(entry.parentID, entry.fingerprint, decision.reason)
+        const opened = entry.holdRow !== null
+        const settled = apply(event, entry, { decision: "allow", row: decision.row, reason: decision.reason, generation: decision.generation, effect: "allow" })
+        // The evidence that raised the question is gone: the prompt has no
+        // answer left to want, so it is granted rather than left for a stale
+        // reject.
+        if (opened) {
+          clearHold(entry)
+          grantPrompt(entry)
+        }
+        return settled
       }
-      return settled
-    }
-    if (decision.effect === "deny") {
-      const opened = entry.holdRow !== null
-      const settled = apply(event, entry, { decision: "deny", row: decision.row, reason: decision.reason, generation: decision.generation, effect: "deny" })
-      if (opened) clearHold(entry)
-      return settled
-    }
-    return hold(event, entry, decision)
+      if (decision.effect === "deny") {
+        const opened = entry.holdRow !== null
+        const settled = apply(event, entry, { decision: "deny", row: decision.row, reason: decision.reason, generation: decision.generation, effect: "deny" })
+        if (opened) clearHold(entry)
+        return settled
+      }
+      return hold(event, entry, decision)
+    })
+    if (!current()) return retired(event)
+    return decided
   }
 
   /**
@@ -484,6 +744,27 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
       entry.holdRow = decision.row
       entry.holdReason = decision.reason
       entry.holdMarker = holdMarker(entry.key, decision.reason)
+      // The prompt the host is about to open outlives this instance's table: it
+      // is on the host's screen, so it is tracked process-wide until answered or
+      // rejected. An abort inventories that record, not this entry.
+      trackPrompt(entry.key, {
+        parentID: entry.parentID,
+        callKey: entry.key,
+        requestID: () => entry.perId,
+        replyPending: () => entry.replyClaimed || entry.jevReplied,
+        deny: () => {
+          if (entry.settled?.effect === "deny") return
+          const row = entry.holdRow ?? "none"
+          record(entry, { decision: "deny", row, reason: "revocation:abort", generation: null, effect: "deny" })
+          clearHold(entry)
+        },
+        reject: async () => {
+          if (typeof ctx?.permission?.reply !== "function") return "unsupported"
+          // A reply already in flight is not an outcome this attempt can read.
+          if (entry.replyClaimed || entry.jevReplied) return "in-flight"
+          return await selfReject(entry, "the call was revoked by an abort")
+        },
+      })
       const state = parent(entry.parentID)
       audit(entry.parentID, {
         event: decision.row === "9" ? "degraded_hold" : "hold",
@@ -515,7 +796,32 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     try {
       if (closed || entry.settled?.effect === "deny" || entry.holdRow === null) return
       const message = `${entry.holdMarker ?? "session-ban hold"} expired after ${holdMs} ms`
-      if (!(await selfReject(entry, "the hold expired", message))) return
+      // A settlement from before the hold opened is not this hold's answer (an
+      // earlier allow is not spent), so only a settlement that lands across the
+      // list read's yield can stand in place of the expiry's own.
+      const settledBefore = entry.settled
+      const outcome = await selfReject(entry, "the hold expired", message)
+      if (outcome === "closed-by-frame") {
+        // A correlated frame closed the prompt, and this expiry sent nothing:
+        // no Jev action may be recorded for it. A settlement that landed during
+        // the read stands on its own line. An approval still being admitted
+        // says so here, and its own mint or refusal lands when the gate releases.
+        if (entry.settled !== settledBefore) return
+        if (entry.answerPending) {
+          audit(entry.parentID, {
+            event: "hold_answer_pending",
+            fingerprint: entry.fingerprint ?? undefined,
+            callID: entry.key,
+            perId: entry.perId ?? undefined,
+            detail: "a human answered the hold before the deadline; the approval was still being admitted",
+          })
+        }
+        return
+      }
+      // The list read yields, and a human frame can settle this hold while it
+      // runs. That settlement stands: overwriting it here would record a Jev
+      // reject that was never sent and flip a human approval into a deny.
+      if (outcome !== "closed" || entry.settled !== settledBefore) return
       settleDenied(entry, "hold_expired", `${message}; Jev rejected the call`)
     } catch {}
   }
@@ -548,6 +854,9 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
       if (!requestID) return
       const entry = [...entries.values()].find((item) => item.perId === requestID)
       if (!entry) return
+      // The host resolved this request, so the prompt is closed whatever answered
+      // it. Only an attempt that was never made leaves the record standing.
+      closePrompt(entry.key)
       // A reply Jev issued and a terminally denied hold are both spent: the
       // frame carries no author, so only this record can tell them apart.
       if (entry.jevReplied || entry.settled?.effect === "deny" || entry.holdRow === null) return
@@ -557,7 +866,48 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
         return
       }
       if (reply !== "once" && reply !== "always") return
-      mintApproval(entry, reply)
+      // Approving is the one reply that mints a generation, so it admits a call
+      // and is admitted like one. The feed must not wait for the decision.
+      // The pending mark is synchronous: an expiry that resumes while the
+      // admission is gated names the answer instead of claiming the hold.
+      entry.answerPending = true
+      void approveReply(entry, reply)
+    } catch {}
+  }
+
+  /**
+   * A human said yes to a held call, and the generation it mints is what admits
+   * the call. It therefore passes the same admission every release does: out of
+   * any discovery hold, then the restriction read and the mint in one
+   * synchronous block.
+   *
+   * A covered session mints nothing and keeps its hold open: the prompt cannot
+   * authorize a call every gate refuses, and a later assert is refused again. The
+   * refusal is recorded under a fixed line so the receipt can be read back.
+   */
+  async function approveReply(entry: Entry, reply: "once" | "always"): Promise<void> {
+    try {
+      const blocked = await releaseGate(entry.parentID, (refusal) => {
+        // The wait is a yield: the generation, the hold and the entry can all
+        // have moved across it, so they are read here, not before it.
+        // The pending mark ends with this decision: minted, refused or spent.
+        entry.answerPending = false
+        // The claim is not checked here: a human frame that closed the record
+        // already stopped the parked attempt from replying, so the approval is
+        // not racing a reject that will be sent.
+        if (!current() || entry.jevReplied || entry.settled?.effect === "deny" || entry.holdRow === null) return null
+        if (refusal) return refusal
+        mintApproval(entry, reply)
+        return null
+      })
+      if (!blocked) return
+      audit(entry.parentID, {
+        event: "hold_reply_refused",
+        fingerprint: entry.fingerprint ?? undefined,
+        callID: entry.key,
+        perId: entry.perId ?? undefined,
+        detail: `the approval was not minted: ${blocked}`,
+      })
     } catch {}
   }
 
@@ -625,7 +975,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
    * cancel route exists, so a shared session is never auto-denied: the hold is
    * skipped, audited, and left standing.
    */
-  async function selfReject(entry: Entry, reason: string, message?: string): Promise<boolean> {
+  async function selfReject(entry: Entry, reason: string, message?: string): Promise<RejectOutcome> {
     const perId = entry.perId
     if (!perId) {
       audit(entry.parentID, {
@@ -634,30 +984,48 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
         callID: entry.key,
         detail: `${reason}; permission.asked never arrived`,
       })
-      return false
+      return "no-outcome"
     }
-    const others = await pendingOthers(entry.parentID, perId)
-    // A reject is session-wide on this host: `HOLD_FANOUT` allows one only when
-    // nothing else is waiting, and a shared session is never auto-denied.
-    if (HOLD_FANOUT === "solo-only" && others !== 0) {
+    // The claim is synchronous and comes before the list read, which yields: an
+    // expiry already checking the list and an abort arriving during it would
+    // otherwise both send a reject for this one request.
+    if (entry.replyClaimed || entry.jevReplied) return "no-outcome"
+    entry.replyClaimed = true
+    try {
+      const others = await pendingOthers(entry.parentID, perId)
+      // The list read yields, and the host can resolve this request while it
+      // runs: a correlated frame closes the record. Replying after that would
+      // answer a request the host already answered, so the closure is re-read
+      // here, synchronously, before any reply is sent. The read is unconditional:
+      // a pending id only exists for a hold this process tracked, so an absent
+      // record always means closed, and a frame that landed before this attempt
+      // started must not be answered either.
+      if (!openPrompts.has(entry.key)) return "closed-by-frame"
+      // A reject is session-wide on this host: `HOLD_FANOUT` allows one only
+      // when nothing else is waiting, and a shared session is never auto-denied.
+      if (HOLD_FANOUT === "solo-only" && others !== 0) {
+        audit(entry.parentID, {
+          event: "hold_fanout_skipped",
+          fingerprint: entry.fingerprint ?? undefined,
+          callID: entry.key,
+          perId,
+          detail: `${reason}; ${others === null ? "an unknown number of" : String(others)} other pending permission(s) in the session`,
+        })
+        return others === null ? "skipped-unreadable" : "skipped-pending"
+      }
+      const outcome = await jevReply(entry, "reject", message)
+      if (outcome === "closed") return "closed"
       audit(entry.parentID, {
-        event: "hold_fanout_skipped",
+        event: "hold_uncancellable",
         fingerprint: entry.fingerprint ?? undefined,
         callID: entry.key,
         perId,
-        detail: `${reason}; ${others === null ? "an unknown number of" : String(others)} other pending permission(s) in the session`,
+        detail: `${reason}; ${outcome === "refused" ? "the self-reply was refused" : "no reply outcome was observed"}`,
       })
-      return false
+      return outcome === "refused" ? "refused" : "no-outcome"
+    } finally {
+      entry.replyClaimed = false
     }
-    if (await jevReply(entry, "reject", message)) return true
-    audit(entry.parentID, {
-      event: "hold_uncancellable",
-      fingerprint: entry.fingerprint ?? undefined,
-      callID: entry.key,
-      perId,
-      detail: `${reason}; the self-reply was refused`,
-    })
-    return false
   }
 
   /**
@@ -683,31 +1051,45 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
    * author, so the call itself is the only record: mark the entry before the
    * await, or a fast frame is read as a human's answer.
    */
-  async function jevReply(entry: Entry, decision: "once" | "reject", message?: string): Promise<boolean> {
+  async function jevReply(entry: Entry, decision: "once" | "reject", message?: string): Promise<ReplyOutcome> {
     const perId = entry.perId
     const reply = ctx?.permission?.reply
-    if (!perId || typeof reply !== "function") return false
+    if (!perId || typeof reply !== "function") return "unknown"
     entry.jevReplied = true
     try {
-      await reply.call(ctx.permission, { sessionID: entry.parentID, requestID: perId, decision, ...(message ? { message } : {}) })
-      return true
+      const answer = await reply.call(ctx.permission, { sessionID: entry.parentID, requestID: perId, decision, ...(message ? { message } : {}) })
+      // An explicit refusal is the one host answer that says the reply was not
+      // taken; anything else is the host having answered the request.
+      if (answer === false) {
+        entry.jevReplied = false
+        return "refused"
+      }
+      // The host took the answer, so this prompt is no longer outstanding.
+      closePrompt(entry.key)
+      return "closed"
     } catch {
+      // A throw is a transport or surface failure: nothing about the prompt's
+      // state was observed.
       entry.jevReplied = false
-      return false
+      return "unknown"
     }
   }
 
   /** Resolve a prompt for a call this module has already admitted. */
   function grantPrompt(entry: Entry): void {
-    if (!entry.perId || entry.jevReplied) return
+    if (!entry.perId || entry.replyClaimed || entry.jevReplied) return
     void (async () => {
-      if (await jevReply(entry, "once")) return
+      const outcome = await jevReply(entry, "once")
+      if (outcome === "closed") return
       audit(entry.parentID, {
         event: "hold_uncancellable",
         fingerprint: entry.fingerprint ?? undefined,
         callID: entry.key,
         perId: entry.perId ?? undefined,
-        detail: "the call was admitted; the self-reply was refused",
+        detail:
+          outcome === "refused"
+            ? "the call was admitted; the self-reply was refused"
+            : "the call was admitted; no reply outcome was observed",
       })
     })()
   }
@@ -801,6 +1183,30 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
    * plugin, and it is why the whole feature is off by default. The verdict it
    * reports is `hold`: nothing was proven either way, and the effect says so.
    */
+  /**
+   * The release every answered branch goes through: wait out any discovery hold,
+   * then read the restriction and run `decide` in the same synchronous block, so
+   * no abort can start between the read and the decision this provider returns.
+   *
+   * The wait ends with a yield, and a queued abort marks its own session and opens
+   * a hold inside that gap: a gate read taken before the wait would look clean for
+   * a descendant the scan has not named. Only a probe that finds no hold lets the
+   * read happen, and because the decision is taken with the read, no earlier
+   * answer can be reused either.
+   */
+  function releaseGate<T>(sessionID: string, decide: (blocked: string | null) => T): Promise<T> {
+    return releaseWhenClear(
+      () => options.blocked?.(sessionID) ?? null,
+      decide,
+      {
+        wait: async () => {
+          if (discoveryHold) await discoveryHold()
+        },
+        inForce: () => holdInForce?.() === true,
+      },
+    )
+  }
+
   function failClosed(event: any, entry: Entry | null, reason: string): Decision {
     const decision: Decision = { decision: "hold", row: "none", reason, generation: null, effect: "deny" }
     if (entry) record(entry, decision)
@@ -810,9 +1216,13 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   // ——— 3. binding ———
 
   function after(event: any): void {
+    // An observation from a retired generation would move the live one's
+    // frontier with evidence it never saw: the bind and the tombstone it feeds
+    // belong to the provider that watched the call.
+    if (!current()) return
     try {
       if (String(event?.tool ?? "") !== SUBAGENT) return
-      const key = callKey(String(event?.sessionID ?? ""), String(event?.messageID ?? ""), String(event?.id ?? ""))
+      const key = callKey(event?.sessionID, event?.messageID, event?.id)
       const entry = key ? entries.get(key) : undefined
       const childID = typeof event?.result?.metadata?.sessionID === "string" ? event.result.metadata.sessionID : ""
       if (entry) {
@@ -1206,9 +1616,22 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   function writeSessionBan(parentID: string, cause: string, at: number): { sessionBan: SessionBan; written: boolean } {
     const state = parent(parentID)
     const sessionBan: SessionBan = { kind: "parent", atSeq: state.frontier.seq, cause, at }
+    let kept: SessionBan | null = null
     const written = mutateSnapshot(parentID, (snap) => {
+      // A `subtree` ban is the abort's durable restriction: it must not be
+      // replaced by one a later user turn retires. The session stays banned
+      // either way, so the caller's receipt is durable.
+      if (snap.sessionBan?.kind === "subtree") {
+        kept = snap.sessionBan
+        return false
+      }
       snap.sessionBan = sessionBan
+      return true
     })
+    if (kept) {
+      audit(parentID, { event: "session_ban_kept", detail: `a durable abort ban is already in place: ${cause}` })
+      return { sessionBan: kept, written }
+    }
     return { sessionBan, written }
   }
 
@@ -1237,20 +1660,30 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
     for (const childID of all) await interrupt(childID)
   }
 
-  /** Remove only the session ban, leaving tombstones and cursors untouched. */
-  function clearSessionBan(parentID: string): boolean {
-    sessionBans.delete(parentID)
-    if (!canMutate(parentID)) return false
+  /**
+   * Remove the legacy `parent` session ban, leaving tombstones and cursors
+   * untouched. A `subtree` ban is the abort's durable restriction and only
+   * ticket #16's release operation may clear it, so this reports `refused` and
+   * the session stays stopped. `unreadable` is a store that cannot be read or
+   * written: nothing was changed, and the caller must not claim a lift.
+   */
+  function clearSessionBan(parentID: string): ClearBanResult {
+    if (!canMutate(parentID)) return "unreadable"
     try {
-      return store.withParentLock(parentID, () => {
+      const result = store.withParentLock(parentID, (): ClearBanResult => {
         const read = store.readSnapshot(parentID)
-        if (!read.ok || !read.snap || read.snap.sessionBan == null) return true
+        if (!read.ok) return read.reason === "missing" ? "absent" : "unreadable"
+        if (!read.snap || read.snap.sessionBan == null) return "absent"
+        if (read.snap.sessionBan.kind !== "parent") return "refused"
         delete read.snap.sessionBan
         store.writeSnapshot(parentID, read.snap)
-        return true
+        return "cleared"
       })
+      if (result === "cleared" || result === "absent") sessionBans.delete(parentID)
+      else if (result === "refused") audit(parentID, { event: "session_ban_kept", detail: "lift refused: a durable abort ban is not clearable here" })
+      return result
     } catch {
-      return false
+      return "unreadable"
     }
   }
 
@@ -1375,7 +1808,7 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
    * `withParentLock` as the permitted form, so it is used here and nowhere
    * else. Closing the gap needs a store API for the non-task fields.
    */
-  function mutateSnapshot(parentID: string, edit: (snap: fsStore.Snapshot) => void): boolean {
+  function mutateSnapshot(parentID: string, edit: (snap: fsStore.Snapshot) => void | boolean): boolean {
     if (!canMutate(parentID)) return false
     try {
       return store.withParentLock(parentID, () => {
@@ -1384,7 +1817,9 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
         const snap =
           read.snap ??
           ({ v: 1, parentID, frontierSeq: parent(parentID).frontier.seq, eventCursor: parent(parentID).frontier.cursor, tasks: {} } as fsStore.Snapshot)
-        edit(snap)
+        // `false` means the snapshot stays as read: the caller handled the state
+        // it found and had nothing to change.
+        if (edit(snap) === false) return true
         store.writeSnapshot(parentID, snap)
         return true
       })
@@ -1408,8 +1843,10 @@ export function createAdmissionHost(options: HostOptions = {}): AdmissionHost {
   }
 
   return {
+    current,
     observe,
     enforce,
+    retired,
     asked,
     replied,
     after,
@@ -1486,11 +1923,33 @@ function wrapSubagent(editor: any, host: AdmissionHost): void {
  * What `setup` keeps: the disposer, and the two entry points the plugin has no
  * other way to reach. Without this handle an abort trigger cannot exist.
  */
+/**
+ * What a lift did. `cleared` and `absent` both mean the session carries no
+ * session ban; `refused` is a durable abort ban that only ticket #16's release
+ * may clear; `unreadable` is a store that cannot be read or written; `unknown`
+ * is a host that is off or never attached, so no ban state was observed at all.
+ * Nothing may be lifted or resumed on `unreadable` or `unknown`.
+ */
+export type ClearBanResult = "cleared" | "absent" | "refused" | "unreadable" | "unknown"
+
 export interface SessionBanHandle {
   dispose: () => void
+  /**
+   * True only when the host took every wire the rule needs: the permission
+   * evaluate hook and the event feed. Configuration alone is not evidence, and a
+   * handle whose wires failed enforces nothing.
+   */
+  attached: () => boolean
+  /**
+   * True when the permission evaluate hook attached and this generation is still
+   * live, so this provider can still refuse a call. Independent of the feed: a
+   * host whose feed failed still denies, and a posture that reported no admission
+   * surface while this is true would be wrong.
+   */
+  enforcing: () => boolean
   abort(request: AbortRequest): Promise<AbortReceipt>
   abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
-  clearSessionBan(parentID: string): boolean
+  clearSessionBan(parentID: string): ClearBanResult
 }
 
 /** A handle that records nothing: the feature is off, so there is nothing to stop. */
@@ -1506,14 +1965,105 @@ function offHandle(): SessionBanHandle {
     notified: false,
     reason: "the feature is off",
   })
-  return { dispose: () => {}, abort: refuse, abortSession: refuse, clearSessionBan: () => false }
+  // Nothing is known about ban state when the feature is off: that is not an
+  // absent ban, and a caller must not present it as one.
+  return {
+    dispose: () => {},
+    attached: () => false,
+    enforcing: () => false,
+    abort: refuse,
+    abortSession: refuse,
+    clearSessionBan: () => "unknown",
+  }
 }
 
+/**
+ * The lift's answer from whatever handle `setup` left behind. A host that never
+ * attached observed no ban state, and that is `unknown`: neither a definite ban
+ * nor a definite absence, so a caller lifts nothing on it.
+ */
+export function clearBanOrUnknown(host: SessionBanHandle | null, parentID: string): ClearBanResult {
+  return host ? host.clearSessionBan(parentID) : "unknown"
+}
+
+/** What the host actually took, as opposed to what the configuration asks for. */
+export interface AttachResult {
+  /** The `permission.hook.evaluate` wire returned without throwing. */
+  permission: boolean
+  /** The event subscription opened. */
+  events: boolean
+  /**
+   * One deregistration per wire the host accepted: a hook's `Registration`
+   * `dispose`, or the feed's `AbortController`. The host may return no handle at
+   * all (an older surface), in which case the entry is a no-op and the
+   * generation token is what keeps the old callbacks inert.
+   */
+  wires: Array<() => void>
+}
+
+/**
+ * The generation `setup` last registered. Every callback of an older generation
+ * is inert: the host's own deregistration is asynchronous (and a hook already
+ * running cannot be recalled), so disposal alone would leave a window where two
+ * providers judge one call, and the retired one fails closed on entries only its
+ * own wrapper saw.
+ */
+let providerGeneration = 0
+
+/**
+ * The live provider's enforcement, published once that provider is registered
+ * and attached and cleared when that same provider is disposed. Disposing a
+ * handle the generation has already moved past leaves the pointer alone: it
+ * names the successor, and that handle's own callbacks fail closed through the
+ * generation token. A callback from a retired generation hands its call here:
+ * the host is not obliged to replay an already-dispatched event to the
+ * replacement registration, so returning no decision would release the call
+ * unjudged.
+ */
+let liveEnforcer: ((event: any) => Promise<Decision>) | null = null
+
+/**
+ * What a call is told while no provider can take it: between one generation
+ * being retired and its replacement being attached. Fixed sentence, because the
+ * caller is a refusal and the reason must name itself.
+ */
+export const HANDOVER_REFUSAL = "jev: an enforcement handover is in progress, so this call was denied"
+
 export async function register(ctx: any, options: HostOptions = {}): Promise<SessionBanHandle> {
-  const host = createAdmissionHost({ ...options, ctx })
-  await attach(ctx, host)
+  providerGeneration += 1
+  const mine = providerGeneration
+  const host = createAdmissionHost({ ...options, ctx, current: () => mine === providerGeneration })
+  const taken = await attach(ctx, host)
+  // Published only once this provider is up: before that a call dispatched to the
+  // retired one is refused with the handover sentence, and after it the retired
+  // one delegates here and gets a real judgment.
+  if (mine === providerGeneration) liveEnforcer = host.enforce
+  // Both wires are required for the full rule: the evaluate hook refuses a call,
+  // and the feed is what advances the frontier the refusal is judged against.
+  // The permission hook alone still refuses, so it is its own evidence.
+  const attached = taken.permission && taken.events
+  const admitting = taken.permission
+  let disposed = false
   return {
-    dispose: () => host.close(),
+    dispose: () => {
+      // Exactly once. A handle replaced by a later setup is retired by the token
+      // even when nobody disposed it, so this never depends on the caller.
+      if (disposed) return
+      disposed = true
+      // Disposal IS retirement. A callback already dispatched to this host resumes
+      // after this returns, and it must find its generation dead: otherwise it
+      // would regard itself as current and apply its own stale decision instead of
+      // delegating to the live provider or refusing. A handle the generation has
+      // already moved past is retired by the token and must not move it back.
+      if (mine === providerGeneration) {
+        providerGeneration += 1
+        if (liveEnforcer === host.enforce) liveEnforcer = null
+      }
+      host.close()
+      for (const wire of taken.wires) wire()
+    },
+    attached: () => attached && !disposed && host.current(),
+    enforcing: () => admitting && !disposed && host.current(),
     abort: (request) => host.abort(request),
     abortSession: (parentID, by, cause) => host.abortSession(parentID, by, cause),
     clearSessionBan: (parentID) => host.clearSessionBan(parentID),
@@ -1529,20 +2079,38 @@ export async function register(ctx: any, options: HostOptions = {}): Promise<Ses
  * plugin alive, and would otherwise leave a silent registration invisible until
  * a paid session misbehaved.
  */
-export async function attach(ctx: any, host: AdmissionHost): Promise<void> {
-  await wire("tool.transform", typeof ctx?.tool?.transform === "function", () =>
-    ctx.tool.transform((editor: any) => wrapSubagent(editor, host)),
+export async function attach(ctx: any, host: AdmissionHost): Promise<AttachResult> {
+  const taken: AttachResult = { permission: false, events: false, wires: [] }
+  const keep = (deregister: (() => void) | null): void => {
+    if (deregister) taken.wires.push(deregister)
+  }
+  keep(
+    await wire("tool.transform", typeof ctx?.tool?.transform === "function", () =>
+      ctx.tool.transform((editor: any) => wrapSubagent(editor, host)),
+    ),
   )
-  await wire("tool.hook.execute.after", typeof ctx?.tool?.hook === "function", () =>
-    ctx.tool.hook("execute.after", (event: any) => {
-      host.after(event)
-    }),
+  keep(
+    await wire("tool.hook.execute.after", typeof ctx?.tool?.hook === "function", () =>
+      ctx.tool.hook("execute.after", (event: any) => {
+        host.after(event)
+      }),
+    ),
   )
-  await wire("permission.hook.evaluate", typeof ctx?.permission?.hook === "function", () =>
+  const permissionWire = await wire("permission.hook.evaluate", typeof ctx?.permission?.hook === "function", () =>
     ctx.permission.hook("evaluate", async (event: any) => {
+      // The token is checked before the call and again on the way out: a setup
+      // can replace this provider while `enforce` is awaiting. A retired
+      // generation still answers — through the live provider, or with the
+      // handover refusal when none is attached — because the host need not
+      // replay this event to the replacement.
+      if (!host.current()) return await host.retired(event)
       try {
-        return await host.enforce(event)
+        const decision = await host.enforce(event)
+        return host.current() ? decision : await host.retired(event)
       } catch {
+        // A retired generation does not inherit this fail-closed answer: denying
+        // here would refuse a call the live provider may admit.
+        if (!host.current()) return await host.retired(event)
         // The admission path does not inherit the permission hook's fail-open
         // wrapper: an error here denies.
         event.effect = "deny"
@@ -1551,21 +2119,32 @@ export async function attach(ctx: any, host: AdmissionHost): Promise<void> {
       }
     }),
   )
+  keep(permissionWire)
+  taken.permission = permissionWire !== null
   if (typeof ctx?.event?.subscribe !== "function") {
     recordAttach("event.subscribe", false)
     host.feedFailed("the host has no event subscription")
-    return
+    return taken
   }
   try {
-    const stream = ctx.event.subscribe({ types: EVENT_TYPES })
+    // The documented way to end a feed: abort its signal. The token still stops
+    // a frame that was already delivered before the abort.
+    const controller = typeof AbortController === "function" ? new AbortController() : null
+    const stream = ctx.event.subscribe({
+      types: EVENT_TYPES,
+      ...(controller ? { signal: controller.signal } : {}),
+    })
+    if (controller) taken.wires.push(() => controller.abort())
     // Recorded before `pump` starts: "wired" must not depend on a stream that
     // never yields.
     recordAttach("event.subscribe", true)
+    taken.events = true
     void pump(stream, host)
   } catch (error) {
     recordAttach("event.subscribe", true, error)
     host.feedFailed("the host refused the event subscription")
   }
+  return taken
 }
 
 /** `attached` means the registration call returned: present, and not thrown. */
@@ -1581,13 +2160,31 @@ function recordAttach(site: string, present: boolean, error?: unknown): void {
   })
 }
 
-async function wire(site: string, present: boolean, run: () => unknown): Promise<void> {
-  if (!present) return recordAttach(site, false)
+/**
+ * Register one wire. The value is the host's own deregistration: the published
+ * hook signature returns a `Registration` with `dispose`, and a host that returns
+ * nothing (or throws) gets a no-op in its place, where the generation token is
+ * the only guard.
+ */
+async function wire(site: string, present: boolean, run: () => unknown): Promise<(() => void) | null> {
+  if (!present) {
+    recordAttach(site, false)
+    return null
+  }
   try {
-    await run()
+    const registration: any = await run()
     recordAttach(site, true)
+    if (registration && typeof registration.dispose === "function") {
+      return () => {
+        try {
+          void Promise.resolve(registration.dispose()).catch(() => {})
+        } catch {}
+      }
+    }
+    return () => {}
   } catch (error) {
     recordAttach(site, true, error)
+    return null
   }
 }
 
@@ -1595,6 +2192,9 @@ async function pump(stream: any, host: AdmissionHost): Promise<void> {
   let first = true
   try {
     for await (const event of stream) {
+      // A retired generation must not move the live one's frontier with frames
+      // only it was served.
+      if (!host.current()) return
       const type = String(event?.type ?? "")
       if (first) {
         first = false
@@ -1623,6 +2223,13 @@ async function pump(stream: any, host: AdmissionHost): Promise<void> {
  * state file. `setup` calls this and nothing else.
  */
 export async function start(ctx: any, enabled: () => boolean, options: HostOptions = {}): Promise<SessionBanHandle> {
-  if (!enabled()) return offHandle()
+  if (!enabled()) {
+    // Turning the switch off retires the provider the previous setup left: its
+    // callbacks are still registered with the host, and the switch alone would
+    // leave them deciding (each re-reads `enabled`, but a stale map is still a
+    // second judge the moment the switch returns).
+    providerGeneration += 1
+    return offHandle()
+  }
   return register(ctx, { ...options, enabled })
 }

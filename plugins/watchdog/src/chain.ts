@@ -17,10 +17,13 @@
  *   never stands in for it. Generation on a busy parent is measured (C1), but
  *   transcript isolation rests on one marker check and whether the host really
  *   projects the full inherited context is unverified (#19).
- * - Bounded nonblocking timing is a selection this build cannot honor: a deny
- *   after a call started needs containment, which #15 owns. Selecting it is
- *   reported and the call is held for authorization, so nothing runs before a
- *   decision and no row claims a review that did not happen.
+ * - Bounded nonblocking timing stays gated. The abort operation (#15) now
+ *   contains a started call's session and descendants, but no primitive cancels
+ *   a started transient generation (capability C3, closed enumeration) and
+ *   whether a started tool actually stopped is unverifiable (#19), so a late
+ *   deny cannot be shown to complete. Selecting it is reported and the call is
+ *   held for authorization, so nothing runs before a decision and no row claims
+ *   a review that did not happen.
  * - Coverage is unverified: this gates at `tool.execute.before` and nowhere
  *   else. Whether native, plugin, Model Context Protocol or code-mode calls
  *   reach that boundary is unmeasured (#19), so no surface is reported as
@@ -210,7 +213,13 @@ export interface ChainDeps {
   human: (item: ReviewItem, brief: string) => Promise<"allow" | "deny" | "abort" | "unavailable">
   /** Host rules, host asks and effective bans again, at the release boundary. */
   recheck: (item: ReviewItem) => Promise<HostCheck>
-  /** Slot ownership across restarts; absent means memory only. */
+  /**
+   * An abort operation has selected this session in this process, whether or not
+   * this runtime was wired when it started. The abort-level mark outlives a
+   * replaced runtime and exists with the chain off, so a release must read it
+   * alongside `cancelled`.
+   */
+  aborted?: (sessionID: string) => boolean  /** Slot ownership across restarts; absent means memory only. */
   ledger?: ChainLedger
   /** A ledger read or write failed. Fixed categories only: no path, no message. */
   ledgerError?: (operation: "read" | "write") => void
@@ -235,6 +244,27 @@ export interface ChainHandle {
    * instead of hanging on a slot or a window that nothing will close.
    */
   shutdown(): void
+  /**
+   * Mark one abort scope's sessions. Registered before the abort writes anything,
+   * so a call already awaiting its final execution check cannot release into a
+   * scope that is about to be banned.
+   */
+  markAborted(sessionIDs: string[]): void
+  /** True when this session is inside a cancelled abort scope. */
+  isAborted(sessionID: string): boolean
+  /**
+   * Hold every release already inside its final execution check. An abort cannot
+   * know its descendants before it scans, so it holds releases for the length of
+   * that one host call; a held release re-checks the cancelled set when it wakes.
+   * The returned function releases this hold and is idempotent.
+   */
+  holdReleases(): () => void
+  /**
+   * Settle the outstanding reviews of one abort scope. `settled` counts queued
+   * entries resolved unresolved; `started` counts generations already running,
+   * which no primitive cancels (C3) and whose late answer is discarded.
+   */
+  cancelScope(sessionIDs: string[]): { settled: number; started: number }
 }
 
 /** The operator's enablement switch. The second condition is the gate file. */
@@ -492,8 +522,6 @@ export function parseSupervisorReply(text: string, expected: string[]): Map<stri
   return out
 }
 
-const terminal = (verdict: NodeVerdict): boolean => verdict === "allow" || verdict === "deny" || verdict === "abort"
-
 /** A batch window: at least one item, and a non-negative interval. */
 function bound(raw: BatchLimits | undefined, fallback: BatchLimits): BatchLimits {
   return {
@@ -546,6 +574,19 @@ export function attachChain(deps: ChainDeps): ChainHandle {
   const capacityWaiters = new Map<string, Array<() => void>>()
   // Per-session admission counter: two identical calls are two distinct items.
   const callSeq = new Map<string, number>()
+  // Sessions an abort operation selected during this runtime's life. A review
+  // already inside the chain must stop rather than advance to a stage that could
+  // allow it; the durable ban is what refuses calls after the runtime is gone.
+  const cancelled = new Set<string>()
+  // Aborts in their discovery phase. A release that already finished its final
+  // check waits here, because a descendant it cannot see yet may be in the
+  // set the scan is about to fill.
+  let releaseHolds = 0
+  const holdWaiters: Array<() => void> = []
+  // Bumped on every hold begin and every hold end. A host check whose result was
+  // pending across a change is stale even when the count is back to zero: a hold
+  // can open and close entirely inside that await.
+  let holdEpoch = 0
 
   // One report per failure streak: a persistent write failure is a condition,
   // not one event per capacity change.
@@ -761,6 +802,34 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       for (const entry of [...inflight]) settle(entry, "unavailable")
     }
 
+    /**
+     * One abort scope's share of this stage. A queued entry settles unresolved
+     * now; an entry already generating cannot be cancelled, so it is settled here
+     * and its late answer arrives for an entry that is already settled.
+     */
+    const cancelScope = (sessionIDs: string[]): { settled: number; started: number } => {
+      const keys = new Set(sessionIDs.map((sessionID) => budgetKey(sessionID)))
+      let settled = 0
+      let started = 0
+      for (const [key, group] of [...groups]) {
+        if (!keys.has(key)) continue
+        group.cancel?.()
+        group.cancel = null
+        for (const entry of group.entries) {
+          settle(entry, "unavailable")
+          settled++
+        }
+        group.entries.length = 0
+        groups.delete(key)
+      }
+      for (const entry of [...inflight]) {
+        if (!keys.has(budgetKey(entry.item.sessionID))) continue
+        settle(entry, "unavailable")
+        started++
+      }
+      return { settled, started }
+    }
+
     const join = (item: ReviewItem, history: ChainHistory): Promise<NodeVerdict> =>
       new Promise((resolve) => {
         if (retired) {
@@ -788,7 +857,7 @@ export function attachChain(deps: ChainDeps): ChainHandle {
         }
         if (!group.cancel) group.cancel = schedule(ms, () => flush(key))
       })
-    return { join, flush, cancelAll }
+    return { join, flush, cancelAll, cancelScope }
   }
 
   const jevBatcher = createBatcher(
@@ -846,6 +915,11 @@ export function attachChain(deps: ChainDeps): ChainHandle {
 
   let reconciled = false
 
+  /** Wait out every release hold in force. A retired runtime never waits. */
+  const awaitReleaseHold = async (): Promise<void> => {
+    while (releaseHolds > 0 && !retired) await new Promise<void>((resolve) => holdWaiters.push(resolve))
+  }
+
   return {
     shutdown(): void {
       if (retired) return
@@ -856,6 +930,38 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       // A woken admission re-checks `alive()` and returns unresolved.
       for (const list of capacityWaiters.values()) for (const wake of list.splice(0)) wake()
       capacityWaiters.clear()
+      // A held release wakes too: it re-checks `alive()` and ends unresolved.
+      for (const wake of holdWaiters.splice(0)) wake()
+    },
+    markAborted(sessionIDs: string[]): void {
+      for (const sessionID of sessionIDs) cancelled.add(budgetKey(sessionID))
+    },
+    isAborted(sessionID: string): boolean {
+      return cancelled.has(budgetKey(sessionID))
+    },
+    holdReleases(): () => void {
+      releaseHolds++
+      holdEpoch++
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        releaseHolds--
+        holdEpoch++
+        if (releaseHolds > 0) return
+        for (const wake of holdWaiters.splice(0)) wake()
+      }
+    },
+    cancelScope(sessionIDs: string[]): { settled: number; started: number } {
+      let settled = 0
+      let started = 0
+      for (const sessionID of sessionIDs) cancelled.add(budgetKey(sessionID))
+      for (const stage of [jevBatcher, supervisorBatcher, parentBatcher]) {
+        const result = stage.cancelScope(sessionIDs)
+        settled += result.settled
+        started += result.started
+      }
+      return { settled, started }
     },
     async admit(event: ChainEvent): Promise<ChainDecision> {
       if (!deps.enabled()) return { allow: true, verdict: "none", itemID: "" }
@@ -877,6 +983,29 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       }
       const key = budgetKey(item.sessionID)
 
+      /**
+       * The two sources of abort truth: this runtime's own settled set and the
+       * abort operation's process-wide mark, which exists even when no runtime
+       * was wired when the abort started.
+       */
+      const cancelledAtSource = (): boolean => cancelled.has(key) || deps.aborted?.(item.sessionID) === true
+
+      // An abort that landed before this call was admitted: no stage may authorize
+      // it, and the durable ban already covers every later call.
+      if (cancelledAtSource()) {
+        deps.audit({
+          event: "chain_decision",
+          itemID: item.id,
+          sessionID: item.display.sessionID,
+          tool: item.display.tool,
+          action: item.display.action,
+          stage: "final",
+          verdict: "unresolved",
+          reason: "the session was aborted",
+        })
+        return { allow: false, verdict: "unresolved", itemID: item.id, message: "watchdog chain: the session was aborted, so this call did not run." }
+      }
+
       // Unknown ownership is not safe to admit against: the read is retried on
       // the next call, and this one does not run.
       if (ledgerFailure) {
@@ -893,9 +1022,10 @@ export function attachChain(deps: ChainDeps): ChainHandle {
         return { allow: false, verdict: "unresolved", itemID: item.id, message: "watchdog chain: the review ledger could not be read, so the call did not run." }
       }
 
-      // `nonblocking` is a selection this build cannot honor: a deny after a
-      // call started needs containment, which #15 owns. The call is held for
-      // authorization and the selection is reported rather than followed.
+      // `nonblocking` is a selection this build cannot honor: a started transient
+      // generation cannot be cancelled (C3) and a started tool's stop cannot be
+      // confirmed (#19), so a late deny has no provable containment. The call is
+      // held for authorization and the selection is reported, not followed.
       if (limits().timing === "nonblocking") {
         deps.audit({
           event: "chain_admission",
@@ -906,7 +1036,7 @@ export function attachChain(deps: ChainDeps): ChainHandle {
           stage: "final",
           verdict: "none",
           timing: "nonblocking",
-          reason: "nonblocking timing is unavailable until late-deny containment (#15): the call is held",
+          reason: "nonblocking timing stays gated: a started transient generation cannot be cancelled (C3) and a started tool's stop cannot be confirmed (#19), so the call is held",
         })
       }
 
@@ -994,10 +1124,30 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       const releaseCall = async (by: ChainStage): Promise<ChainDecision> => {
         if (!alive()) return finish("unresolved", "the review runtime was replaced")
         if (reviewItem(event, seq)?.id !== item.id) return finish("deny", "the call changed while it was held")
-        const again = await check(() => deps.recheck(item), "the execution checks could not run")
+        let again: HostCheck | null = null
+        while (!again) {
+          // A hold still in force means the scope is not settled: wait for it
+          // before asking the host anything.
+          if (releaseHolds > 0 && !retired) await awaitReleaseHold()
+          if (!alive()) return finish("unresolved", "the review runtime was replaced")
+          if (cancelledAtSource()) return finish("unresolved", "the session was aborted during review")
+          const epoch = holdEpoch
+          const result = await check(() => deps.recheck(item), "the execution checks could not run")
+          if (!alive()) return finish("unresolved", "the review runtime was replaced")
+          // An abort that landed during the awaited check outranks its result.
+          if (cancelledAtSource()) return finish("unresolved", "the session was aborted during review")
+          // A hold that began or ended while the check was pending invalidates
+          // it, even when the count is back to zero: the host rule can have
+          // changed under the pending check. A hold still in force is not
+          // settled either. Both cases re-run the check instead of consuming it.
+          if (holdEpoch !== epoch) continue
+          if (releaseHolds > 0 && !retired) continue
+          again = result
+        }
         // A replacement can land while the host check is pending: the awaited
         // result is only trustworthy if this runtime is still the current one.
         if (!alive()) return finish("unresolved", "the review runtime was replaced")
+        if (cancelledAtSource()) return finish("unresolved", "the session was aborted during review")
         if (!again.ok) return finish("deny", again.reason ?? "the call is no longer permitted")
         if (again.humanOnly && by !== "human") return finish("deny", "the host requires human approval for this action")
         if (reviewItem(event, seq)?.id !== item.id) return finish("deny", "the call changed while it was held")
@@ -1007,8 +1157,17 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       const decide = async (verdict: NodeVerdict, by: ChainStage): Promise<ChainDecision> =>
         verdict === "allow" ? await releaseCall(by) : finish(verdict, `the ${by} stage returned ${verdict}`)
 
+      /**
+       * An abort that landed while this item waited ends it: a stage that already
+       * settled unresolved must not be followed by one that could allow it.
+       */
+      const stopped = (): ChainDecision | null =>
+        cancelledAtSource() ? finish("unresolved", "the session was aborted during review") : null
+
       /** Jev, then the LLM stage, then Human, on one slot. */
       const review = async (): Promise<ChainDecision> => {
+        const before = stopped()
+        if (before) return before
         if (humanOnly) {
           notes.push("human-only action")
         } else {
@@ -1017,7 +1176,12 @@ export function attachChain(deps: ChainDeps): ChainHandle {
           else {
             const verdict = await jevBatcher.join(item, history)
             stage("jev", verdict)
-            if (terminal(verdict)) return decide(verdict, "jev")
+            // A refusal decides on its own. An allow waits: an abort that landed while
+            // this stage ran outranks it.
+            if (verdict === "deny" || verdict === "abort") return decide(verdict, "jev")
+            const after = stopped()
+            if (after) return after
+            if (verdict === "allow") return decide("allow", "jev")
             notes.push(`jev ${verdict}`)
           }
 
@@ -1040,7 +1204,12 @@ export function attachChain(deps: ChainDeps): ChainHandle {
             else {
               const verdict = await parentBatcher.join(item, history)
               stage("parent", verdict)
-              if (terminal(verdict)) return decide(verdict, "parent")
+              // A refusal decides on its own. An allow waits: an abort that landed while
+              // this stage ran outranks it.
+              if (verdict === "deny" || verdict === "abort") return decide(verdict, "parent")
+              const after = stopped()
+              if (after) return after
+              if (verdict === "allow") return decide("allow", "parent")
               notes.push(`parent ${verdict}`)
             }
           } else if (!nodes.supervisor) {
@@ -1050,7 +1219,12 @@ export function attachChain(deps: ChainDeps): ChainHandle {
           } else {
             const verdict = await supervisorBatcher.join(item, history)
             stage("supervisor", verdict)
-            if (terminal(verdict)) return decide(verdict, "supervisor")
+            // A refusal decides on its own. An allow waits: an abort that landed while
+            // this stage ran outranks it.
+            if (verdict === "deny" || verdict === "abort") return decide(verdict, "supervisor")
+            const after = stopped()
+            if (after) return after
+            if (verdict === "allow") return decide("allow", "supervisor")
             notes.push(`supervisor ${verdict}`)
           }
         }
@@ -1063,7 +1237,10 @@ export function attachChain(deps: ChainDeps): ChainHandle {
             enterStage(key, item.id, "human")
             const answer = await node(() => deps.human(item, brief.text))
             stage("human", answer)
-            if (terminal(answer)) return decide(answer, "human")
+            if (answer === "deny" || answer === "abort") return decide(answer, "human")
+            const after = stopped()
+            if (after) return after
+            if (answer === "allow") return decide("allow", "human")
             notes.push("human unavailable")
           }
         }

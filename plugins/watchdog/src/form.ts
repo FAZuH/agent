@@ -87,7 +87,21 @@ export async function createCard(sessionID: string, card: CardInput): Promise<Op
 
 /** Remove a card that is still pending after dismissal, abort or interrupt. */
 export async function cancelCard(sessionID: string, formID: string): Promise<void> {
+  await cancelCardChecked(sessionID, formID)
+}
+
+/**
+ * Remove a pending card and report whether the host confirmed it is gone. An
+ * abort must not claim cleanup it cannot confirm, so the failure has to be
+ * visible to the caller; 404 and 409 both mean the card is not there any more.
+ */
+export async function cancelCardChecked(sessionID: string, formID: string): Promise<boolean> {
   try {
-    await api("DELETE", `/api/session/${encodeURIComponent(sessionID)}/form/${encodeURIComponent(formID)}`)
-  } catch {}
+    const result = await api("DELETE", `/api/session/${encodeURIComponent(sessionID)}/form/${encodeURIComponent(formID)}`)
+    if (!result) return false
+    if (result.ok) return true
+    return result.status === 404 || result.status === 409
+  } catch {
+    return false
+  }
 }

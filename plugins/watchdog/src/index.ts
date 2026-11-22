@@ -16,18 +16,19 @@ import { snapshotFor, snapshotIsUsable } from "./context.ts"
 import { changed, jevRpcHandlers, setJevEmitter } from "./gui-rpc.ts"
 import { Contract as JevContract } from "../../../lib/jev/rpc.ts"
 import { autoAccept } from "./autopermit.ts"
-import { callToken, consumeGrant, recordApproval } from "../../../lib/jev/approve.ts"
+import { callToken, consumeGrant, readApprovals, recordApproval, rejectApproval } from "../../../lib/jev/approve.ts"
 import { banTool, isToolBanned, latestToolBanCard, readToolBans, setToolBanCard, unbanTool } from "../../../lib/jev/tool-ban.ts"
-import { stopSessionTree, liftToolBan } from "./tool-ban-actions.ts"
-import { cancelCard, createCard } from "./form.ts"
+import { descendantScan, liftToolBan } from "./tool-ban-actions.ts"
+import { cancelCard, cancelCardChecked, createCard } from "./form.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
-import { start as startSessionBan, type AbortReceipt, type AbortRequest, type SessionBanHandle } from "./session-ban-host.ts"
+import { clearBanOrUnknown, HANDOVER_REFUSAL, revokeOpenPrompts, start as startSessionBan, type AbortReceipt, type AbortRequest, type SessionBanHandle } from "./session-ban-host.ts"
 import { attachSupervisor, SUPERVISOR_HOLD_REASON, supervisorHandoff, type SupervisorCall, type SupervisorHostHandle, type SupervisorResolution } from "./supervisor-host.ts"
 import { createBatchRunner, resolveSupervisorMode, type BatchRunner, type SupervisorMode } from "./supervisor-batch.ts"
-import { readSnapshot, type SnapshotRead } from "./session-ban-state.ts"
-import type { AbortAuthority, TaskRecord } from "./session-ban.ts"
+import { readSnapshot, writeSubtreeBan, type SnapshotRead } from "./session-ban-state.ts"
+import { abortNotice, abortStarted, abortSubtree, appendAbortRecord, awaitReleaseHold, containDeny, durabilitySentence, markAbortStarted, reconcileAbortRecords, recoveryCovers, recoveryReason, releaseHoldOpen, releaseWhenClear, replaceAbortRecord, retainUncoveredAbortMarks, type AbortIO, type AbortOutcome, type AbortSource, type RecoveryBlock } from "./abort.ts"
+import type { TaskRecord } from "./session-ban.ts"
 import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/jev/state.ts"
-import { attachCardEvents, cardRouteActiveNow, markCardRouteActive, onBeforeExecute, questionCardsOn, type CardDeps, type GateDecision } from "./question-cards.ts"
+import { attachCardEvents, cardRouteActiveNow, heldQuestionCards, markCardRouteActive, onBeforeExecute, questionCardsOn, releaseHeldCard, resetCardRoute, type CardDeps, type GateDecision } from "./question-cards.ts"
 import { resourcesOf } from "./actions.ts"
 import { attachChain, auditSession, chainStateHome, CHAIN_BUDGET_FILE, CHAIN_DEFAULTS, CHAIN_ENABLE_SWITCH, CHAIN_GATE_FILE, CHAIN_GATE_PASSED, type ChainEvent, type ChainHandle, type ChainHistory, type ChainLedger, type ChainLimits, type ChainNodes, type LedgerEntry, type NodeVerdict, type ReviewItem } from "./chain.ts"
 
@@ -229,7 +230,10 @@ export function verdictOutcome(verdict: Verdict, probability: number, info: Call
     return {
       effect: "abort",
       reason: `abort (P=${pct})`,
-      message: `jev: abort. This call is genuinely destructive (P=${pct}). The session was stopped and the user was notified.`,
+      // Written before the operation runs, so it can only state what the verdict
+      // establishes: the call does not run. Whether anything was recorded is the
+      // returning operation's own report, never this pre-write sentence.
+      message: `jev: abort (P=${pct}). This call is genuinely destructive, so it does not run; the session's abort operation starts now, and its own result reports what was recorded.`,
     }
   }
   return propagateOutcome(info, `unknown verdict; a human must decide (P=${pct})`)
@@ -241,14 +245,37 @@ const verdictCache = new Map<string, Outcome | null>()
 /** The cache is a convenience, not a ledger: it never grows past a session's worth. */
 const VERDICT_CACHE_MAX = 200
 
+/**
+ * The cache key for one judged call: the same JSON-array composition as the
+ * claims, so two calls whose parts contain the separator cannot share a verdict.
+ */
+function verdictCacheKey(info: CallInfo): string {
+  return JSON.stringify([info.sessionID, info.action, info.resources])
+}
+
+/**
+ * One hook's judgement: what it decided, and the write it owes once that
+ * decision is settled. The row and the cache entry are published only where the
+ * decision is actually applied — the permission hook runs `publish` from its
+ * plan, after the generation comparison — so a verdict that outlived its
+ * generation is never recorded as acted and never reused by a later call.
+ */
+interface Judgement {
+  outcome: Outcome | null
+  /** Publish the applied decision: the row, and for the risk hook its cache entry. */
+  publish: () => void
+  /** Publish a settlement that refused this decision: the same model facts, no applied verdict. */
+  refuse: (reason: string) => void
+}
+
 /** The risk hook: one question, four answers. */
-async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
+async function riskOutcome(ctx: any, info: CallInfo): Promise<Judgement> {
   const F = "hook_tool_risk"
-  const key = `${info.sessionID}|${info.action}|${info.resources.join("\0")}`
+  const key = verdictCacheKey(info)
   const cached = verdictCache.get(key)
   if (cached !== undefined && cfgBool(F, "cache")) {
     logCall({ hook: F, sessionID: info.sessionID, tool: info.action, subject: info.text, skipped: "cached verdict" })
-    return cached
+    return { outcome: cached, publish: () => {}, refuse: () => {} }
   }
   const timeout = Math.round(cfgNum(F, "timeout"))
   const { subject, text } = await withInput(info)
@@ -279,21 +306,30 @@ async function riskOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
       ? verdictOutcome(verdict, confidence, info)
       : undecidedOutcome(info)
     : propagateOutcome(info, "task history unavailable; a supervisor must investigate")
-  if (cfgBool(F, "cache")) {
-    if (verdictCache.size >= VERDICT_CACHE_MAX) verdictCache.clear()
-    verdictCache.set(key, outcome)
-  }
-  logDecision(F, info, result, outcome, undefined, {
+  const label = d.confident ? verdict : outcomeLabel(outcome)
+  const row = {
     // An unsure answer is recorded as what it became, not as a meta-label: the
     // confidence already says how sure it was.
-    label: d.confident ? verdict : outcomeLabel(outcome),
+    label,
     confidence,
     outcome: effectOutcome(outcome),
     // The hook acted when it decided or when an unsure answer went to the user.
     // An unsure answer that let the call through is no decision.
     acted: d.confident || (outcome !== null && outcome.effect !== "allow"),
-  })
-  return outcome
+  }
+  return {
+    outcome,
+    publish: () => {
+      // Only an applied verdict may be reused: a call that never received this
+      // verdict must not be answered from it later.
+      if (cfgBool(F, "cache")) {
+        if (verdictCache.size >= VERDICT_CACHE_MAX) verdictCache.clear()
+        verdictCache.set(key, outcome)
+      }
+      logDecision(F, info, result, outcome, undefined, row)
+    },
+    refuse: (reason) => logDecision(F, info, result, outcome, undefined, row, reason),
+  }
 }
 
 /**
@@ -316,19 +352,29 @@ function effectOutcome(outcome: Outcome | null): string {
   return outcome?.effect ?? "allow"
 }
 
+/**
+ * A judgement that decided nothing: the rules were absent, unreadable or did not
+ * apply, so the call keeps the host's own effect. It is a complete judgement on
+ * purpose — settlement calls `refuse` on every judgement it does not apply, and a
+ * missing callback would turn a refusal into a thrown error.
+ */
+function silentJudgement(): Judgement {
+  return { outcome: null, publish: () => {}, refuse: () => {} }
+}
+
 /** The rules hook: one question per rule, every rule scored. */
-async function standardOutcome(ctx: any, info: CallInfo): Promise<Outcome | null> {
+async function standardOutcome(ctx: any, info: CallInfo): Promise<Judgement> {
   const F = "hook_tool_standard"
   const set = loadRules(cfgStr(F, "rulesFile"))
   if (set.error) {
     // A policy file that cannot be read is a real problem, not a skip: it
     // says so loudly and changes nothing.
     logCall({ hook: F, sessionID: info.sessionID, error: `rules file invalid: ${set.error}` })
-    return null
+    return silentJudgement()
   }
-  if (!set.rules.length) return null
+  if (!set.rules.length) return silentJudgement()
   const applicable = set.rules.filter((rule) => ruleApplies(rule, info.action, info.resources))
-  if (!applicable.length) return null
+  if (!applicable.length) return silentJudgement()
   const questions: Record<string, any> = {}
   const asked: Rule[] = []
   const dir = await info.dir()
@@ -345,7 +391,7 @@ async function standardOutcome(ctx: any, info: CallInfo): Promise<Outcome | null
     }
     asked.push(rule)
   }
-  if (!asked.length) return null
+  if (!asked.length) return silentJudgement()
   const timeout = Math.round(cfgNum(F, "timeout"))
   const { subject, text } = await withInput(info)
   const result = await ask(subject, questions, {
@@ -390,14 +436,18 @@ async function standardOutcome(ctx: any, info: CallInfo): Promise<Outcome | null
   }
   // The closest any rule came to firing is how sure the answer is.
   const closest = scored.reduce((max, s) => Math.max(max, s.probability), 0)
-  logDecision(F, info, result, outcome, scored, {
+  const row = {
     label,
     confidence: closest,
     outcome: effectOutcome(outcome),
     // The rules were judged either way, so the call is a decision.
     acted: true,
-  })
-  return outcome
+  }
+  return {
+    outcome,
+    publish: () => logDecision(F, info, result, outcome, scored, row),
+    refuse: (reason) => logDecision(F, info, result, outcome, scored, row, reason),
+  }
 }
 
 /** Clip a line for the log and the message. */
@@ -413,6 +463,12 @@ function clipText(text: string, max: number): string {
  *
  * `verdict` is the model's answer and names the toast; `outcome` is what
  * happened to the call and decides whether the toast is worth showing.
+ *
+ * `refused` is the other settlement: the model answered, but this decision was
+ * never applied. The row keeps the model facts so the call can still be read,
+ * and writes none of the fields that claim it decided anything — no `outcome`,
+ * no `blocked`, no `token`, and `acted: false` so nothing announces a verdict
+ * the call never received.
  */
 function logDecision(
   hook: string,
@@ -421,6 +477,7 @@ function logDecision(
   outcome: Outcome | null,
   rules: { id: string; probability: number; violated: boolean }[] | undefined,
   verdict: { label: string; confidence?: number; outcome: string; acted?: boolean },
+  refused?: string,
 ): void {
   logCall({
     hook,
@@ -433,10 +490,14 @@ function logDecision(
     elapsedMs: result.elapsedMs,
     verdict: verdict.label,
     confidence: verdict.confidence,
-    outcome: verdict.outcome,
-    ...(typeof verdict.acted === "boolean" ? { acted: verdict.acted } : {}),
-    ...(outcome?.effect === "deny" ? { blocked: outcome.reason } : {}),
-    ...(outcome?.token ? { token: outcome.token } : {}),
+    ...(refused
+      ? { refused, acted: false }
+      : {
+          outcome: verdict.outcome,
+          ...(typeof verdict.acted === "boolean" ? { acted: verdict.acted } : {}),
+          ...(outcome?.effect === "deny" ? { blocked: outcome.reason } : {}),
+          ...(outcome?.token ? { token: outcome.token } : {}),
+        }),
     ...(rules ? { rules } : {}),
   })
 }
@@ -528,7 +589,7 @@ export function buildAlertForm(alert: AlertFormat): FormData {
  * The webhook carries the tool call in a code block, because one long line
  * of a shell command is unreadable.
  */
-export async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Promise<void> {
+export async function alertUser(ctx: any, info: CallInfo, outcome: Outcome, text?: string): Promise<void> {
   const webhook = cfgStr("hook_tool_risk", "alertWebhook").trim()
   if (webhook) {
     try {
@@ -554,7 +615,10 @@ export async function alertUser(ctx: any, info: CallInfo, outcome: Outcome): Pro
   try {
     await ctx.session.synthetic?.({
       sessionID: info.sessionID,
-      text: `jev abort: the session was stopped because a tool call was genuinely destructive. ${info.text}`,
+      // The caller's own cause and receipt when it has one: a user or
+      // supervisor abort is not a destructive-call verdict, and the notice must
+      // never claim more than the operation's record shows.
+      text: text ?? `jev abort: the session was stopped because a tool call was genuinely destructive. ${info.text}`,
       delivery: "queue",
     })
   } catch {}
@@ -699,12 +763,32 @@ async function decideForCard(
   })
   if (!info) return allow()
   info.input = async () => JSON.stringify(input ?? null).slice(0, 4000)
+  // The proposals this decision made. Nothing is published here: the card route
+  // answers the call in `question-cards.ts`, after its own retirement and abort
+  // gates, and that is the only place a stale proposal may be turned into an
+  // applied row or a reusable cache entry.
+  const judgements: Judgement[] = []
   let outcome: Outcome | null = null
+  let winner: Judgement | null = null
+  const take = (judged: Judgement): void => {
+    judgements.push(judged)
+    const next = stronger(outcome, judged.outcome)
+    if (next !== outcome) winner = judged
+    outcome = next
+  }
+  /** What this decision owes once the route settles on an allow. */
+  const settle = (applied: Judgement[] | null, reason: string) => (ok: boolean, refusal: string) => {
+    for (const judged of judgements) {
+      if (!ok) judged.refuse(refusal)
+      else if (applied?.includes(judged)) judged.publish()
+      else judged.refuse(reason)
+    }
+  }
   if (!standalone) {
-    if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
-    if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
-    if (!outcome) return allow()
-    if (outcome.effect === "allow") return allow()
+    if (inStandard) take(await standardOutcome(ctx, info))
+    if (inRisk && outcome?.effect !== "deny") take(await riskOutcome(ctx, info))
+    if (!outcome) return { ...allow(), settle: settle(judgements, "") }
+    if (outcome.effect === "allow") return { ...allow(), settle: settle(winner ? [winner] : null, `outranked by the ${outcome.effect} verdict`) }
   }
   // Every non-allow outcome hands off to the supervisor when it is enabled;
   // that resolution replaces the Jev effect entirely. With no hand-off the
@@ -729,63 +813,120 @@ async function decideForCard(
     effect: gateEffect(outcome, resolution),
     message: outcome?.message,
     resources,
+    // A supervisor resolution replaces the proposal entirely: the route answers
+    // with the supervisor's effect, so the proposal's row is a refusal naming it.
+    settle:
+      resolution !== null
+        ? settle(null, "handed to the supervisor, which decides this call")
+        : settle(winner ? [winner] : null, `outranked by the ${outcome.effect} verdict`),
     ...(resolution !== null ? { notice: SUPERVISOR_HOLD_REASON } : {}),
   }
 }
 
-async function evaluatePermission(ctx: any, event: any): Promise<void> {
+/** A refusal the hook applies: the fixed sentence, and the log line saying why. */
+function refusePlan(sessionID: string, action: string, message: string, detail: string): JevPlan {
+  return {
+        apply: (event) => {
+      logCall({ hook: "hook_tool_risk", sessionID, tool: action, blocked: message, detail })
+      if (!event) return
+      event.effect = "deny"
+      event.message = message
+    },
+    settle: () => {},
+  }
+}
+
+/** The supervisor modes' own refusal, applied when the plan is settled. */
+function supervisorPlan(sessionID: string, reason: string): JevPlan {
+  return { apply: (event) => denyWithoutSupervisor(event, sessionID, reason), settle: () => {} }
+}
+
+/**
+ * Score one permission event and propose what its call is worth. Nothing here
+ * changes the outcome of the call: the returned plan is applied by the
+ * settlement, after it has re-compared the setup generation, so a verdict that
+ * outlived its generation cannot start a hold or an abort.
+ */
+async function evaluatePermission(ctx: any, event: any): Promise<JevPlan> {
   const mode = supervisorMode()
   const runtimeReady = ensureSupervisorRuntime(ctx, mode)
   const standalone = mode !== "default"
   const standard = featureOn("hook_tool_standard")
   const risk = featureOn("hook_tool_risk")
-  if (!standalone && !standard && !risk) return
+  if (!standalone && !standard && !risk) return LEAVE
   const action = normalizeAction(String(event?.action ?? ""))
   const sessionID = String(event?.sessionID ?? "")
-  if (!action || !sessionID) {
-    if (standalone) denyWithoutSupervisor(event, sessionID, "no action or session to judge")
-    return
+  // Identity first: every return below can leave the host's own effect in place,
+  // and this hook can score, hold and abort one call, so a duplicate dispatch of
+  // a call it cannot claim would repeat those side effects. The host's identity
+  // contract is unverified (#19), so an unidentifiable call is refused rather
+  // than judged.
+  if (!permissionIdentity(event)) {
+    return refusePlan(sessionID, action, UNIDENTIFIED_PERMISSION, "the call has no host identity")
   }
-  if (standalone && !runtimeReady) {
-    denyWithoutSupervisor(event, sessionID, "supervisor runtime unavailable")
-    return
+  // A call with no action cannot be matched to a rule, scored, held or banned:
+  // nothing about it can be shown to be in scope, so an active hook refuses it
+  // rather than releasing a call it cannot classify.
+  if (!action) {
+    return refusePlan(sessionID, action, UNIDENTIFIED_ACTION, "the call carried no action")
   }
+  // This hook can admit on its own (the card route below forces allow), so it
+  // answers both ban kinds exactly as the chain and the provider do. It is also
+  // asked again after every await below: an abort can begin while scoring or a
+  // model call is in flight and write its ban before this hook sets an allow, so
+  // the entry read cannot be the last one.
+  const refuseNow = async (detail: string): Promise<JevPlan | null> => {
+    // A pending abort is discovering its descendants and holds every release in
+    // this process until it does. The primitive re-reads the hold after the yield
+    // that ends its wait, and runs this callback in the same block as the read:
+    // the callback only ever builds a refusal, so a read that an abort overtakes
+    // can cost this call its judgment, never release it.
+    const reason = await releaseWhenClear(
+      () => admissionRefusal(sessionID),
+      (blocked) => blocked,
+    )
+    return reason ? refusePlan(sessionID, action, reason, detail) : null
+  }
+  const entryRefusal = await refuseNow("refused at entry")
+  if (entryRefusal) return entryRefusal
+  if (standalone && !runtimeReady) return supervisorPlan(sessionID, "supervisor runtime unavailable")
 
   // Non-blocking records the call and lets it run. No hold, no card, no Jev
   // scorer: one later supervisor call judges the whole per-session batch.
   if (mode === "nonBlocking") {
-    if (!supervisorBatch) {
-      denyWithoutSupervisor(event, sessionID, "no batch runner available")
-      return
-    }
+    if (!supervisorBatch) return supervisorPlan(sessionID, "no batch runner available")
     const info = callInfo(ctx, event)
-    if (!info) {
-      denyWithoutSupervisor(event, sessionID, "no call metadata to judge")
-      return
-    }
+    if (!info) return supervisorPlan(sessionID, "no call metadata to judge")
     const { subject, text } = await withInput(info)
-    supervisorBatch.record({ ...info, subject, text })
-    event.effect = "allow"
-    return
+    // Reading the input is an await; the restriction may have landed inside it.
+    const scoredRefusal = await refuseNow("an abort landed while the batch entry was prepared")
+    if (scoredRefusal) return scoredRefusal
+    return {
+            apply: (target) => {
+        supervisorBatch?.record({ ...info, subject, text })
+        if (target) target.effect = "allow"
+      },
+      settle: () => {},
+    }
   }
 
   const inStandard = standard && actionsInScope("hook_tool_standard", action)
   const inRisk = risk && actionsInScope("hook_tool_risk", action)
-  if (!standalone && !inStandard && !inRisk) return
+  if (!standalone && !inStandard && !inRisk) return LEAVE
   const resources = Array.isArray(event?.resources) ? event.resources.map(String) : []
 
   // A tool ban is denied before any other shortcut,
   // including trusted paths. Gated on the card route so flag-off is byte-identical.
   if (cardRouteActiveNow() && isToolBanned(sessionID)) {
-    event.effect = "deny"
-    event.message = "jev: this session is blocked until Lift tool ban."
-    return
+    return refusePlan(sessionID, action, "jev: this session is blocked until Lift tool ban.", "the tool is banned in this session")
   }
   // Trusted paths keep the host's own effect: Jev never examines a call whose
   // every resource sits under a configured prefix. Mixed calls still get judged.
   if (allResourcesTrusted(resources, cfgStr("hook_tool_risk", "trustedPaths"))) {
-    logCall({ hook: "hook_tool_risk", sessionID, tool: action, skipped: "trusted path" })
-    return
+    return {
+            apply: () => logCall({ hook: "hook_tool_risk", sessionID, tool: action, skipped: "trusted path" }),
+      settle: () => {},
+    }
   }
 
   // With cards on the whole decision moved to execute.before (which runs first).
@@ -793,40 +934,66 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
   // no permission.asked is ever emitted. Configured hard denies are applied by
   // the host before this hook and never reach here.
   if (cardRouteActiveNow()) {
-    event.effect = "allow"
-    return
+    return { apply: (target) => { if (target) target.effect = "allow" }, settle: () => {} }
   }
 
   // An approved call spends its grant here: no model call, no tokens, no wait.
   const token = callToken(sessionID, action, resources)
   if (consumeGrant(token)) {
     logCall({ hook: "hook_tool_risk", sessionID, tool: action, skipped: `approved by the user (${token})` })
-    event.effect = "allow"
-    return
+    return { apply: (target) => { if (target) target.effect = "allow" }, settle: () => {} }
   }
 
   const info = callInfo(ctx, event)
-  if (!info) return
+  if (!info) return LEAVE
+  // The judgements this evaluation made. Their rows are written by the
+  // settlement, so a verdict this call never received is never recorded as
+  // acted and never enters the verdict cache.
+  const judgements: Judgement[] = []
   let outcome: Outcome | null = null
+  // The proposal whose outcome the composition actually took. On a tie the
+  // first one stands, exactly as `stronger` decides it.
+  let winner: Judgement | null = null
+  const take = (judged: Judgement): void => {
+    judgements.push(judged)
+    const next = stronger(outcome, judged.outcome)
+    if (next !== outcome) winner = judged
+    outcome = next
+  }
   if (!standalone) {
     // The rules first: an explicit policy is cheaper than a verdict, and a
     // blocked call never needs the second opinion.
-    if (inStandard) outcome = stronger(outcome, await standardOutcome(ctx, info))
-    if (inRisk && outcome?.effect !== "deny") outcome = stronger(outcome, await riskOutcome(ctx, info))
-    if (!outcome) return
+    if (inStandard) take(await standardOutcome(ctx, info))
+    if (inRisk && outcome?.effect !== "deny") take(await riskOutcome(ctx, info))
   }
+  // Scoring awaits the rules file and the model. An abort that began inside
+  // them outranks whatever they returned, including an allow.
+  const verdictRefusal = await refuseNow("an abort landed while the call was scored")
+  if (verdictRefusal) {
+    return refusedJudgements(verdictRefusal, judgements, "an abort landed while the call was scored")
+  }
+  // Nothing was decided against the call, so no proposal lost: every row stands.
+  if (!standalone && !outcome) return settleWith(LEAVE, judgements, judgements, "")
   const handoff: SupervisorCall = { ...info, subject: info.enrichedSubject ?? info.subject }
   if (standalone) {
     // No Jev score to hold on: the supervisor judges every in-scope call.
     const marker = supervisorHost ? supervisorHandoff(handoff, "propagate", true, supervisorConfigured()) : null
-    if (marker && supervisorHost) {
-      event.effect = "ask"
-      event.message = marker
-      supervisorHost.begin(handoff, marker)
-    } else {
-      denyWithoutSupervisor(event, sessionID, "no supervisor host available")
-    }
-    return
+    if (!marker || !supervisorHost) return supervisorPlan(sessionID, "no supervisor host available")
+    return settleWith(
+      {
+        apply: (target) => {
+          if (target) {
+            target.effect = "ask"
+            target.message = marker
+          }
+          supervisorHost?.begin(handoff, marker)
+        },
+        settle: () => {},
+      },
+      judgements,
+      null,
+      "handed to the supervisor, which decides this call",
+    )
   }
   // Every non-allow Jev outcome hands off to the supervisor when enabled; the
   // native hold stays open while it investigates. The marker is the correlation
@@ -838,20 +1005,82 @@ async function evaluatePermission(ctx: any, event: any): Promise<void> {
     featureOn("hook_supervisor") && supervisorConfigured(),
   )
   if (marker && supervisorHost) {
-    event.effect = "ask"
-    event.message = marker
-    supervisorHost.begin(handoff, marker)
-    return
+    return settleWith(
+      {
+        apply: (target) => {
+          if (target) {
+            target.effect = "ask"
+            target.message = marker
+          }
+          supervisorHost?.begin(handoff, marker)
+        },
+        settle: () => {},
+      },
+      judgements,
+      null,
+      "handed to the supervisor, which decides this call",
+    )
   }
   if (featureOn("hook_supervisor") && !supervisorHost) {
-    logCall({ hook: "hook_supervisor", detail: "enabled but no host attached; the hold stays with the human" })
+    return settleWith(
+      {
+        apply: (target) => {
+          logCall({ hook: "hook_supervisor", detail: "enabled but no host attached; the hold stays with the human" })
+          if (target) {
+            target.effect = hostEffect(outcome)
+            if (outcome.message) target.message = outcome.message
+          }
+          if (outcome.effect === "abort") return runVerdictAbort(ctx, target, sessionID, info, outcome)
+        },
+        settle: () => {},
+      },
+      judgements,
+      winner ? [winner] : null,
+      `outranked by the ${outcome.effect} verdict`,
+    )
   }
-  event.effect = hostEffect(outcome)
-  if (outcome.message) event.message = outcome.message
-  if (outcome.effect === "abort") {
-    await stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {})
-    void alertUser(ctx, info, outcome)
+  if (outcome.effect !== "abort") {
+    return settleWith(
+      {
+        apply: (target) => {
+          if (!target) return
+          target.effect = hostEffect(outcome)
+          if (outcome.message) target.message = outcome.message
+        },
+        settle: () => {},
+      },
+      judgements,
+      winner ? [winner] : null,
+      `outranked by the ${outcome.effect} verdict`,
+    )
   }
+  return settleWith(
+    { apply: (target) => runVerdictAbort(ctx, target, sessionID, info, outcome), settle: () => {} },
+    judgements,
+    winner ? [winner] : null,
+    `outranked by the ${outcome.effect} verdict`,
+  )
+}
+
+/**
+ * The unified abort a verdict asks for, run when the plan is settled. Every
+ * verdict-driven abort is one operation: a durable `subtree` ban, a record and
+ * containment rows. The legacy parent-kind stop is retirable by a user turn,
+ * which is not what a verdict means.
+ */
+async function runVerdictAbort(ctx: any, event: any, sessionID: string, info: CallInfo, outcome: Outcome): Promise<void> {
+  if (event) {
+    event.effect = hostEffect(outcome)
+    if (outcome.message) event.message = outcome.message
+  }
+  const cause = "the Jev verdict aborted the session"
+  const stopped = await abortSessionTree(ctx, chainRuntime, { sessionID, source: "chain", cause })
+  // The verdict's own sentence was written before anything ran. Once the
+  // operation has reported, the call's message and the alert carry its receipt
+  // instead, and the posture decides whether the stop is enforced at all.
+  const notice = abortNotice(stopped, cause, enforcementPosture().length > 0)
+  if (event) event.message = notice
+  void alertUser(ctx, info, { ...outcome, message: notice }, notice)
 }
 
 /**
@@ -917,6 +1146,447 @@ interface ChainRuntime {
  */
 let chainRuntime: ChainRuntime | null = null
 
+/**
+ * True while the chain's `execute.before` wrapper is registered. The runtime
+ * alone is not enough: a host without the hook surface keeps the runtime and
+ * gates nothing, so the abort RPC's posture must not claim the chain guards it.
+ */
+let chainWired = false
+
+/**
+ * True when the chain's own dependency attach failed. Its wrapper then throws
+ * for every call instead of judging one, so the posture must not count it as a
+ * surface that consults bans.
+ */
+let chainWiredFailure = false
+
+/**
+ * True only when the host took the permission `evaluate` hook. The tool-risk
+ * and supervisor modes are read from configuration, but configuration alone
+ * proves nothing about a host that never registered the hook.
+ */
+let permissionHookAttached = false
+
+/**
+ * Bumped by every `setup`. The host may deliver a call already in flight to a
+ * callback an earlier setup registered, and a repeated setup is otherwise two
+ * judges for one call: double scoring, two cards for one hold, and a stale hold
+ * denying after the live one was approved. The token is what makes the retired
+ * callback inert; disposal alone cannot cover a call already on its way.
+ */
+let setupGeneration = 0
+
+/**
+ * Deregistrations for callbacks this plugin registered with the host. Cleared
+ * by every setup after it retires the previous generation, so a repeated setup
+ * leaves one live callback per surface rather than a growing stack.
+ */
+let pluginWires: Array<() => void> = []
+
+/**
+ * A registration handle as a disposer. A host that returns no handle has no
+ * deregistration to give, and the generation token is then the only retirement.
+ */
+function registrationWire(registration: any): () => void {
+  if (typeof registration?.dispose !== "function") return () => {}
+  return () => {
+    try {
+      Promise.resolve(registration.dispose()).catch(() => {})
+    } catch {}
+  }
+}
+
+/**
+ * Registrations the previous generation left with the host, dropped once the new
+ * generation's own are in place. Disposing them first would leave a window in
+ * which a dispatched call reaches no callback that promises to judge it.
+ */
+let retiringWires: Array<() => void> = []
+
+/**
+ * True from the moment a setup retires the previous generation until its own
+ * registrations are in place. A retired callback the host still dispatches to
+ * refuses inside it rather than delegating into a successor that is still
+ * registering; afterwards it hands the call to the live generation, or refuses
+ * when none is registered.
+ */
+let handoverInProgress = false
+
+/**
+ * True when the last setup threw after retiring the generation before it. No
+ * generation is live, so the retired callbacks stay registered, keep failing
+ * closed, and refuse the delegate-or-refuse handover until a setup completes: a
+ * host that never re-runs `setup` refuses calls instead of releasing them
+ * unjudged. Cleared by the next completed setup.
+ */
+let handoverFailed = false
+
+/**
+ * The live card route's judgement, or null when this setup did not register one.
+ * A callback from a retired generation hands its call here rather than releasing
+ * it undecided; cleared when a setup starts, so a handoff can never bounce back
+ * into the generation it left.
+ */
+let cardJudge: ((event: any) => Promise<void>) | null = null
+
+/**
+ * The live generation's Jev permission judgment, or null when no setup registered
+ * one. A callback from a retired generation hands its event here: the host need
+ * not replay an already-dispatched event to the replacement, so returning without
+ * a judgment would release the call unjudged.
+ */
+let jevJudge: ((event: any) => Promise<void>) | null = null
+
+/**
+ * The live generation's chain judgment, or null when no setup registered one. A
+ * retired chain wrapper hands its event here for the same reason, and refuses
+ * when there is nobody to take it.
+ */
+let chainJudge: ((event: any) => Promise<void>) | null = null
+
+/**
+ * Chain judgments in flight, by call and generation. A host may hand one call to
+ * both a retired wrapper and its replacement; with a shared entry the second
+ * caller replays the first answer instead of reviewing the call twice. The
+ * generation is part of the key: an entry can outlive its generation (a review
+ * parked in an awaited host check sits outside the batchers `shutdown()`
+ * cancels), and the key is what stops the successor adopting that result — it
+ * reviews the call afresh instead.
+ */
+const chainCalls = new Map<string, Promise<Error | null>>()
+
+/** Why the chain refuses a call whose host identity it cannot claim. */
+const UNIDENTIFIED_CHAIN = "watchdog chain: the call could not be identified, so it did not run."
+
+/**
+ * A host identity component, or "" when the host did not send one. Only a
+ * non-empty string identifies a call: a number, an object or an empty value
+ * would collapse into a key that aliases another call.
+ */
+function identityPart(value: unknown): string {
+  return typeof value === "string" && value ? value : ""
+}
+
+/**
+ * The host's identity for one call: both parts or nothing. A judgment that can
+ * score, hold or abort must be claimable by call, and an id the host did not
+ * send cannot key a claim. The parts are encoded as one JSON array, never
+ * concatenated: a separator inside a part cannot then make two tuples share a
+ * key.
+ */
+function callIdentity(event: any): string {
+  const sessionID = identityPart(event?.sessionID)
+  const id = identityPart(event?.id)
+  return sessionID && id ? JSON.stringify([sessionID, id]) : ""
+}
+
+function chainCallKey(event: any, generation: number): string {
+  const identity = callIdentity(event)
+  return identity ? JSON.stringify([generation, identity]) : ""
+}
+
+async function runChainJudge(
+  judge: (event: any) => Promise<void>,
+  event: any,
+  generation: number,
+): Promise<void> {
+  const key = chainCallKey(event, generation)
+  if (!key) return await judge(event)
+  const shared = chainCalls.get(key)
+  if (shared) {
+    const error = await shared
+    if (error) throw error
+    return
+  }
+  const record = judge(event).then(
+    () => null,
+    (error) => (error instanceof Error ? error : new Error(String(error))),
+  )
+  chainCalls.set(key, record)
+  try {
+    const error = await record
+    if (error) throw error
+  } finally {
+    if (chainCalls.get(key) === record) chainCalls.delete(key)
+  }
+}
+
+/** Why the Jev hook refuses a call whose host identity it cannot claim. */
+const UNIDENTIFIED_PERMISSION = "jev: the call could not be identified, so it was denied"
+
+/** Why the Jev hook refuses a call that carries no tool action at all. */
+const UNIDENTIFIED_ACTION = "jev: the call carried no action, so it was denied"
+
+/**
+ * The permission event's own identity: the host sends the message and the call
+ * id inside `source`, and a call without all three parts cannot be claimed by
+ * any generation. `callIdentity` is not reused because the permission event
+ * carries the call id under `source.id`, not at the top level.
+ */
+function permissionIdentity(event: any): string {
+  const sessionID = identityPart(event?.sessionID)
+  const messageID = identityPart(event?.source?.messageID)
+  const callID = identityPart(event?.source?.id)
+  return sessionID && messageID && callID ? JSON.stringify([sessionID, messageID, callID]) : ""
+}
+
+/**
+ * Jev judgments in flight, by call identity alone — no generation. One call has
+ * one judgment however many generations its event reaches: the first callback to
+ * claim owns the run, and any other arrival for the same call refuses instead of
+ * judging again, because grants, holds and aborts cannot be undone by the
+ * second judgment's verdict. Ownership of the run stays with the claimant even
+ * after its generation is retired; the settlement then denies that run (see
+ * `settleJevJudge`).
+ */
+const jevCalls = new Map<string, Promise<void>>()
+
+/**
+ * The settled answer for one call, so a sequential duplicate gets the same
+ * answer without a second judge run. `jevCalls` covers arrivals that overlap in
+ * time; this covers the ones that follow, where a host delivers the same call
+ * again after the first judgment finished. Replaying the settled result is the
+ * honest answer — the same call, judged once, and no second grant, hold or
+ * abort — where a refusal would deny a call whose verdict already allowed it.
+ *
+ * Process lifetime, no eviction: one call is judged once, and a record that
+ * expired would let the same call be judged — and spend a grant, open a hold or
+ * run an abort — a second time. Its memory is bounded by what it names, the number
+ * of distinct call identities this process judged, which is the honest bound; a
+ * cap would trade that memory for a second judgment, which is the behaviour the
+ * record exists to prevent. Each record is two small unknown fields.
+ */
+const jevSettled = new Map<string, { effect?: unknown; message?: unknown }>()
+
+/**
+ * What one evaluation proposes. Nothing consequential is applied while the judge
+ * runs: `apply` is invoked by the settlement only after the generation is
+ * re-compared, and it starts every effect — the event's effect and message, a
+ * supervisor hold, the durable abort — in that same synchronous step.
+ */
+interface JevPlan {
+  apply: (event: any) => void | Promise<void>
+  /**
+   * Publishes what this evaluation owes — the decision rows, and for the risk
+   * hook the verdict cache entry — once the settlement has decided. `applied`
+   * false means the evaluation was refused: the rows name the refusal and write
+   * nothing the proposal decided.
+   */
+  settle: (applied: boolean, refusal: string) => void
+}
+
+/**
+ * A plan that decides nothing: the host's own effect stands for the call. It is
+ * inert about the judgment, not about containment — the settlement still admits
+ * every plan, so an abort that covers the session refuses this call too.
+ */
+const LEAVE: JevPlan = { apply: () => {}, settle: () => {} }
+
+/**
+ * Attach the judgement rows a plan owes to its settlement.
+ *
+ * `applied` names the proposals whose outcome the call actually received: only
+ * those are published as acted. Everything else — a proposal a stronger verdict
+ * outranked, or one the supervisor took over — is refused with `reason`, so a row
+ * never claims a decision the call did not get. `null` applies none of them.
+ */
+function settleWith(
+  base: JevPlan,
+  judgements: Judgement[],
+  applied: Judgement[] | null,
+  reason: string,
+): JevPlan {
+  return {
+        apply: base.apply,
+    settle: (appliedVerdict, refusal) => {
+      for (const judged of judgements) {
+        if (!appliedVerdict) judged.refuse(refusal)
+        else if (applied?.includes(judged)) judged.publish()
+        else judged.refuse(reason)
+      }
+    },
+  }
+}
+
+/**
+ * A plan that overrides the verdict these judgements proposed: they ran, so
+ * their rows are owed, but this refusal is what the call received. The rows are
+ * written as refusals naming the override, never as the verdict's own effect.
+ */
+function refusedJudgements(base: JevPlan, judgements: Judgement[], reason: string): JevPlan {
+  return settleWith(base, judgements, null, reason)
+}
+
+/**
+ * Release one Jev call: the admission read and `decide` in one synchronous block.
+ *
+ * `gate` is this event's admission; the settlement uses the process gate, and
+ * tests pass their own to observe that the block is the release. Nothing that
+ * decides the call may run between the read and `decide` — an abort marks its
+ * session synchronously with its start, so the read is the whole answer.
+ */
+export function releaseJevCall(
+  event: any,
+  decide: (blocked: string | null) => void,
+  gate: () => string | null = () => admissionRefusal(String(event?.sessionID ?? "")),
+): Promise<void> {
+  return releaseWhenClear(gate, decide)
+}
+
+/** The release of one Jev call: the gate read and the effect, one step. */
+async function settleJevJudge(
+  judge: (event: any) => Promise<JevPlan>,
+  event: any,
+  generation: number,
+): Promise<void> {
+  const plan = await judge(event)
+  // The judgment is the last await before this call is released. Everything that
+  // decides the call — the generation comparison, the abort admission and the
+  // effect the host reads — runs in the block below, with no yield between them: a
+  // setup or an abort that starts after the gate's read is refused by that read,
+  // and one that started before it is in the answer. An inert plan is admitted
+  // too — it judges nothing, but a covered session still refuses its call — and a
+  // clean read leaves its event exactly as the host sent it.
+  let applied: void | Promise<void> = undefined
+  let refusal: string | null = null
+  await releaseJevCall(event, (blocked) => {
+    refusal = generation !== setupGeneration ? HANDOVER_REFUSAL : blocked
+    if (refusal) {
+      if (event) {
+        event.effect = "deny"
+        event.message = refusal
+      }
+      return
+    }
+    applied = plan.apply(event)
+  })
+  if (refusal) {
+    plan.settle(false, refusal)
+    return
+  }
+  await applied
+  plan.settle(true, "")
+}
+
+async function runJevJudge(
+  judge: (event: any) => Promise<JevPlan>,
+  event: any,
+  generation: number,
+): Promise<void> {
+  const identity = permissionIdentity(event)
+  if (!identity) {
+    // Unreachable through the hook, which refuses an unidentifiable call before
+    // it judges. Kept as the safe default: a judgment nobody can claim still
+    // answers the call.
+    await settleJevJudge(judge, event, generation)
+    return
+  }
+  // A call this process already judged is answered from that settlement, never
+  // judged again. The record says what that call was worth; it is not an
+  // admission. The session can have been covered by an abort since, or an abort
+  // can be discovering its descendants right now, so the recorded answer passes
+  // the same release gate a fresh judgment does and a covered session is refused
+  // whatever the record holds. No row is written either way: this delivery of the
+  // call decided nothing.
+  const settled = jevSettled.get(identity)
+  if (settled) {
+    // The record names what the call was worth, so nothing is judged again. The
+    // admission and the copy are one step: a session covered since the first
+    // judgment is refused, and the recorded allow never lands on it.
+    await releaseJevCall(event, (refusal) => {
+      if (!event) return
+      if (refusal) {
+        event.effect = "deny"
+        event.message = refusal
+        return
+      }
+      if (settled.effect !== undefined) event.effect = settled.effect
+      if (settled.message !== undefined) event.message = settled.message
+    })
+    return
+  }
+  if (jevCalls.has(identity)) {
+    // Another callback already owns this call's one judgment. Waiting for it
+    // would apply a verdict this generation never reached, and judging again
+    // would repeat its side effects, so the call is refused.
+    if (event) {
+      event.effect = "deny"
+      event.message = HANDOVER_REFUSAL
+    }
+    return
+  }
+  const record = settleJevJudge(judge, event, generation)
+  jevCalls.set(identity, record)
+  try {
+    await record
+  } finally {
+    if (jevCalls.get(identity) === record) jevCalls.delete(identity)
+  }
+  // Recorded after the claim is released, and only what the settlement actually
+  // left on the event: an applied verdict or the handover denial, never the
+  // proposal that was refused. Never evicted: see `jevSettled`.
+  jevSettled.set(identity, { effect: event?.effect, message: event?.message })
+}
+
+/** Retire the previous generation now that this one is registered. */
+function retirePreviousWires(): void {
+  const wires = retiringWires
+  retiringWires = []
+  handoverFailed = false
+  for (const wire of wires) wire()
+}
+
+/**
+ * What a setup attempt leaves behind when it throws. Its own registrations are
+ * dropped, its generation token is retired and its chain runtime is closed, so
+ * nothing it registered can keep judging as its own live self. The previous
+ * generation's registrations stay with the host and stay fail-closed through
+ * `handoverFailed`: a failed attempt cannot re-publish them, so the retired
+ * callbacks are the degraded owner and refuse every call still dispatched to
+ * them until a setup completes.
+ */
+function failSetupAttempt(): void {
+  setupGeneration += 1
+  resetChainRuntime()
+  const wires = pluginWires
+  pluginWires = []
+  for (const wire of wires) wire()
+  cardJudge = null
+  jevJudge = null
+  chainJudge = null
+  permissionHookAttached = false
+  resetCardRoute()
+  const provider = sessionBan
+  sessionBan = null
+  provider?.dispose()
+  handoverFailed = true
+}
+
+/**
+ * One setup attempt. The handover flag is cleared on every exit path, so a throw
+ * cannot leave live callbacks failing closed forever, and a failed attempt
+ * leaves the state `failSetupAttempt` describes rather than a half-attached one.
+ */
+async function runAttempt(run: () => Promise<void>): Promise<void> {
+  try {
+    await run()
+  } catch (error) {
+    failSetupAttempt()
+    throw error
+  } finally {
+    handoverInProgress = false
+  }
+}
+
+/**
+ * Enforcement startup recovery could not establish, or null when it did. Set by
+ * `setup` from the abort record store. While set, chain admissions for the
+ * affected sessions are refused: either the record store was unreadable (every
+ * session) or an unconfirmed abort's ban could not be restored (its scope).
+ * Cleared by the next `setup` that reads and recovers cleanly.
+ */
+let abortRecoveryGate: RecoveryBlock | null = null
+
 function newChainRuntime(): ChainRuntime {
   let release: () => void = () => {}
   const promise = new Promise<void>((resolve) => {
@@ -943,6 +1613,8 @@ function newChainRuntime(): ChainRuntime {
 function resetChainRuntime(): void {
   const old = chainRuntime
   chainRuntime = null
+  chainWired = false
+  chainWiredFailure = false
   if (!old) return
   old.replaced = true
   try {
@@ -1122,6 +1794,90 @@ export function chainNodes(): ChainNodes {
   }
 }
 
+/** The refusal a live abort gives. It lasts until ticket #16's release. */
+const ABORT_MARK_REASON = "an abort covers this session, so this call is not admitted"
+
+/**
+ * The one admission gate every surface asks, in one order: recovery that could
+ * not establish an abort's enforcement, an abort running in this process (whose
+ * ban is only written after descendant discovery), then the durable ban already
+ * on disk.
+ *
+ * The ban step is deliberately `subtree` only. A legacy `parent` ban is
+ * approvable and retirable by the session-ban table, so it keeps its own vote in
+ * the chain's host check and the provider's evaluator; folding it in here would
+ * hide it behind a sentence no operator action can lift. A `subtree` ban has no
+ * expiry, no approval and no user-turn retirement, so nothing but #16's release
+ * clears it.
+ *
+ * Chain, tool-risk hook, question-card route, session-ban provider and the send
+ * boundary all ask this function. A surface that reads its own subset has
+ * invented a window the others do not have.
+ */
+function blockedFor(sessionID: string): string | null {
+  const gate = abortRecoveryGate
+  if (gate && recoveryCovers(gate, sessionID)) return recoveryReason(gate)
+  if (abortStarted(sessionID)) return ABORT_MARK_REASON
+  const read = readSnapshot(sessionID)
+  if (!read.ok && read.reason !== "missing") return "the session ban state is unreadable, so this call is not admitted"
+  if (read.ok && read.snap?.sessionBan?.kind === "subtree") {
+    return "this session is under a durable abort ban, so this call is not admitted"
+  }
+  return null
+}
+
+/**
+ * A legacy `parent` ban, read as its own signal. The chain's host check and the
+ * session-ban provider already vote on it (a human approval can admit one
+ * generation), so the card and tool-risk routes vote the same way instead of
+ * approving work the other two would hold. It stays out of `blockedFor`: the two
+ * ban kinds are retired by different actions, and an abort ban must not be lifted
+ * by an approval.
+ */
+function parentBanReason(sessionID: string): string | null {
+  const read = readSnapshot(sessionID)
+  if (!read.ok) return null
+  return read.snap?.sessionBan?.kind === "parent" ? "this session is under an active session ban, so this call is not admitted" : null
+}
+
+/**
+ * The refusal for a surface that must answer both ban kinds: the shared gate
+ * first (recovery, live abort mark, durable abort ban), then the legacy parent
+ * ban as a separate vote. Used at the call sites, never inside `blockedFor`.
+ */
+function admissionRefusal(sessionID: string): string | null {
+  return blockedFor(sessionID) ?? parentBanReason(sessionID)
+}
+
+/**
+ * The admission surfaces that consult a ban right now. Each entry needs
+ * attach-time evidence that the host actually took the hook, not merely that
+ * the configuration asks for it: an inert wrapper or an unattached provider
+ * refuses nothing, and listing it would suppress the no-enforcement warning
+ * while no route enforces the ban. Read at call time because the switches are
+ * re-read per call and the chain's capability gate can change between them.
+ */
+function enforcementPosture(): string[] {
+  const active: string[] = []
+  // The wrapper must exist, must not have failed its dependencies, and the
+  // capability gate must pass now: a wrapper that always passes the call
+  // through enforces nothing.
+  if (chainWired && chainRuntime !== null && !chainWiredFailure && chainStatus() === "passed") active.push("chain")
+  // The provider enforces only through the wires the host took, and only while
+  // it is the generation this setup registered: a handle a later setup replaced
+  // reports itself unattached, so a retired provider never keeps the surface
+  // listed. The permission hook is the evidence for refusing a call: a provider
+  // whose feed failed still denies, and posture must not say otherwise.
+  if (featureOn("hook_session_ban") && sessionBan !== null && sessionBan.enforcing()) active.push("session-ban")
+  // Set only after execute.before registered, so it is attach evidence already.
+  if (cardRouteActiveNow()) active.push("cards")
+  // The permission hook must have attached, and some mode must make it judge.
+  if (permissionHookAttached && (supervisorMode() !== "default" || featureOn("hook_tool_risk") || featureOn("hook_tool_standard"))) {
+    active.push("tool-risk")
+  }
+  return active
+}
+
 /**
  * Host rules, host asks and effective bans, read before routing and again at
  * release. Bans are read once more after the awaited permission check: a ban
@@ -1130,6 +1886,11 @@ export function chainNodes(): ChainNodes {
  * a host without it cannot be authorized (#19 must pin the real surface).
  */
 async function chainHostCheck(ctx: any, item: ReviewItem): Promise<{ ok: boolean; reason?: string; humanOnly?: boolean }> {
+  // A recovery that could not read the record store leaves aborted sessions
+  // unnamed, a live abort has not written its ban yet, and a ban that could not
+  // be rewritten leaves a scope unprotected. Every one of them refuses here.
+  const blocked = blockedFor(item.sessionID)
+  if (blocked) return { ok: false, reason: blocked }
   const banReason = (): string => {
     if (isToolBanned(item.sessionID)) return "this session has a tool ban"
     const read = readSnapshot(item.sessionID)
@@ -1320,6 +2081,118 @@ async function chainParentGenerate(runtime: ChainRuntime, ctx: any, request: { p
   return text
 }
 
+/** Revoke the pending approvals whose own session is inside the abort scope. */
+function revokeApprovals(sessionIDs: string[]): { revoked: number; failed: number } {
+  const scope = new Set(sessionIDs)
+  let revoked = 0
+  let failed = 0
+  for (const approval of readApprovals(loadState().approveTtl)) {
+    if (!scope.has(approval.sessionID)) continue
+    if (rejectApproval(approval.token)) revoked++
+    else failed++
+  }
+  return { revoked, failed }
+}
+
+/**
+ * True when an abort or a durable ban covers this session right now. Synchronous
+ * on purpose: it is the send boundary's own check, taken in the same step as the
+ * dispatch, so it asks the same shared gate every admission surface asks. The
+ * chain's own view is added because a review already inside it is stopped by
+ * that mark, not by a ban that does not exist yet.
+ */
+function sessionBlockedNow(sessionID: string): boolean {
+  if (blockedFor(sessionID)) return true
+  return chainRuntime?.chain?.isAborted(sessionID) === true
+}
+
+/**
+ * The host half of an abort operation: the subtree from the host's own lineage,
+ * the interrupts it accepts, this runtime's held cards and reviews, and the
+ * pending approvals and bans this process owns. `abort.ts` decides what the
+ * record says and what counts as incomplete.
+ */
+function abortIO(ctx: any, runtime: ChainRuntime | null): AbortIO {
+  const current = (): ChainRuntime | null => (runtime && chainRuntime === runtime ? runtime : null)
+  return {
+    subtree: (sessionID) => descendantScan(ctx, sessionID),
+    // The abort-level mark is written first and unconditionally: it is the only
+    // signal that exists before the ban lands and with the chain off. The chain
+    // keeps its own view for stage gating and batch settlement.
+    markAborted: (sessionIDs) => {
+      markAbortStarted(sessionIDs)
+      current()?.chain?.markAborted(sessionIDs)
+    },
+    holdReleases: () => current()?.chain?.holdReleases() ?? (() => {}),
+    interrupt: async (sessionID) => {
+      // A host without the primitive, a refusal it states, and a host that says
+      // nothing are three different answers: only a stated stop is a stop.
+      const run = ctx?.session?.interrupt
+      if (typeof run !== "function") return "unsupported"
+      try {
+        const result = await run.call(ctx.session, { sessionID, resume: false })
+        const interrupted = (result as { interrupted?: unknown } | undefined)?.interrupted
+        if (typeof interrupted === "boolean") return interrupted ? "done" : "refused"
+        return "unconfirmed"
+      } catch {
+        return "refused"
+      }
+    },
+    cards: () => {
+      const live = current()
+      const chainCards = live ? [...live.cards].map(([formID, waiting]) => ({ formID, sessionID: waiting.sessionID })) : []
+      // A question-card hold is a hold too: it waits in this process, not in the
+      // chain runtime, and a receipt that counted only chain cards would report
+      // "no held cards" while one is open.
+      return [...chainCards, ...heldQuestionCards()]
+    },
+    cancelCard: (sessionID, formID) => cancelCardChecked(sessionID, formID),
+    releaseCard: (formID) => {
+      // Release before the host call: a card that cannot be deleted is still
+      // not a hold, and the waiter must not outlive the abort.
+      releaseHeldCard(formID)
+      const live = current()
+      const waiting = live?.cards.get(formID)
+      if (!live || !waiting) return
+      live.cards.delete(formID)
+      waiting.resolve("unavailable")
+    },
+    reviews: (sessionIDs) => current()?.chain?.cancelScope(sessionIDs) ?? { settled: 0, started: 0 },
+    // The session-ban provider's holds are this process's other kind of pending
+    // approval: a prompt the host opened for a held call. The registry is
+    // process-wide, not the live handle's, so a replaced provider cannot hide an
+    // older prompt from this abort's receipt.
+    holds: (sessionIDs) => revokeOpenPrompts(sessionIDs),
+    approvals: (sessionIDs) => revokeApprovals(sessionIDs),
+    ban: (sessionIDs, cause) => {
+      const at = Date.now()
+      let written = 0
+      let failed = 0
+      for (const sessionID of sessionIDs) {
+        if (writeSubtreeBan(sessionID, `abort: ${cause}`, at)) written++
+        else failed++
+      }
+      return { written, failed }
+    },
+    store: { append: appendAbortRecord, replace: replaceAbortRecord },
+    now: () => Date.now(),
+    audit: (row) => logCall({ hook: "hook_watchdog_chain", ...row, sessionID: auditSession(row.sessionID) }),
+  }
+}
+
+/**
+ * One abort operation over one selected session and its owned descendants. The
+ * same function serves the chain's own verdict and the operator route, so a
+ * headless client and a card answer cannot disagree about what an abort did.
+ */
+export async function abortSessionTree(
+  ctx: any,
+  runtime: ChainRuntime | null,
+  request: { sessionID: string; source: AbortSource; cause: string },
+): Promise<AbortOutcome> {
+  return await abortSubtree(abortIO(ctx, runtime), request)
+}
+
 async function chainHistory(ctx: any, sessionID: string): Promise<unknown> {
   if (typeof ctx?.session?.context !== "function") return undefined
   return await ctx.session.context({ sessionID })
@@ -1465,10 +2338,11 @@ function attachSupervisorHost(ctx: any): boolean {
       },
       isEnabled: () => featureOn("hook_supervisor") && supervisorConfigured(),
       cardMode: () => cardRouteActiveNow(),
-      abortSession: (sessionID, by, cause) =>
-        sessionBan
-          ? sessionBan.abortSession(sessionID, by as AbortAuthority, cause)
-          : Promise.resolve({ sealed: false, durable: false, revoked: [], interrupted: [], preserved: [], sessionBanned: 0, sessionBanFailures: [], notified: false, reason: "no session-ban host" }),
+      // A supervisor abort verdict is a verdict, so it runs the same unified
+      // operation as every other verdict route: durable `subtree` ban, record,
+      // containment rows.
+      abortSession: (sessionID) =>
+        abortSessionTree(ctx, chainRuntime, { sessionID, source: "chain", cause: "a supervisor verdict aborted the session" }),
       toolBan: (sessionID, reason) => {
         banTool(sessionID, [], reason)
         logCall({ hook: "hook_supervisor", sessionID, detail: "session ban held; tool ban placed" })
@@ -1535,9 +2409,9 @@ function ensureSupervisorRuntime(ctx: any, mode: SupervisorMode): boolean {
   return true
 }
 
+/** The one host capability a task seal still needs: its own durable ban write. */
 export interface AbortCommandHost {
   abort(request: AbortRequest): Promise<AbortReceipt>
-  abortSession(parentID: string, by: AbortAuthority, cause: string): Promise<AbortReceipt>
 }
 
 export interface AbortCommandDeps {
@@ -1547,6 +2421,16 @@ export interface AbortCommandDeps {
   read: (parentID: string) => SnapshotRead
   /** The registered host, or null when `setup` could not register one. */
   host: AbortCommandHost | null
+  /**
+   * The unified abort for one session tree, or undefined where it is not wired.
+   * A session stop is the same durable operation as a verdict's — one record,
+   * one ban, one set of containment rows — so the command asks for that and
+   * nothing else. There is no legacy fallback: a stop that would be retirable by
+   * the next user turn is not the stop this command reports.
+   */
+  abortSession?: (sessionID: string) => Promise<AbortOutcome>
+  /** True when some admission hook enforces a ban in this process right now. */
+  enforced?: () => boolean
 }
 
 const shortKey = (key: string) => key.slice(0, 12)
@@ -1571,6 +2455,33 @@ function receiptLine(what: string, receipt: AbortReceipt): string {
   ].join(", ")
   const notSessionBanned = receipt.sessionBanFailures.length ? sessionBanFailureClause(receipt.sessionBanFailures) : ""
   return `jev-abort: ${what} stopped (${counts}). Unrelated work continues; a replacement is held until your next message.${notSessionBanned}${durability(receipt)}`
+}
+
+/**
+ * One session-tree stop, as the operation's own report states it. The command
+ * keeps its own voice, but every claim here comes from a containment row: a
+ * failed discovery names itself, the ban is counted, and the durability sentence
+ * needs a live enforcement surface, not just a sealed record.
+ */
+function sessionStopLine(sessionID: string, outcome: AbortOutcome, enforced: boolean): string {
+  const covered = outcome.operation.scope.length
+  const scopeRow = outcome.containment.find((row) => row.step === "scope")
+  const interruptRow = outcome.containment.find((row) => row.step === "interrupt")
+  const scopeText =
+    scopeRow?.status === "done"
+      ? `${many(covered, "session")} covered`
+      : `discovery failed (${scopeRow?.detail ?? "the scope step did not run"}), so only the selected session is covered`
+  const banText =
+    outcome.ban.failed === 0 && outcome.ban.written === covered
+      ? `the durable subtree ban was written for all ${many(covered, "session")}`
+      : `the durable subtree ban was written for ${outcome.ban.written} of ${many(covered, "session")}`
+  const stop = durabilitySentence(outcome, enforced)
+  const short = outcome.incomplete.map((row) => `${row.step} ${row.status}`)
+  return [
+    `jev-abort: session ${shortKey(sessionID)} aborted (${scopeText}; ${banText}; ${interruptRow?.detail ?? "no interrupt was attempted"}).`,
+    short.length ? ` Containment incomplete: ${short.join(", ")}.` : "",
+    ` ${stop}`,
+  ].join("")
 }
 
 /**
@@ -1618,10 +2529,13 @@ export async function runAbort(
   const target = arg.trim().split(/\s+/)[0] ?? ""
 
   if (target === "session") {
-    if (!deps.host) return "jev-abort: the session-ban host is not registered in this process."
-    const receipt = await deps.host.abortSession(parentID, "user", "user command")
-    seen?.(receipt)
-    return receiptLine(`session ${shortKey(parentID)}`, receipt)
+    // The session target is the unified operation, exactly as a verdict's abort
+    // is: a `subtree` ban no user turn retires, a record, and containment rows
+    // that name what failed. The old host call wrote a parent-kind ban a later
+    // message could clear, and reported a stop it could not vouch for.
+    if (!deps.abortSession) return "jev-abort: the abort operation is not available in this process; nothing was aborted."
+    const outcome = await deps.abortSession(parentID)
+    return sessionStopLine(parentID, outcome, deps.enforced?.() ?? false)
   }
   if (!target) return taskListing(rows)
 
@@ -1654,198 +2568,372 @@ export async function runAbort(
   return receiptLine(`task ${shortKey(rec.fingerprint)}${rec.agent ? ` (${rec.agent})` : ""}`, receipt)
 }
 
+/**
+ * Setups run one at a time. A host that calls `setup` twice must not run two
+ * teardowns and two registration passes at once: the second would retire the
+ * first's callbacks while the first is still registering, and whichever pass
+ * finished later would own the module handles — the session-ban handle and the
+ * card route among them. Queuing makes the newest call the last one to run, so
+ * the newest generation is the live one and a call dispatched during the
+ * handover is judged by one of the two.
+ */
+let setupLock: Promise<unknown> = Promise.resolve()
+
+function serializedSetup(run: () => Promise<void>): Promise<void> {
+  const next = setupLock.then(() => runAttempt(run), () => runAttempt(run))
+  // The queue holds the settled state only: a rejected setup must not poison the
+  // next one, and its own rejection still reaches the host that awaited it.
+  setupLock = next.then(
+    () => {},
+    () => {},
+  )
+  return next
+}
+
 export default {
   id: "fazuh.watchdog",
   tui: true,
 
-  setup: async (ctx: any) => {
-    const mode = supervisorMode()
-    resetSupervisorRuntime()
-    batchFeedCtx = null
+  setup: (ctx: any) =>
+    serializedSetup(async () => {
+      const mode = supervisorMode()
+      resetSupervisorRuntime()
+      batchFeedCtx = null
+      // Attach-time evidence is per setup: a later setup must not inherit a claim
+      // that a previous one's hook is still registered.
+      permissionHookAttached = false
+      // The card route's flag describes the registration this setup is about to
+      // make, so a later setup with the route off must not leave an earlier one's
+      // flag saying cards guard calls they no longer see.
+      resetCardRoute()
+      // This setup's generation retires the previous one now; its registrations
+      // are dropped only after this setup's own are in place (see the end of
+      // `setup`), so the host never has a moment with neither.
+      const generation = ++setupGeneration
+      const live = (): boolean => generation === setupGeneration
+      retiringWires.push(...pluginWires)
+      pluginWires = []
+      handoverInProgress = true
+      // A retired card callback hands its call to this: null until this setup
+      // registers its own, so the handover refuses rather than bouncing back.
+      cardJudge = null
+      // Same for the Jev and chain judgments: a retired callback must never bounce
+      // into the generation it left.
+      jevJudge = null
+      chainJudge = null
 
-    // Desktop panel RPC. The GUI half calls these handlers; they read state
-    // from disk server-side and return only allowlisted fields. A host with no
-    // rpc.register simply has no Desktop panel, as before.
-    if (typeof ctx?.rpc?.register === "function") {
-      try {
-        const registration = await ctx.rpc.register(
-          JevContract,
-          jevRpcHandlers({
-            sessionTitle: async (sessionID) => {
-              try {
-                const session = await ctx.session?.get?.({ sessionID })
-                return typeof session?.title === "string" ? session.title : undefined
-              } catch {
-                return undefined
-              }
-            },
-            stopSession: (sessionID) => stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {}),
-            liftToolBan: (sessionID) => liftToolBan(ctx, sessionID),
-            clearSessionBan: (sessionID) => (sessionBan ? sessionBan.clearSessionBan(sessionID) : false),
-            resumeSession: async (sessionID, text) => {
-              try {
-                await ctx.session?.prompt?.({ sessionID, text })
-              } catch {}
-            },
-          }),
-        )
-        setJevEmitter((event) => registration.events.emit("changed", event))
-      } catch (error) {
-        logCall({ hook: "rpc", error: error instanceof JevError ? error.message : String(error) })
-      }
-    }
-
-    // The tool hooks. The permission hook is where a decision about a call
-    // belongs: the host has already applied its own rules (an explicit deny
-    // never reaches the hook) and hands over an allow or a propagate, and the
-    // hook may change that to allow, propagate, deny, or abort.
-    //
-    // The hook is capability-probed. The published plugin types are older than
-    // the host and do not carry the permission domain, and a host without it
-    // simply has no gate to sit in.
-    if (typeof ctx?.permission?.hook === "function") {
-      await ctx.permission.hook("evaluate", async (event: any) => {
-        try {
-          await evaluatePermission(ctx, event)
-        } catch (error) {
-          // Default fails open on a Jev problem; supervisor modes fail closed
-          // so an exception cannot leave a call without a judgement.
-          if (supervisorMode() !== "default") {
-            event.effect = "deny"
-            event.message = "jev supervisor: evaluation failed; the call was denied"
-          }
-          logCall({
-            hook: "hook_tool_risk",
-            sessionID: String(event?.sessionID ?? ""),
-            error: error instanceof JevError ? error.message : String(error),
-          })
-        }
-      })
-   
-
-    // Question-card route, inert until the opt-in flag is on. The evaluate hook
-    // forces allow and parks a hold; execute.before opens the card and awaits it.
-    // Non-blocking has no hold to open, so it never registers this route.
-    if (questionCardsOn() && mode !== "nonBlocking") {
-      if (typeof ctx?.tool?.hook === "function") {
-        const deps: CardDeps = {
-          stopTree: (sessionID) => stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {}),
-          toolBan: (sessionID, subagents, reason) => {
-            banTool(sessionID, subagents, reason)
-            logCall({ hook: "hook_tool_risk", sessionID, detail: `tool ban + ${subagents.length} subagents` })
-          },
-          staleCard: (sessionID) => readToolBans().find((row) => row.sessionID === sessionID)?.formID,
-          setCard: (sessionID, formID, tool) => setToolBanCard(sessionID, formID, tool),
-          unbanTool: (sessionID) => unbanTool(sessionID),
-          changed: (reason) => changed(reason),
-          notifyAbort: (sessionID, text) =>
-            alertUser(
-              { session: ctx.session },
-              { sessionID, action: "tool", text } as any,
-              { effect: "abort", message: text } as any,
-            ),
-        }
-        await ctx.tool.hook("execute.before", async (event: any) => {
-          if (supervisorMode() === "nonBlocking") return
-          await onBeforeExecute(ctx, event, decideForCard, deps)
+      // Before any hook can admit a call: an operation whose ban is not confirmed
+      // means the process died between the identity write and its ban, so the
+      // restriction is re-asserted from the record's own scope. A store that
+      // cannot be read, or a ban that cannot be rewritten, is a recovery failure:
+      // admissions are refused for it rather than guessing what it held.
+      const recovery = reconcileAbortRecords(abortIO(ctx, null))
+      abortRecoveryGate = recovery.blocked
+      // Only after recovery: a mark a recovered record covers is redundant, and a
+      // mark with no record is the only trace of an abort still in flight (or one
+      // that died before writing its identity), so it is kept. Clearing first
+      // would leave that window with neither a mark nor a ban.
+      retainUncoveredAbortMarks(recovery.scopes)
+      if (recovery.blocked) {
+        logCall({
+          hook: "hook_watchdog_chain",
+          event: "abort_recovery_unavailable",
+          reason: recovery.blocked.reason,
+          scope: recovery.blocked.sessions?.length ?? 0,
+          all: recovery.blocked.sessions === null,
         })
-        attachCardEvents(ctx)
-        markCardRouteActive()
-      } else {
-        logCall({ hook: "hook_tool_risk", skipped: "questionCards on but host tool.execute.before hook missing; native permission gate remains" })
+      } else if (recovery.restored || recovery.failed) {
+        logCall({ hook: "hook_watchdog_chain", event: "abort_recovery_summary", restored: recovery.restored, failed: recovery.failed })
       }
-    }
-    }
 
-    // The session-ban admission path, behind its own switch. It is the one hook
-    // in the plugin that fails closed, so an off flag must leave exactly
-    // today's plugin: no wrapper, no subscription, no state file. `start`
-    // checks the flag before it touches the context for that reason.
-    try {
-      // The handle is what `/jev-abort` reaches: a disposer alone leaves no
-      // route from a decision to a stopped task.
-      sessionBan = await startSessionBan(ctx, () => featureOn("hook_session_ban"), {
-        holdMs: Math.max(1, Math.round(cfgNum("hook_session_ban", "holdMs"))),
-        graceMs: Math.max(0, Math.round(cfgNum("hook_session_ban", "bindGraceMs"))),
-        capMs: Math.max(1, Math.round(cfgNum("hook_session_ban", "admissionWindowMs"))),
-      })
-    } catch (error) {
-      logCall({ hook: "hook_session_ban", error: error instanceof JevError ? error.message : String(error) })
-    }
-
-    // The review chain (see `chain.ts`). The wrapper's presence tracks the
-    // operator's switch, not the gate file's timing, so a gate file written later
-    // activates the next call without a restart. The switch itself is read only
-    // here: turning it on later needs a restart, and #18/#19 own the real
-    // controls. Off means no execute.before wrapper, no form subscription and no
-    // behavior change. The gate holds the one call at execute.before, the only
-    // pre-execution boundary this plugin can observe; which tool surfaces reach
-    // it is unverified (#19).
-    resetChainRuntime()
-    if (process.env[CHAIN_ENABLE_SWITCH] === "1") {
-      const runtime = newChainRuntime()
-      chainRuntime = runtime
-      if (typeof ctx?.tool?.hook !== "function") {
-        // Without the hook surface Watchdog never sees a call: that is absent
-        // protection, not a denial, so nothing is claimed as refused.
-        logCall({ hook: "hook_watchdog_chain", protection: "absent", wired: false, reason: "the host has no tool.execute.before hook" })
-      } else {
-        let failure = ""
-        if (!attachChainEvents(ctx, runtime)) failure = "the host cannot deliver a card answer"
-        else if (!(runtime.filterReady = await attachChainFilter(ctx, runtime))) failure = "the host cannot filter the review projection"
-        // Every dependency short-circuits once a later setup replaced this
-        // runtime, so a decision already in flight cannot release a call.
-        const live = (): boolean => !runtime.replaced
-        if (!failure) {
-          runtime.chain = attachChain({
-            enabled: chainEnabled,
-            live,
-            nodes: chainNodes,
-            limits: chainLimits,
-            ledger: chainLedger(),
-            ledgerError: (operation) =>
-              logCall({
-                hook: "hook_watchdog_chain",
-                ledger: operation,
-                error: operation === "read" ? "the budget ledger could not be read" : "the budget ledger could not be written",
-              }),
-            linkage: async (sessionID) => {
-              if (!live()) throw new Error("the review runtime was replaced")
-              return chainLinkage(ctx, sessionID)
-            },
-            precheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
-            jev: async (batch) => {
-              if (!live()) throw new Error("the review runtime was replaced")
-              return chainJev(batch)
-            },
-            generate: async (request) => {
-              if (!live()) throw new Error("the review runtime was replaced")
-              return chainGenerate(runtime, ctx, request)
-            },
-            parentGenerate: async (request) => {
-              if (!live()) throw new Error("the review runtime was replaced")
-              return chainParentGenerate(runtime, ctx, request)
-            },
-            history: async (sessionID) => {
-              if (!live()) throw new Error("the review runtime was replaced")
-              return chainHistory(ctx, sessionID)
-            },
-            human: async (item, brief) => (live() ? chainHuman(runtime, item, brief) : "unavailable"),
-            recheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
-            audit: (entry) => logCall({ hook: "hook_watchdog_chain", ...entry }),
-          })
-        }
-        // The status is reported only once the boundary exists: a row that says
-        // wired must not outlive a host that refused the registration.
+      // Desktop panel RPC. The GUI half calls these handlers; they read state
+      // from disk server-side and return only allowlisted fields. A host with no
+      // rpc.register simply has no Desktop panel, as before.
+      if (typeof ctx?.rpc?.register === "function") {
         try {
-          await ctx.tool.hook("execute.before", async (event: ChainEvent) => {
-            // A later setup leaves this callback registered. Only the current
-            // runtime decides: a retired wrapper passes the call through untouched.
-            if (chainRuntime !== runtime) return
+          const registration = await ctx.rpc.register(
+            JevContract,
+            jevRpcHandlers({
+              sessionTitle: async (sessionID) => {
+                try {
+                  const session = await ctx.session?.get?.({ sessionID })
+                  return typeof session?.title === "string" ? session.title : undefined
+                } catch {
+                  return undefined
+                }
+              },
+              liftToolBan: (sessionID) => liftToolBan(ctx, sessionID),
+              // A host that is off, failed or never attached knows nothing about
+              // ban state: that is `unknown`, never `absent`.
+              clearSessionBan: (sessionID) => clearBanOrUnknown(sessionBan, sessionID),
+              // The send boundary's own check: synchronous, so nothing can be marked
+              // between its answer and the continuation.
+              sessionBlocked: (sessionID) => sessionBlockedNow(sessionID),
+              sessionBlockedNow: (sessionID) => sessionBlockedNow(sessionID),
+              resumeSession: async (sessionID, text) => {
+                try {
+                  await ctx.session?.prompt?.({ sessionID, text })
+                } catch {}
+              },
+              abortSession: (sessionID) => abortSessionTree(ctx, chainRuntime, { sessionID, source: "human", cause: "operator abort" }),
+              enforcedBy: () => enforcementPosture(),
+            }),
+          )
+          setJevEmitter((event) => registration.events.emit("changed", event))
+        } catch (error) {
+          logCall({ hook: "rpc", error: error instanceof JevError ? error.message : String(error) })
+        }
+      }
+
+      // The tool hooks. The permission hook is where a decision about a call
+      // belongs: the host has already applied its own rules (an explicit deny
+      // never reaches the hook) and hands over an allow or a propagate, and the
+      // hook may change that to allow, propagate, deny, or abort.
+      //
+      // The hook is capability-probed. The published plugin types are older than
+      // the host and do not carry the permission domain, and a host without it
+      // simply has no gate to sit in.
+      if (typeof ctx?.permission?.hook === "function") {
+        const judge = async (event: any): Promise<JevPlan> => {
+          try {
+            return await evaluatePermission(ctx, event)
+          } catch (error) {
+            logCall({
+              hook: "hook_tool_risk",
+              sessionID: String(event?.sessionID ?? ""),
+              error: error instanceof JevError ? error.message : String(error),
+            })
+            // Default fails open on a Jev problem; supervisor modes fail closed
+            // so an exception cannot leave a call without a judgement.
+            if (supervisorMode() === "default") return LEAVE
+            return {
+                            apply: (target) => {
+                if (!target) return
+                target.effect = "deny"
+                target.message = "jev supervisor: evaluation failed; the call was denied"
+              },
+              settle: () => {},
+            }
+          }
+        }
+        const permissionRegistration = await ctx.permission.hook("evaluate", async (event: any) => {
+          // A retired generation still owes this call a judgment: the host may
+          // dispatch it to the old callback and never to the new one, and this
+          // event is not guaranteed to be replayed. It is handed to the live
+          // generation once that generation is fully registered, and refused
+          // while a handover is still running or after a setup failed: delegating
+          // into a successor that is still registering would judge the call with
+          // half a generation.
+          if (!live()) {
+            const current = jevJudge
+            if (current && !handoverInProgress && !handoverFailed) return await runJevJudge(current, event, setupGeneration)
+            event.effect = "deny"
+            event.message = HANDOVER_REFUSAL
+            return
+          }
+          return await runJevJudge(judge, event, generation)
+        })
+        // The host took the hook: from here this surface can refuse a call. A
+        // setup that a later one already replaced must not claim it.
+        const permissionWire = registrationWire(permissionRegistration)
+        if (live()) {
+          jevJudge = judge
+          pluginWires.push(permissionWire)
+          permissionHookAttached = true
+        } else {
+          permissionWire()
+        }
+
+      // Question-card route, inert until the opt-in flag is on. The evaluate hook
+      // forces allow and parks a hold; execute.before opens the card and awaits it.
+      // Non-blocking has no hold to open, so it never registers this route.
+      if (questionCardsOn() && mode !== "nonBlocking") {
+        if (typeof ctx?.tool?.hook === "function") {
+          const deps: CardDeps = {
+            // Every card-origin stop (Jev's abort verdict, the supervisor's, and a
+            // user answer on a held card) funnels here, so this one seam decides
+            // what a card abort means. It is the unified operation — durable
+            // `subtree` ban, record, containment rows — not the legacy parent-kind
+            // stop: a user turn retires that one, and this route is enabled on its
+            // own, so its stop must hold on every surface. The outcome goes back
+            // whole: the notice is built from its own receipt, never assumed.
+            stopTree: (sessionID, cause) => abortSessionTree(ctx, chainRuntime, { sessionID, source: "chain", cause }),
+            toolBan: (sessionID, subagents, reason) => {
+              banTool(sessionID, subagents, reason)
+              logCall({ hook: "hook_tool_risk", sessionID, detail: `tool ban + ${subagents.length} subagents` })
+            },
+            staleCard: (sessionID) => readToolBans().find((row) => row.sessionID === sessionID)?.formID,
+            setCard: (sessionID, formID, tool) => setToolBanCard(sessionID, formID, tool),
+            unbanTool: (sessionID) => unbanTool(sessionID),
+            changed: (reason) => changed(reason),
+            // The same gate the chain and the session-ban provider read, plus their
+            // vote on a legacy parent ban.
+            blocked: (sessionID) => admissionRefusal(sessionID),
+            // Read at notice time, after the operation: a sealed record blocks
+            // nothing while every admission hook is off.
+            enforced: () => enforcementPosture().length > 0,
+            notifyAbort: (sessionID, text) =>
+              alertUser(
+                { session: ctx.session },
+                { sessionID, action: "tool", text } as any,
+                { effect: "abort", message: text } as any,
+                text,
+              ),
+            live,
+            // A retired callback hands a call the host still dispatches to it
+            // over to this generation, which is the one whose feed answers the
+            // card it opens.
+            handToLive: () => cardJudge,
+          }
+          const judge = (event: any) => onBeforeExecute(ctx, event, decideForCard, deps)
+          const cardRegistration = await ctx.tool.hook("execute.before", async (event: any) => {
+            if (supervisorMode() === "nonBlocking") return
+            // Retirement is judged inside: a call already dispatched here is
+            // handed to the live generation, never released undecided.
+            await judge(event)
+          })
+          const cardFeedStop = attachCardEvents(ctx)
+          const cardWire = registrationWire(cardRegistration)
+          if (live()) {
+            cardJudge = judge
+            pluginWires.push(cardWire, cardFeedStop)
+            markCardRouteActive()
+          } else {
+            cardWire()
+            cardFeedStop()
+          }
+        } else {
+          logCall({ hook: "hook_tool_risk", skipped: "questionCards on but host tool.execute.before hook missing; native permission gate remains" })
+        }
+      }
+      }
+
+      // The session-ban admission path, behind its own switch. It is the one hook
+      // in the plugin that fails closed, so an off flag must leave exactly
+      // today's plugin: no wrapper, no subscription, no state file. `start`
+      // checks the flag before it touches the context for that reason.
+      // A provider this setup replaces stops judging the moment the generation
+      // moves (`current()` turns false, and its callbacks fail closed), but its
+      // registrations and feed stay until the new provider is up: dropping them
+      // first would leave a window with neither. The module variable is cleared
+      // before the start, so a throw below leaves `null` — a host that registers
+      // nothing — never the handle this setup just retired.
+      const replaced = sessionBan
+      sessionBan = null
+      try {
+        // The handle is what `/jev-abort` reaches: a disposer alone leaves no
+        // route from a decision to a stopped task.
+        const handle = await startSessionBan(ctx, () => featureOn("hook_session_ban"), {
+          holdMs: Math.max(1, Math.round(cfgNum("hook_session_ban", "holdMs"))),
+          graceMs: Math.max(0, Math.round(cfgNum("hook_session_ban", "bindGraceMs"))),
+          capMs: Math.max(1, Math.round(cfgNum("hook_session_ban", "admissionWindowMs"))),
+          // This provider is an admission path of its own: with the review chain
+          // off it is one of the few that run, so it asks the same shared gate.
+          blocked: (sessionID) => blockedFor(sessionID),
+          // And it waits out a discovery: a descendant is not marked or banned
+          // until the scan returns, so an admission inside that window would pass
+          // a gate that has nothing to say about it yet. The probe re-reads the
+          // hold after the wait's own yield, where a new abort can open its hold.
+          hold: () => awaitReleaseHold(),
+          holdInForce: () => releaseHoldOpen(),
+        })
+        if (live()) {
+          sessionBan = handle
+          // The replacement is registered: the provider it replaces can go.
+          replaced?.dispose()
+        } else {
+          // A setup a later one already superseded has no claim on the module
+          // handle, so it drops what it started instead of overwriting the live
+          // one.
+          handle.dispose()
+        }
+      } catch (error) {
+        // The replacement never came up, and it retired the generation it was
+        // going to replace before it failed. Restoring that handle would publish
+        // one that reports itself unattached while its callbacks keep refusing
+        // calls — posture and reality would disagree. So it is disposed and
+        // retired: no provider is registered, and posture says exactly that.
+        replaced?.dispose()
+        logCall({ hook: "hook_session_ban", error: error instanceof JevError ? error.message : String(error) })
+      }
+
+      // The review chain (see `chain.ts`). The wrapper's presence tracks the
+      // operator's switch, not the gate file's timing, so a gate file written later
+      // activates the next call without a restart. The switch itself is read only
+      // here: turning it on later needs a restart, and #18/#19 own the real
+      // controls. Off means no execute.before wrapper, no form subscription and no
+      // behavior change. The gate holds the one call at execute.before, the only
+      // pre-execution boundary this plugin can observe; which tool surfaces reach
+      // it is unverified (#19).
+      resetChainRuntime()
+      if (process.env[CHAIN_ENABLE_SWITCH] === "1") {
+        const runtime = newChainRuntime()
+        chainRuntime = runtime
+        if (typeof ctx?.tool?.hook !== "function") {
+          // Without the hook surface Watchdog never sees a call: that is absent
+          // protection, not a denial, so nothing is claimed as refused.
+          logCall({ hook: "hook_watchdog_chain", protection: "absent", wired: false, reason: "the host has no tool.execute.before hook" })
+        } else {
+          let failure = ""
+          if (!attachChainEvents(ctx, runtime)) failure = "the host cannot deliver a card answer"
+          else if (!(runtime.filterReady = await attachChainFilter(ctx, runtime))) failure = "the host cannot filter the review projection"
+          // Every dependency short-circuits once a later setup replaced this
+          // runtime, so a decision already in flight cannot release a call.
+          const live = (): boolean => !runtime.replaced
+          if (!failure) {
+            runtime.chain = attachChain({
+              enabled: chainEnabled,
+              live,
+              nodes: chainNodes,
+              limits: chainLimits,
+              ledger: chainLedger(),
+              ledgerError: (operation) =>
+                logCall({
+                  hook: "hook_watchdog_chain",
+                  ledger: operation,
+                  error: operation === "read" ? "the budget ledger could not be read" : "the budget ledger could not be written",
+                }),
+              linkage: async (sessionID) => {
+                if (!live()) throw new Error("the review runtime was replaced")
+                return chainLinkage(ctx, sessionID)
+              },
+              precheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
+              jev: async (batch) => {
+                if (!live()) throw new Error("the review runtime was replaced")
+                return chainJev(batch)
+              },
+              generate: async (request) => {
+                if (!live()) throw new Error("the review runtime was replaced")
+                return chainGenerate(runtime, ctx, request)
+              },
+              parentGenerate: async (request) => {
+                if (!live()) throw new Error("the review runtime was replaced")
+                return chainParentGenerate(runtime, ctx, request)
+              },
+              history: async (sessionID) => {
+                if (!live()) throw new Error("the review runtime was replaced")
+                return chainHistory(ctx, sessionID)
+              },
+              human: async (item, brief) => (live() ? chainHuman(runtime, item, brief) : "unavailable"),
+              recheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
+              // The abort-level mark, so a release sees an abort that started
+              // before this runtime was wired or while it was replaced.
+              aborted: (sessionID) => abortStarted(sessionID),
+              audit: (entry) => logCall({ hook: "hook_watchdog_chain", ...entry }),
+            })
+          }
+          // One judgment of one event, shared by this wrapper and by any retired
+          // wrapper that hands its event here.
+          const judge = async (event: ChainEvent): Promise<void> => {
             const status = chainStatus()
             reportChainStatus(runtime, status, failure)
             if (status !== "passed") return
             if (failure) throw new Error("watchdog chain: the review chain cannot run on this host, so the call did not run.")
+            // A review can hold, deny or abort, so one call must be claimable by
+            // id to keep a duplicate dispatch from reviewing it twice. The host's
+            // identity contract is unverified (#19), so a call without an id is
+            // refused instead of reviewed undeduplicated.
+            if (!callIdentity(event)) throw new Error(UNIDENTIFIED_CHAIN)
             const sessionID = String(event?.sessionID ?? "")
             let decision
             try {
@@ -1857,154 +2945,199 @@ export default {
               throw new Error("watchdog chain: the review failed; the call did not run.")
             }
             if (decision.allow) return
+            // The verdict is one row and its containment is another: an abort of the
+            // selected session and its owned descendants, or — for a deny that
+            // arrived while the call was queued — that call alone.
             if (decision.verdict === "abort") {
-              await stopSessionTree(ctx, sessionID, sessionBan ? { abortSession: (id, by, cause) => sessionBan!.abortSession(id, by as AbortAuthority, cause) } : {})
+              await abortSessionTree(ctx, runtime, { sessionID, source: "chain", cause: "the review chain aborted this session" })
+            } else if (decision.verdict === "deny") {
+              await containDeny(abortIO(ctx, runtime), { sessionID, itemID: decision.itemID, shape: "queued" })
             }
             throw new Error(decision.message ?? "watchdog chain: the call did not run.")
-          })
-        } catch {
-          chainRuntime = null
-          runtime.replaced = true
-          runtime.lostSignal.resolve()
+          }
+          // The status is reported only once the boundary exists: a row that says
+          // wired must not outlive a host that refused the registration.
           try {
-            void runtime.stream?.return?.()
-          } catch {}
-          logCall({ hook: "hook_watchdog_chain", protection: "incomplete", wired: false, reason: "the host refused the execute.before hook" })
-          throw new Error("watchdog chain: the host refused the execute.before hook, so the call did not run.")
-        }
-        reportChainStatus(runtime, chainStatus(), failure)
-      }
-    }
-
-    // The supervisor adds no permission hook: it reuses the propagate effect the
-    // risk hook already sets and resolves that hold through the permission surface.
-    // The same wiring runs on demand when config changes after setup.
-    ensureSupervisorRuntime(ctx, mode)
-
-    // /jev commands. Every field the client reads at call time is a setting,
-    // not a constant: the wire model id and the endpoint path are
-    // provider-specific and neither has a portable default. The same settings
-    // are also editable from the TUI panel, and both write the same state file.
-    //
-    // /jev-settings, /jev-features and /jev-key are deliberately absent: the
-    // TUI module owns those names, and a server command of the same name
-    // shadows the panel and the key dialog with a summary that edits nothing.
-    // /jev-status, /jev-model, /jev-endpoint, /jev-log and /jev-abort remain
-    // the text route.
-    // See tui.ts.
-    for (const [name, description] of Object.entries(JEV_COMMANDS)) {
-      await ctx.command.transform((draft: any) => {
-        draft.add({
-          name,
-          description,
-          execute: async (input: any) => {
-            const arg = String(input?.prompt?.text ?? "").trim()
-            const state = loadState()
-            // opencode v2.3.0's command route returns void and drops `content`,
-            // so the same text also goes out as a synthetic message. `resume:
-            // false` is what keeps it from starting a model turn.
-            const respond = async (text: string) => {
-              if (typeof ctx?.session?.synthetic === "function") {
-                try {
-                  await ctx.session.synthetic({ sessionID: input.sessionID, text, resume: false })
-                } catch (error) {
-                  logCall({ hook: name, error: error instanceof JevError ? error.message : String(error) })
+            const chainRegistration = await ctx.tool.hook("execute.before", async (event: ChainEvent) => {
+              // A later setup leaves this callback registered, and the host need
+              // not replay an event it already dispatched here. A retired wrapper
+              // hands the call to the live generation instead of passing it
+              // through unjudged; with no live generation, or while a handover is
+              // still running or after a failed setup, it refuses.
+              if (chainRuntime !== runtime) {
+                const current = chainJudge
+                if (current && !handoverInProgress && !handoverFailed) {
+                  return await runChainJudge(current, event, setupGeneration)
                 }
+                throw new Error(HANDOVER_REFUSAL)
               }
-              return { content: text }
+              return await runChainJudge(judge, event, generation)
+            })
+            // The registration is this generation's wire like every other: a
+            // later setup drops it once its own is in place, and a failed one
+            // drops it instead of leaving a wrapper nothing owns.
+            const chainWire = registrationWire(chainRegistration)
+            if (live()) {
+              pluginWires.push(chainWire)
+              chainJudge = judge
+            } else {
+              chainWire()
             }
+          } catch {
+            chainRuntime = null
+            runtime.replaced = true
+            runtime.lostSignal.resolve()
+            try {
+              void runtime.stream?.return?.()
+            } catch {}
+            logCall({ hook: "hook_watchdog_chain", protection: "incomplete", wired: false, reason: "the host refused the execute.before hook" })
+            throw new Error("watchdog chain: the host refused the execute.before hook, so the call did not run.")
+          }
+          // The wrapper exists: from here this surface consults bans, unless a
+          // dependency failed and the wrapper can only refuse every call.
+          chainWired = true
+          chainWiredFailure = Boolean(failure)
+          reportChainStatus(runtime, chainStatus(), failure)
+        }
+      }
 
-            if (name === "jev-latest") {
-              const record = latestToolBanCard()
-              if (!record?.formID) return respond("No blocked calls to reopen.")
-              const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
-              const formID = `frm_jev_block_${nonce}`
-              void cancelCard(input.sessionID, record.formID)
-              void createCard(input.sessionID, {
-                id: formID,
-                card: {
-                  id: formID,
-                  title: `Jev blocked a ${record.tool ?? "tool"} call`,
-                  metadata: { kind: "question", jevTool: record.tool ?? "" },
-                  fields: [{ key: "decision", title: "This call was stopped", description: "Use Lift tool ban to lift the tool ban, then continue from the main session.", type: "string", custom: true }],
-                },
-              })
-              setToolBanCard(record.sessionID, formID, record.tool ?? "")
-              return respond("Reopened the latest blocked call as a card.")
-            }
-            if (name === "jev-model") {
-              if (!arg) return respond(`Model: ${state.model}`)
-              saveState({ model: arg })
-              return respond(`Model set to ${arg}.`)
-            }
-            if (name === "jev-endpoint") {
-              if (!arg) return respond(`Endpoint: ${state.endpoint}`)
-              saveState({ endpoint: arg })
-              return respond(`Endpoint set to ${arg}.`)
-            }
-            if (name === "jev-log") {
-              const rows = readLog(20)
-              if (rows.length === 0) return respond("No Jev calls logged yet.")
-              const text = rows
-                .map((r) => {
-                  // A skipped or failed entry names the feature in `hook` and
-                  // the reason in `skipped`/`error`; the risk hook adds the
-                  // tool it judged. A regular call logs its decisions instead.
-                  if (r.skipped || r.error) {
-                    const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
-                    return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
+      // The supervisor adds no permission hook: it reuses the propagate effect the
+      // risk hook already sets and resolves that hold through the permission surface.
+      // The same wiring runs on demand when config changes after setup.
+      ensureSupervisorRuntime(ctx, mode)
+
+      // /jev commands. Every field the client reads at call time is a setting,
+      // not a constant: the wire model id and the endpoint path are
+      // provider-specific and neither has a portable default. The same settings
+      // are also editable from the TUI panel, and both write the same state file.
+      //
+      // /jev-settings, /jev-features and /jev-key are deliberately absent: the
+      // TUI module owns those names, and a server command of the same name
+      // shadows the panel and the key dialog with a summary that edits nothing.
+      // /jev-status, /jev-model, /jev-endpoint, /jev-log and /jev-abort remain
+      // the text route.
+      // See tui.ts.
+      for (const [name, description] of Object.entries(JEV_COMMANDS)) {
+        await ctx.command.transform((draft: any) => {
+          draft.add({
+            name,
+            description,
+            execute: async (input: any) => {
+              const arg = String(input?.prompt?.text ?? "").trim()
+              const state = loadState()
+              // opencode v2.3.0's command route returns void and drops `content`,
+              // so the same text also goes out as a synthetic message. `resume:
+              // false` is what keeps it from starting a model turn.
+              const respond = async (text: string) => {
+                if (typeof ctx?.session?.synthetic === "function") {
+                  try {
+                    await ctx.session.synthetic({ sessionID: input.sessionID, text, resume: false })
+                  } catch (error) {
+                    logCall({ hook: name, error: error instanceof JevError ? error.message : String(error) })
                   }
-                  const answers = (r.decisions ?? [])
-                    .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
-                    .join(" ")
-                  return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
+                }
+                return { content: text }
+              }
+
+              if (name === "jev-latest") {
+                const record = latestToolBanCard()
+                if (!record?.formID) return respond("No blocked calls to reopen.")
+                const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
+                const formID = `frm_jev_block_${nonce}`
+                void cancelCard(input.sessionID, record.formID)
+                void createCard(input.sessionID, {
+                  id: formID,
+                  card: {
+                    id: formID,
+                    title: `Jev blocked a ${record.tool ?? "tool"} call`,
+                    metadata: { kind: "question", jevTool: record.tool ?? "" },
+                    fields: [{ key: "decision", title: "This call was stopped", description: "Use Lift tool ban to lift the tool ban, then continue from the main session.", type: "string", custom: true }],
+                  },
                 })
-                .join("\n")
+                setToolBanCard(record.sessionID, formID, record.tool ?? "")
+                return respond("Reopened the latest blocked call as a card.")
+              }
+              if (name === "jev-model") {
+                if (!arg) return respond(`Model: ${state.model}`)
+                saveState({ model: arg })
+                return respond(`Model set to ${arg}.`)
+              }
+              if (name === "jev-endpoint") {
+                if (!arg) return respond(`Endpoint: ${state.endpoint}`)
+                saveState({ endpoint: arg })
+                return respond(`Endpoint set to ${arg}.`)
+              }
+              if (name === "jev-log") {
+                const rows = readLog(20)
+                if (rows.length === 0) return respond("No Jev calls logged yet.")
+                const text = rows
+                  .map((r) => {
+                    // A skipped or failed entry names the feature in `hook` and
+                    // the reason in `skipped`/`error`; the risk hook adds the
+                    // tool it judged. A regular call logs its decisions instead.
+                    if (r.skipped || r.error) {
+                      const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
+                      return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
+                    }
+                    const answers = (r.decisions ?? [])
+                      .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
+                      .join(" ")
+                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
+                  })
+                  .join("\n")
+                return respond(text)
+              }
+              if (name === "jev-abort") {
+                const parentID = String(input?.sessionID ?? input?.invocation?.sessionID ?? "")
+                // A real abort posts its own notice through the host; only a
+                // path that never notified needs the command to speak.
+                let notified = false
+                const text = await runAbort(
+                  parentID,
+                  arg,
+                  {
+                    enabled: () => featureOn("hook_session_ban"),
+                    read: readSnapshot,
+                    host: sessionBan,
+                    abortSession: (sessionID) =>
+                      abortSessionTree(ctx, chainRuntime, { sessionID, source: "human", cause: "user command" }),
+                    enforced: () => enforcementPosture().length > 0,
+                  },
+                  (receipt) => {
+                    notified = receipt.notified
+                  },
+                )
+                return notified ? { content: text } : respond(text)
+              }
+              const key = keySource()
+              const money = spend()
+              const text = [
+                `endpoint  ${state.endpoint}`,
+                `model     ${state.model}`,
+                `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
+                `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
+                `toast     ${state.toast ? "on" : "off"}`,
+                `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+                `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
+                ...FEATURES.map(
+                  (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
+                    .map(([k, v]) => `${k}=${v}`)
+                    .join(" ")}`,
+                ),
+                `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
+                `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
+                "",
+                "Edit any of it with /jev-settings.",
+              ].join("\n")
               return respond(text)
-            }
-            if (name === "jev-abort") {
-              const parentID = String(input?.sessionID ?? input?.invocation?.sessionID ?? "")
-              // A real abort posts its own notice through the host; only a
-              // path that never notified needs the command to speak.
-              let notified = false
-              const text = await runAbort(
-                parentID,
-                arg,
-                {
-                  enabled: () => featureOn("hook_session_ban"),
-                  read: readSnapshot,
-                  host: sessionBan,
-                },
-                (receipt) => {
-                  notified = receipt.notified
-                },
-              )
-              return notified ? { content: text } : respond(text)
-            }
-            const key = keySource()
-            const money = spend()
-            const text = [
-              `endpoint  ${state.endpoint}`,
-              `model     ${state.model}`,
-              `key       ${key.present ? `present (${key.from})` : `MISSING — set one of $${state.keyEnv}, or /jev-key`}`,
-              `plugin    ${pluginEnabled() ? "on" : "OFF — every hook is silent, nothing is sent, nothing is spent"}`,
-              `toast     ${state.toast ? "on" : "off"}`,
-              `on        ${FEATURES.filter((f) => featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-              `off       ${FEATURES.filter((f) => !featureStored(f.key)).map((f) => f.key).join(" ") || "nothing"}`,
-              ...FEATURES.map(
-                (f) => `config.${f.key}  ${Object.entries(state.config[f.key] ?? {})
-                  .map(([k, v]) => `${k}=${v}`)
-                  .join(" ")}`,
-              ),
-              `spend     ${money.calls} calls · ${money.tokens} input tokens · $${money.usd.toFixed(6)}`,
-              `logMax    ${state.logMax} lines (jev-calls.jsonl, pruned to tail)`,
-              "",
-              "Edit any of it with /jev-settings.",
-            ].join("\n")
-            return respond(text)
-          },
+            },
+          })
         })
-      })
-    }
-  },
+      }
+
+      // Every registration this setup made is in place, so the generation it
+      // replaced can be dropped and a previous failed attempt's fail-closed
+      // posture ends: from here the host has exactly one live generation.
+      retirePreviousWires()
+    }),
 }

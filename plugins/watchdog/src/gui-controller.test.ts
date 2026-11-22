@@ -1,9 +1,26 @@
 /** Controller and log-filter behaviour for the Jev panel. No host, no network. */
 import { describe, expect, test } from "bun:test"
-import { createJevView, type JevRPC, type JevViewState } from "./gui-controller.ts"
+import { createJevView, type JevRPC, type JevViewState, type StopSessionResult } from "./gui-controller.ts"
 import { filterRows, rowBadge, distinctHooks, distinctBadges } from "./gui-filter.ts"
 
 const row = (over: Record<string, unknown> = {}) => ({ hook: "hook_tool_risk", verdict: "DENY", ts: "2026-01-01T00:00:00Z", subject: "shell: rm -rf build", ...over })
+
+/** A stop result as the RPC returns it; overrides name what a case inspects. */
+function stopResult(over: Partial<StopSessionResult> = {}): StopSessionResult {
+  return {
+    ok: true,
+    sealed: true,
+    durable: true,
+    receipt: true,
+    ban: { written: 2, failed: 0 },
+    operationID: "op_1",
+    scope: ["ses_block", "ses_child"],
+    incomplete: [],
+    outcome: "known",
+    enforcedBy: ["chain"],
+    ...over,
+  }
+}
 
 function harness() {
   let listener: (() => void) | undefined
@@ -23,13 +40,22 @@ function harness() {
     setFeature: async () => ({ ok: true }),
     liftToolBan: async () => ({ ok: true, count: 0 }),
     liftToolBanAndResume: async () => ({ ok: true, count: 0 }),
-    stopSession: async () => ({ ok: true, subagents: [] }),
+    stopSession: async () => stopResult(),
     subscribe: (fn) => { listener = fn; return () => { listener = undefined } },
   }
-  const view = createJevView(rpc, { update: (s) => states.push(s), error: () => {} })
+  const warnings: string[] = []
+  const errors: string[] = []
+  const view = createJevView(rpc, {
+    update: (s) => states.push(s),
+    error: (message) => errors.push(message),
+    warning: (message) => warnings.push(message),
+  })
   return {
     view,
+    rpc,
     calls,
+    warnings,
+    errors,
     fire: () => listener?.(),
     states: () => states,
     counts: () => ({ status: statusCalls, approvals: approvalCalls, log: calls.length }),
@@ -123,6 +149,57 @@ describe("JevView controller", () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(h.calls.length).toBe(before + 1)
   })
+  test("a stop that is not sealed, stopped short, or enforced says so", async () => {
+    const h = harness()
+    // The receipt is ok, but three facts the user needs are not: durability, one
+    // containment step, and the enforcement posture.
+    h.rpc.stopSession = async () =>
+      stopResult({
+        sealed: false,
+        durable: false,
+        incomplete: [{ step: "interrupt", status: "unconfirmed", detail: "the host did not confirm" }],
+        enforcedBy: [],
+      })
+    await h.view.stopSession("ses_block")
+    expect(h.errors).toEqual([])
+    expect(h.warnings.length).toBe(1)
+    const text = h.warnings[0]!
+    expect(text).toContain("not sealed")
+    expect(text).toContain("interrupt did not stop as asked")
+    expect(text).toContain("no admission hook is active")
+    expect(text).toContain("the abort record did not reach disk")
+  })
+
+  test("a fully enforced sealed stop warns about nothing", async () => {
+    const h = harness()
+    await h.view.stopSession("ses_block")
+    expect(h.warnings).toEqual([])
+    expect(h.errors).toEqual([])
+  })
+
+  test("a stop that never ran or may have run is not reported as a failed no-op", async () => {
+    const h = harness()
+    h.rpc.stopSession = async () =>
+      stopResult({ ok: false, sealed: false, durable: false, outcome: "unknown", error: "the bridge dropped" })
+    await h.view.stopSession("ses_block")
+    expect(h.warnings.length).toBe(1)
+    expect(h.warnings[0]).toContain("may have run before it failed")
+    expect(h.warnings[0]).toContain("the bridge dropped")
+    expect(h.errors).toEqual([])
+  })
+
+  test("a stop that throws says its effects are unconfirmed, not that nothing ran", async () => {
+    const h = harness()
+    h.rpc.stopSession = async () => {
+      throw new Error("socket closed")
+    }
+    await h.view.stopSession("ses_block")
+    expect(h.warnings).toEqual([])
+    expect(h.errors.length).toBe(1)
+    expect(h.errors[0]).toContain("socket closed")
+    expect(h.errors[0]).toContain("could not be confirmed")
+  })
+
   test("liftTool banAndResume forwards the session once", async () => {
     const seen: string[] = []
     const rpc: JevRPC = {
@@ -135,13 +212,13 @@ describe("JevView controller", () => {
       rejectAll: async () => ({ ok: true, count: 0 }),
       setEnabled: async () => ({ ok: true }),
       setFeature: async () => ({ ok: true }),
-      stopSession: async () => ({ ok: true, subagents: [] }),
+      stopSession: async () => stopResult(),
       liftToolBan: async () => ({ ok: true, count: 0 }),
       liftToolBanAndResume: async (input) => { seen.push(input.sessionID); return { ok: true, count: 1 } },
       listToolBans: async () => ({ toolBans: [] }),
       subscribe: () => () => {},
     }
-    const view = createJevView(rpc, { update: () => {}, error: () => {} })
+    const view = createJevView(rpc, { update: () => {}, error: () => {}, warning: () => {} })
     await (view as any).liftToolBanAndResume("ses_batch_01")
     expect(seen).toEqual(["ses_batch_01"])
   })

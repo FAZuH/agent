@@ -273,6 +273,7 @@ function JevView(props: { ctx: any; server: any; sessionID: string }) {
     {
       update: setState,
       error: (description) => props.ctx.toast.show({ title: "Jev", description, variant: "error" }),
+      warning: (description) => props.ctx.toast.show({ title: "Jev", description, variant: "warning" }),
     },
   )
   onCleanup(controller.dispose)

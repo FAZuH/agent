@@ -183,6 +183,91 @@ export const Contract = {
         additionalProperties: false,
       },
     },
+    abortOperations: {
+      input: { type: "object", properties: {}, additionalProperties: false },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          reason: { type: "string" },
+          operations: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                sessionID: { type: "string" },
+                scope: { type: "array", items: { type: "string" } },
+                source: { type: "string" },
+                cause: { type: "string" },
+                at: { type: "number" },
+                incomplete: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      step: { type: "string" },
+                      status: { type: "string" },
+                      detail: { type: "string" },
+                    },
+                    required: ["step", "status", "detail"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["id", "sessionID", "scope", "source", "cause", "at", "incomplete"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["ok", "operations"],
+        additionalProperties: false,
+      },
+    },
+    abortOperation: {
+      input: {
+        type: "object",
+        properties: { sessionID: { type: "string" } },
+        required: ["sessionID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          sealed: { type: "boolean" },
+          durable: { type: "boolean" },
+          receipt: { type: "boolean" },
+          ban: {
+            type: "object",
+            properties: { written: { type: "number" }, failed: { type: "number" } },
+            required: ["written", "failed"],
+            additionalProperties: false,
+          },
+          operationID: { type: "string" },
+          scope: { type: "array", items: { type: "string" } },
+          error: { type: "string" },
+          outcome: { type: "string" },
+          enforcedBy: { type: "array", items: { type: "string" } },
+          warning: { type: "string" },
+          incomplete: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                step: { type: "string" },
+                status: { type: "string" },
+                detail: { type: "string" },
+              },
+              required: ["step", "status", "detail"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["ok", "sealed", "durable", "receipt", "ban", "operationID", "scope", "incomplete", "outcome", "enforcedBy"],
+        additionalProperties: false,
+      },
+    },
     listToolBans: {
       input: { type: "object", properties: {}, additionalProperties: false },
       output: {
@@ -218,8 +303,38 @@ export const Contract = {
       },
       output: {
         type: "object",
-        properties: { ok: { type: "boolean" }, subagents: { type: "array", items: { type: "string" } } },
-        required: ["ok", "subagents"],
+        properties: {
+          ok: { type: "boolean" },
+          sealed: { type: "boolean" },
+          durable: { type: "boolean" },
+          receipt: { type: "boolean" },
+          ban: {
+            type: "object",
+            properties: { written: { type: "number" }, failed: { type: "number" } },
+            required: ["written", "failed"],
+            additionalProperties: false,
+          },
+          operationID: { type: "string" },
+          scope: { type: "array", items: { type: "string" } },
+          error: { type: "string" },
+          outcome: { type: "string" },
+          enforcedBy: { type: "array", items: { type: "string" } },
+          warning: { type: "string" },
+          incomplete: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                step: { type: "string" },
+                status: { type: "string" },
+                detail: { type: "string" },
+              },
+              required: ["step", "status", "detail"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["ok", "sealed", "durable", "receipt", "ban", "operationID", "scope", "incomplete", "outcome", "enforcedBy"],
         additionalProperties: false,
       },
     },
@@ -232,7 +347,7 @@ export const Contract = {
       },
       output: {
         type: "object",
-        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        properties: { ok: { type: "boolean" }, count: { type: "number" }, error: { type: "string" } },
         required: ["ok", "count"],
         additionalProperties: false,
       },
@@ -246,7 +361,7 @@ export const Contract = {
       },
       output: {
         type: "object",
-        properties: { ok: { type: "boolean" }, count: { type: "number" } },
+        properties: { ok: { type: "boolean" }, count: { type: "number" }, error: { type: "string" } },
         required: ["ok", "count"],
         additionalProperties: false,
       },

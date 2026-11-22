@@ -1272,6 +1272,224 @@ describe("stage batching", () => {
   })
 })
 
+describe("abort scope", () => {
+  test("cancelScope settles the selected session's queued review and leaves a sibling alone", async () => {
+    const { schedule, fireAll } = handScheduler()
+    const { chain } = makeChain({
+      jev: "allow",
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 4, ms: 100 } }),
+      schedule,
+    })
+    const scoped = chain.admit(CALL("ses_abort_a", "ls a"))
+    const sibling = chain.admit(CALL("ses_abort_b", "ls b"))
+    await settle(2)
+    expect(chain.cancelScope(["ses_abort_a"])).toEqual({ settled: 1, started: 0 })
+    fireAll()
+    const cancelled = await scoped
+    expect(cancelled.allow).toBe(false)
+    expect(cancelled.verdict).toBe("unresolved")
+    // A sibling's review is its own: the abort never reaches outside its scope.
+    expect((await sibling).allow).toBe(true)
+    // A session with nothing outstanding settles nothing.
+    expect(chain.cancelScope(["ses_abort_a"])).toEqual({ settled: 0, started: 0 })
+  })
+
+  test("an abort that lands during the final execution check ends the call unresolved", async () => {
+    let releaseRecheck: (() => void) | null = null
+    const { chain, log } = makeChain({
+      jev: "allow",
+      nodes: { human: false },
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 1, ms: 0 } }),
+      recheck: async () => {
+        await new Promise<void>((resolve) => {
+          releaseRecheck = resolve
+        })
+        return { ok: true }
+      },
+    })
+    const call = chain.admit(CALL("ses_abort_d", "ls a"))
+    for (let turn = 0; turn < 50 && !releaseRecheck; turn++) await settle(1)
+    expect(releaseRecheck).not.toBeNull()
+    // The abort registers the scope while the host check is still pending, so
+    // the allow that check returns decides nothing.
+    chain.markAborted(["ses_abort_d"])
+    releaseRecheck!()
+    const decision = await call
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("unresolved")
+    expect(log.audit.some((row: any) => row.event === "chain_decision" && row.verdict === "allow")).toBe(false)
+  })
+
+  test("a release inside its final check waits for the abort's discovery hold", async () => {
+    let releaseRecheck: (() => void) | null = null
+    const { chain, log } = makeChain({
+      jev: "allow",
+      nodes: { human: false, supervisor: false },
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 1, ms: 0 } }),
+      recheck: async () => {
+        await new Promise<void>((resolve) => {
+          releaseRecheck = resolve
+        })
+        return { ok: true }
+      },
+    })
+    let settledAs: string | null = null
+    const call = chain.admit(CALL("ses_abort_hold", "ls a")).then((decision) => {
+      settledAs = decision.verdict
+      return decision
+    })
+    for (let turn = 0; turn < 50 && !releaseRecheck; turn++) await settle(1)
+    expect(releaseRecheck).not.toBeNull()
+    // An abort is scanning for descendants it cannot name yet. A release that
+    // already passed its host check must not execute into that unknown set.
+    const done = chain.holdReleases()
+    releaseRecheck!()
+    await settle(6)
+    expect(settledAs).toBeNull()
+    // The scan named this session, and the hold lifts: the release re-checks the
+    // cancelled set it could not see before and ends unresolved.
+    chain.markAborted(["ses_abort_hold"])
+    done()
+    const decision = await call
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("unresolved")
+    expect(log.audit.some((row: any) => row.event === "chain_decision" && row.verdict === "allow")).toBe(false)
+  })
+
+  test("a hold released before the recheck returns does not delay the release", async () => {
+    const { chain } = makeChain({ jev: "allow", nodes: { human: false, supervisor: false } })
+    const done = chain.holdReleases()
+    done()
+    // A second call to the same release is not a second hold.
+    done()
+    const decision = await chain.admit(CALL("ses_abort_hold_2", "ls a"))
+    expect(decision.allow).toBe(true)
+  })
+
+  test("a host change that lands during a discovery hold is honoured after the wait", async () => {
+    let parked = false
+    let releaseRecheck: (() => void) | null = null
+    const { chain, log } = makeChain({
+      jev: "allow",
+      nodes: { human: false, supervisor: false },
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 1, ms: 0 } }),
+      recheck: async () => {
+        // The first check answers before the rule changes, and parks so the change
+        // lands inside the abort's discovery hold.
+        if (!parked) {
+          parked = true
+          await new Promise<void>((resolve) => {
+            releaseRecheck = resolve
+          })
+          return { ok: true }
+        }
+        return { ok: false, reason: "the session was banned during the wait" }
+      },
+    })
+    let settledAs: string | null = null
+    const call = chain.admit(CALL("ses_hold_stale", "ls a")).then((decision) => {
+      settledAs = decision.verdict
+      return decision
+    })
+    for (let turn = 0; turn < 50 && !releaseRecheck; turn++) await settle(1)
+    expect(releaseRecheck).not.toBeNull()
+    const done = chain.holdReleases()
+    releaseRecheck!()
+    await settle(6)
+    // Still parked: the answer it returned is no longer trustworthy while a hold
+    // is in force, so the release waits rather than allowing.
+    expect(settledAs).toBeNull()
+    done()
+    const decision = await call
+    // The check ran again after the hold lifted and saw the ban.
+    expect(log.recheck).toHaveLength(2)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("deny")
+  })
+
+  test("a hold that opens and closes inside the host check makes it run again", async () => {
+    let checks = 0
+    let parked: (() => void) | null = null
+    const { chain, log } = makeChain({
+      jev: "allow",
+      nodes: { human: false, supervisor: false },
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 1, ms: 0 } }),
+      recheck: async () => {
+        checks++
+        if (checks === 1) {
+          await new Promise<void>((resolve) => {
+            parked = resolve
+          })
+          // The answer the host gave before the rule changed.
+          return { ok: true }
+        }
+        return { ok: false, reason: "the rule changed while the check was pending" }
+      },
+    })
+    const call = chain.admit(CALL("ses_hold_complete", "ls a"))
+    for (let turn = 0; turn < 50 && !parked; turn++) await settle(1)
+    expect(parked).not.toBeNull()
+    // A discovery hold that opens and closes entirely inside the pending check:
+    // the count is back to zero when it returns, so only a generation can tell.
+    chain.holdReleases()()
+    parked!()
+    const decision = await call
+    // The stale allow was not consumed: the check ran again and saw the change.
+    expect(log.recheck).toHaveLength(2)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("deny")
+  })
+
+  test("markAborted alone refuses the next admission without settling anything", async () => {
+    const { schedule, fireAll } = handScheduler()
+    const { chain, log } = makeChain({
+      jev: "allow",
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 4, ms: 100 } }),
+      schedule,
+    })
+    chain.markAborted(["ses_abort_e"])
+    const refused = await chain.admit(CALL("ses_abort_e", "ls a"))
+    expect(refused.allow).toBe(false)
+    expect(refused.verdict).toBe("unresolved")
+    expect(log.jev).toHaveLength(0)
+    fireAll()
+    await settle(2)
+  })
+
+  test("a started review is reported started, and its late allow is discarded", async () => {
+    let release: (() => void) | null = null
+    const { chain, log } = makeChain({
+      nodes: { supervisor: false, human: false },
+      limits: limitsWith({ sessionCap: 8, jevBatch: { max: 1, ms: 0 } }),
+      jevBatch: async (batch: { items: ReviewItem[] }) => {
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return new Map(batch.items.map((item) => [item.id, "allow" as const]))
+      },
+    })
+    const first = chain.admit(CALL("ses_abort_c", "ls a"))
+    await settle(2)
+    // The generation is in flight: no primitive cancels it (C3).
+    expect(chain.cancelScope(["ses_abort_c"])).toEqual({ settled: 0, started: 1 })
+    const decision = await first
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("unresolved")
+
+    // The settled entry wrote one row: the stage saw unavailability, not an allow.
+    const rows = () => log.audit.filter((row: any) => row.event === "chain_stage")
+    expect(rows().map((row: any) => row.verdict)).toEqual(["unavailable"])
+
+    release!()
+    await settle(4)
+    const late = await first
+    expect(late.allow).toBe(false)
+    expect(late.verdict).toBe("unresolved")
+    // The late allow re-decided nothing: the entry was already settled.
+    expect(rows().map((row: any) => row.verdict)).toEqual(["unavailable"])
+  })
+})
+
 describe("the durable ledger", () => {
   const LEDGER_ID = "wd_0123456789abcdef01234567.1"
   const KEY = budgetKey("ses_budget_09")
@@ -1397,8 +1615,8 @@ describe("review timing", () => {
     expect(log.human).toHaveLength(1)
 
     const row = log.audit.find((entry: any) => entry.event === "chain_admission" && entry.timing === "nonblocking")
-    expect(String(row?.reason)).toContain("unavailable")
-    expect(String(row?.reason)).toContain("#15")
+    expect(String(row?.reason)).toContain("stays gated")
+    expect(String(row?.reason)).toContain("cannot be cancelled")
     // No row claims the call ran, or that a review happened after it ran.
     expect(log.audit.some((entry: any) => entry.event === "chain_decision" && entry.timing === "nonblocking")).toBe(false)
   })
