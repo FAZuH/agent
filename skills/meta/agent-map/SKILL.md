@@ -62,7 +62,7 @@ answer is "none of it". The roster below assumes a full install: `install.sh -b
 `omarchy-plugin-install`.
 
 **Meta** — the agent system itself:
-`agent-map` (this skill), `update-fazuh-agent` (pull and redeploy),
+`agent-map` (this skill), `update-fazuh-agent` (pull, deploy, verify),
 `external-skills` (manage upstream skills), `skill-doctor` (skill-graph
 drift), `review-agent` (three-axis review).
 

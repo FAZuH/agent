@@ -1,8 +1,10 @@
 # AGENTS.md
 
-Personal OpenCode setup. This repo is the source of truth: `sync.sh` copies
-skills, agents, plugins, commands, and instructions into `~/.config/opencode/`,
-executables into `~/.local/bin/`, and installs the Rust `agent` package.
+Personal OpenCode setup. This repo is the source of truth. In the managed
+config dirs a symlink is repo-managed; a real file is machine-private.
+`sync.sh deploy` promotes the local `deploy` branch into an XDG clone and links
+each item into `~/.config/opencode/`; script executables are linked from
+`~/.local/bin/`. `install.sh` installs the Rust `agent` package.
 
 ## Commands
 
@@ -21,20 +23,26 @@ executables into `~/.local/bin/`, and installs the Rust `agent` package.
 
 ## Deploy
 
-- `./sync.sh push -g` deploys everything. Scope it: `./sync.sh push skills` or
-  `./sync.sh push skills agents`; `-t dev,utils,ocv2,desktop` filters by `tags.conf`.
-- A top-scoped push still ships every changed item under that top, including
-  another session's uncommitted work. Run `./sync.sh diff <top>` first.
-- Never hand-edit deployed copies: `~/.config/opencode/**`, `~/.local/bin/*`,
-  or `~/.agents/skills/**`. Fix the repo, then push. There is no repo-side
-  `opencode.json`; `install.sh` writes the instructions glob into the live config.
+- `./sync.sh deploy` promotes the local `deploy` branch into
+  `${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/config`. It links each
+  skill, agent, plugin, command, and instruction into `~/.config/opencode/`
+  and links script executables into `~/.local/bin/`. Add `-n` for a dry run,
+  `-f` to adopt colliding real entries, `-t` to filter by `tags.conf`.
+- `./sync.sh list` shows managed links beside private entries; `./sync.sh diff [ref]`
+  compares the clone with the promoted ref; `./sync.sh remove` unlinks managed
+  items only.
+- A symlink in a managed config dir is repo-managed; a real file is
+  machine-private. Never hand-edit repo-managed items or their links under
+  `~/.config/opencode/` and `~/.local/bin/`: fix the repo, then deploy. There
+  is no project-target config, no `pull`, no `-g`, and no placeholder templating.
+- No command restarts the service. A newly added instruction link is not picked
+  up until the config changes; plugin `setup()` re-runs on edit, but old
+  closures keep firing until restart.
+- There is no repo-side `opencode.json`; `install.sh` writes the instructions
+  glob into the live config.
 - External skills in `~/.agents/skills/` are upstream-owned, installed and
   updated by the `skills` CLI or their own installer. Never edit them in place;
   change upstream or reinstall. This repo's `skills/` are the only skills to edit.
-- `./sync.sh pull` overwrites repo files from the live config. Run it only when
-  the live copy is the intended source.
-- OpenCode v2 hot-reloads most components. Do not restart after a push unless a
-  component stays missing or a plugin fails to load.
 
 ## Layout
 
@@ -48,12 +56,13 @@ executables into `~/.local/bin/`, and installs the Rust `agent` package.
   `node_modules/` is gitignored, so run `bun install --frozen-lockfile` in
   `plugins/` after a fresh clone.
 - `scripts/` is a Rust workspace (`scripts/Cargo.toml`, crates under
-  `scripts/crates/`) plus Python helpers. Every executable file in `scripts/`
-  deploys to `~/.local/bin/`.
+  `scripts/crates/`) plus Python helpers. Each executable is copied into
+  `${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/bin/` and linked from
+  `~/.local/bin/`.
 - `docs/skills.md` and `docs/agents.md` are hand-maintained indexes: update
   them when adding, renaming, or removing a skill or agent.
-- `.agent-values` (gitignored, from `.agent-values.example`) fills `{{KEY}}`
-  placeholders; a push fails on an unresolved placeholder.
+- `.agent-values` (gitignored, from `.agent-values.example`) is kept for
+  machine-local values; `sync.sh` no longer substitutes placeholders.
 
 ## Conventions
 

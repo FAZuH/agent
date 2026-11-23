@@ -1,9 +1,9 @@
 ---
 name: update-fazuh-agent
 description: >-
-  Update this OpenCode setup from the agent repo: pull the checkout, redeploy
-  skills, agents, plugins, commands. Triggers: update the agent, sync my
-  setup, refresh the config, is it current.
+  Update this OpenCode setup from the agent repo: pull the checkout, deploy
+  reviewed work from the deploy branch, verify. Triggers: update the agent,
+  sync my setup, refresh the config, is it current.
 ---
 
 # Update fazuh agent
@@ -13,16 +13,17 @@ description: >-
 
 ## Find the repository
 
-The checkout path is not fixed: every push to the global target writes it to
+The checkout path is not fixed: deploy writes it to
 `~/.config/opencode/.agent-repo` (one line, absolute path). Read it; never
-hardcode a path, never guess.
+hardcode a path, never guess. This pointer names the editable checkout, not the
+deployed clone.
 
 ```bash
 cat ~/.config/opencode/.agent-repo
 ```
 
 If the file is missing, this setup predates it. Ask the user for the checkout
-path, or run `./sync.sh push -g` from the checkout once to create it. Never
+path, or run `./sync.sh deploy` from the checkout once to create it. Never
 fall back to a guessed directory.
 
 ## Steps
@@ -72,34 +73,43 @@ fall back to a guessed directory.
    also formats and auto-fixes. Fix nothing here; report a red run and let the
    user decide.
 
-8. **Redeploy the configuration**, the step that makes the update real:
+8. **Promote the reviewed work**, the step that makes the update real. The
+   deploy tool fetches the local `deploy` branch from this checkout; `main` is
+   not the promotion source. If the pulled commits are not on `deploy`, stop and
+   ask the user to put them there. Do not commit, merge, or cherry-pick from
+   this skill. Then run:
 
    ```bash
-   cd "$repo" && ./sync.sh push -g
+   cd "$repo" && ./sync.sh deploy
    ```
 
-   This copies the repository items into the global OpenCode config, refreshes
-   `~/.local/bin`, and rewrites the repo path pointer. Preview first with
-   `./sync.sh push -g --dry-run` when anything surprising shows up.
+   The tool updates the clone at
+   `${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/config`, then reconciles
+   the config symlinks and the `~/.local/bin` symlinks. It keeps the
+   `.agent-repo` pointer aimed at this checkout. Preview with
+   `./sync.sh deploy -n`. The preview plans from the promoted `deploy` ref and
+   exits non-zero on a collision.
 
-9. **Verify the result:** `./sync.sh diff -g` must report every item in sync. A
-   target file that still differs was edited in place after the push; sync keeps
-   it and says so. Report the path instead of overwriting.
+9. **Verify the result:** `./sync.sh diff` must report every item in sync. A
+   managed item that differs was edited outside the promoted branch. Report
+   the path instead of overwriting it.
 
 10. **Reinstall only when the pull really needs it.** `./install.sh` refreshes
     the external skills and cargo packages, `./install.sh -b` adds the bonus
-    ones. Skip it for a routine pull: the step-8 config push is the normal
-    case. Run it when the pull changed `install.sh` itself, when a new external
+    ones. Skip it for a routine pull: the step-8 deploy is the normal case.
+    Run it when the pull changed `install.sh` itself, when a new external
     or bonus item was added, or when the user asks. Moving a pin forward
     is the `update-pins` skill's job, not this one.
 
-11. **Report**: commits pulled, what was pushed, checks run, what
+11. **Report**: commits pulled, what was deployed, checks run, what
     still needs a restart, what was skipped and why.
 
 ## Restart rule
 
-OpenCode v2 hot-reloads most components. A plugin that does not appear at all
-is the restart case.
+OpenCode v2 hot-reloads most components. Deploy never restarts the service. A
+plugin that does not appear at all is the restart case. Plugin `setup()` re-runs
+on edit, but old closures keep firing until restart. A newly added instruction
+link enters a running server's glob snapshot only after the config changes next.
 
 ## Rules
 
@@ -110,9 +120,10 @@ is the restart case.
 - Never force a pull and never resolve a divergence on your own.
 - Never run the full installer without asking first. It reinstalls unpinned
   external skills at whatever upstream `HEAD` is that day.
-- Never commit or push from this skill. Stop at the working tree.
-- Stop and report on any failing check, missing pointer file, or target that
-  refuses to sync. A partial update with a clear report beats a silent fix.
+- Never commit or push from this skill. The user commits reviewed work to
+  `deploy`; this skill only pulls, deploys, and verifies.
+- Stop and report on any failing check, missing pointer file, or item that
+  stops deploy on drift. A partial update with a clear report beats a silent fix.
 - Follow the repository's own rules for anything you touch beyond deploying:
   the source layout is `skills/<category>/<name>/`, `agents/<role>/<name>.md`,
   `plugins/<name>/`, `commands/<name>.md`; `skill-doctor` when a skill link or

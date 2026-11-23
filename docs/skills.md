@@ -3,8 +3,8 @@
 Skills split by what they do, not by how they are loaded. ⭐ marks the entry
 points you or an agent load first.
 
-`sync.sh` installs them flat as `skills/<name>/`. Skill IDs are path-derived, so
-the category directory never reaches the installed name.
+Deploy links them flat as `skills/<name>/` into the config dir. Skill IDs are
+path-derived, so the category directory never reaches the installed name.
 
 - **Orchestration**: controls, delegates, tracks, and finishes agent work
 - **Workflow**: repeatable procedures with a defined process
@@ -68,7 +68,7 @@ the category directory never reaches the installed name.
 ## Meta
 
 - ⭐ **[agent-map](../skills/meta/agent-map/SKILL.md)**: Pick the installed skill, agent, agent-facing plugin, or CLI for a task; search outward when nothing fits.
-- ⭐ **[update-fazuh-agent](../skills/meta/update-fazuh-agent/SKILL.md)**: Update the installed setup from the agent repository: pull, redeploy, verify.
+- ⭐ **[update-fazuh-agent](../skills/meta/update-fazuh-agent/SKILL.md)**: Update the installed setup from the agent repository: pull, promote, deploy, verify.
 - **[update-pins](../.agents/skills/update-pins/SKILL.md)**: Move the pinned versions in `install.sh` and `uninstall.sh` forward after checking each remote.
 - **[external-skills](../skills/meta/external-skills/SKILL.md)**: Install, update, list, or remove upstream-owned skills.
 - ⭐ **[skill-doctor](../skills/meta/skill-doctor/SKILL.md)**: Audit skill references, names, collisions, and source drift.

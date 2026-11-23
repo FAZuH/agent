@@ -135,13 +135,13 @@ text. Keep the raw key only as the persisted RPC value behind the control.
 ```sh
 bun run build:gui          # in the plugin dir; runs vite build
 # output: dist/gui-experimental.cjs (the package's GUI export)
-./sync.sh diff plugins     # what a broad push would ship
+./sync.sh diff             # compare the clone with the promoted branch
 ```
 
-Check that diff first. A broad `./sync.sh push plugins` can ship another
-session's uncommitted plugin work. Push only the plugin you changed, with an
-item-scoped or `-t` tag-filtered push. OpenCode hot-reloads plugin files
-immediately. No Desktop or service restart.
+Commit reviewed work to `deploy`, then run `./sync.sh deploy`. Use `-t` to
+filter by `tags.conf`. Deploy is global only. OpenCode hot-reloads plugin files
+immediately. Plugin `setup()` re-runs on edit, but old closures keep firing
+until restart. No Desktop or service restart.
 
 ## Verify
 
