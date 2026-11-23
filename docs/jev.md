@@ -901,9 +901,11 @@ relocates the directory.
 bun test plugins/watchdog/src
 ```
 
-Eight files, 410 tests (410 pass, 0 fail, 1292 expectations). `jev.test.ts` is
-the hooks, the state machine and the `/jev-abort` command's refusals (142); `session-ban.test.ts` is the task key, the
-verdict table, the store and the frontier, all pure or on a temp directory (25);
+Run one file with `bun test plugins/watchdog/src/<file>.test.ts`. Counts change
+as tests are added, so run the command for the current result. `jev.test.ts` is
+the hooks, the state machine and the `/jev-abort` command's refusals;
+`session-ban.test.ts` is the task key, the
+verdict table, the store and the frontier, all pure or on a temp directory;
 `session-ban-host.test.ts` drives the host glue through fake contexts and fabricated
 events, including the flag-off guard, the duplicate-assert re-ask, a refused
 approval, a refused self-reply, a refused seal, the lock takeover band, the
@@ -914,19 +916,19 @@ deny that is never softened), and the abort trigger: a quiet seal, an
 allow revoked, a same-prompt hold an abort does not own, an unreadable store
 refused, a retired or expired task refused, a memory-only seal, a memory-only
 session ban, the subtree session ban denying row 6, a subtree session ban the store
-refused, and a session abort revoking a held call (68). `context.test.ts`
+refused, and a session abort revoking a held call. `context.test.ts`
 covers the bounded, redacted history snapshot: shape variants, byte and entry
 bounds, redaction, role labels, the incomplete marker, the cache and snapshot
-usability (18). `evidence.test.ts` covers the broker's path, revision, query and
-glob allowlists, excerpt bounding and redaction, and its bounded read calls
-(56). `supervisor.test.ts` is the pure core: decision validation, verdict
+usability. `evidence.test.ts` covers the broker's path, revision, query and
+glob allowlists, excerpt bounding and redaction, and its bounded read calls.
+`supervisor.test.ts` is the pure core: decision validation, verdict
 precedence, budget arithmetic, the audit record, incomplete-history escalation
-and the evidence-step budget guards (71). `supervisor-host.test.ts` drives the
+and the evidence-step budget guards. `supervisor-host.test.ts` drives the
 hold through fake contexts: the marker and audit vocabulary, all four verdicts,
 the real evidence adapter, the live switch and the human short-circuit, a
 confident answer's own reason, single-writer redaction and two-writer
-correlation with fail-closed identity (27). `index.test.ts` covers the
-supervisor handoff seam (3). None of them calls a
+correlation with fail-closed identity. `index.test.ts` covers the
+supervisor handoff seam. None of them calls a
 provider or starts a host. `N1`-`N9` in the design still need a real host.
 
 No network: hand-built answer objects, so the checks are the shape rules and the

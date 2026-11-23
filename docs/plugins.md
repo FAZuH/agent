@@ -105,6 +105,17 @@ at the loopback shim in `src/shim.ts`, which injects the bearer token jegrep's
 install it yourself if you want that use case (see
 [jev.md](jev.md#the-jegrep-shim)).
 
+### Watchdog review chain and dedicated page
+
+The plugin also ships a Watchdog review chain with its own top-level page
+(`gui.tsx`, `watchdog-controller.ts`). The page has independent enablement and
+fill-on-read migration (`watchdog-settings.ts`), separate from the Jev features
+above. Its behavior stays off until you set `WATCHDOG_CHAIN=1` and a real-host
+`chain-gate.json` passes the rollout gate. No record exists of the page being
+inspected on a rendered client. Read
+[Watchdog rollout status](watchdog-rollout-status.md) for coverage, blockers,
+and the commands that run the test seams.
+
 ## dispatch (`fazuh.dispatch`)
 
 `/dispatch <task>` spawns a `general` subagent bound to the current session
