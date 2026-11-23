@@ -6,9 +6,10 @@ blocked. It is not host evidence and does not open the rollout gate.
 Watchdog is the authority that coordinates action review and owns enforcement.
 The review chain runs a Decision model (Jev) stage, then a Parent or Supervisor
 stage, then Human when the action needs exact approval. Each stage returns a
-Verdict. The chain stays off until you set `WATCHDOG_CHAIN=1` and a real-host
-`chain-gate.json` records a passed gate. A missing, malformed, or synthetic gate
-file fails closed.
+Verdict. The chain stays off until you turn on the page's `Review chain`
+switch and a real-host `chain-gate.json` records a passed gate; `WATCHDOG_CHAIN`
+is an environment override of that switch. A missing, malformed, or synthetic
+gate file fails closed.
 
 ## Code and synthetic test coverage
 
@@ -17,7 +18,7 @@ network, and no model.
 
 The suite needs the plugin dev dependencies. Run `cd plugins && bun install
 --frozen-lockfile` before the tests. After that install, the full suite reports
-`1105 pass / 0 fail / 3667 expect() calls; Ran 1105 tests across 30 files` and
+`1149 pass / 0 fail / 3880 expect() calls; Ran 1149 tests across 30 files` and
 exits 0. Without the install, only `gui-bundle.test.ts` fails with `Cannot find
 module 'solid-js'`. One uninstalled run also showed eight order-dependent
 failures. Those failures did not reproduce in four later runs, and each failing

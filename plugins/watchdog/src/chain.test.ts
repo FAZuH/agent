@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test"
 
-const { attachChain, userHistory, budgetKey, CHAIN_DEFAULTS, replyFailure, repairFeedback } = await import("./chain.ts")
+const { attachChain, userHistory, budgetKey, reviewText, CHAIN_DEFAULTS, replyFailure, repairFeedback } = await import("./chain.ts")
 import type { ChainDeps, ChainEvent, ReviewItem } from "./chain.ts"
 
 const EVENT: ChainEvent = {
@@ -48,6 +48,7 @@ function makeChain(over: Record<string, any> = {}) {
     enabled: over.enabled ?? (() => true),
     live: over.live ?? (() => true),
     nodes: () => nodes,
+    askMode: over.askMode ?? (() => "judged" as const),
     linkage: async (sessionID: string) => {
       log.linkage.push(sessionID)
       return call(over.linkage ?? { parentID: null }, sessionID)
@@ -263,13 +264,144 @@ describe("routing", () => {
     expect(log.jev).toHaveLength(0)
   })
 
-  test("a host ask is a human-only action: no automated node may authorize it", async () => {
-    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "allow" })
+  test("a host ask is a human-only action: the stages run but only the human may authorize it", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "allow", human: "allow" })
+    const decision = await chain.admit(EVENT)
+    // Judged routing: jev allowed, but the release guard carried the item to
+    // the card instead of letting an automated stage authorize it.
+    expect(log.jev).toHaveLength(1)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+    expect(finalReason(log)).toContain("the human stage allowed it")
+  })
+
+  test("immediate routing keeps today's skip: a host ask goes straight to the card", async () => {
+    const { chain, log } = makeChain({
+      precheck: { ok: true, humanOnly: true },
+      askMode: () => "immediate",
+      jev: "allow",
+      human: "allow",
+    })
     const decision = await chain.admit(EVENT)
     expect(log.jev).toHaveLength(0)
     expect(log.generate).toHaveLength(0)
     expect(log.human).toHaveLength(1)
     expect(decision.allow).toBe(true)
+  })
+})
+
+describe("ask routing", () => {
+  test("judged is the default when the dependency is absent: a stage allow never authorizes a host ask", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "allow", human: "allow" })
+    const decision = await chain.admit(EVENT)
+    expect(log.jev).toHaveLength(1)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+    // The stage row records the allow; the final row records the human's.
+    expect(stages(log)).toContainEqual(["chain_stage", "jev", "allow"])
+    expect(stages(log)).toContainEqual(["chain_decision", "final", "allow"])
+  })
+
+  test("judged: a stage deny on a host ask is final and the card never opens", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "deny" })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("deny")
+    expect(log.jev).toHaveLength(1)
+    expect(log.human).toHaveLength(0)
+  })
+
+  test("judged: a stage abort on a host ask is final and the card never opens", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "abort" })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("abort")
+    expect(log.jev).toHaveLength(1)
+    expect(log.human).toHaveLength(0)
+  })
+
+  test("judged: a stage propagate on a host ask advances to the card", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "propagate", human: "allow" })
+    const decision = await chain.admit(EVENT)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+  })
+
+  test("judged: an unavailable jev stage advances through the supervisor to the card", async () => {
+    const { chain, log } = makeChain({
+      precheck: { ok: true, humanOnly: true },
+      jev: "unavailable",
+      generate: (request: any) => reply(firstId(request), "propagate"),
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(log.jev).toHaveLength(1)
+    expect(log.generate).toHaveLength(1)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+  })
+
+  test("judged: a host ask on a subagent runs the parent stage, never the supervisor", async () => {
+    const { chain, log } = makeChain({
+      precheck: { ok: true, humanOnly: true },
+      linkage: { parentID: "ses_parent_01" },
+      jev: "propagate",
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(log.parent).toHaveLength(1)
+    expect(log.generate).toHaveLength(0)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+  })
+
+  test("judged: a host ask on a root session runs the supervisor stage, never a parent", async () => {
+    const { chain, log } = makeChain({
+      precheck: { ok: true, humanOnly: true },
+      linkage: { parentID: null },
+      jev: "propagate",
+      generate: (request: any) => reply(firstId(request), "propagate"),
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(log.generate).toHaveLength(1)
+    expect(log.parent).toHaveLength(0)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+  })
+
+  test("immediate: a host ask on a subagent skips the parent and the supervisor alike", async () => {
+    const { chain, log } = makeChain({
+      precheck: { ok: true, humanOnly: true },
+      askMode: () => "immediate",
+      linkage: { parentID: "ses_parent_02" },
+      jev: "allow",
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(log.jev).toHaveLength(0)
+    expect(log.parent).toHaveLength(0)
+    expect(log.generate).toHaveLength(0)
+    expect(log.human).toHaveLength(1)
+    expect(decision.allow).toBe(true)
+  })
+
+  test("judged: no automated stage authorizes a host ask when the human node is off", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, nodes: { human: false }, jev: "allow" })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("unresolved")
+    expect(log.jev).toHaveLength(1)
+    expect(log.human).toHaveLength(0)
+  })
+
+  test("judged: a human deny on a host ask stops the call after the stages ran", async () => {
+    const { chain, log } = makeChain({ precheck: { ok: true, humanOnly: true }, jev: "propagate", human: "deny" })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(false)
+    expect(decision.verdict).toBe("deny")
+    expect(log.jev).toHaveLength(1)
+    expect(log.human).toHaveLength(1)
   })
 })
 
@@ -326,12 +458,13 @@ describe("node enablement", () => {
     expect(decision.verdict).toBe("unresolved")
   })
 
-  test("a human-only action with the human node disabled is denied, never automated", async () => {
+  test("a human-only action with the human node disabled grants nothing, never automated authorization", async () => {
     const { chain, log } = makeChain({ nodes: { humanOnly: ["shell"], human: false }, jev: "allow" })
     const decision = await chain.admit(EVENT)
     expect(decision.allow).toBe(false)
-    expect(log.jev).toHaveLength(0)
+    expect(log.jev).toHaveLength(1)
     expect(log.human).toHaveLength(0)
+    expect(finalReason(log)).toContain("host requires human approval")
   })
 })
 
@@ -1133,13 +1266,28 @@ describe("execution boundary", () => {
     expect(finalReason(log)).toContain("banned while the call was held")
   })
 
-  test("a host ask that appears during the hold stops an automated allow", async () => {
+  test("judged routing: a host ask that appears during the hold goes to the card, which decides", async () => {
     const { chain, log } = makeChain({
       jev: "allow",
       recheck: { ok: true, humanOnly: true },
+      human: "allow",
+    })
+    const decision = await chain.admit(EVENT)
+    expect(decision.allow).toBe(true)
+    expect(log.human).toHaveLength(1)
+    expect(finalReason(log)).toContain("the human stage allowed it")
+  })
+
+  test("immediate routing: a host ask that appears during the hold stops an automated allow", async () => {
+    const { chain, log } = makeChain({
+      askMode: () => "immediate",
+      jev: "allow",
+      recheck: { ok: true, humanOnly: true },
+      human: "allow",
     })
     const decision = await chain.admit(EVENT)
     expect(decision.allow).toBe(false)
+    expect(log.human).toHaveLength(0)
     expect(finalReason(log)).toContain("host requires human approval")
   })
 
@@ -2042,7 +2190,107 @@ describe("review timing", () => {
     })
     const decision = await chain.admit(CALL("ses_timing_02"))
     expect(log.human).toHaveLength(1)
-    expect(log.jev).toHaveLength(0)
+    expect(log.jev).toHaveLength(1)
     expect(decision.allow).toBe(true)
+  })
+})
+
+describe("pending human reviews (#22)", () => {
+  /** A human stage the test answers by hand: the card stays open until it does. */
+  const heldHuman = () => {
+    let answer: (verdict: string) => void = () => {}
+    const waiting = new Promise<string>((resolve) => (answer = resolve))
+    return { waiting, answer: (verdict: string) => answer(verdict) }
+  }
+  const propagate = (request: any) => reply(firstId(request), "propagate")
+
+  test("a call waiting for its human card is one pending review, and leaves the list when answered", async () => {
+    const human = heldHuman()
+    const { chain } = makeChain({ human: () => human.waiting, generate: propagate })
+    const held = chain.admit(CALL("ses_list_01", "ls a"))
+    await settle()
+
+    const rows = chain.reviews()
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row.stage).toBe("human")
+    expect(row.tool).toBe("shell")
+    expect(row.action).toBe("shell")
+    expect(row.sessionID).toBe("ses_list_01")
+    expect(row.reported).toBe(false)
+    expect(typeof row.at).toBe("number")
+    // The row is the display triple plus identity and age: no arguments, no
+    // prompt, no model text can be reached through it.
+    expect(Object.keys(row).sort()).toEqual(["action", "at", "id", "key", "reported", "sessionID", "stage", "tool"])
+    expect(JSON.stringify(row)).not.toContain("ls a")
+
+    human.answer("allow")
+    expect((await held).allow).toBe(true)
+    expect(chain.reviews()).toHaveLength(0)
+  })
+
+  test("a call held inside an automated stage is not a pending human review", async () => {
+    let release: (map: Map<string, string>) => void = () => {}
+    const jevGate = new Promise<Map<string, string>>((resolve) => (release = resolve as any))
+    const { chain, log } = makeChain({ jevBatch: () => jevGate, human: "deny" })
+    const held = chain.admit(CALL("ses_list_02"))
+    await settle()
+    // The jev round is open: the item is held, but no human was asked yet.
+    expect(log.jev).toHaveLength(1)
+    expect(chain.reviews()).toHaveLength(0)
+    release(new Map())
+    await settle()
+    await held
+  })
+
+  test("a review a restart reported is listed as interrupted under the ledger's own short key", async () => {
+    const key = budgetKey("ses_gone_01")
+    const ledger = {
+      load: () => ({ [key]: [{ id: "wd_ledger_restored", stage: "human", tool: "shell", action: "shell", at: 1000 }] }),
+      save: () => {},
+    }
+    const { chain } = makeChain({ ledger, precheck: { ok: false, reason: "no" } })
+    const decision = await chain.admit(CALL("ses_live_02"))
+    expect(decision.allow).toBe(false)
+
+    const rows = chain.reviews()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].id).toBe("wd_ledger_restored")
+    expect(rows[0].reported).toBe(true)
+    expect(rows[0].at).toBe(1000)
+    // The ledger holds only hashes, so a restored row can offer no more than the
+    // key itself, shortened.
+    expect(rows[0].sessionID).toBe(`${key.slice(0, 9)}…`)
+  })
+
+  test("a restored row is sanitized at the source, so no raw ledger field reaches a row", async () => {
+    const key = budgetKey("ses_gone_02")
+    const rawTool = "sh\u0000ell rm -rf / secret"
+    const ledger = {
+      load: () => ({ [key]: [{ id: "wd_hostile.1", stage: "human", tool: rawTool, action: "a b", at: 1000 }] }),
+      save: () => {},
+    }
+    const { chain } = makeChain({ ledger, precheck: { ok: false, reason: "no" } })
+    await chain.admit(CALL("ses_live_03"))
+
+    const row = chain.reviews()[0]
+    expect(row.tool).toBe(reviewText(rawTool))
+    expect(row.tool).not.toBe(rawTool)
+    expect(row.action).toBe(reviewText("a b"))
+  })
+
+  test("the ledger records when a review was admitted, so a restored row has an age", async () => {
+    let written: any = null
+    const ledger = { load: () => ({}), save: (state: any) => (written = state) }
+    const human = heldHuman()
+    const { chain } = makeChain({ ledger, human: () => human.waiting, generate: propagate })
+    const held = chain.admit(CALL("ses_at_01"))
+    await settle()
+
+    const key = budgetKey("ses_at_01")
+    const entry = written?.[key]?.find((row: any) => row.stage === "human")
+    expect(typeof entry?.at).toBe("number")
+    human.answer("deny")
+    await held
   })
 })

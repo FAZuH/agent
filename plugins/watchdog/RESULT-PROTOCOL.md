@@ -73,6 +73,54 @@ re-asks the identical question once per unresolved item: a fixed question, not a
 conversational nudge, with no LLM repair loop, and its answers pass the same
 expected-id filter.
 
+## Ask routing
+
+`askMode` selects what the chain does with a call the host already answers with
+an ask. `judged` (the default) runs the Jev, Parent, or Supervisor stage first
+and then the Human card. No automated stage authorizes a host ask on its own: a
+stage allow is recorded and withheld, and the card decides. `immediate` sends
+the ask straight to the Human card and runs no stage. The release guard in
+`src/chain.ts` enforces both directions, including an ask that appears only at
+release.
+
+## Pending human reviews
+
+A review waiting for its human stays visible. `ChainHandle.reviews()`
+(`src/chain.ts`) lists every ledger entry at the `human` stage, and
+`watchdogStatus` projects them as `pending.reviews`: short session id, item id,
+tool, action, stage, age, and `interrupted`. A row carries display fields and an
+age only; no argument, prompt, or model text is reachable from the ledger or the
+runtime.
+
+The list has two sources, merged by `key|id` with the live row winning: the live
+runtime (the audit form of the session, an age from the admission time) and the
+durable ledger (the hashed session key, shortened, because the ledger stores
+only hashes). A ledger row with no live runtime behind it was reported
+interrupted by a restart: it renders `interrupted`, its call did not survive the
+process that held it, and it offers no reopen. An unreadable ledger leaves the
+live rows in place and is reported unreadable, never as an empty list.
+
+`reopenPendingReview({itemID})` re-posts the card a live review still holds,
+under the same form id, so the waiter already registered for it answers exactly
+as before. Reopening authorizes nothing: the item still resolves only through
+the human answer, deny and abort included. A review a restart reported is
+refused as `interrupted`; one that already resolved is refused as `not-pending`.
+
+`/permission-latest` reopens the newest live review of the calling session
+(newest admission time, ties to the later entry) and answers with one line.
+Nothing live answers `No pending human review to reopen.`; a session whose only
+reviews a restart reported is told those calls did not survive.
+
+## Denial and containment
+
+A deny verdict cancels only the denied call, and only while that call is still
+queued and unstarted (`containDeny(..., { shape: "queued" })` in `src/index.ts`).
+A call that already started cannot be retracted by a deny: the containment path
+for started work is the abort verdict, which aborts the session tree and applies
+its durable ban. `containDeny` also accepts a `started` shape, but no production
+caller selects it. It is tested library code; the chain reports started work
+through abort, never by claiming a deny undid it.
+
 ## What never travels
 
 Judge transcripts, reply text, and stored secrets never enter a feedback
@@ -84,11 +132,47 @@ record `JevError.reason` (a fixed code), never the message. Restored ledger
 entries are displayed sanitized; hostile keys and fields load nothing and show
 nothing.
 
+## The call log and its families
+
+`jev-calls.jsonl` holds every hook's rows. `/jev-log` reads families, not the
+whole file (`JEV_LOG_HOOKS` and `CHAIN_LOG_HOOKS` in
+`src/feature-families.ts`):
+
+| Argument | Hooks |
+| --- | --- |
+| none | `hook_skill_pick`, `hook_tool_risk`, `hook_tool_standard` |
+| `chain` | `hook_watchdog_chain` |
+| `all` | every hook, unfiltered |
+
+The Jev family is the model-call hooks; the chain family is audit rows (stage
+verdicts, admissions, denials). The chain's judge calls do reach the Jev
+library: its Jev stage calls `ask()` in `lib/jev/jev.ts` (`chainJev` in
+`src/index.ts`) and stays out of the log only because that call passes
+`log: false`; its Supervisor and Parent stages call `session.generate`.
+`hook_supervisor`, `hook_session_ban`, and `hook_abort_receipts` write audit
+rows and belong to neither family, as do rows logged under a command's own name
+(`jev-model`, `rpc`); all of them appear only under `all`. The alert webhook
+logs under `hook_tool_risk`, so its status rows count as Jev-family rows. The
+chain and supervisor audit rows render with their own fields and no cost tail.
+The supervisor's rejected-answer row (`lib/jev/jev.ts:570`) logs unconditionally
+with `inputTokens`, so the default view can hide one token-bearing supervisor
+row. The audit line prints `event`, `stage`, `verdict`, `protection`, and the
+page's summary; it does not print `hook_session_ban`'s `site` field, and
+`hook_abort_receipts` rows appear only under `all`. An unknown argument answers
+with the three accepted values. The page's call log is unchanged: it still
+filters the rows it received by hook and outcome.
+
 ## Rollout limits and defaults
 
-The chain ships off. Activation needs both `WATCHDOG_CHAIN=1` and a
+The chain ships off. Activation needs both the review switch and a
 `chain-gate.json` carrying `{"gate":"passed"}` in the Jev state directory, and
-the only writer that file has is `src/capability-gate.ts`. The measured
+the only writer that file has is `src/capability-gate.ts`. The switch is the
+Watchdog page's persisted `watchdog.chain` setting; `WATCHDOG_CHAIN` wins over it
+when it is defined (`1` on, any other value off). The wrapper registers on every
+plugin setup and reads the switch per call, so a page toggle takes effect on the
+next call with no relaunch. While the switch is off the wrapper is inert: no
+audit row, no host check, no hold, no decision, no card, and nothing subscribes
+to the form feed. The measured
 capability report (ticket #10, CAPABILITY-REPORT.md) keeps the gate `blocked`:
 eight required capabilities, and every one failed, unverified, partial, or
 sourced from anything but a real-host run records as a gating limitation.
@@ -105,6 +189,8 @@ Approved defaults (`CHAIN_DEFAULTS` in `src/chain.ts`, env names in
 | transport | `{attempts:2, backoffMs:250}` | `WATCHDOG_CHAIN_TRANSPORT_ATTEMPTS`, `WATCHDOG_CHAIN_TRANSPORT_BACKOFF_MS` |
 | timing | `blocking` | `WATCHDOG_CHAIN_TIMING` |
 | nodes | all four on | `WATCHDOG_CHAIN_NODES` |
+| askMode | `judged` | `WATCHDOG_CHAIN_ASK_MODE` |
+| chain switch | off | `WATCHDOG_CHAIN` (defined wins: `1` on, anything else off) |
 | humanOnly | empty allowlist | `WATCHDOG_CHAIN_HUMAN_ONLY` (environment-only) |
 
 A batch window clamps to at least one item and a non-negative interval

@@ -16,7 +16,7 @@
  */
 
 import { cfgStr, loadState, readRawState, saveState, setFeatureConfig, watchdogMap, type WatchdogSettings } from "../../../lib/jev/state.ts"
-import { nextWatchdogSettings, watchdogEnvOverrides, watchdogLimits, watchdogNodes } from "./watchdog-config.ts"
+import { nextWatchdogSettings, watchdogAskMode, watchdogChain, watchdogEnvOverrides, watchdogLimits, watchdogNodes } from "./watchdog-config.ts"
 
 export interface WatchdogSettingsResult {
   ok: boolean
@@ -45,6 +45,8 @@ export const WATCHDOG_SETTING_KEYS = [
   "jevBatchMs",
   "supervisorBatchMax",
   "supervisorBatchMs",
+  "chain",
+  "askMode",
 ] as const
 
 /** The receipts webhook's presence, never its value. */
@@ -77,6 +79,8 @@ export function watchdogSnapshot() {
       jevBatchMs: stored.jevBatchMs,
       supervisorBatchMax: stored.supervisorBatchMax,
       supervisorBatchMs: stored.supervisorBatchMs,
+      chain: stored.chain,
+      askMode: stored.askMode,
     },
     effective: {
       timing: effective.timing,
@@ -86,6 +90,8 @@ export function watchdogSnapshot() {
       supervisorBatchMax: effective.supervisorBatch.max,
       supervisorBatchMs: effective.supervisorBatch.ms,
       nodes: { jev: nodes.jev, parent: nodes.parent, supervisor: nodes.supervisor, human: nodes.human },
+      chain: watchdogChain(),
+      askMode: watchdogAskMode(),
     },
     envOverrides: watchdogEnvOverrides(),
     receiptsWebhookPresent: receiptsWebhookPresent(),

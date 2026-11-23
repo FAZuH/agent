@@ -8,7 +8,7 @@ import { grant, readApprovals, rejectApproval } from "../../../lib/jev/approve.t
 import { readToolBans } from "../../../lib/jev/tool-ban.ts"
 import { incompleteContainment, readAbortRecords } from "./abort.ts"
 import { readDeliveryRows } from "./delivery.ts"
-import { CHAIN_BUDGET_FILE, chainStateHome } from "./chain.ts"
+import { CHAIN_BUDGET_FILE, chainStateHome, reviewText, shortKey, type ChainStage, type PendingReview } from "./chain.ts"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { ClearBanResult } from "./session-ban-host.ts"
@@ -210,7 +210,7 @@ export function watchdogStatusRows(deps: JevRpcDeps) {
     pending: {
       inFlight: stats?.pending ?? 0,
       waiting: stats?.waiting ?? 0,
-      ...durableLedgerCount(),
+      ...pendingReviews(deps.pendingReviews?.() ?? []),
     },
     effective: {
       activeOperations: active.length,
@@ -223,29 +223,142 @@ export function watchdogStatusRows(deps: JevRpcDeps) {
   }
 }
 
+/** One row the page shows: the display fields and an age, never the call's input. */
+export interface PendingReviewRow {
+  sessionID: string
+  id: string
+  tool: string
+  action: string
+  stage: ChainStage
+  ageMs: number | null
+  interrupted: boolean
+}
+
+/** One ledger row, before the display projection. `key` is the hashed session. */
+interface LedgerReviewRow {
+  key: string
+  id: string
+  tool: string
+  action: string
+  at: number | null
+}
+
 /**
- * The durable budget ledger's unresolved count. An unreadable ledger is
- * reported as unreadable, never as zero: "no pending reviews" and "the
- * ledger cannot be read" are different operator facts.
+ * The durable budget ledger, read once: its unresolved count, whether it could
+ * be read, and the rows it still holds for a human. One read, so the count and
+ * the list can never disagree about the same file. An unreadable ledger is
+ * reported as unreadable, never as zero: "no pending reviews" and "the ledger
+ * cannot be read" are different operator facts.
  */
-function durableLedgerCount(): { durable: number; durableUnreadable: boolean } {
+function durableLedger(): {
+  durable: number
+  durableUnreadable: boolean
+  human: LedgerReviewRow[]
+} {
   try {
     const text = readFileSync(join(chainStateHome(), CHAIN_BUDGET_FILE), "utf8")
     const parsed = JSON.parse(text) as { sessions?: Record<string, unknown> }
     const sessions = parsed?.sessions
-    if (!sessions || typeof sessions !== "object" || Array.isArray(sessions)) return { durable: 0, durableUnreadable: true }
+    if (!sessions || typeof sessions !== "object" || Array.isArray(sessions)) return { durable: 0, durableUnreadable: true, human: [] }
     let durable = 0
-    for (const entries of Object.values(sessions)) {
-      if (!Array.isArray(entries)) return { durable: 0, durableUnreadable: true }
+    const human: LedgerReviewRow[] = []
+    for (const [key, entries] of Object.entries(sessions)) {
+      if (!Array.isArray(entries)) return { durable: 0, durableUnreadable: true, human: [] }
       durable += entries.length
+      // Only a key this runtime could have written names a review: a hostile
+      // file cannot mint a row under an arbitrary key.
+      if (!/^sess_[0-9a-f]{24}$/.test(key)) continue
+      for (const raw of entries) {
+        if (raw?.stage !== "human") continue
+        human.push({
+          key,
+          id: reviewText(raw?.id),
+          tool: reviewText(raw?.tool),
+          action: reviewText(raw?.action),
+          at: typeof raw?.at === "number" && Number.isFinite(raw.at) ? raw.at : null,
+        })
+      }
     }
-    return { durable, durableUnreadable: false }
+    return { durable, durableUnreadable: false, human }
   } catch (error) {
     // A missing ledger is an empty budget. Anything else (corrupt bytes, an
     // unreadable file) is an unreadable ledger, never a silent zero.
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { durable: 0, durableUnreadable: false }
-    return { durable: 0, durableUnreadable: true }
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { durable: 0, durableUnreadable: false, human: [] }
+    return { durable: 0, durableUnreadable: true, human: [] }
   }
+}
+
+/** The projection every caller reads: a merged row without its session key. */
+function publicRow(row: PendingReviewRow & { key: string }): PendingReviewRow {
+  return {
+    sessionID: row.sessionID,
+    id: row.id,
+    tool: row.tool,
+    action: row.action,
+    stage: row.stage,
+    ageMs: row.ageMs,
+    interrupted: row.interrupted,
+  }
+}
+
+/**
+ * The pending human reviews: what the live runtime holds merged with what the
+ * ledger still records, by the one identity both share. The live row wins,
+ * because only it knows the session and whether the wait is still answerable.
+ * A row the ledger alone reports was interrupted by a restart: its call did not
+ * survive, so it says so instead of offering a card nothing would answer.
+ */
+function mergedReviews(live: PendingReview[]): { durable: number; durableUnreadable: boolean; rows: Array<PendingReviewRow & { key: string }> } {
+  const ledger = durableLedger()
+  const now = Date.now()
+  const age = (at: number | null): number | null => (at === null ? null : Math.max(0, now - at))
+  const rows = new Map<string, PendingReviewRow & { key: string }>()
+  for (const row of ledger.human) {
+    rows.set(`${row.key}|${row.id}`, {
+      key: row.key,
+      sessionID: shortKey(row.key),
+      id: row.id,
+      tool: row.tool,
+      action: row.action,
+      stage: "human",
+      ageMs: age(row.at),
+      interrupted: true,
+    })
+  }
+  for (const row of live) {
+    rows.set(`${row.key}|${row.id}`, {
+      key: row.key,
+      sessionID: row.sessionID,
+      id: row.id,
+      tool: reviewText(row.tool),
+      action: reviewText(row.action),
+      stage: row.stage,
+      ageMs: age(row.at),
+      interrupted: row.reported === true,
+    })
+  }
+  const merged = [...rows.values()].sort(
+    (a, b) =>
+      Number(a.interrupted) - Number(b.interrupted) ||
+      (a.ageMs ?? Number.MAX_SAFE_INTEGER) - (b.ageMs ?? Number.MAX_SAFE_INTEGER) ||
+      a.id.localeCompare(b.id),
+  )
+  return { durable: ledger.durable, durableUnreadable: ledger.durableUnreadable, rows: merged }
+}
+
+/** The status projection: one read of both sources, every row's key dropped. */
+function pendingReviews(live: PendingReview[]): { durable: number; durableUnreadable: boolean; reviews: PendingReviewRow[] } {
+  const merged = mergedReviews(live)
+  return { durable: merged.durable, durableUnreadable: merged.durableUnreadable, reviews: merged.rows.map(publicRow) }
+}
+
+/**
+ * One producing session's pending reviews, from the same merged source the page
+ * reads and in its order. `/permission-latest` uses this so a review the ledger
+ * records is answered for even when the runtime has reconciled nothing yet.
+ */
+export function pendingReviewsForKey(live: PendingReview[], key: string): PendingReviewRow[] {
+  return mergedReviews(live).rows.filter((row) => row.key === key).map(publicRow)
 }
 
 /** The blocked calls a human can still act on, oldest first. */
@@ -317,6 +430,13 @@ export interface JevRpcDeps {
   chainStatus?: () => { status: string; reason: string; wired: boolean } | null
   /** The live chain counts: reviews in flight and calls parked for a slot. */
   chainStats?: () => { pending: number; waiting: number } | null
+  /** The live reviews waiting for their human, from this process's runtime. */
+  pendingReviews?: () => PendingReview[]
+  /**
+   * Re-open one pending review's card. Authorizes nothing: the answer path is
+   * unchanged, and a review a restart reported is refused.
+   */
+  reopenReview?: (itemID: string) => Promise<"reopened" | "not-pending" | "interrupted" | "failed">
 }
 
 const CONTINUE_TEXT = "Continue the interrupted task."
@@ -457,6 +577,16 @@ export function jevRpcHandlers(deps: JevRpcDeps = {}) {
     listToolBans: async () => ({ toolBans: readToolBans() }),
     status: async () => statusSnapshot(),
     watchdogStatus: async () => watchdogStatusRows(deps),
+    reopenPendingReview: async (input: any) => {
+      const itemID = String(input?.itemID ?? "")
+      if (!itemID) return { ok: false, reopened: false, reason: "no review was identified" }
+      if (!deps.reopenReview) return { ok: false, reopened: false, reason: "no review runtime is attached" }
+      const outcome = await deps.reopenReview(itemID)
+      if (outcome === "reopened") return { ok: true, reopened: true }
+      if (outcome === "interrupted") return { ok: false, reopened: false, reason: "that review was interrupted by a restart: the call it held did not survive, so there is no card to answer" }
+      if (outcome === "failed") return { ok: false, reopened: false, reason: "the card could not be opened; the review is still pending" }
+      return { ok: false, reopened: false, reason: "that review is no longer pending" }
+    },
     getWatchdogSettings: async () => watchdogSnapshot(),
     setWatchdogSetting: async (input: any) => {
       const result = applyWatchdogSetting({

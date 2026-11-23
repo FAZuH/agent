@@ -11,7 +11,16 @@ const status: WatchdogStatusInfo = {
   ok: true,
   on: true,
   chain: { status: "passed", reason: "the capability gate passed", wired: true },
-  pending: { inFlight: 2, waiting: 1, durable: 1, durableUnreadable: false },
+  pending: {
+    inFlight: 2,
+    waiting: 1,
+    durable: 1,
+    durableUnreadable: false,
+    reviews: [
+      { sessionID: "ses_covered", id: "wd_a.1", tool: "shell", action: "shell", stage: "human", ageMs: 4200, interrupted: false },
+      { sessionID: "sess_abcd…", id: "wd_b.1", tool: "write", action: "write", stage: "human", ageMs: null, interrupted: true },
+    ],
+  },
   effective: {
     activeOperations: 2,
     sessionsCovered: 2,
@@ -23,7 +32,7 @@ const status: WatchdogStatusInfo = {
 
 const settings: WatchdogSettingsInfo = {
   on: true,
-  persisted: { nodes: "", timing: "blocking", sessionCap: 4, jevBatchMax: 1, jevBatchMs: 0, supervisorBatchMax: 1, supervisorBatchMs: 0 },
+  persisted: { nodes: "", timing: "blocking", sessionCap: 4, jevBatchMax: 1, jevBatchMs: 0, supervisorBatchMax: 1, supervisorBatchMs: 0, chain: false, askMode: "judged" },
   effective: {
     timing: "blocking",
     sessionCap: 4,
@@ -32,11 +41,13 @@ const settings: WatchdogSettingsInfo = {
     supervisorBatchMax: 1,
     supervisorBatchMs: 0,
     nodes: { jev: true, parent: true, supervisor: true, human: true },
+    chain: false,
+    askMode: "judged",
   },
   envOverrides: [],
   receiptsWebhookPresent: false,
   supervisorEndpointPresent: false,
-  migration: { present: false, stored: 0, defaulted: 8, invalid: 0 },
+  migration: { present: false, stored: 0, defaulted: 10, invalid: 0 },
 }
 
 const operations: WatchdogOperationInfo[] = [
@@ -79,6 +90,8 @@ function releaseResult(over: Partial<ReleaseResult> = {}): ReleaseResult {
 
 function harness(overrides: Partial<WatchdogRPC> = {}) {
   const releaseCalls: Array<{ operationID: string; continue?: boolean }> = []
+  const reopenCalls: Array<{ itemID: string }> = []
+  let reopenAnswer: { ok: boolean; reopened: boolean; reason?: string } = { ok: true, reopened: true }
   const errors: string[] = []
   const warnings: string[] = []
   const states: WatchdogViewState[] = []
@@ -96,6 +109,10 @@ function harness(overrides: Partial<WatchdogRPC> = {}) {
       if (releaseError) throw releaseError
       return releaseAnswer
     },
+    reopenPendingReview: async (input) => {
+      reopenCalls.push(input)
+      return reopenAnswer
+    },
     subscribe: (fn) => {
       listener = fn
       return () => {
@@ -112,9 +129,13 @@ function harness(overrides: Partial<WatchdogRPC> = {}) {
   return {
     view,
     releaseCalls,
+    reopenCalls,
     errors,
     warnings,
     states,
+    answerReopen: (result: { ok: boolean; reopened: boolean; reason?: string }) => {
+      reopenAnswer = result
+    },
     fire: () => listener?.({ reason: "changed" }),
     answerRelease: (result: ReleaseResult) => {
       releaseAnswer = result
@@ -239,6 +260,39 @@ describe("WatchdogView controller", () => {
     await h.view.load()
     await h.view.release("op_1", false)
     expect(releaseBusy).toBe(true)
+    expect(h.states[h.states.length - 1].busy).toBeUndefined()
+  })
+
+  test("reopening a review goes through the contract once and reloads", async () => {
+    const h = harness()
+    await h.view.load()
+    await h.view.reopen("wd_a.1")
+    expect(h.reopenCalls).toEqual([{ itemID: "wd_a.1" }])
+    expect(h.errors).toEqual([])
+    const last = h.states[h.states.length - 1]
+    expect(last.busy).toBeUndefined()
+    expect(last.status).toEqual(status)
+  })
+
+  test("a refused reopen reaches the dialogs with its own reason, never as success", async () => {
+    const h = harness()
+    h.answerReopen({ ok: false, reopened: false, reason: "that review was interrupted by a restart: the call it held did not survive, so there is no card to answer" })
+    await h.view.load()
+    await h.view.reopen("wd_b.1")
+    expect(h.errors).toHaveLength(1)
+    expect(h.errors[0]).toContain("interrupted")
+  })
+
+  test("the reopen busy key is held for the call and cleared after", async () => {
+    const h = harness()
+    let held = false
+    const rpc = h.view
+    await h.view.load()
+    h.answerReopen({ ok: true, reopened: true })
+    const opened = rpc.reopen("wd_a.1")
+    held = h.states.some((s) => s.busy === "reopen:wd_a.1")
+    await opened
+    expect(held).toBe(true)
     expect(h.states[h.states.length - 1].busy).toBeUndefined()
   })
 

@@ -382,7 +382,9 @@ describe("supervisor mode wiring", () => {
     setMode({ nonBlocking: true, batchMax: 2 })
     try {
       const h = await harness()
-      expect(h.toolHooks).not.toContain("execute.before")
+      // The chain's own wrapper is registered whenever the plugin runs (inert
+      // while its switch is off); the card route must not add a second one.
+      expect(h.toolHooks.filter((name) => name === "execute.before")).toHaveLength(1)
       const first: any = { source: { type: "tool", messageID: "msg_batch", id: "call_batch" }, action: "shell", sessionID: "ses_batch", resources: ["src/a.ts"], effect: "ask" }
       await h.evaluate(first)
       expect(first.effect).toBe("allow")

@@ -1,15 +1,74 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 
 const scratch = mkdtempSync(join(tmpdir(), "jev-gui-rpc-"))
 process.env.JEV_DATA_DIR = scratch
 process.env.JEV_SECRET_DIR = join(scratch, "secrets")
 
-const { jevRpcHandlers, logRows, setJevEmitter, statusSnapshot } = await import("./gui-rpc.ts")
-const { STATE_FILE, LOG_FILE, APPROVALS_FILE, logCall } = await import("../../../lib/jev/state.ts")
+const { jevRpcHandlers, logRows, pendingReviewsForKey, setJevEmitter, statusSnapshot } = await import("./gui-rpc.ts")
+const { STATE_FILE, LOG_FILE, APPROVALS_FILE, GRANTS_FILE, DATA_FILE, logCall } = await import("../../../lib/jev/state.ts")
 const { CHAIN_BUDGET_FILE, chainStateHome } = await import("./chain.ts")
+
+/**
+ * The operator's live state home. A desktop session exports
+ * `XDG_STATE_HOME=$HOME/.local/state`, so the default XDG path *is* the live
+ * home: a redirect naming it is refused like no redirect at all.
+ */
+const LIVE_STATE_HOME = join(homedir(), ".local", "state", "opencode", "jev")
+
+/** The run's temporary root, normalized: an XDG state home must sit under it. */
+const TEMPORARY = tmpdir().replace(/\/+$/, "")
+
+/** The state home `XDG_STATE_HOME` names, if this run exported one. */
+const XDG_HOME = process.env.XDG_STATE_HOME ? join(process.env.XDG_STATE_HOME, "opencode", "jev") : null
+
+/**
+ * The state homes this run redirected to, as far as this file can still see
+ * them. `state.ts` fixes its paths at first import, so a run that imports it
+ * before this file redirects hands the fixtures below that home; with no redirect
+ * at all it hands them the operator's live home, which is never admitted. A write
+ * path is therefore allowed only inside this file's scratch or a home whose env
+ * this file still sees at load.
+ *
+ * That is narrower than "a home this run redirected to": an env a previous file
+ * set and then deleted is refused, because `state.ts` stays fixed on the path it
+ * resolved while this file can no longer see it. Refusing is the safe direction,
+ * a false failure instead of a live write, so the check is deliberately not
+ * widened to cover it.
+ */
+const RUN_HOMES = [
+  process.env.OPENCODE_JEV_STATE_HOME,
+  process.env.JEV_STATE_HOME,
+  process.env.JEV_DATA_HOME,
+  process.env.JEV_DATA_DIR,
+  // `state.ts` nests the state home under XDG, and so does `chainStateHome()`.
+  // That value is admitted only under the temporary root: anywhere else it may
+  // name a real state directory (this host exports `$HOME/.local/state`, which
+  // is the live home).
+  ...(XDG_HOME && XDG_HOME.startsWith(`${TEMPORARY}/`) ? [XDG_HOME] : []),
+].filter((home): home is string => typeof home === "string" && home.length > 0 && home !== LIVE_STATE_HOME)
+
+function guard(path: string): string {
+  const allowed = [scratch, ...RUN_HOMES].some((home) => path === home || path.startsWith(`${home}/`))
+  if (!allowed) throw new Error(`refusing to write outside this run's scratch: ${path}`)
+  return path
+}
+
+// Measured on bun 1.4.3, three runs each, argv order honoured:
+//   bun test ./plugins/watchdog/src/chain.test.ts ./plugins/watchdog/src/gui-rpc.test.ts
+//     -> red by design: `chain.test.ts` imports `state.ts` first with no redirect,
+//        so this file inherits the operator's live homes and throws on the path
+//        below before any test body runs. It must never be made green while that
+//        file loads first; set the JEV homes (or put this file first) instead.
+//   bun test ./plugins/watchdog/src/gui-rpc.test.ts ./plugins/watchdog/src/chain.test.ts
+//     -> green: this file redirects first, so every write lands in its scratch.
+// `chainStateHome()` is read per call, not fixed at import, so it is guarded
+// beside the fixed files: a hook that mutates the env can move the ledger home
+// while the fixed paths stay put.
+for (const path of [STATE_FILE, LOG_FILE, APPROVALS_FILE, GRANTS_FILE, DATA_FILE]) guard(path)
+guard(chainStateHome())
 
 test("statusSnapshot projects safe config fields and masks the endpoint", () => {
   writeFileSync(
@@ -724,5 +783,158 @@ describe("watchdogStatus durable ledger honesty", () => {
     const status = await (handlers as any).watchdogStatus({})
     expect(status.pending.durableUnreadable).toBe(true)
     rmSync(ledgerPath(), { recursive: true, force: true })
+  })
+})
+
+describe("watchdogStatus pending human reviews (#22)", () => {
+  const ledgerPath = () => join(chainStateHome(), CHAIN_BUDGET_FILE)
+  const key = (hex: string) => `sess_${hex.repeat(24).slice(0, 24)}`
+  const live = (over: Record<string, unknown> = {}) => ({
+    key: key("a"),
+    id: "wd_live.1",
+    sessionID: "ses_live",
+    tool: "shell",
+    action: "shell",
+    stage: "human",
+    at: 1000,
+    reported: false,
+    ...over,
+  })
+
+  test("no live review and no ledger is an empty list, readable", async () => {
+    rmSync(ledgerPath(), { force: true })
+    const handlers = jevRpcHandlers({})
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.reviews).toEqual([])
+    expect(status.pending.durableUnreadable).toBe(false)
+  })
+
+  test("a live review and the ledger row for the same call are one row, and the live row wins", async () => {
+    const k = key("a")
+    writeFileSync(ledgerPath(), JSON.stringify({ sessions: { [k]: [{ id: "wd_live.1", stage: "human", tool: "shell", action: "shell", at: 1000 }] } }))
+    const handlers = jevRpcHandlers({ pendingReviews: () => [live()] as any })
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.durable).toBe(1)
+    expect(status.pending.reviews).toHaveLength(1)
+    const row = status.pending.reviews[0]
+    expect(row.sessionID).toBe("ses_live")
+    expect(row.interrupted).toBe(false)
+    expect(row.id).toBe("wd_live.1")
+  })
+
+  test("a ledger row a restart reported is interrupted, under the ledger's short key", async () => {
+    const k = key("b")
+    writeFileSync(ledgerPath(), JSON.stringify({ sessions: { [k]: [{ id: "wd_restored.1", stage: "human", tool: "shell", action: "shell", at: 500 }] } }))
+    const handlers = jevRpcHandlers({ pendingReviews: () => [] })
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.reviews).toHaveLength(1)
+    const row = status.pending.reviews[0]
+    expect(row.interrupted).toBe(true)
+    expect(row.sessionID).toBe(`${k.slice(0, 9)}…`)
+    expect(row.tool).toBe("shell")
+    expect(row.stage).toBe("human")
+  })
+
+  test("a ledger row still inside an automated stage counts, but is not a pending human review", async () => {
+    const k = key("c")
+    writeFileSync(
+      ledgerPath(),
+      JSON.stringify({
+        sessions: { [k]: [{ id: "wd_jev.1", stage: "jev", tool: "shell", action: "shell" }, { id: "wd_human.1", stage: "human", tool: "shell", action: "shell" }] },
+      }),
+    )
+    const handlers = jevRpcHandlers({ pendingReviews: () => [] })
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.durable).toBe(2)
+    expect(status.pending.reviews).toHaveLength(1)
+    expect(status.pending.reviews[0].id).toBe("wd_human.1")
+  })
+
+  test("an unreadable ledger still lists the live reviews and says unreadable, never empty", async () => {
+    writeFileSync(ledgerPath(), "{not json")
+    const handlers = jevRpcHandlers({ pendingReviews: () => [live()] as any })
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.durableUnreadable).toBe(true)
+    expect(status.pending.reviews).toHaveLength(1)
+    expect(status.pending.reviews[0].id).toBe("wd_live.1")
+  })
+
+  test("a row is the display fields and an age, and nothing of the call's input", async () => {
+    rmSync(ledgerPath(), { force: true })
+    const now = Date.now()
+    const handlers = jevRpcHandlers({ pendingReviews: () => [live({ at: now - 5000 }), live({ id: "wd_live.2", at: null })] as any })
+    const status = await handlers.watchdogStatus({})
+    const rows = status.pending.reviews
+    expect(rows.map((row) => Object.keys(row).sort())).toEqual([
+      ["action", "ageMs", "id", "interrupted", "sessionID", "stage", "tool"],
+      ["action", "ageMs", "id", "interrupted", "sessionID", "stage", "tool"],
+    ])
+    expect(rows[0].ageMs).toBeGreaterThanOrEqual(5000)
+    expect(rows[1].ageMs).toBeNull()
+  })
+})
+
+describe("pendingReviewsForKey (#22)", () => {
+  const ledgerPath = () => join(chainStateHome(), CHAIN_BUDGET_FILE)
+  const key = (hex: string) => `sess_${hex.repeat(24).slice(0, 24)}`
+
+  test("one session's rows from both sources, and no other session's", async () => {
+    const a = key("a")
+    const b = key("b")
+    writeFileSync(
+      ledgerPath(),
+      JSON.stringify({
+        sessions: {
+          [a]: [{ id: "wd_a.ledger", stage: "human", tool: "shell", action: "shell" }],
+          [b]: [{ id: "wd_b.ledger", stage: "human", tool: "shell", action: "shell" }],
+        },
+      }),
+    )
+    const live = [{ key: a, id: "wd_a.live", sessionID: "ses_a", tool: "shell", action: "shell", stage: "human", at: 1000, reported: false }]
+    const rows = pendingReviewsForKey(live as any, a)
+    expect(rows.map((row) => row.id).sort()).toEqual(["wd_a.ledger", "wd_a.live"])
+    // The key is not a page field: it exists to filter, never to render.
+    expect(rows.every((row) => !("key" in row))).toBe(true)
+  })
+
+  test("a live row replaces its ledger twin for the same call", async () => {
+    const a = key("d")
+    writeFileSync(ledgerPath(), JSON.stringify({ sessions: { [a]: [{ id: "wd_d.1", stage: "human", tool: "shell", action: "shell" }] } }))
+    const live = [{ key: a, id: "wd_d.1", sessionID: "ses_live", tool: "shell", action: "shell", stage: "human", at: 1000, reported: false }]
+    const rows = pendingReviewsForKey(live as any, a)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].sessionID).toBe("ses_live")
+    expect(rows[0].interrupted).toBe(false)
+  })
+})
+
+describe("reopenPendingReview (#22)", () => {
+  test("a reopened review reports ok, and the runtime received the exact item", async () => {
+    const seen: string[] = []
+    const handlers = jevRpcHandlers({
+      reopenReview: async (itemID: string) => {
+        seen.push(itemID)
+        return "reopened"
+      },
+    })
+    expect(await (handlers as any).reopenPendingReview({ itemID: "wd_x.1" })).toEqual({ ok: true, reopened: true })
+    expect(seen).toEqual(["wd_x.1"])
+  })
+
+  test("an interrupted review is refused with that reason, never as reopened", async () => {
+    const handlers = jevRpcHandlers({ reopenReview: async () => "interrupted" })
+    const result = await (handlers as any).reopenPendingReview({ itemID: "wd_x.1" })
+    expect(result.ok).toBe(false)
+    expect(result.reopened).toBe(false)
+    expect(String(result.reason)).toContain("interrupted")
+  })
+
+  test("a review that is no longer pending is refused, and no id is refused as nothing to reopen", async () => {
+    const gone = await (jevRpcHandlers({ reopenReview: async () => "not-pending" }) as any).reopenPendingReview({ itemID: "wd_x.1" })
+    expect(gone.ok).toBe(false)
+    expect(String(gone.reason)).toContain("no longer pending")
+    const empty = await (jevRpcHandlers({}) as any).reopenPendingReview({})
+    expect(empty.ok).toBe(false)
+    expect(empty.reopened).toBe(false)
   })
 })

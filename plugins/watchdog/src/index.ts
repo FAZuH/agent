@@ -13,13 +13,13 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { ask, JevError, redact, signalFor } from "../../../lib/jev/jev.ts"
 import { snapshotFor, snapshotIsUsable } from "./context.ts"
-import { changed, jevRpcHandlers, setJevEmitter } from "./gui-rpc.ts"
+import { changed, jevRpcHandlers, pendingReviewsForKey, setJevEmitter } from "./gui-rpc.ts"
 import { Contract as JevContract } from "../../../lib/jev/rpc.ts"
 import { autoAccept } from "./autopermit.ts"
 import { callToken, consumeGrant, readApprovals, recordApproval, rejectApproval } from "../../../lib/jev/approve.ts"
 import { banTool, isToolBanned, latestToolBanCard, readToolBans, setToolBanCard, unbanTool } from "../../../lib/jev/tool-ban.ts"
 import { descendantScan, liftToolBan } from "./tool-ban-actions.ts"
-import { cancelCard, cancelCardChecked, createCard } from "./form.ts"
+import { cancelCard, cancelCardChecked, createCard, type CardInput } from "./form.ts"
 import { expandFileRefs, loadRules, ruleApplies, type Rule } from "./rules.ts"
 import { clearBanOrUnknown, HANDOVER_REFUSAL, revokeOpenPrompts, start as startSessionBan, type AbortReceipt, type AbortRequest, type SessionBanHandle } from "./session-ban-host.ts"
 import { attachSupervisor, SUPERVISOR_HOLD_REASON, supervisorHandoff, type SupervisorCall, type SupervisorHostHandle, type SupervisorResolution } from "./supervisor-host.ts"
@@ -31,8 +31,10 @@ import type { TaskRecord } from "./session-ban.ts"
 import { cfgBool, cfgNum, cfgStr, featureOn, featureStored, keySource, loadState, logCall, pluginEnabled, readLog, saveState, spend, supervisorBatchMax, supervisorBatchMs, supervisorNonBlocking, supervisorStandalone, FEATURES, USD_PER_MILLION_TOKENS, type JevState } from "../../../lib/jev/state.ts"
 import { attachCardEvents, cardRouteActiveNow, heldQuestionCards, markCardRouteActive, onBeforeExecute, questionCardsOn, releaseHeldCard, resetCardRoute, type CardDeps, type GateDecision } from "./question-cards.ts"
 import { resourcesOf } from "./actions.ts"
-import { attachChain, auditSession, chainStateHome, CHAIN_BUDGET_FILE, CHAIN_DEFAULTS, CHAIN_ENABLE_SWITCH, CHAIN_GATE_FILE, CHAIN_GATE_PASSED, type ChainEvent, type ChainHandle, type ChainHistory, type ChainLedger, type ChainLimits, type ChainNodes, type LedgerEntry, type NodeVerdict, type ReviewItem } from "./chain.ts"
+import { attachChain, auditSession, budgetKey, chainStateHome, CHAIN_BUDGET_FILE, CHAIN_DEFAULTS, CHAIN_GATE_FILE, CHAIN_GATE_PASSED, type ChainEvent, type ChainHandle, type ChainHistory, type ChainLedger, type ChainLimits, type ChainNodes, type LedgerEntry, type NodeVerdict, type ReviewItem } from "./chain.ts"
 import * as WATCHDOG_CONFIG from "./watchdog-config.ts"
+import { CHAIN_LOG_HOOKS, JEV_LOG_HOOKS } from "./feature-families.ts"
+import { rowSummary } from "./gui-filter.ts"
 
 
 /**
@@ -1094,9 +1096,10 @@ export const JEV_COMMANDS: Record<string, string> = {
   "jev-status": "Jev endpoint, model, key source, which features are on, thresholds, and spend",
   "jev-model": "Set the wire model id, e.g. /jev-model typesafe/jev",
   "jev-endpoint": "Set the decisions endpoint, e.g. /jev-endpoint https://host/v1/systemone",
-  "jev-log": "Show recent Jev calls: what was sent, what came back, what it cost",
+  "jev-log": "Show recent Jev calls (or `chain` audit rows, or `all`): what was sent, what came back, what it cost",
   "jev-abort": "Stop a task of this session by fingerprint prefix, or the whole session: /jev-abort <prefix> | session",
   "jev-latest": "Reopen the latest blocked call as a question card.",
+  "permission-latest": "Reopen the newest pending human review of this session as a card",
 }
 
 /**
@@ -1125,8 +1128,8 @@ interface ChainRuntime {
    * it composed and the projection the filter produced for it.
    */
   reviews: Map<string, { itemIDs: string[]; prompt: string; projection: string; filtered: number }>
-  /** Held cards, keyed by form id. */
-  cards: Map<string, { itemID: string; sessionID: string; resolve: (answer: ChainAnswer) => void }>
+  /** Held cards, keyed by form id. The payload is kept so a reopen re-posts it. */
+  cards: Map<string, { itemID: string; sessionID: string; card: CardInput; resolve: (answer: ChainAnswer) => void }>
   /** Set when a later setup replaced this runtime: nothing it started may release. */
   replaced: boolean
   /**
@@ -1142,9 +1145,10 @@ interface ChainRuntime {
 
 /**
  * The review chain. Two independent conditions, neither one sufficient: the
- * operator's `WATCHDOG_CHAIN` switch, and `chain-gate.json` in the Jev state
- * directory. Nothing here writes that file, the ticket #10 report is BLOCKED,
- * and the Watchdog page (#18) owns the real control. See `chain.ts`.
+ * Watchdog page's persisted switch (`WATCHDOG_CHAIN` overrides it when set) and
+ * `chain-gate.json` in the Jev state directory. Nothing here writes that file,
+ * the ticket #10 report is BLOCKED, and the page owns the real control. See
+ * `chain.ts`.
  */
 let chainRuntime: ChainRuntime | null = null
 
@@ -1666,13 +1670,15 @@ function chainGate(): ChainStatus {
 }
 
 /**
- * Both activation conditions, with the cause when they fail. The environment
- * switch is read per call but only registered at setup, the start of the process:
- * turning it on later needs a restart. The gate file is read per call, so a
- * verdict written while the process runs activates the next call.
+ * Both activation conditions, with the cause when they fail. The switch is
+ * env-first then persisted and read per call, so a page toggle takes effect on
+ * the next call with no restart. The gate file is the second condition and is
+ * read per call only while the switch is on.
  */
 function chainStatus(): ChainStatus {
-  return process.env[CHAIN_ENABLE_SWITCH] === "1" ? chainGate() : "off"
+  // The switch is env-first then persisted (#21): watchdogChain owns that
+  // precedence, and the gate file stays the second condition.
+  return WATCHDOG_CONFIG.watchdogChain() ? chainGate() : "off"
 }
 
 function chainEnabled(): boolean {
@@ -1731,6 +1737,7 @@ function chainLedger(): ChainLedger {
             stage: String(entry.stage ?? "admitted") as LedgerEntry["stage"],
             tool: String(entry.tool ?? "unrecorded"),
             action: String(entry.action ?? "unrecorded"),
+            ...(typeof entry.at === "number" && Number.isFinite(entry.at) ? { at: entry.at } : {}),
             ...(entry.reported === true ? { reported: true } : {}),
           }
         })
@@ -2302,10 +2309,7 @@ async function chainHuman(runtime: ChainRuntime, item: ReviewItem, brief: string
   if (runtime.lost || runtime.replaced) return "unavailable"
   const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
   const formID = `frm_wd_chain_${nonce}`
-  // The waiter is registered before the card is opened: a reply that arrives
-  // while the POST is in flight must not be dropped.
-  const waiting = new Promise<ChainAnswer>((resolve) => runtime.cards.set(formID, { itemID: item.id, sessionID: item.sessionID, resolve }))
-  const opening = createCard(item.sessionID, {
+  const card: CardInput = {
     id: formID,
     title: `Watchdog: approve this ${item.display.tool} call?`,
     metadata: { kind: "question", watchdogItem: item.id, jevTool: item.display.tool },
@@ -2323,7 +2327,11 @@ async function chainHuman(runtime: ChainRuntime, item: ReviewItem, brief: string
         ],
       },
     ],
-  }).catch(() => undefined)
+  }
+  // The waiter is registered before the card is opened: a reply that arrives
+  // while the POST is in flight must not be dropped.
+  const waiting = new Promise<ChainAnswer>((resolve) => runtime.cards.set(formID, { itemID: item.id, sessionID: item.sessionID, card, resolve }))
+  const opening = createCard(item.sessionID, card).catch(() => undefined)
   const LOST = { lost: true }
   const opened = await Promise.race([opening, runtime.lostSignal.promise.then(() => LOST)])
   if (opened === LOST) {
@@ -2357,6 +2365,26 @@ function loseRuntime(self: ChainRuntime, detail: string): void {
   self.cards.clear()
   self.lostSignal.resolve()
   logCall({ hook: "hook_watchdog_chain", capability: "form.replied", detail, held: "released unresolved and card cancellation attempted, not approved" })
+}
+
+/**
+ * Re-open one pending review's card. The same form id is posted again, so the
+ * waiter registered for it answers as before: reopening authorizes nothing, and
+ * a review a restart reported has no card to offer at all — its call did not
+ * survive the process that held it.
+ */
+async function reopenChainCard(runtime: ChainRuntime | null, itemID: string): Promise<"reopened" | "not-pending" | "interrupted" | "failed"> {
+  if (!runtime || runtime.replaced || runtime.lost) return "not-pending"
+  for (const [formID, held] of runtime.cards) {
+    if (held.itemID !== itemID) continue
+    // A 409 means the card is already open: that is reopened, not a failure.
+    const opened = await createCard(held.sessionID, held.card).catch(() => undefined)
+    if (opened) logCall({ hook: "hook_watchdog_chain", event: "review_reopened", formID, itemID: held.itemID })
+    return opened ? "reopened" : "failed"
+  }
+  const row = runtime.chain?.reviews().find((entry) => entry.id === itemID)
+  if (row?.reported) return "interrupted"
+  return "not-pending"
 }
 
 /** Route a card answer to the held call that opened that card, and no other. */
@@ -2774,13 +2802,17 @@ export default {
                 releaseSessionTree(ctx, chainRuntime, request),
               enforcedBy: () => enforcementPosture(),
               // The page's capability read: the chain's own two-condition
-              // verdict, never a second gate. `wired` says whether a passing
-              // gate file appearing later could still activate this deployment.
+              // verdict, never a second gate. `wired` reports whether the host
+              // took the execute.before wrapper, the only surface that can judge
+              // a call: it is true with the switch off and false when the host
+              // refused the registration, whatever the switch and gate say.
               chainStatus: () => {
                 const status = chainStatus()
-                return { status, reason: CHAIN_STATUS_REASON[status], wired: status !== "off" }
+                return { status, reason: CHAIN_STATUS_REASON[status], wired: chainWired }
               },
               chainStats: () => chainRuntime?.chain?.stats() ?? null,
+              pendingReviews: () => chainRuntime?.chain?.reviews() ?? [],
+              reopenReview: (itemID: string) => reopenChainCard(chainRuntime, itemID),
             }),
           )
           setJevEmitter((event) => registration.events.emit("changed", event))
@@ -2961,75 +2993,98 @@ export default {
         logCall({ hook: "hook_session_ban", error: error instanceof JevError ? error.reason : String(error) })
       }
 
-      // The review chain (see `chain.ts`). The wrapper's presence tracks the
-      // operator's switch, not the gate file's timing, so a gate file written later
-      // activates the next call without a restart. The switch itself is read only
-      // here: turning it on later needs a restart, and #18/#19 own the real
-      // controls. Off means no execute.before wrapper, no form subscription and no
-      // behavior change. The gate holds the one call at execute.before, the only
-      // pre-execution boundary this plugin can observe; which tool surfaces reach
-      // it is unverified (#19).
+      // The review chain (see `chain.ts`). The wrapper attaches whenever this
+      // plugin runs, so the persisted activation switch (#21) takes effect on the
+      // next call with no relaunch: the judge reads the switch per call and
+      // returns before reporting anything while it is off. The switch is
+      // env-first then persisted (watchdog-config), and the gate file stays the
+      // second condition. While the switch is off nothing subscribes: the form
+      // feed, the review filter and the review deps attach lazily at the first
+      // non-off judgment, or right here for a setup that is already switched on.
+      // The gate holds the one call at execute.before, the only pre-execution
+      // boundary this plugin can observe; which tool surfaces reach it is
+      // unverified (#19).
       resetChainRuntime()
-      if (process.env[CHAIN_ENABLE_SWITCH] === "1") {
-        const runtime = newChainRuntime()
-        chainRuntime = runtime
-        if (typeof ctx?.tool?.hook !== "function") {
-          // Without the hook surface Watchdog never sees a call: that is absent
-          // protection, not a denial, so nothing is claimed as refused.
+      const runtime = newChainRuntime()
+      chainRuntime = runtime
+      if (typeof ctx?.tool?.hook !== "function") {
+        // Without the hook surface Watchdog never sees a call: that is absent
+        // protection, not a denial, so nothing is claimed as refused. The claim
+        // is written only when the operator switched the chain on.
+        if (WATCHDOG_CONFIG.watchdogChain()) {
           logCall({ hook: "hook_watchdog_chain", protection: "absent", wired: false, reason: "the host has no tool.execute.before hook" })
-        } else {
-          let failure = ""
-          if (!attachChainEvents(ctx, runtime)) failure = "the host cannot deliver a card answer"
-          else if (!(runtime.filterReady = await attachChainFilter(ctx, runtime))) failure = "the host cannot filter the review projection"
-          // Every dependency short-circuits once a later setup replaced this
-          // runtime, so a decision already in flight cannot release a call.
-          const live = (): boolean => !runtime.replaced
-          if (!failure) {
-            runtime.chain = attachChain({
-              enabled: chainEnabled,
-              live,
-              nodes: chainNodes,
-              limits: chainLimits,
-              ledger: chainLedger(),
-              ledgerError: (operation) =>
-                logCall({
-                  hook: "hook_watchdog_chain",
-                  ledger: operation,
-                  error: operation === "read" ? "the budget ledger could not be read" : "the budget ledger could not be written",
-                }),
-              linkage: async (sessionID) => {
-                if (!live()) throw new Error("the review runtime was replaced")
-                return chainLinkage(ctx, sessionID)
-              },
-              precheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
-              jev: async (batch) => {
-                if (!live()) throw new Error("the review runtime was replaced")
-                return chainJev(batch)
-              },
-              generate: async (request) => {
-                if (!live()) throw new Error("the review runtime was replaced")
-                return chainGenerate(runtime, ctx, request)
-              },
-              parentGenerate: async (request) => {
-                if (!live()) throw new Error("the review runtime was replaced")
-                return chainParentGenerate(runtime, ctx, request)
-              },
-              history: async (sessionID) => {
-                if (!live()) throw new Error("the review runtime was replaced")
-                return chainHistory(ctx, sessionID)
-              },
-              human: async (item, brief) => (live() ? chainHuman(runtime, item, brief) : "unavailable"),
-              recheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
-              // The abort-level mark, so a release sees an abort that started
-              // before this runtime was wired or while it was replaced.
-              aborted: (sessionID) => abortStarted(sessionID),
-              audit: (entry) => logCall({ hook: "hook_watchdog_chain", ...entry }),
-            })
-          }
+        }
+      } else {
+        // Every dependency short-circuits once a later setup replaced this
+        // runtime, so a decision already in flight cannot release a call.
+        const live = (): boolean => !runtime.replaced
+        /**
+         * This generation's chain wiring: the form feed, the review filter and the
+         * review deps. Attached once, cached as a promise so a first call and the
+         * setup tail's own attach share one; while the switch is off nothing has
+         * been attached, so the pass-through subscribes to nothing.
+         */
+        let attach: Promise<string> | null = null
+        const ensureWired = (): Promise<string> =>
+          (attach ??= (async () => {
+            let failure = ""
+            if (!attachChainEvents(ctx, runtime)) failure = "the host cannot deliver a card answer"
+            else if (!(runtime.filterReady = await attachChainFilter(ctx, runtime))) failure = "the host cannot filter the review projection"
+            if (!failure) {
+              runtime.chain = attachChain({
+                enabled: chainEnabled,
+                live,
+                nodes: chainNodes,
+                limits: chainLimits,
+                ledger: chainLedger(),
+                ledgerError: (operation) =>
+                  logCall({
+                    hook: "hook_watchdog_chain",
+                    ledger: operation,
+                    error: operation === "read" ? "the budget ledger could not be read" : "the budget ledger could not be written",
+                  }),
+                linkage: async (sessionID) => {
+                  if (!live()) throw new Error("the review runtime was replaced")
+                  return chainLinkage(ctx, sessionID)
+                },
+                precheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
+                jev: async (batch) => {
+                  if (!live()) throw new Error("the review runtime was replaced")
+                  return chainJev(batch)
+                },
+                generate: async (request) => {
+                  if (!live()) throw new Error("the review runtime was replaced")
+                  return chainGenerate(runtime, ctx, request)
+                },
+                parentGenerate: async (request) => {
+                  if (!live()) throw new Error("the review runtime was replaced")
+                  return chainParentGenerate(runtime, ctx, request)
+                },
+                history: async (sessionID) => {
+                  if (!live()) throw new Error("the review runtime was replaced")
+                  return chainHistory(ctx, sessionID)
+                },
+                human: async (item, brief) => (live() ? chainHuman(runtime, item, brief) : "unavailable"),
+                recheck: async (item) => (live() ? chainHostCheck(ctx, item) : { ok: false, reason: "the review runtime was replaced" }),
+                // The abort-level mark, so a release sees an abort that started
+                // before this runtime was wired or while it was replaced.
+                aborted: (sessionID) => abortStarted(sessionID),
+                audit: (entry) => logCall({ hook: "hook_watchdog_chain", ...entry }),
+                askMode: () => WATCHDOG_CONFIG.watchdogAskMode(),
+              })
+            }
+            return failure
+          })())
           // One judgment of one event, shared by this wrapper and by any retired
-          // wrapper that hands its event here.
+          // wrapper that hands its event here. The switch is read per call, so
+          // turning the chain on or off takes effect on the next call; while it
+          // is off the pass-through is inert: no row, no hold, no decision and no
+          // refusal.
           const judge = async (event: ChainEvent): Promise<void> => {
             const status = chainStatus()
+            if (status === "off") return
+            const failure = await ensureWired()
+            chainWiredFailure = Boolean(failure)
             reportChainStatus(runtime, status, failure)
             if (status !== "passed") return
             if (failure) throw new Error("watchdog chain: the review chain cannot run on this host, so the call did not run.")
@@ -3061,14 +3116,18 @@ export default {
           }
           // The status is reported only once the boundary exists: a row that says
           // wired must not outlive a host that refused the registration.
+          let registered = false
           try {
             const chainRegistration = await ctx.tool.hook("execute.before", async (event: ChainEvent) => {
               // A later setup leaves this callback registered, and the host need
-              // not replay an event it already dispatched here. A retired wrapper
-              // hands the call to the live generation instead of passing it
-              // through unjudged; with no live generation, or while a handover is
-              // still running or after a failed setup, it refuses.
+              // not replay an event it already dispatched here. With the switch
+              // off this callback owns nothing, so a stale wrapper passes the call
+              // through exactly as it did before the wrapper existed. On, a
+              // retired wrapper hands the call to the live generation instead of
+              // passing it through unjudged; with no live generation, or while a
+              // handover is still running or after a failed setup, it refuses.
               if (chainRuntime !== runtime) {
+                if (!WATCHDOG_CONFIG.watchdogChain()) return
                 const current = chainJudge
                 if (current && !handoverInProgress && !handoverFailed) {
                   return await runChainJudge(current, event, setupGeneration)
@@ -3087,24 +3146,37 @@ export default {
             } else {
               chainWire()
             }
+            registered = true
           } catch {
-            chainRuntime = null
-            runtime.replaced = true
-            runtime.lostSignal.resolve()
-            try {
-              void runtime.stream?.return?.()
-            } catch {}
-            logCall({ hook: "hook_watchdog_chain", protection: "incomplete", wired: false, reason: "the host refused the execute.before hook" })
-            throw new Error("watchdog chain: the host refused the execute.before hook, so the call did not run.")
+            // With the switch off this hook is one the chain never uses: a host
+            // that refuses it costs nothing, so the attempt keeps its runtime and
+            // records nothing, exactly as before the wrapper existed. On, the
+            // refusal is the chain's own failure and the setup fails closed.
+            if (WATCHDOG_CONFIG.watchdogChain()) {
+              chainRuntime = null
+              runtime.replaced = true
+              runtime.lostSignal.resolve()
+              try {
+                void runtime.stream?.return?.()
+              } catch {}
+              logCall({ hook: "hook_watchdog_chain", protection: "incomplete", wired: false, reason: "the host refused the execute.before hook" })
+              throw new Error("watchdog chain: the host refused the execute.before hook, so the call did not run.")
+            }
           }
           // The wrapper exists: from here this surface consults bans, unless a
           // dependency failed and the wrapper can only refuse every call.
-          chainWired = true
-          chainWiredFailure = Boolean(failure)
-          reportChainStatus(runtime, chainStatus(), failure)
-        }
+          if (registered) chainWired = true
+          // A setup that is already switched on wires now, exactly as #19 did, so
+          // a dependency failure is known and reported before the first call. A
+          // setup switched off wires nothing and reports nothing: the pass-through
+          // stays inert and the judge attaches at the first call after the switch
+          // turns on.
+          if (chainStatus() !== "off") {
+            const failure = await ensureWired()
+            chainWiredFailure = Boolean(failure)
+            reportChainStatus(runtime, chainStatus(), failure)
+          }
       }
-
       // The supervisor adds no permission hook: it reuses the propagate effect the
       // risk hook already sets and resolves that hold through the permission surface.
       // The same wiring runs on demand when config changes after setup.
@@ -3161,6 +3233,32 @@ export default {
                 setToolBanCard(record.sessionID, formID, record.tool ?? "")
                 return respond("Reopened the latest blocked call as a card.")
               }
+              if (name === "permission-latest") {
+                const sessionID = String(input.sessionID ?? "")
+                const key = budgetKey(sessionID)
+                const live = chainRuntime?.chain?.reviews() ?? []
+                // The page's own source: the runtime's reviews merged with the
+                // durable ledger. Reconciling is lazy, so before the first admit
+                // after a restart only the ledger knows a review is waiting, and
+                // answering "nothing pending" there would contradict the page.
+                const rows = pendingReviewsForKey(live, key)
+                // The newest review this session is still waiting on, in
+                // admission order: the same order the page's age sort expresses,
+                // and the only tie-free way to say "newest" without a clock.
+                const waiting = live.filter((row) => row.key === key && !row.reported)
+                const newest = waiting[waiting.length - 1] ?? null
+                if (!newest) {
+                  return respond(
+                    rows.some((row) => row.interrupted)
+                      ? "No pending human review to reopen: the reviews a restart held were interrupted, so the calls they held did not survive."
+                      : "No pending human review to reopen.",
+                  )
+                }
+                const outcome = await reopenChainCard(chainRuntime, newest.id)
+                if (outcome === "reopened") return respond("Reopened the newest pending human review as a card.")
+                if (outcome === "failed") return respond("The card could not be opened; the review is still pending.")
+                return respond("No pending human review to reopen.")
+              }
               if (name === "jev-model") {
                 if (!arg) return respond(`Model: ${state.model}`)
                 saveState({ model: arg })
@@ -3172,8 +3270,28 @@ export default {
                 return respond(`Endpoint set to ${arg}.`)
               }
               if (name === "jev-log") {
-                const rows = readLog(20)
-                if (rows.length === 0) return respond("No Jev calls logged yet.")
+                // `chain` and `all` are the only other families; anything else
+                // names the values instead of guessing which one was meant.
+                const family = arg.toLowerCase()
+                if (family !== "" && family !== "jev" && family !== "chain" && family !== "all") {
+                  return respond("Unknown argument. Use /jev-log for Jev calls, /jev-log chain for chain audit rows, or /jev-log all for every hook.")
+                }
+                const hooks: readonly string[] | null = family === "all" ? null : family === "chain" ? CHAIN_LOG_HOOKS : JEV_LOG_HOOKS
+                // The retained tail, not the last 20 lines: a chain-heavy stretch
+                // would otherwise leave a Jev answer empty while Jev rows sit
+                // further back. One read of a file already pruned to `logMax`
+                // (default 500), under the same 1000-line ceiling `spend()` and
+                // the page's session read use.
+                const rows = readLog(Math.max(1000, state.logMax))
+                  .filter((row) => hooks === null || hooks.includes(String(row?.hook ?? "")))
+                  .slice(0, 20)
+                if (rows.length === 0) {
+                  return respond(
+                    family === "all"
+                      ? "No calls logged yet."
+                      : `No ${family === "chain" ? "chain audit rows" : "Jev calls"} in the retained log; /jev-log all shows every hook.`,
+                  )
+                }
                 const text = rows
                   .map((r) => {
                     // A skipped or failed entry names the feature in `hook` and
@@ -3183,10 +3301,24 @@ export default {
                       const on = typeof r.tool === "string" && r.tool ? ` on ${r.tool}` : ""
                       return `${r.ts}  ${r.hook ?? "jev"}${on} ${r.error ? `failed: ${r.error}` : `skipped: ${r.skipped}`}`
                     }
+                    // An audit row (the chain's stage and verdict rows, the
+                    // supervisor's, the ban and receipt rows) has no decisions:
+                    // print its own fields and no cost tail, which is the same
+                    // summary the page shows. A row without an array is audit even
+                    // if it carries a token field, so a stray count can never buy
+                    // it a cost line.
+                    if (!Array.isArray(r.decisions)) {
+                      const fields = [r.event, r.stage, r.verdict, r.protection]
+                        .filter((value) => typeof value === "string" && value)
+                        .join(" ")
+                      const summary = rowSummary(r)
+                      return `${r.ts}  ${r.hook ?? "jev"}${fields ? `  ${fields}` : ""}${summary && summary !== r.hook ? `  ${summary}` : ""}`
+                    }
                     const answers = (r.decisions ?? [])
                       .map((d: any) => `${d.id}=${JSON.stringify(d.value)}${d.confident ? "" : " (low)"}`)
                       .join(" ")
-                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${r.inputTokens}tok $${((r.inputTokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
+                    const tokens = Number.isFinite(r.inputTokens) ? r.inputTokens : 0
+                    return `${r.ts}  ${r.hook ? `${r.hook}  ` : ""}${answers}  ${tokens}tok $${((tokens / 1e6) * USD_PER_MILLION_TOKENS).toFixed(6)}`
                   })
                   .join("\n")
                 return respond(text)

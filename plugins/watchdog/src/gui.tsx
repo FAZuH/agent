@@ -832,6 +832,7 @@ function WatchdogView(props: { ctx: any; server: any; sessionID: string }) {
       getWatchdogSettings: (input) => rpc.getWatchdogSettings(input),
       setWatchdogSetting: (input) => rpc.setWatchdogSetting(input),
       setWatchdogSecret: (input) => rpc.setWatchdogSecret(input),
+      reopenPendingReview: (input) => rpc.reopenPendingReview(input),
       abortOperations: (input) => rpc.abortOperations(input),
       releaseOperation: (input) => rpc.releaseOperation(input),
       subscribe: (listener) => rpc.events.on("changed", (event: any) => listener({ reason: String(event?.data?.reason ?? "") })),
@@ -870,9 +871,28 @@ function WatchdogView(props: { ctx: any; server: any; sessionID: string }) {
   const chainText = () => {
     const chain = status()?.chain
     if (!chain) return "Capability unknown"
-    if (chain.status === "passed") return `Review chain available: ${chain.reason}`
-    if (chain.status === "off") return "Review chain off: the WATCHDOG_CHAIN switch is not set"
+    // A passed gate is not availability: the host must also have taken the
+    // wrapper. Without it no call is reviewed, whatever the gate says.
+    if (chain.status === "passed") return chain.wired ? `Review chain available: ${chain.reason}` : "Review chain not wired: no execute.before wrapper is registered, so no call is reviewed"
+    if (chain.status === "off") return "Review chain off: the review switch is off"
     return `Review chain unavailable: ${chain.reason}`
+  }
+  /** A review's age as the page reads it; unknown when the ledger kept none. */
+  const ageText = (ms: number | null) => {
+    if (ms === null) return "age unknown"
+    const seconds = Math.max(0, Math.round(ms / 1000))
+    if (seconds < 60) return `${seconds}s old`
+    const minutes = Math.round(seconds / 60)
+    if (minutes < 60) return `${minutes}m old`
+    return `${Math.round(minutes / 60)}h old`
+  }
+  // The switch and the gate file are the two conditions. The switch off means
+  // the gate is never read, so this says that instead of guessing a gate state.
+  const chainGate = () => {
+    const chain = status()?.chain
+    if (!chain || chain.status === "off") return "Capability: not checked while the review switch is off."
+    if (chain.status === "passed") return "Capability: the capability gate passed."
+    return `Capability: ${chain.reason}.`
   }
 
   return (
@@ -923,11 +943,66 @@ function WatchdogView(props: { ctx: any; server: any; sessionID: string }) {
               <Show when={watch?.pending.durableUnreadable}>
                 <p class="fazuh-wd-note" role="status">The durable review ledger could not be read, so the durable pending count is unknown, not zero.</p>
               </Show>
-              <p class="fazuh-wd-note">{chainText()}{watch?.chain && watch.chain.wired ? " (a passing gate file activates it)" : ""}</p>
+              <p class="fazuh-wd-note">{chainText()}{watch?.chain?.status === "passed" && watch.chain.wired ? " (the capability gate passed)" : ""}</p>
+
+              <div class="fazuh-jev-section">
+                <strong>Pending human reviews</strong>
+                <Show when={watch?.pending.durableUnreadable}>
+                  <p class="fazuh-wd-note" role="status">The durable review ledger could not be read, so this list may be incomplete, not empty.</p>
+                </Show>
+                <Show when={!watch?.pending.durableUnreadable && (watch?.pending.reviews ?? []).length === 0}>
+                  <span class="fazuh-jev-empty">No pending human reviews.</span>
+                </Show>
+                <div class="fazuh-wd-ops">
+                  <For each={watch?.pending.reviews ?? []}>
+                    {(row) => (
+                      <div class="fazuh-wd-op">
+                        <div class="fazuh-wd-op-head">
+                          <b>{row.sessionID}</b>
+                          <span>{row.interrupted ? "interrupted" : "awaiting you"}</span>
+                        </div>
+                        <small>
+                          {row.tool} · {row.action} · {row.stage} · {ageText(row.ageMs)}
+                        </small>
+                        <Show when={row.interrupted}>
+                          <small>Interrupted by a restart: the call it held did not survive, so there is no card to answer.</small>
+                        </Show>
+                        <Show when={!row.interrupted}>
+                          <div class="fazuh-jev-actions">
+                            <ui.Button
+                              size="small"
+                              disabled={!!state().busy}
+                              busy={running(`reopen:${row.id}`)}
+                              onClick={() => void controller.reopen(row.id)}
+                            >
+                              Reopen card
+                            </ui.Button>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
 
               <div class="fazuh-jev-settings-section">
                 <div class="fazuh-jev-settings-section-title">Chain controls</div>
                 <div data-component="settings-list">
+                  <BoolField
+                    title="Review chain"
+                    description={`Reviews every call through the configured nodes and holds it until one decides. Off means nothing is reviewed. ${chainGate()}${overridden("chain") ? " Environment override active." : ""}`}
+                    checked={cfg.persisted.chain}
+                    disabled={off()}
+                    onToggle={() => put("chain", !cfg.persisted.chain)}
+                  />
+                  <SelectField
+                    title="Ask routing"
+                    description={`Judged runs the Jev, parent or supervisor node first and only then asks you; immediate sends a call the host already asks about straight to you.${overridden("askMode") ? " Environment override active." : ""}`}
+                    value={cfg.effective.askMode}
+                    options={[["judged", "Judged"], ["immediate", "Immediate"]]}
+                    disabled={off()}
+                    onSelect={(v) => put("askMode", v)}
+                  />
                   <BoolField title="Jev review node" description={`Model review of producing-session calls.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.jev} disabled={off()} onToggle={() => toggleNode("jev")} />
                   <BoolField title="Parent review node" description={`Review of subagent sessions.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.parent} disabled={off()} onToggle={() => toggleNode("parent")} />
                   <BoolField title="Supervisor review node" description={`Independent reviewer for high-risk calls.${overridden("nodes") ? " Environment override active." : ""}`} checked={cfg.effective.nodes.supervisor} disabled={off()} onToggle={() => toggleNode("supervisor")} />
