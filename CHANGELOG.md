@@ -1,3 +1,19 @@
+## Unreleased
+
+These Watchdog changes are in the source. The review chain stays off by
+default. It activates only when you set `WATCHDOG_CHAIN=1` and a real-host
+`chain-gate.json` passes the rollout gate. The gate did not pass. See
+[Watchdog rollout status](docs/watchdog-rollout-status.md).
+
+### Features
+
+* **plugin:** capability gate, composed race evidence, delivery panel state ([4c2a441](https://github.com/FAZuH/agent/commit/4c2a441))
+* **plugin:** dedicated watchdog page and migration ([579df92](https://github.com/FAZuH/agent/commit/579df92))
+* **plugin:** abort receipts and parent notices ([a805d41](https://github.com/FAZuH/agent/commit/a805d41))
+* **plugin:** operation-scoped release and overlapping recovery ([3025b02](https://github.com/FAZuH/agent/commit/3025b02))
+* **plugin:** unified abort operations with honest receipts ([0996bc6](https://github.com/FAZuH/agent/commit/0996bc6))
+* **plugin:** harden judge result protocol ([a00588d](https://github.com/FAZuH/agent/commit/a00588d))
+
 ## [0.16.1](https://github.com/FAZuH/agent/compare/v0.16.0...v0.16.1) (2026-11-20)
 
 
