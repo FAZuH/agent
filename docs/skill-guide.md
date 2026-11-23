@@ -281,7 +281,8 @@ flowchart LR
   directory follows the repo layout (`skills/<category>/<name>/`,
   `agents/<role>/<name>.md`, `plugins/<name>/`, `commands/<name>.md`).
 - **simple-english** and **readme** cover the prose and the front door.
-- `sync.sh` never deploys a hand-edited target copy; edit here, then push.
+- Never hand-edit a deployed copy in the config dir. Change the repository,
+  commit to `deploy`, then run `./sync.sh deploy`.
 
 ### Unattended or overnight run
 

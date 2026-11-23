@@ -20,7 +20,7 @@ the way it is, what was checked with real requests, and what is still unproven.
 | --- | --- | --- |
 | OpenCode | v2.0.20 | `opencode --version` |
 | Plugin SDK | `@opencode-ai/plugin` 0.0.0-beta-17963 | `plugins/package.json` |
-| Plugin load | auto-discovered per `plugins/<name>/` by `sync.sh` | `sync.sh:307` |
+| Plugin load | auto-discovered per `plugins/<name>/` by `sync.sh` | `enumerate_items()` |
 | TUI load | `<plugin-dir>/tui` resolved by the CLI | `plugins/watchdog/tui.ts:1` |
 
 ## The v2 plugin contract (the published docs are wrong)

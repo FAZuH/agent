@@ -25,10 +25,10 @@ plugins/<name>/
 `export default { id, tui: true, setup }` is what makes the CLI look for
 `<plugin-dir>/tui`. Without `tui: true` it loads nothing there.
 
-`sync.sh` discovers `plugins/*` and copies the directory to
-`~/.config/opencode/plugins/`. A repository edit is not live until
-`./sync.sh push -g`. Hot-reload makes restart rarely the fix:
-`references/pluginhealth.md` covers loading.
+`sync.sh deploy` discovers `plugins/*` in the deployed clone and links each
+directory into `~/.config/opencode/plugins/`. A repository edit is not live
+until the work is committed to `deploy` and `./sync.sh deploy` runs. Hot-reload
+makes restart rarely the fix: `references/pluginhealth.md` covers loading.
 
 **A local dir plugin gets no `node_modules`.** No `solid-js`, no
 `@opentui/solid`, no `createComponent`, and therefore no JSX. This single

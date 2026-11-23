@@ -94,7 +94,7 @@ it never shows a previous release's notes. Add and populate a
 `## [Unreleased]` section during development so the preview and release body
 carry the real entries.
 
-The file is project-local. `sync.sh` never ships it, and never pulls it.
+The file is project-local. `sync.sh` never ships it.
 
 ## PR-level overrides (auto mode only)
 

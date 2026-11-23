@@ -21,7 +21,7 @@ Format: `type(scope): summary` or `type: summary`.
 | `ocv2`     | `skills/ocv2/**`                                     |
 | `plugin`   | `plugins/**`                                         |
 | `command`  | `commands/**`                                        |
-| `script`   | `scripts/**` (deployed executables) plus manager machinery: `sync.sh`, `install.sh`, `uninstall.sh`, `.agent-values.example`, `targets.conf`, `tags.conf`, `.agent-sync.json`, `.gitignore` entries about them |
+| `script`   | `scripts/**` (deployed executables) plus manager machinery: `sync.sh`, `install.sh`, `uninstall.sh`, `.agent-values.example`, `tags.conf`, `.gitignore` entries about them |
 | `release`  | Version bumps and changelog materialization produced by the release workflow (`chore(release)`) |
 
 No scope = repo-wide: README, `docs/`, `.github/`, `dev.sh`, and any change
@@ -44,7 +44,7 @@ that genuinely spans several components.
 ```
 feat(skill): add issue-closeout skill
 fix(plugin): branch fork notice fires before the fork starts
-docs(script): document project-level sync targets
+docs(script): document the deploy command set
 fix(plugin): dispatch rejects a subagent target outside the session tree
 feat(plugin): configurable sidebar count via jev-state.json
 feat(agent): teach review subagent the spec axis

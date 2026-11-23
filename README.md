@@ -53,17 +53,23 @@ It installs every item below.
 
 From this repository, with no upstream:
 
-- `skills/`, `agents/`, `plugins/`, `commands/`, and `instructions/` into
-  `~/.config/opencode/`.
-- Every executable file in `scripts/` into `~/.local/bin/`.
+- `skills/`, `agents/`, `plugins/`, `commands/`, and `instructions/` as symlinks
+  in `~/.config/opencode/` that point into the deployed clone.
+- Every executable file in `scripts/` into
+  `${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/bin/`, then symlinked into
+  `~/.local/bin/`.
 - The Rust package `agent`, giving you `octask`, `phone-digest`, and
   `mail-digest`.
 - `.agent-values`, created from `.agent-values.example` on the first run.
 
+In these managed directories a symlink belongs to the repository and a real file
+or directory belongs to this machine. Never hand-edit a deployed copy in the
+live config. Change the repository and deploy again.
+
 The install also adds `~/.config/opencode/instructions/*.md` to the
 `instructions` array in `~/.config/opencode/opencode.json`, so every file in
 `instructions/` loads in every session, on any project. The glob is the entry:
-a new instruction file needs no config change, only a sync. The two always-on
+a new instruction file needs no config change, only a deploy. The two always-on
 skills, `terse` and `antislop-copywriting`, are linked into that directory from
 their deployed `SKILL.md`, so their bodies load without a `skill` call.
 
@@ -146,14 +152,64 @@ needs no re-wiring. Add `--external-packages` to remove `bgrun` too,
 ## Usage
 
 ```bash
-./install.sh          # once
-./sync.sh push -g     # after every change
+./install.sh                 # once
+git switch deploy            # local promotion branch
+./sync.sh deploy             # promote and link
 ```
 
-`sync.sh` copies the repository items into the OpenCode config. Run
-`./sync.sh --help` for selective tags, project targets, and templates. OpenCode
-v2 hot-reloads most of the changes, so restart it only when a changed component
-does not appear or a plugin is not loaded.
+Commit reviewed work to the local `deploy` branch, then run `./sync.sh deploy`.
+The tool fetches that branch into a clone at
+`${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/config`. The clone's origin is
+this checkout, so no remote push is needed. `main` is not the promotion source.
+
+`sync.sh` updates the clone and reconciles links in the global config. `list`
+shows managed links beside private entries, `diff` compares the clone with the
+promoted branch, and `remove` unlinks managed items. Use `-t` to filter by
+`tags.conf`, `-n` for a dry run, and `-f` to adopt colliding real entries. Run
+`./sync.sh --help` for the full command set.
+
+`sync.sh deploy -n` materializes the promoted `deploy` ref in a temporary tree.
+Its table shows what promotion ships, not what the working tree holds. A
+collision makes the dry run exit non-zero.
+
+When `plugins/package.json` exists, deploy runs `bun install --frozen-lockfile`
+in the clone's `plugins/` directory. A missing bun or a failed install stops
+deploy before any plugin is linked. With no `package.json`, deploy skips this
+step.
+
+On a real deploy, the tool checks
+`${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/backups/`. If that directory
+holds no `opencode-*.tar.gz`, the tool creates one tar of `~/.config/opencode`
+there before any config, bin, or pointer write. A dry run creates no tar. To
+roll back, restore that archive:
+
+```bash
+tar -C ~/.config -xzf <archive>
+```
+
+The tool also moves displaced entries under `backups/<timestamp>/`. Those files
+are a secondary aid. Use the tar for rollback.
+
+The live `~/.config/opencode/commands/imagescan` directory has no repository
+copy and no manifest entry, so link pruning leaves it in place. Remove it once
+during migration:
+
+```bash
+rm -rf ~/.config/opencode/commands/imagescan
+```
+
+`plugins/prompt/src/settings-wiring.test.ts` needs no removal. It is tracked and
+byte-identical, so deploy adopts it by hash match.
+
+The config directory keeps a `.agent-repo` pointer to this editable checkout for
+update tooling. The tool records the clone path under the XDG data directory.
+
+No deploy step restarts OpenCode. Two limits remain:
+
+- A new instruction link is not in a running server's glob snapshot until the
+  config changes next.
+- Plugin `setup()` re-runs on edit without a restart, but old closures keep
+  firing until restart.
 
 ## Docs
 

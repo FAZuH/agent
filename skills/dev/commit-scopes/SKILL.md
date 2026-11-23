@@ -101,7 +101,7 @@ Format: `type(scope): summary` or `type: summary`.
 | `agent` | `agents/**` |
 | `skill` | `skills/**` |
 | `plugin` | `plugins/**` |
-| `script` | `sync.sh`, `targets.conf` |
+| `script` | `sync.sh`, `tags.conf` |
 
 No scope = repo-wide: README, `docs/`, `.github/`, `dev.sh`, and any change
 that genuinely spans several components.
@@ -122,7 +122,7 @@ that genuinely spans several components.
 \`\`\`
 feat(skill): add issue-closeout skill
 fix(plugin): branch fork notice fires before the fork starts
-docs(script): document project-level sync targets
+docs(script): document the deploy command set
 feat: restructure repo into skill/agent/plugin/command
 docs: add commit scopes reference
 \`\`\`

@@ -5,8 +5,8 @@ Shared dependencies live in `plugins/package.json`. A plugin that adds TUI
 commands ships a `tui.ts` at its own directory root: the CLI resolves the TUI
 entry as `<plugin-dir>/tui` and loads nothing otherwise.
 
-Plugin IDs are `fazuh.<name>`. `sync.sh` copies the plugin directory into the
-OpenCode config.
+Plugin IDs are `fazuh.<name>`. Deploy links each plugin directory into the
+OpenCode config from the XDG clone.
 
 ## jev (`fazuh.watchdog`)
 

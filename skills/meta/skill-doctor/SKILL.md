@@ -12,7 +12,7 @@ The scanner (`scripts/build_graph.py`) reads three sources:
 
 - Skill roots, later-wins on duplicate ids: `~/.agents/skills` (installed),
   `~/.config/opencode/skills` (config), `~/Projects/agent/skills` (source repo, in
-  category subdirs; copies are pushed into the config root by the repo's sync.sh).
+  category subdirs; deployed as links into the config root by `sync.sh deploy`).
 - Agent definitions: `~/.config/opencode/agents/*.md`.
 - Documented references: `~/.config/opencode/AGENTS.md`.
 
@@ -89,7 +89,7 @@ command so their tooling rewrites the copy. Owned roots you may edit directly:
    line merging `{"disposition":"proposed-fix|reported|documented|upstream|user-action","note":"..."}`
    into a copy of it.
 5. Optional: view the graph with `scripts/skill-graph` (repo `scripts/`,
-   installed flat to `~/.local/bin` via `sync.sh push -g`). It regenerates the
+   installed flat to `~/.local/bin` via `sync.sh deploy`). It regenerates the
    interactive page beside `graph.json` and opens it (`--no-open` to skip;
    `--json`/`--out` to redirect paths). If browser tools reject `file://` or no
    desktop bridge is connected, serve the XDG data directory on localhost and
@@ -109,8 +109,8 @@ python3 scripts/build_graph.py | grep '"severity":"high"'
 #          tags: ["type:friction","severity:minor","scope:skill","status:open"] }
 # open backlog: recall "friction open backlog", keep type:friction+status:open
 
-# Repo changes need a push, global installs are copies, not symlinks
-~/Projects/agent/sync.sh push -g
+# Repo changes need a deploy into the XDG clone
+cd ~/Projects/agent && ./sync.sh deploy
 ```
 
 ## Rules

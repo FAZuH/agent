@@ -251,7 +251,7 @@ opencode::the harness every skill runs in
 git::the install itself
 cargo::bgrun, octask
 npx::the skills CLI
-rsync::sync.sh
+rsync::install.sh digest deploy
 python3::install.sh, skill-doctor
 zele:npm i -g zele:the fazuh-email skill and mail search
 jq:pacman -S jq:the ocv2 scripts
@@ -277,6 +277,23 @@ uv:pacman -S uv:pdf-read
 clamscan:pacman -S clamav:malware-check, omarchy-plugin-install
 bun:pacman -S bun-bin:opencode-guideline, the jev plugin
 PACKAGES
+}
+
+CLONE_PATH_FILE="$(realpath -m "${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent/.clone-path")"
+
+# Managed entries are symlinks into the deployed clone; real entries are
+# machine-private. Both count as installed when their target resolves.
+deployed_present() { # <path>
+  local clone target
+  if [[ -e "$1" && ! -L "$1" ]]; then
+    return 0
+  fi
+  [[ -f "$CLONE_PATH_FILE" ]] || return 1
+  IFS= read -r clone < "$CLONE_PATH_FILE" || return 1
+  [[ -n "$clone" && -d "$clone" ]] || return 1
+  [[ -L "$1" ]] || return 1
+  target="$(readlink -f -- "$1" 2>/dev/null)" || return 1
+  [[ "$target" == "$clone"/* && -e "$target" ]]
 }
 
 # What the install puts on disk. A path here is anything whose absence means a
@@ -342,7 +359,7 @@ checklist() {
   while IFS=: read -r name path; do
     [[ -n "$name" ]] || continue
     if [[ "$path" == /* ]]; then
-      if [[ -e "$path" ]]; then
+      if deployed_present "$path"; then
         printf '  [ok]      %-16s %s\n' "$name" "$path"
       elif [[ "$name" == digest-* ]]; then
         printf '  [off]     %-16s %s — enable with --%s-digest\n' \
@@ -454,8 +471,8 @@ if ((DIGEST_MAIL || DIGEST_PHONE)); then
   fi
 fi
 
-step "Pushing OpenCode configuration"
-"$ROOT/sync.sh" push -g
+step "Deploying OpenCode configuration"
+"$ROOT/sync.sh" deploy
 ensure_instructions_config
 ensure_skill_instructions
 
@@ -466,4 +483,4 @@ if ((BONUS == 1)); then
   install_skill cloudflare/security-audit-skill --skill security-audit
 fi
 
-printf '\nInstallation complete. Restart OpenCode to load the configuration.\n'
+printf '\nInstallation complete. Deploy does not restart OpenCode.\n'

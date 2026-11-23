@@ -45,11 +45,11 @@ Gotchas 1 to 4 (plain serve lists nothing, global-location-only endpoints, proje
 
 1. **Hot-reload scope is the whole plugin dir, nested files included.** On
    v2.0.3 an edit to `plugins/<name>/src/<file>.ts`, not the entry, was live
-   after `sync.sh push` with no restart (marker string in the tool's own
-   output). Each changed file fires its own `msg="loading plugin"`.
+   with no restart (marker string in the tool's own output). Each changed file
+   fires its own `msg="loading plugin"`.
    No hot-reload: config-entry (`"plugins": [...]`) and
-   npm-installed plugins, which need a restart. A push that seems to do
-   nothing means suspect a stale installed copy (`sync.sh diff -g plugins`), a
+   npm-installed plugins, which need a restart. A deploy that seems to do
+   nothing means suspect a stale clone (`./sync.sh diff`), a
    cached session tool catalog, or inert config (opencode.json has no
    top-level `env` key, so a var set there never reaches the plugin host; verify
    with `tr '\0' '\n' < /proc/$(pgrep -f "opencode2 serve"|head -1)/environ`.

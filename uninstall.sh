@@ -66,10 +66,10 @@ agent_installed() {
 
 remove_sync_files() {
   if ((DRY_RUN)); then
-    bash "$ROOT/sync.sh" remove -g -n
+    bash "$ROOT/sync.sh" remove -n
   else
-    bash "$ROOT/sync.sh" remove -g -n >/dev/null
-    bash "$ROOT/sync.sh" remove -g
+    bash "$ROOT/sync.sh" remove -n >/dev/null
+    bash "$ROOT/sync.sh" remove
   fi
 }
 
@@ -201,7 +201,7 @@ if ((DRY_RUN)); then
   info 'dry run: no files will be changed'
 else
   info 'checking sync removal plan'
-  bash "$ROOT/sync.sh" remove -g -n >/dev/null
+  bash "$ROOT/sync.sh" remove -n >/dev/null
 fi
 
 remove_sync_files

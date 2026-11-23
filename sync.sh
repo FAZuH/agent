@@ -1,35 +1,45 @@
 #!/usr/bin/env bash
-# agent — sync. Copies repo items (skills, agents, plugins, commands,
-# instructions) into OpenCode config dirs. Repo is the source of truth; targets
-# hold copies.
-# Items can be tagged in tags.conf and deployed selectively with -t/--tags.
+# agent — global symlink deploy. Repo items become symlinks into the XDG data
+# clone; real files in the config dir stay machine-private.
 set -euo pipefail
 shopt -s extglob   # tags.conf patterns may use @(), !(), etc.
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_CFG="$HOME/.config/opencode"
-MANIFEST="$REPO/.agent-sync.json"
-VALUES_FILE="${AGENT_VALUES:-$REPO/.agent-values}"
-TARGETS_CONF="$REPO/targets.conf"
+XDG_DATA="$(realpath -m "${XDG_DATA_HOME:-$HOME/.local/share}/fazuh-agent")"
+CLONE="$XDG_DATA/config"
+CLONE_POINTER="$XDG_DATA/.clone-path"
+DATA_BIN="$XDG_DATA/bin"
+BACKUP_BASE="$XDG_DATA/backups"
 TAGS_CONF="$REPO/tags.conf"
-AGENTS_SKILLS="$HOME/.agents/skills"
-# Where this checkout lives, recorded on push so the update-fazuh-agent skill
-# can find it from an installed copy. Machine state, not a deployable item.
+BIN_DIR="$(realpath -m "${AGENT_BIN_DIR:-$HOME/.local/bin}")"
 REPO_POINTER=".agent-repo"
-# Machine-global install root for repo scripts/ (overridable for tests).
-BIN_DIR="${AGENT_BIN_DIR:-$HOME/.local/bin}"
 TOPS=(skills agents plugins commands instructions lib)
 
 DRY=0
 FORCE=0
 COMMAND=""
-SUB_CMD=""
-TARGET_NAME=""      # as given: "global", a targets.conf name, or a path
-TARGET=""           # resolved config dir
-TOPS_SEL=()
-TAGS_SEL=()         # selected tags (empty = no filter = all items)
-TAG_NAME=()         # tags.conf: tag names, parallel to TAG_PATS
-TAG_PATS=()         # tags.conf: comma-joined item patterns per tag
+REF_ARG=""
+TAGS_SEL=()
+TAG_NAME=()
+TAG_PATS=()
+TOP_LIST=("${TOPS[@]}")
+
+PLAN_ACTION=()
+PLAN_ITEM=()
+PLAN_DETAIL=()
+PLAN_KIND=()
+PLAN_TGT=()
+PLAN_SRC=()
+COLLISIONS=()
+BACKUP_DIR=""
+PREVIEW_DIR=""
+
+cleanup_preview() {
+  [[ -n "$PREVIEW_DIR" && -d "$PREVIEW_DIR" ]] && rm -rf "$PREVIEW_DIR"
+  return 0
+}
+trap cleanup_preview EXIT
 
 # ── output helpers (colors on TTY only, respect NO_COLOR) ────────────────────
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -43,40 +53,31 @@ info()  { printf '  %s·%s %s\n' "$DIM" "$R" "$1"; }
 warn()  { printf '  %s!%s %s\n' "$YLW" "$R" "$1"; }
 would() { printf '  %s~%s %s\n' "$YLW" "$R" "$1"; }
 die()   { printf '%s✗ error:%s %s\n' "$RED" "$R" "$1" >&2; exit 1; }
+plan_row() { printf '  %-10s %-36s %s\n' "$1" "$2" "$3"; }
 
 usage() {
   cat <<EOF
 ${B}agent — sync${R}
-Copy repo items (skills, agents, plugins, commands, instructions) into
-OpenCode config dirs.
-The repo is the source of truth — run push after editing repo content.
+Deploy repo items into the global OpenCode config as symlinks into a local
+clone. Real files in the config dir stay machine-private.
 
 ${B}Usage:${R}
-  sync.sh list
-  sync.sh push|pull|diff|remove [target] [top...] [-t TAG,TAG...]
-  sync.sh all [push|pull|diff|remove] [top...] [-t TAG,TAG...]
+  sync.sh deploy [-n|--dry-run] [-f|--force] [-t TAGS] [ref]   (default ref: deploy)
+  sync.sh list   [-t TAGS]
+  sync.sh diff   [-t TAGS] [ref]
+  sync.sh remove [-n|--dry-run] [-f|--force] [-t TAGS]
+  sync.sh -h|--help
 
 ${B}Args:${R}
-  target   global (default), a name from $TARGETS_CONF, or a project dir
-           (a top in the target slot, e.g. \`sync.sh push skills\`, means global)
-  top      one or more of: ${TOPS[*]} (default: all)
-  -t TAGS  deploy only items tagged TAGS in $TAGS_CONF —
-           0 to N tags, comma-separated or repeated -t; no -t means all;
-           "all" is reserved and selects everything
+  ref    git ref in the working checkout to deploy (default: deploy)
 
 ${B}Options:${R}
-  -g                 global config (~/.config/opencode)
-  -f, --force        allow plugins installed in targets that load together
-  -n, --dry-run      print what would change, change nothing
-  -h, --help         this help
-
-${B}Examples:${R}
-  sync.sh push -g                 install everything, globally
-                                  (incl. executable scripts/ → ~/.local/bin, copy never symlink)
-  sync.sh push -g -t dev,ocv2     install only dev + ocv2 items
-  sync.sh list                    targets, tags, installed items
-
-See README.md for manifest, templating ({{KEY}}), and collision details.
+  -n, --dry-run   print the planned table, write nothing
+  -f, --force     replace differing real entries and private symlinks
+  -t, --tags      select items tagged TAGS in $TAGS_CONF —
+                  0 to N tags, comma-separated or repeated -t; no -t means all;
+                  "all" is reserved and selects everything
+  -h, --help      this help
 EOF
 }
 
@@ -97,20 +98,18 @@ add_tags() { # <comma-list> — accumulate -t/--tags selections
   done
 }
 
-# Load tag definitions. Format: one tag per line,
-#   tag=pattern,pattern,...
-# Patterns match repo item paths (skills/<cat>/<name>, agents/<cat>/<name>.md,
-# plugins/<name>, commands/<name>.md) and may be shell globs / extglob
-# (@(a|b), !(a|b), ...). Same tag may appear on several lines; tags union.
+# Format: one tag per line, tag=pattern,pattern,... Patterns match item paths
+# (skills/<cat>/<name>, agents/<cat>/<name>.md, plugins/<name>,
+# commands/<path>.md, lib/<name>, scripts/<name>) and may be shell globs.
 load_tags_conf() {
   [[ -f "$TAGS_CONF" ]] || return 0
   local line name pats p cleaned
   declare -a parts=()
   while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%%#*}"                       # strip comments
+    line="${line%%#*}"
     line="$(trim "$line")"
     [[ -z "$line" ]] && continue
-    [[ "$line" == *=* ]] || die "$TAGS_CONF: expected 'tag=pattern,pattern,…' — got: $line"
+    [[ "$line" == *=* ]] || die "$TAGS_CONF: expected 'tag=pattern,pattern' — got: $line"
     name="$(trim "${line%%=*}")"
     [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || die "$TAGS_CONF: bad tag name: '$name'"
     [[ "$name" != "all" ]] || die "$TAGS_CONF: tag 'all' is reserved"
@@ -127,7 +126,7 @@ load_tags_conf() {
   done < "$TAGS_CONF"
 }
 
-known_tags() { # prints "a, b, " for the error message
+known_tags() {
   local i out=""
   for i in "${!TAG_NAME[@]}"; do
     [[ ",$out," == *",${TAG_NAME[i]},"* ]] || out="${out:+$out, }${TAG_NAME[i]}"
@@ -152,7 +151,7 @@ validate_tag_selection() {
   done
 }
 
-item_tags() { # <src> — prints comma-joined tags matching this repo item
+item_tags() { # <src> — prints comma-joined tags matching this item
   local i pats p t out=""
   for i in "${!TAG_NAME[@]}"; do
     IFS=',' read -ra pats <<<"${TAG_PATS[i]}"
@@ -177,16 +176,11 @@ item_selected() { # <src> — true when the item passes the tag filter
   return 1
 }
 
-# Warn about patterns that match no repo item — usually a typo, and it would
-# silently drop items from a tagged deploy. Checks all deployable items,
-# regardless of top/tag selection.
+# Warn about tag patterns that match no repo item.
 warn_unused_patterns() {
-  local sel=("${TAGS_SEL[@]}") tops=("${TOP_LIST[@]}") src i pats p found
-  TAGS_SEL=(); TOP_LIST=("${TOPS[@]}")
-  local all_srcs=()
-  while IFS='|' read -r src rel; do all_srcs+=("$src"); done < <(enumerate_items)
-  while IFS= read -r src; do all_srcs+=("$src"); done < <(enumerate_bin)
-  TAGS_SEL=("${sel[@]}"); TOP_LIST=("${tops[@]}")
+  local all_srcs=() src i pats p found
+  while IFS='|' read -r src rel; do all_srcs+=("$src"); done < <(enumerate_items "$REPO")
+  while IFS= read -r src; do all_srcs+=("$src"); done < <(enumerate_bin "$REPO")
   for i in "${!TAG_NAME[@]}"; do
     IFS=',' read -ra pats <<<"${TAG_PATS[i]}"
     for p in "${pats[@]}"; do
@@ -202,7 +196,6 @@ warn_unused_patterns() {
 # ── arg parsing ──────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -g) TARGET_NAME="global"; TARGET="${TARGET:-$GLOBAL_CFG}"; shift ;;
     -f|--force) FORCE=1; shift ;;
     -n|--dry-run) DRY=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -214,83 +207,38 @@ while [[ $# -gt 0 ]]; do
     *)
       if [[ -z "$COMMAND" ]]; then
         COMMAND="$1"
-      elif [[ "$COMMAND" == "all" && -z "$SUB_CMD" ]]; then
-        SUB_CMD="$1"
-      elif [[ -z "$TARGET_NAME" ]]; then
-        if [[ " ${TOPS[*]} " == *" $1 "* ]]; then
-          TOPS_SEL+=("$1")     # top in the target slot — global is the default
-        else
-          TARGET_NAME="$1"
-        fi
+      elif [[ -z "$REF_ARG" ]]; then
+        REF_ARG="$1"
       else
-        TOPS_SEL+=("$1")
+        die "unexpected argument: $1"
       fi
       shift ;;
   esac
 done
 
 case "$COMMAND" in
-  "") usage; echo; die "a command is required (list, push, pull, diff, remove, all)" ;;
-  list|push|pull|diff|remove|all) ;;
-  *) die "unknown command: $COMMAND" ;;
+  "") usage; echo; die "a command is required (deploy, list, diff, remove)" ;;
+  deploy|list|diff|remove) ;;
+  *) die "unknown command: $COMMAND (expected deploy, list, diff, remove)" ;;
 esac
-if [[ "$COMMAND" == "all" ]]; then
-  SUB_CMD="${SUB_CMD:-push}"
-  case "$SUB_CMD" in push|pull|diff|remove) ;; *) die "unknown command for all: $SUB_CMD" ;; esac
+if [[ "$COMMAND" == "list" || "$COMMAND" == "remove" ]] && [[ -n "$REF_ARG" ]]; then
+  die "$COMMAND takes no ref"
 fi
-if [[ ${#TOPS_SEL[@]} -gt 0 ]]; then
-  for t in "${TOPS_SEL[@]}"; do
-    [[ " ${TOPS[*]} " == *" $t "* ]] || die "unknown top: $t (expected one of: ${TOPS[*]})"
-  done
-  TOP_LIST=("${TOPS_SEL[@]}")
-else
-  TOP_LIST=("${TOPS[@]}")
-fi
+REF="${REF_ARG:-deploy}"
 
-# ── targets ──────────────────────────────────────────────────────────────────
-declare -A TARGET_PATHS=()   # name -> abs path
-if [[ -f "$TARGETS_CONF" ]]; then
-  while IFS='=' read -r name path; do
-    [[ -z "$name" || "$name" =~ ^[[:space:]]*# ]] && continue
-    name="${name// /}"; path="${path// /}"
-    path="${path/#\~/$HOME}"
-    [[ -n "$name" && -n "$path" ]] && TARGET_PATHS["$name"]="$path"
-  done < "$TARGETS_CONF"
-fi
-
-resolve_target() { # <arg: global|name|path|"">
-  local arg="$1" base
-  if [[ -z "$arg" || "$arg" == "global" ]]; then
-    TARGET="$GLOBAL_CFG"; TARGET_NAME="global"
-  elif [[ -n "${TARGET_PATHS[$arg]:-}" ]]; then
-    TARGET="${TARGET_PATHS[$arg]}"
-  elif [[ "$arg" == /* || "$arg" == ~* ]]; then
-    # project path (dir need not exist — remove must clean deleted targets)
-    base="${arg/#\~/$HOME}"
-    base="$(realpath -m "$base")"
-    TARGET="$base/.opencode"; TARGET_NAME="$arg"
-  else
-    die "not a target name: $arg (add it to $TARGETS_CONF or pass a directory path)"
-  fi
-  case "$TARGET" in
-    "$REPO"|"$REPO"/*) die "target is inside the repo ($REPO) — pass a project dir or -g" ;;
-  esac
-}
+case "$REPO" in
+  "$CLONE"|"$CLONE"/*) die "refusing to run from inside the deploy clone ($CLONE) — run from the working checkout" ;;
+esac
 
 # ── item enumeration (flatten categories for skills/agents) ─────────────────
-# Prints "src|rel": src = repo-relative, rel = target-relative.
-# Only items passing the tag filter (item_selected) are emitted.
-enumerate_items() {
-  local cat child name
-  emit_item() { # <src> <rel>
-    if item_selected "$1"; then
-      printf '%s|%s\n' "$1" "$2"
-    fi
-  }
+# Prints "src|rel" for every item; callers apply the tag filter.
+enumerate_items() { # <base>
+  local base="$1" top cat child name
+  emit_item() { printf '%s|%s\n' "$1" "$2"; }
   for top in "${TOP_LIST[@]}"; do
     case "$top" in
       skills)
-        for cat in "$REPO/skills"/*; do
+        for cat in "$base/skills"/*; do
           [[ -d "$cat" ]] || continue
           for child in "$cat"/*; do
             [[ -d "$child" ]] || continue
@@ -298,7 +246,7 @@ enumerate_items() {
           done
         done ;;
       agents)
-        for cat in "$REPO/agents"/*; do
+        for cat in "$base/agents"/*; do
           [[ -d "$cat" ]] || continue
           for child in "$cat"/*.md; do
             [[ -f "$child" ]] || continue
@@ -306,31 +254,42 @@ enumerate_items() {
           done
         done ;;
       plugins)
-        for child in "$REPO/plugins"/*; do
+        for child in "$base/plugins"/*; do
           name="$(basename "$child")"
           [[ "$name" == "node_modules" || "$name" == "package.json" || "$name" == "bun.lock" ]] && continue
           [[ -e "$child" ]] || continue
           emit_item "plugins/$name" "plugins/$name"
         done ;;
       lib)
-        for child in "$REPO/lib"/*; do
-          name="$(basename "$child")"
+        for child in "$base/lib"/*; do
           [[ -d "$child" ]] || continue
+          name="$(basename "$child")"
           emit_item "lib/$name" "lib/$name"
         done ;;
       commands)
+        [[ -d "$base/commands" ]] || continue
         while IFS= read -r -d '' child; do
-          name="${child#"$REPO/commands/"}"
+          name="${child#"$base/commands/"}"
           emit_item "commands/$name" "commands/$name"
-        done < <(find "$REPO/commands" -type f -name '*.md' -print0 | sort -z) ;;
+        done < <(find "$base/commands" -type f -name '*.md' -print0 | sort -z) ;;
       instructions)
-        for child in "$REPO/instructions"/*.md; do
+        for child in "$base/instructions"/*.md; do
           [[ -f "$child" ]] || continue
           name="$(basename "$child")"
           emit_item "instructions/$name" "instructions/$name"
         done ;;
     esac
   done
+}
+
+enumerate_bin() { # <base> — prints checkout-relative executable script paths
+  local base="$1" f
+  [[ -d "$base/scripts" ]] || return 0
+  for f in "$base/scripts"/*; do
+    [[ -f "$f" && -x "$f" ]] || continue
+    printf 'scripts/%s\n' "$(basename "$f")"
+  done
+  return 0
 }
 
 # ── content hash: file, or dir as tree of (relpath+sha) pairs ───────────────
@@ -356,614 +315,418 @@ print(h.hexdigest())
 EOF
 }
 
-# ── template substitution ({{KEY}} from gitignored .agent-values) ────────────
-STAGE=""   # lazily created staging dir for substituted copies
-
-stage_init() {
-  [[ -n "$STAGE" ]] && return 0
-  STAGE="$(mktemp -d)"
-  trap 'rm -rf "$STAGE"' EXIT
-}
-
-# Substitute {{UPPER_SNAKE}} placeholders in one file, in place. Unknown
-# UPPER_SNAKE keys fail (a literal placeholder must never reach a target);
-# lowercase {{...}} is left alone; binary files are skipped.
-substitute_file() { # <path> <rel-label>
-  python3 - "$1" "$2" "$VALUES_FILE" <<'PYEOF'
-import os, re, sys
-path, rel, values_path = sys.argv[1:4]
-pat = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
-values = {}
-if os.path.exists(values_path):
-    vp = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
-    for line in open(values_path, encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        m = vp.match(line)
-        if m:
-            v = m.group(2).strip()
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-                v = v[1:-1]
-            values[m.group(1)] = v
-data = open(path, "rb").read()
-if b"\x00" in data:
-    raise SystemExit(0)          # binary — never touched
-text = data.decode("utf-8", errors="surrogateescape")
-used = set(pat.findall(text))
-missing = sorted(used - set(values))
-if missing:
-    for key in missing:
-        sys.stderr.write(f"  ! {rel}: {{{{{key}}}}} is not defined in .agent-values\n")
-    sys.stderr.write("✗ error: unresolved placeholders — add the keys to .agent-values (see .agent-values.example) or reword the content\n")
-    raise SystemExit(1)
-new = pat.sub(lambda m: values[m.group(1)], text)
-if new != text:
-    open(path, "w", encoding="utf-8", errors="surrogateescape", newline="").write(new)
-PYEOF
-}
-
-# Copy a repo item (file or dir) into the stage, substituting every text file.
-# Sets STAGED_PATH (no command substitution — the EXIT trap must live in the
-# main shell, and a subshell's trap would delete the stage too early). The
-# stage key is the full src — basenames collide across tops (skill `finish`
-# vs agent `finish.md`).
-stage_item() { # <src>
-  stage_init
-  local src="$1" f
-  STAGED_PATH="$STAGE/$(printf '%s' "$src" | tr '/' '_')"
-  rm -rf "$STAGED_PATH"
-  if [[ -d "$REPO/$src" ]]; then
-    cp -a "$REPO/$src" "$STAGED_PATH"
-    while IFS= read -r -d '' f; do
-      substitute_file "$f" "$src/${f#"$STAGED_PATH"/}"
-    done < <(find "$STAGED_PATH" -type f -print0 | sort -z)
+# ── symlink ownership ────────────────────────────────────────────────────────
+link_abs() { # <link> — print canonical target path
+  local raw d
+  raw="$(readlink "$1")" || return 1
+  if [[ "$raw" == /* ]]; then
+    printf '%s\n' "$(realpath -m "$raw")"
   else
-    cp -p "$REPO/$src" "$STAGED_PATH"
-    substitute_file "$STAGED_PATH" "$src"
+    d="$(cd "$(dirname "$1")" && pwd)"
+    printf '%s\n' "$(realpath -m "$d/$raw")"
   fi
 }
 
-# Fail before anything is written if any selected item references an
-# undefined {{KEY}}.
-preflight_placeholders() {
-  local srcs=() src rel
-  while IFS='|' read -r src rel; do
-    [[ -n "$src" ]] && srcs+=("$REPO/$src")
-  done < <(enumerate_items)
-  [[ -d "$REPO/scripts" ]] && srcs+=("$REPO/scripts")
-  [[ ${#srcs[@]} -gt 0 ]] || return 0
-  python3 - "$VALUES_FILE" "$REPO" "${srcs[@]}" <<'PYEOF'
-import os, re, sys
-values_path, repo, roots = sys.argv[1], sys.argv[2], sys.argv[3:]
-pat = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
-values = set()
-if os.path.exists(values_path):
-    vp = re.compile(r"^([A-Z][A-Z0-9_]*)=")
-    for line in open(values_path, encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if line and not line.startswith("#"):
-            m = vp.match(line)
-            if m:
-                values.add(m.group(1))
-bad = []
-for root in roots:
-    if os.path.isfile(root):
-        walk = [root]
-    else:
-        walk = []
-        for r, dirs, files in os.walk(root):
-            dirs.sort()
-            for f in sorted(files):
-                walk.append(os.path.join(r, f))
-    for fp in walk:
-        try:
-            data = open(fp, "rb").read()
-        except OSError:
-            continue
-        if b"\x00" in data:
-            continue
-        for key in pat.findall(data.decode("utf-8", errors="replace")):
-            if key not in values:
-                bad.append((fp[len(repo) + 1:] if fp.startswith(repo + os.sep) else fp, key))
-if bad:
-    for fp, key in sorted(set(bad)):
-        sys.stderr.write(f"  ! {fp}: {{{{{key}}}}} not defined in .agent-values\n")
-    sys.stderr.write("✗ error: unresolved placeholders — nothing was pushed\n")
-    raise SystemExit(1)
-PYEOF
+is_managed_link() { # <path> — symlink into the config clone
+  local a
+  [[ -L "$1" ]] || return 1
+  a="$(link_abs "$1")" || return 1
+  [[ "$a" == "$CLONE/"* ]]
 }
 
-# True when a repo item carries any {{UPPER_SNAKE}} placeholder.
-item_templated() { # <src>
-  local p="$REPO/$1"
-  if [[ -d "$p" ]]; then
-    grep -rqE '\{\{[A-Z][A-Z0-9_]*\}\}' "$p" 2>/dev/null
-  else
-    grep -qE '\{\{[A-Z][A-Z0-9_]*\}\}' "$p" 2>/dev/null
-  fi
+is_managed_bin_link() { # <path> — symlink into the data bin
+  local a
+  [[ -L "$1" ]] || return 1
+  a="$(link_abs "$1")" || return 1
+  [[ "$a" == "$DATA_BIN/"* ]]
 }
 
-# ── manifest helpers ─────────────────────────────────────────────────────────
-manifest_set_item() { # <target> <rel> <src> <sha>
-  local target="$1" rel="$2" src="$3" sha="$4"
-  [[ $DRY -eq 1 ]] && return 0
-  python3 - "$MANIFEST" "$target" "$rel" "$src" "$sha" <<'EOF'
-import json, sys
-path, target, rel, src, sha = sys.argv[1:6]
-try:
-    m = json.load(open(path))
-except (FileNotFoundError, json.JSONDecodeError):
-    m = {}
-e = m.setdefault(target, {"items": {}})
-e["items"][rel] = {"src": src, "sha": sha}
-with open(path, "w") as f:
-    json.dump(m, f, indent=2)
-EOF
+# ── plan/backup/refresh ─────────────────────────────────────────────────────
+add_plan() { # <action> <item> <detail> <kind> <target> <source>
+  PLAN_ACTION+=("$1"); PLAN_ITEM+=("$2"); PLAN_DETAIL+=("$3")
+  PLAN_KIND+=("$4"); PLAN_TGT+=("$5"); PLAN_SRC+=("$6")
 }
 
-manifest_del_item() { # <target> <rel>
-  local target="$1" rel="$2"
-  [[ $DRY -eq 1 ]] && return 0
-  python3 - "$MANIFEST" "$target" "$rel" <<'EOF'
-import json, sys
-path, target, rel = sys.argv[1:4]
-try:
-    m = json.load(open(path))
-except (FileNotFoundError, json.JSONDecodeError):
-    raise SystemExit
-e = m.get(target)
-if e and rel in e.get("items", {}):
-    del e["items"][rel]
-    if not e["items"]:
-        m.pop(target, None)
-    with open(path, "w") as f:
-        json.dump(m, f, indent=2)
-EOF
-}
-
-manifest_drop_target() { # <target>
-  [[ $DRY -eq 1 ]] && return 0
-  python3 - "$MANIFEST" "$1" <<'EOF'
-import json, sys
-try:
-    m = json.load(open(sys.argv[1]))
-except Exception:
-    raise SystemExit
-m.pop(sys.argv[2], None)
-with open(sys.argv[1], "w") as f:
-    json.dump(m, f, indent=2)
-EOF
-}
-
-manifest_read_items() { # <target> — prints "rel|src|sha"
-  python3 - "$MANIFEST" "$1" <<'EOF'
-import json, sys
-try:
-    m = json.load(open(sys.argv[1]))
-except Exception:
-    raise SystemExit
-for rel, it in (m.get(sys.argv[2]) or {}).get("items", {}).items():
-    print(f"{rel}|{it.get('src','')}|{it.get('sha','')}")
-EOF
-}
-
-target_has_plugins() { # <target> — true if the manifest records plugin items
-  [[ -f "$MANIFEST" ]] || return 1
-  python3 - "$MANIFEST" "$1" <<'EOF' | grep -q .
-import json, sys
-try: m = json.load(open(sys.argv[1]))
-except Exception: raise SystemExit
-for rel in (m.get(sys.argv[2]) or {}).get("items", {}):
-    if rel.startswith("plugins/"):
-        print(rel)
-EOF
-}
-
-# ── actions ──────────────────────────────────────────────────────────────────
-action_push() {
-  local target="$1" src rel item tgt current
-  step "Push → $target"
-  preflight_placeholders
-  while IFS='|' read -r src rel; do
-    [[ -n "$src" ]] || continue
-    tgt="$target/$rel"
-    if [[ -L "$tgt" ]]; then
-      warn "$rel skipped — target path is a symlink (remove it first: rm $tgt)"
-      continue
-    fi
-    if [[ $DRY -eq 1 ]]; then
-      would "push $rel"
-      continue
-    fi
-    stage_item "$src"
-    item="$STAGED_PATH"
-    mkdir -p "$(dirname "$tgt")"
-    if [[ -d "$item" ]]; then
-      rsync -a --delete "$item/" "$tgt/"
-    else
-      cp -p "$item" "$tgt"
-    fi
-    manifest_set_item "$target" "$rel" "$src" "$(tree_sha "$tgt")"
-    ok "pushed $rel"
-  done < <(enumerate_items)
-
-  # stale prune: tracked items no longer shipped by the repo — remove only if
-  # the target copy is still exactly what we pushed; authored drift is kept.
-  # Skipped on top-filtered pushes (-t): a filtered push must not prune other
-  # tops' manifest entries.
-  if [[ -f "$MANIFEST" && ${#TOPS_SEL[@]} -eq 0 ]]; then
-    while IFS='|' read -r rel src sha; do
-      [[ -n "$rel" ]] || continue
-      [[ -e "$REPO/$src" ]] && continue
-      tgt="$target/$rel"
-      if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
-        info "stale $rel already gone"
-        manifest_del_item "$target" "$rel"
-        continue
-      fi
-      if [[ "$(tree_sha "$tgt" 2>/dev/null || true)" == "$sha" ]]; then
-        if [[ $DRY -eq 1 ]]; then
-          would "remove stale $rel"
-        else
-          rm -rf "$tgt"; ok "removed stale $rel"
-          manifest_del_item "$target" "$rel"
-        fi
-      else
-        warn "$rel kept — no longer in repo and modified in target"
-      fi
-    done < <(manifest_read_items "$target")
-  fi
-
-  if [[ $DRY -eq 0 && "$target" == "$GLOBAL_CFG" ]]; then
-    printf '%s\n' "$REPO" > "$target/$REPO_POINTER"
-    ok "recorded repo path in $REPO_POINTER"
-  fi
-}
-
-action_pull() {
-  local target="$1" src rel tgt
-  step "Pull ← $target"
-  [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to pull"; return; }
-  while IFS='|' read -r rel src sha; do
-    [[ -n "$rel" && -n "$src" ]] || continue
-    [[ " ${TOP_LIST[*]} " == *" ${rel%%/*} "* ]] || continue   # top filter
-    item_selected "$src" || continue           # tag filter
-    [[ -e "$REPO/$src" ]] || continue          # only items the repo still ships
-    if item_templated "$src"; then
-      info "pull skipped $rel — templated (repo-owned: edit .agent-values, then push)"
-      continue
-    fi
-    tgt="$target/$rel"
-    [[ -e "$tgt" ]] || continue                # existing files only
-    if [[ $DRY -eq 1 ]]; then
-      would "pull $rel"
-    else
-      if [[ -d "$REPO/$src" ]]; then
-        rsync -a --existing "$tgt/" "$REPO/$src/"
-      else
-        cp -p "$tgt" "$REPO/$src"
-      fi
-      manifest_set_item "$target" "$rel" "$src" "$(tree_sha "$tgt")"
-      ok "pulled $rel"
-    fi
-  done < <(manifest_read_items "$target")
-}
-
-action_diff() {
-  local target="$1" src rel item tgt
-  step "Diff $target"
-  preflight_placeholders
-  while IFS='|' read -r src rel; do
-    [[ -n "$src" ]] || continue
-    stage_item "$src"
-    item="$STAGED_PATH"; tgt="$target/$rel"
-    if [[ ! -e "$tgt" ]]; then
-      would "push $rel (not installed)"
-    elif [[ "$(tree_sha "$tgt")" == "$(tree_sha "$item")" ]]; then
-      info "$rel in sync"
-    else
-      warn "$rel differs:"
-      echo "    push (repo → target):"
-      rsync -ani "$item/" "$tgt/" 2>/dev/null \
-        | grep -vE 'sending incremental|^$|^\.$' | sed 's/^/      /' || true
-      echo "    pull (target → repo):"
-      rsync -ani --existing "$tgt/" "$item/" 2>/dev/null \
-        | grep -vE 'sending incremental|^$|^\.$' | sed 's/^/      /' || true
-    fi
-  done < <(enumerate_items)
-}
-
-action_remove() {
-  local target="$1" src rel sha tgt current
-  step "Remove ← $target"
-  [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to remove"; return; }
-  while IFS='|' read -r rel src sha; do
-    [[ -n "$rel" ]] || continue
-    item_selected "$src" || continue           # tag filter
-    tgt="$target/$rel"
-    if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
-      info "already gone: $rel"
-      manifest_del_item "$target" "$rel"
-      continue
-    fi
-    current="$(tree_sha "$tgt" 2>/dev/null || true)"
-    if [[ -n "$sha" && "$current" == "$sha" ]]; then
-      if [[ $DRY -eq 1 ]]; then
-        would "remove $rel"
-      else
-        rm -rf "$tgt"; ok "removed $rel"
-        manifest_del_item "$target" "$rel"
-      fi
-    else
-      warn "$rel kept — modified in target (content differs from what we pushed); remove manually if unwanted"
-    fi
-  done < <(manifest_read_items "$target")
-  if [[ $DRY -eq 0 ]]; then
-    [[ "$target" == "$GLOBAL_CFG" ]] && rm -f "$target/$REPO_POINTER"
-    for top in "${TOPS[@]}"; do rmdir "$target/$top" 2>/dev/null || true; done
-    rmdir "$target" 2>/dev/null || true
-    # a full remove clears the target's tracking; a tag-filtered remove only
-    # when nothing tracked remains for this target
-    if [[ ${#TAGS_SEL[@]} -eq 0 ]] || [[ -z "$(manifest_read_items "$target")" ]]; then
-      manifest_drop_target "$target"
-    fi
-  fi
-}
-
-# ── bin scripts (scripts/ → ~/.local/bin, copy never symlink) ─────────────
-# Machine-global and flat: executable repo scripts/<name> installs to $BIN_DIR/<name>.
-# Non-executable files and directories under scripts/ are source material, not
-# commands to install. Files sync never installed are left alone (adopted only
-# when identical or with --force); anything else in $BIN_DIR is out of scope.
-
-# Prints repo-relative script paths passing the tag filter.
-enumerate_bin() {
-  local f name
-  [[ -d "$REPO/scripts" ]] || return 0
-  for f in "$REPO/scripts"/*; do
-    [[ -f "$f" && -x "$f" ]] || continue
-    name="$(basename "$f")"
-    item_selected "scripts/$name" && printf 'scripts/%s\n' "$name"
+print_plan() {
+  local i
+  printf '  %-10s %-36s %s\n' ACTION ITEM DETAIL
+  for i in "${!PLAN_ACTION[@]}"; do
+    plan_row "${PLAN_ACTION[i]}" "${PLAN_ITEM[i]}" "${PLAN_DETAIL[i]}"
   done
 }
 
-bin_push() {
-  local src name tgt rec
-  step "Bin → $BIN_DIR"
-  [[ -d "$REPO/scripts" ]] || { info "no scripts/ directory — nothing to install"; return; }
-  mkdir -p "$BIN_DIR"
-  while IFS= read -r src; do
-    [[ -n "$src" ]] || continue
-    name="${src#scripts/}"
-    stage_item "$src"
-    tgt="$BIN_DIR/$name"
-    if [[ -L "$tgt" ]]; then
-      warn "$name skipped — target path is a symlink (remove it first: rm $tgt)"
-      continue
-    fi
-    if [[ -e "$tgt" ]]; then
-      rec="$(manifest_read_items "$BIN_DIR" | grep -F -e "$name|" || true)"
-      if [[ -z "$rec" ]]; then
-        if [[ "$(tree_sha "$tgt")" == "$(tree_sha "$STAGED_PATH")" ]]; then
-          [[ $DRY -eq 1 ]] || manifest_set_item "$BIN_DIR" "$name" "$src" "$(tree_sha "$tgt")"
-          info "$name already in sync — tracking"
-          continue
-        fi
-        [[ $FORCE -eq 1 ]] || { warn "$name kept — not installed by sync (pass --force to adopt)"; continue; }
-      fi
-    fi
-    if [[ $DRY -eq 1 ]]; then
-      would "push $name"
-      continue
-    fi
-    cp -p "$STAGED_PATH" "$tgt"
-    chmod +x "$tgt"
-    manifest_set_item "$BIN_DIR" "$name" "$src" "$(tree_sha "$tgt")"
-    ok "pushed $name"
-  done < <(enumerate_bin)
+backup_entry() { # <backup-rel> <path>
+  local dest
+  [[ -n "$BACKUP_DIR" ]] || BACKUP_DIR="$BACKUP_BASE/$(date '+%Y%m%d-%H%M%S-%N')"
+  [[ -d "$BACKUP_DIR" ]] || mkdir -p "$BACKUP_DIR"
+  dest="$BACKUP_DIR/$1"
+  mkdir -p "$(dirname "$dest")"
+  mv "$2" "$dest"
+}
 
-  # stale prune: tracked scripts no longer shipped — same rule as action_push.
-  # Skipped on top-filtered pushes (-t), same reason.
-  if [[ -f "$MANIFEST" && ${#TOPS_SEL[@]} -eq 0 ]]; then
-    local rel sha current
-    while IFS='|' read -r rel src sha; do
-      [[ -n "$rel" ]] || continue
-      [[ -e "$REPO/$src" ]] && continue
-      tgt="$BIN_DIR/$rel"
-      if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
-        info "stale $rel already gone"
-        manifest_del_item "$BIN_DIR" "$rel"
+ensure_tar_backup() {
+  local existing archive
+  mkdir -p "$BACKUP_BASE"
+  existing="$(find "$BACKUP_BASE" -maxdepth 1 -name 'opencode-*.tar.gz' -print -quit 2>/dev/null)"
+  if [[ -n "$existing" ]]; then
+    info "config backup already present: $existing"
+    return 0
+  fi
+  if [[ ! -d "$HOME/.config/opencode" ]]; then
+    warn "no config dir at $HOME/.config/opencode — skipping tar backup"
+    return 0
+  fi
+  archive="$BACKUP_BASE/opencode-$(date '+%Y%m%d-%H%M%S-%N').tar.gz"
+  tar -C "$HOME/.config" -czf "$archive" opencode || die "cannot create config backup: $archive"
+  ok "config backup: $archive"
+}
+
+materialise_ref() { # <ref> — sets PREVIEW_DIR in the main shell
+  local ref="$1"
+  git -C "$REPO" rev-parse --verify --quiet "refs/heads/$ref" >/dev/null \
+    || die "ref '$ref' not found in $REPO — create the promotion branch first"
+  PREVIEW_DIR="$(mktemp -d "${TMPDIR:-/tmp/opencode}/sync-preview.XXXXXX")"
+  git -C "$REPO" archive "$ref" | tar -x -C "$PREVIEW_DIR" || die "cannot materialise ref '$ref' for preview"
+}
+
+apply_plan() {
+  local i kind tgt src name
+  for i in "${!PLAN_ACTION[@]}"; do
+    kind="${PLAN_KIND[i]}"
+    tgt="${PLAN_TGT[i]}"; src="${PLAN_SRC[i]}"
+    case "$kind" in
+      link)
+        mkdir -p "$(dirname "$tgt")"
+        if [[ -e "$tgt" || -L "$tgt" ]]; then backup_entry "${PLAN_ITEM[i]}" "$tgt"; fi
+        ln -s "$src" "$tgt"
+        ok "linked ${PLAN_ITEM[i]}" ;;
+      unlink)
+        rm -f "$tgt"
+        ok "pruned ${PLAN_ITEM[i]}" ;;
+      binlink)
+        name="${PLAN_ITEM[i]##*/}"
+        mkdir -p "$DATA_BIN" "$BIN_DIR"
+        cp -p "$src" "$DATA_BIN/$name"
+        chmod +x "$DATA_BIN/$name"
+        if [[ -e "$tgt" || -L "$tgt" ]]; then backup_entry "${PLAN_ITEM[i]}" "$tgt"; fi
+        ln -s "$DATA_BIN/$name" "$tgt"
+        ok "linked ${PLAN_ITEM[i]}" ;;
+    esac
+  done
+  return 0
+}
+
+refresh_clone() { # <ref>
+  local ref="$1"
+  mkdir -p "$XDG_DATA"
+  if [[ ! -d "$CLONE/.git" ]]; then
+    [[ -e "$CLONE" ]] && die "clone path exists but is not a git checkout: $CLONE"
+    git clone -q --no-checkout "$REPO" "$CLONE" || die "cannot clone $REPO into $CLONE"
+  fi
+  git -C "$CLONE" fetch -q --no-tags origin "+refs/heads/$ref:refs/remotes/origin/$ref" \
+    || die "cannot fetch ref '$ref' from $REPO"
+  git -C "$CLONE" checkout -q -B "$ref" "origin/$ref" || die "cannot check out ref '$ref' in $CLONE"
+  git -C "$CLONE" reset -q --hard "origin/$ref"
+}
+
+bun_install() {
+  [[ -f "$CLONE/plugins/package.json" ]] || return 0
+  if ! command -v bun >/dev/null 2>&1; then
+    die "bun not found — required to install plugin dependencies in $CLONE/plugins"
+  fi
+  step "Plugin dependencies"
+  ( cd "$CLONE/plugins" && bun install --frozen-lockfile ) \
+    || die "bun install --frozen-lockfile failed in $CLONE/plugins"
+  return 0
+}
+
+write_pointers() {
+  printf '%s\n' "$CLONE" > "$CLONE_POINTER"
+  mkdir -p "$GLOBAL_CFG"
+  printf '%s\n' "$REPO" > "$GLOBAL_CFG/$REPO_POINTER"
+}
+
+# ── actions ──────────────────────────────────────────────────────────────────
+plan_prune_cfg() {
+  local top child a rel
+  for top in "${TOP_LIST[@]}"; do
+    [[ -d "$GLOBAL_CFG/$top" ]] || continue
+    for child in "$GLOBAL_CFG/$top"/*; do
+      [[ -L "$child" ]] || continue
+      a="$(link_abs "$child" || true)"
+      [[ "$a" == "$CLONE/"* ]] || continue
+      rel="${a#"$CLONE"/}"
+      [[ -e "$a" ]] && continue
+      item_selected "$rel" || continue
+      add_plan prune "$rel" "clone target gone" unlink "$child" ""
+    done
+  done
+  return 0
+}
+
+plan_prune_bin() {
+  local child a name
+  [[ -d "$BIN_DIR" ]] || return 0
+  for child in "$BIN_DIR"/*; do
+    [[ -L "$child" ]] || continue
+    a="$(link_abs "$child" || true)"
+    [[ "$a" == "$DATA_BIN/"* ]] || continue
+    [[ -e "$a" ]] && continue
+    name="$(basename "$child")"
+    item_selected "scripts/$name" || continue
+    add_plan binprune "bin/$name" "data-bin copy gone" unlink "$child" ""
+  done
+  return 0
+}
+
+plan_config() { # <base>
+  local base="$1" src rel srcpath tgt a act detail
+  while IFS='|' read -r src rel; do
+    [[ -n "$src" ]] || continue
+    if ! item_selected "$src"; then
+      add_plan skip "$rel" "tag filter" "" "" ""
+      continue
+    fi
+    srcpath="$base/$src"
+    if [[ ! -e "$srcpath" ]]; then
+      add_plan skip "$rel" "no source in checkout" "" "" ""
+      continue
+    fi
+    tgt="$GLOBAL_CFG/$rel"
+    if [[ -L "$tgt" ]]; then
+      a="$(link_abs "$tgt" || true)"
+      if [[ "$a" == "$CLONE/$src" ]]; then
+        add_plan keep "$rel" "already linked" "" "" ""
         continue
       fi
-      current="$(tree_sha "$tgt" 2>/dev/null || true)"
-      if [[ "$current" == "$sha" ]]; then
-        if [[ $DRY -eq 1 ]]; then
-          would "remove stale $rel"
-        else
-          rm -f "$tgt"; ok "removed stale $rel"
-          manifest_del_item "$BIN_DIR" "$rel"
-        fi
+      if [[ "$a" == "$CLONE/"* ]]; then detail="managed link points elsewhere: $a"
+      else detail="private symlink: $a"; fi
+      act=replace
+    elif [[ -e "$tgt" ]]; then
+      if [[ "$(tree_sha "$tgt")" == "$(tree_sha "$srcpath")" ]]; then
+        act=replace; detail="identical real entry"
       else
-        warn "$rel kept — no longer in repo and modified in target"
+        act=collision; detail="real entry differs"
       fi
-    done < <(manifest_read_items "$BIN_DIR")
-  fi
-}
-
-bin_pull() {
-  local rel src sha tgt
-  step "Pull ← $BIN_DIR"
-  [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to pull"; return; }
-  while IFS='|' read -r rel src sha; do
-    [[ -n "$rel" && -n "$src" ]] || continue
-    item_selected "$src" || continue
-    [[ -e "$REPO/$src" ]] || continue
-    if item_templated "$src"; then
-      info "pull skipped $rel — templated (repo-owned: edit .agent-values, then push)"
+    else
+      act=create; detail="-> $srcpath"
+    fi
+    if [[ "$act" == "collision" && $FORCE -eq 0 ]]; then
+      add_plan collision "$rel" "$detail" "" "" ""
+      COLLISIONS+=("$rel")
       continue
     fi
-    tgt="$BIN_DIR/$rel"
-    [[ -e "$tgt" ]] || continue
-    if [[ $DRY -eq 1 ]]; then
-      would "pull $rel"
-    else
-      cp -p "$tgt" "$REPO/$src"
-      manifest_set_item "$BIN_DIR" "$rel" "$src" "$(tree_sha "$tgt")"
-      ok "pulled $rel"
-    fi
-  done < <(manifest_read_items "$BIN_DIR")
+    if [[ "$act" == "collision" && $FORCE -eq 1 ]]; then detail="$detail (forced)"; fi
+    add_plan "$act" "$rel" "$detail" link "$tgt" "$srcpath"
+  done < <(enumerate_items "$base")
+  return 0
 }
 
-bin_diff() {
-  local src name item tgt
-  step "Diff $BIN_DIR"
-  [[ -d "$REPO/scripts" ]] || { info "no scripts/ directory"; return; }
-  preflight_placeholders
+plan_bins() { # <base>
+  local base="$1" src name srcpath tgt a act detail
+  [[ -d "$base/scripts" ]] || return 0
   while IFS= read -r src; do
     [[ -n "$src" ]] || continue
     name="${src#scripts/}"
-    stage_item "$src"
-    item="$STAGED_PATH"; tgt="$BIN_DIR/$name"
-    if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
-      would "push $name (not installed)"
-    elif [[ "$(tree_sha "$tgt")" == "$(tree_sha "$item")" ]]; then
-      info "$name in sync"
-    else
-      warn "$name differs"
-    fi
-  done < <(enumerate_bin)
-}
-
-bin_remove() {
-  local rel src sha tgt current
-  step "Remove ← $BIN_DIR"
-  [[ -f "$MANIFEST" ]] || { info "no manifest — nothing tracked to remove"; return; }
-  while IFS='|' read -r rel src sha; do
-    [[ -n "$rel" ]] || continue
-    item_selected "$src" || continue
-    tgt="$BIN_DIR/$rel"
-    if [[ ! -e "$tgt" && ! -L "$tgt" ]]; then
-      info "already gone: $rel"
-      manifest_del_item "$BIN_DIR" "$rel"
+    srcpath="$base/$src"
+    [[ -e "$srcpath" ]] || continue
+    if ! item_selected "$src"; then
+      add_plan skip "bin/$name" "tag filter" "" "" ""
       continue
     fi
-    current="$(tree_sha "$tgt" 2>/dev/null || true)"
-    if [[ -n "$sha" && "$current" == "$sha" ]]; then
-      if [[ $DRY -eq 1 ]]; then
-        would "remove $rel"
+    tgt="$BIN_DIR/$name"
+    if [[ -L "$tgt" ]]; then
+      a="$(link_abs "$tgt" || true)"
+      if [[ "$a" == "$DATA_BIN/$name" ]]; then
+        add_plan keep "bin/$name" "already linked" "" "" ""
+        continue
+      fi
+      if [[ "$a" == "$DATA_BIN/"* ]]; then detail="managed link points elsewhere: $a"
+      else detail="private symlink: $a"; fi
+      act=replace
+    elif [[ -e "$tgt" ]]; then
+      if [[ "$(tree_sha "$tgt")" == "$(tree_sha "$srcpath")" ]]; then
+        act=replace; detail="identical real binary"
       else
-        rm -f "$tgt"; ok "removed $rel"
-        manifest_del_item "$BIN_DIR" "$rel"
+        act=collision; detail="real binary differs"
       fi
     else
-      warn "$rel kept — modified in target (content differs from what we pushed); remove manually if unwanted"
+      act=create; detail="-> $DATA_BIN/$name"
     fi
-  done < <(manifest_read_items "$BIN_DIR")
+    if [[ "$act" == "collision" && $FORCE -eq 0 ]]; then
+      add_plan collision "bin/$name" "$detail" "" "" ""
+      COLLISIONS+=("bin/$name")
+      continue
+    fi
+    if [[ "$act" == "collision" && $FORCE -eq 1 ]]; then detail="$detail (forced)"; fi
+    add_plan "$act" "bin/$name" "$detail" binlink "$tgt" "$srcpath"
+  done < <(enumerate_bin "$base")
+  return 0
 }
 
-# Bin scripts are machine-global: sync them only for the global target and
-# only when no top filter scopes the run (scripts/ is not a top).
-maybe_bin() { # <push|pull|diff|remove>
-  [[ "$TARGET" == "$GLOBAL_CFG" ]] || return 0
-  [[ ${#TOPS_SEL[@]} -eq 0 ]] || return 0
-  case "$1" in
-    push) bin_push ;; pull) bin_pull ;; diff) bin_diff ;; remove) bin_remove ;;
-  esac
+action_deploy() { # <ref>
+  local ref="$1" base
+  step "Deploy → $GLOBAL_CFG"
+  if [[ $DRY -eq 1 ]]; then
+    info "dry run — plan only — no config, bin, or pointer writes"
+    materialise_ref "$ref"
+    base="$PREVIEW_DIR"
+  else
+    refresh_clone "$ref"
+    bun_install
+    base="$CLONE"
+  fi
+
+  plan_config "$base"
+  plan_prune_cfg
+  plan_bins "$base"
+  plan_prune_bin
+  print_plan
+
+  if [[ ${#COLLISIONS[@]} -gt 0 ]]; then
+    die "collision at ${#COLLISIONS[@]} entry/entries: ${COLLISIONS[*]} — move them aside or pass --force"
+  fi
+  if [[ $DRY -eq 1 ]]; then
+    info "dry run complete — plan only — no config, bin, or pointer writes"
+    return 0
+  fi
+  ensure_tar_backup
+  apply_plan
+  write_pointers
+  step "Done"
+  info "clone: $CLONE"
+  info "config: $GLOBAL_CFG"
+  info "bin: $BIN_DIR"
+  return 0
 }
 
 action_list() {
-  local sel=("${TAGS_SEL[@]}") tops=("${TOP_LIST[@]}")
-  TAGS_SEL=(); TOP_LIST=("${TOPS[@]}")       # list always shows the full picture
-  echo "${B}Targets${R}"
-  [[ -d "$GLOBAL_CFG" ]] && echo "  global -> $GLOBAL_CFG"
-  for name in "${!TARGET_PATHS[@]}"; do echo "  $name -> ${TARGET_PATHS[$name]}"; done
-  echo
-  if [[ -f "$MANIFEST" ]]; then
-    echo "${B}Installed (manifest)${R}"
-    python3 - "$MANIFEST" <<'EOF'
-import json, sys
-try: m = json.load(open(sys.argv[1]))
-except Exception: raise SystemExit
-for tgt, e in m.items():
-    print(f"  {tgt}: {len(e.get('items') or {})} item(s)")
-EOF
-  else
-    echo "Nothing installed yet — run: ./sync.sh push -g"
-  fi
-  echo
-  echo "${B}Tags${R} ($TAGS_CONF)"
-  if [[ ${#TAG_NAME[@]} -eq 0 ]]; then
-    echo "  none defined"
-  else
-    local all_srcs=() src seen="" i t items
-    local untagged=()
-    while IFS='|' read -r src rel; do all_srcs+=("$src"); done < <(enumerate_items)
-    for i in "${!TAG_NAME[@]}"; do
-      t="${TAG_NAME[i]}"
-      [[ ",$seen," == *",$t,"* ]] && continue
-      seen="${seen:+$seen,}$t"
-      items=""
-      for src in "${all_srcs[@]}"; do
-        [[ ",$(item_tags "$src")," == *",$t,"* ]] && items+="${items:+ }$src"
-      done
-      if [[ -z "$items" ]]; then
-        warn "tag '$t' matches no items"
+  local top child a rel name m p total_m=0 total_p=0
+  info "clone: $([[ -f "$CLONE_POINTER" ]] && cat "$CLONE_POINTER" || printf '%s' "$CLONE")"
+  if [[ ${#TAGS_SEL[@]} -gt 0 ]]; then info "tag filter: ${TAGS_SEL[*]}"; fi
+  step "Config → $GLOBAL_CFG"
+  for top in "${TOP_LIST[@]}"; do
+    [[ -d "$GLOBAL_CFG/$top" ]] || continue
+    m=0; p=0
+    printf '  %s\n' "$top"
+    for child in "$GLOBAL_CFG/$top"/*; do
+      [[ -e "$child" || -L "$child" ]] || continue
+      if is_managed_link "$child"; then
+        a="$(link_abs "$child")"
+        rel="${a#"$CLONE"/}"
+        item_selected "$rel" || continue
+        printf '    M %-36s -> %s\n' "${child#"$GLOBAL_CFG/"}" "$a"
+        m=$((m+1))
       else
-        echo "  $t: ${items// /, }"
+        printf '    P %-36s\n' "${child#"$GLOBAL_CFG/"}"
+        p=$((p+1))
       fi
     done
-    for src in "${all_srcs[@]}"; do
-      [[ -z "$(item_tags "$src")" ]] && untagged+=("$src")
+    info "$top: $m managed, $p private"
+    total_m=$((total_m+m)); total_p=$((total_p+p))
+  done
+  info "config total: $total_m managed, $total_p private"
+  step "Bin → $BIN_DIR"
+  m=0; p=0
+  [[ -d "$BIN_DIR" ]] || { info "no bin dir"; return 0; }
+  for child in "$BIN_DIR"/*; do
+    [[ -e "$child" || -L "$child" ]] || continue
+    name="$(basename "$child")"
+    if is_managed_bin_link "$child"; then
+      item_selected "scripts/$name" || continue
+      printf '    M %-36s -> %s\n' "bin/$name" "$(link_abs "$child")"
+      m=$((m+1))
+    else
+      printf '    P %-36s\n' "bin/$name"
+      p=$((p+1))
+    fi
+  done
+  info "bin total: $m managed, $p private"
+  return 0
+}
+
+action_diff() { # <ref>
+  local ref="$1" ref_sha clone_sha="" line item changed_item changed=()
+  step "Diff (ref: $ref)"
+  ref_sha="$(git -C "$REPO" rev-parse --verify "refs/heads/$ref" 2>/dev/null || true)"
+  [[ -n "$ref_sha" ]] || die "ref '$ref' not found in $REPO"
+  info "ref   $ref @ $ref_sha"
+  if [[ ! -d "$CLONE/.git" ]]; then
+    info "clone not present — nothing deployed to compare"
+    return 0
+  fi
+  clone_sha="$(git -C "$CLONE" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -z "$clone_sha" ]]; then
+    info "clone has no HEAD"
+    return 0
+  fi
+  info "clone $CLONE @ $clone_sha"
+  git -C "$CLONE" fetch -q --no-tags origin "$ref" || die "cannot fetch '$ref' from $REPO"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    item="$(printf '%s' "$line" | cut -d/ -f1-2)"
+    case "${item%%/*}" in skills|agents|plugins|commands|instructions|lib|scripts) ;; *) continue ;; esac
+    item_selected "$item" || continue
+    for changed_item in "${changed[@]}"; do [[ "$changed_item" == "$item" ]] && continue 2; done
+    changed+=("$item")
+  done < <(git -C "$CLONE" diff --name-only "$clone_sha" FETCH_HEAD -- "${TOP_LIST[@]}" scripts 2>/dev/null || true)
+  if [[ ${#changed[@]} -eq 0 ]]; then
+    info "no changed items"
+  else
+    printf '  %s\n' "${changed[@]}"
+  fi
+  return 0
+}
+
+action_remove() {
+  local top child a rel src name
+  step "Remove → $GLOBAL_CFG"
+  for top in "${TOP_LIST[@]}"; do
+    [[ -d "$GLOBAL_CFG/$top" ]] || continue
+    for child in "$GLOBAL_CFG/$top"/*; do
+      [[ -L "$child" ]] || continue
+      a="$(link_abs "$child" || true)"
+      [[ "$a" == "$CLONE/"* ]] || continue
+      src="${a#"$CLONE"/}"
+      item_selected "$src" || continue
+      rel="${child#"$GLOBAL_CFG/"}"
+      if [[ $DRY -eq 1 ]]; then
+        plan_row unlink "$rel" "managed symlink"
+      else
+        rm -f "$child"
+        ok "unlinked $rel"
+      fi
     done
-    if [[ ${#untagged[@]} -gt 0 ]]; then
-      warn "untagged (only pushed with no -t filter): ${untagged[*]}"
+  done
+  step "Bin → $BIN_DIR"
+  if [[ -d "$BIN_DIR" ]]; then
+    for child in "$BIN_DIR"/*; do
+      [[ -L "$child" ]] || continue
+      a="$(link_abs "$child" || true)"
+      [[ "$a" == "$DATA_BIN/"* ]] || continue
+      name="$(basename "$child")"
+      item_selected "scripts/$name" || continue
+      if [[ $DRY -eq 1 ]]; then
+        plan_row unlink "bin/$name" "managed bin symlink"
+      else
+        rm -f "$child"
+        ok "unlinked bin/$name"
+      fi
+    done
+  fi
+  if [[ $DRY -eq 1 ]]; then
+    plan_row unlink "${CLONE_POINTER#"$XDG_DATA"/}" "clone pointer"
+  elif [[ -f "$CLONE_POINTER" ]]; then
+    rm -f "$CLONE_POINTER"
+    ok "removed clone pointer"
+  fi
+  if [[ $FORCE -eq 1 && $DRY -eq 0 && -f "$GLOBAL_CFG/$REPO_POINTER" ]]; then
+    if [[ "$(cat "$GLOBAL_CFG/$REPO_POINTER")" == "$REPO" ]]; then
+      rm -f "$GLOBAL_CFG/$REPO_POINTER"
+      ok "removed repo pointer"
     fi
   fi
-  TAGS_SEL=("${sel[@]}"); TOP_LIST=("${tops[@]}")
-}
-
-# ── cross-target plugin guard ────────────────────────────────────────────────
-plugin_guard() { # <target>
-  [[ $FORCE -eq 0 ]] || return 0
-  local tgt="$1" other dangerous=0
-  if [[ "$tgt" == "$GLOBAL_CFG" ]]; then
-    # pushing global: any other target with plugins would double-load
-    while IFS= read -r other; do
-      [[ "$other" == "$tgt" ]] && continue
-      if target_has_plugins "$other"; then dangerous=1; break; fi
-    done < <(python3 - "$MANIFEST" <<'EOF'
-import json, sys
-try: m = json.load(open(sys.argv[1]))
-except Exception: raise SystemExit
-print("\n".join(m.keys()))
-EOF
-)
-  else
-    # pushing a project: collides with global plugins
-    target_has_plugins "$GLOBAL_CFG" && dangerous=1
-  fi
-  [[ $dangerous -eq 0 ]] && return 0
-  die "plugins from this repo are already installed somewhere that loads
-alongside this target — remove the other install first (sync.sh remove …)
-or pass --force."
-}
-
-# ── advisory: shadowed copies in ~/.agents/skills ────────────────────────────
-shadow_advisory() {
-  local name shadowed=()
-  while IFS='|' read -r src rel; do
-    [[ "$rel" == skills/* ]] || continue
-    name="${rel#skills/}"
-    [[ -e "$AGENTS_SKILLS/$name" ]] && shadowed+=("$name")
-  done < <(enumerate_items)
-  [[ ${#shadowed[@]} -gt 0 ]] || return 0
-  step "Shadow conflicts"
-  warn "${#shadowed[@]} skill(s) also exist as copies in $AGENTS_SKILLS:"
-  printf '  %s\n' "${shadowed[@]}"
-  warn "the pushed config copy wins; delete the npx copies or skill-doctor will
-        keep flagging collisions/drift:"
-  printf '  rm -r %s/{%s}\n' "$AGENTS_SKILLS" "$(IFS=,; echo "${shadowed[*]}")"
+  return 0
 }
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
@@ -971,48 +734,13 @@ load_tags_conf
 if [[ ${#TAGS_SEL[@]} -gt 0 ]]; then
   validate_tag_selection
   warn_unused_patterns
-  [[ "$COMMAND" == "list" ]] || info "tag filter: ${TAGS_SEL[*]}"   # list ignores filters
+  info "tag filter: ${TAGS_SEL[*]}"
 fi
-
-if [[ "$COMMAND" == "list" ]]; then action_list; exit 0; fi
-
-if [[ "$COMMAND" == "all" ]]; then
-  [[ $DRY -eq 1 ]] && info "dry run — nothing will be changed"
-  run_target() {
-    resolve_target "$1"
-    echo "=========================================="
-    echo "  $SUB_CMD: $1 -> $TARGET"
-    echo "=========================================="
-    case "$SUB_CMD" in
-      push)   plugin_guard "$TARGET"; action_push "$TARGET" ;;
-      pull)   action_pull "$TARGET" ;;
-      diff)   action_diff "$TARGET" ;;
-      remove) action_remove "$TARGET" ;;
-    esac
-    maybe_bin "$SUB_CMD"
-  }
-  run_target global
-  for name in "${!TARGET_PATHS[@]}"; do run_target "$name"; done
-  echo "Done."
-  exit 0
-fi
-
-resolve_target "$TARGET_NAME"
-[[ $DRY -eq 1 ]] && info "dry run — nothing will be changed"
 
 case "$COMMAND" in
-  push)   plugin_guard "$TARGET"; action_push "$TARGET"; shadow_advisory; maybe_bin push ;;
-  pull)   action_pull "$TARGET"; maybe_bin pull ;;
-  diff)   action_diff "$TARGET"; maybe_bin diff ;;
-  remove) action_remove "$TARGET"; maybe_bin remove ;;
+  deploy) action_deploy "$REF" ;;
+  list)   action_list ;;
+  diff)   action_diff "$REF" ;;
+  remove) action_remove ;;
 esac
-
-step "Next steps"
-if [[ "$COMMAND" == "push" && $DRY -eq 0 ]]; then
-  cat <<EOF
-  1. Restart OpenCode (or just the background service) to pick up new copies.
-  2. After editing repo content later: ./sync.sh push ${TARGET_NAME:-global}
-  ${DIM}Remove: ./sync.sh remove ${TARGET_NAME:-global}${R}
-EOF
-fi
 exit 0

@@ -1,7 +1,7 @@
 # sync manifest — tracked pushes live here, never commit it
 .agent-sync.json
 
-# machine-local template values ({{KEY}} substitution source)
+# machine-local values (installer-owned; not used by sync.sh)
 .agent-values
 
 # plugin dependencies (plugins/package.json is committed, modules are not)
