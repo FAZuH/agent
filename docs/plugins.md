@@ -501,4 +501,3 @@ Command definitions are a separate item class and live in `commands/`, not in
 - **`/finish`**: loads the finish skill for the end-of-session workflow.
 - **`/gate`**: switches the session run mode between `auto` and `interactive`, or reports the current mode.
 - **`/status-report`**: reports goal progress, tracked issues, and remaining tasks for the session.
-- **`/imagescan-*`**: ten single-purpose image commands (`answer`, `code`, `diagram`, `handwriting`, `latex`, `math`, `obsidian`, `ocr`, `summarize`, `translate`), all on the `chat` agent. The `imagescan` tag in `tags.conf` deploys them with the `scripts/imagescan` wrapper, which grabs a screenshot and runs one of them.

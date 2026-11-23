@@ -135,7 +135,7 @@ agent tools and are not listed here.
 ### CLIs
 
 `bgrun` (background jobs), `octask` (schedules),
-`opencode2` (v2 HTTP API), `npx skills` (skill ecosystem), `imagescan`,
+`opencode2` (v2 HTTP API), `npx skills` (skill ecosystem),
 `pdf-build`, `skill-graph`, `mail-digest`/`phone-digest` (opt-in digests),
 `zele` (mail/calendar CLI).
 
