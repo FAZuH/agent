@@ -1,18 +1,36 @@
 ## Unreleased
 
-These Watchdog changes are in the source. The review chain stays off by
-default. It activates only when you set `WATCHDOG_CHAIN=1` and a real-host
-`chain-gate.json` passes the rollout gate. The gate did not pass. See
+The review chain is off by default. Its activation is the `watchdog.chain`
+setting on the Watchdog page, and the capability gate still has to pass; the
+gate passed on a real host. See
 [Watchdog rollout status](docs/watchdog-rollout-status.md).
 
 ### Features
 
-* **plugin:** capability gate, composed race evidence, delivery panel state ([4c2a441](https://github.com/FAZuH/agent/commit/4c2a441))
-* **plugin:** dedicated watchdog page and migration ([579df92](https://github.com/FAZuH/agent/commit/579df92))
-* **plugin:** abort receipts and parent notices ([a805d41](https://github.com/FAZuH/agent/commit/a805d41))
-* **plugin:** operation-scoped release and overlapping recovery ([3025b02](https://github.com/FAZuH/agent/commit/3025b02))
-* **plugin:** unified abort operations with honest receipts ([0996bc6](https://github.com/FAZuH/agent/commit/0996bc6))
-* **plugin:** harden judge result protocol ([a00588d](https://github.com/FAZuH/agent/commit/a00588d))
+* **plugin:** give the review chain an operator surface and its own log family ([dbe4c60](https://github.com/FAZuH/agent/commit/dbe4c60a715d48818b974fba75e761477ca0f33c))
+
+## [0.16.2](https://github.com/FAZuH/agent/compare/v0.16.1...v0.16.2) (2026-11-22)
+
+
+### Features
+
+* **plugin:** abort receipts and parent notices ([a805d41](https://github.com/FAZuH/agent/commit/a805d417a33d43fdfd103310d82b37a65975e4b6)), closes [#17](https://github.com/FAZuH/agent/issues/17)
+* **plugin:** capability gate, composed race evidence, delivery panel state ([4c2a441](https://github.com/FAZuH/agent/commit/4c2a4412fbd60a81541555f8b7309745b5c67eee)), closes [#19](https://github.com/FAZuH/agent/issues/19)
+* **plugin:** dedicated watchdog page and migration ([579df92](https://github.com/FAZuH/agent/commit/579df92c027f7643a5ba72d54e99971c2b68c064)), closes [#18](https://github.com/FAZuH/agent/issues/18)
+* **plugin:** expose durable prompt history lookup ([517bff6](https://github.com/FAZuH/agent/commit/517bff61a39b591c4e4f708939812284f1ab73a9))
+* **plugin:** harden judge result protocol ([a00588d](https://github.com/FAZuH/agent/commit/a00588d6a63f9359e5d3aaea21c37ac2d6577cee)), closes [#14](https://github.com/FAZuH/agent/issues/14)
+* **plugin:** operation-scoped release and overlapping recovery ([3025b02](https://github.com/FAZuH/agent/commit/3025b02e7b7877639e91c0071a33871e2e592ed0)), closes [#16](https://github.com/FAZuH/agent/issues/16)
+* **plugin:** parent stage reviews subagent calls with inherited context ([0d752a5](https://github.com/FAZuH/agent/commit/0d752a5f00d9175b5ff8ec5c660ae05072b9ab9d))
+* **plugin:** per-session review budget, batching, and admission backpressure ([143b95c](https://github.com/FAZuH/agent/commit/143b95cb386c36f39bc38ed412657634476918c7))
+* **plugin:** root-session review chain with capability-gated activation ([aed2412](https://github.com/FAZuH/agent/commit/aed2412baf5fbc11e73fb04e058a2194b89ae4db))
+* **plugin:** unified abort operations with honest receipts ([0996bc6](https://github.com/FAZuH/agent/commit/0996bc69ff8edcfa6a900e545b383603732e1901)), closes [#15](https://github.com/FAZuH/agent/issues/15)
+
+
+### Bug Fixes
+
+* Jev rejection logs carry ids and reason codes only ([483949c](https://github.com/FAZuH/agent/commit/483949c009289ea62657f94eab2b65f31655715f))
+* **skill:** heartbeat watches revived children instead of re-firing settled reports ([843bc39](https://github.com/FAZuH/agent/commit/843bc39b9dac5b3a1f01b98b38a681f55a159ac7))
+* **skill:** review handoff names the branch_report misdelivery fallback ([067e1bf](https://github.com/FAZuH/agent/commit/067e1bf9410648df6cf675f6dd76b4198c08b3de))
 
 ## [0.16.1](https://github.com/FAZuH/agent/compare/v0.16.0...v0.16.1) (2026-11-20)
 
@@ -116,21 +134,4 @@ default. It activates only when you set `WATCHDOG_CHAIN=1` and a real-host
 ### Features
 
 * **skill:** add codebase-audit skill ([ad5437e](https://github.com/FAZuH/agent/commit/ad5437efe279a3e0e6a50620c7a9fb395107baf5))
-
-## [0.15.2](https://github.com/FAZuH/agent/compare/v0.15.1...v0.15.2) (2026-11-09)
-
-
-### Features
-
-* **plugin:** add bulk read and dismiss commands ([0378406](https://github.com/FAZuH/agent/commit/0378406e1fd30668d0ba9f99e51c0081515f47ac))
-* **plugin:** let prompt_user block for the answer ([283c261](https://github.com/FAZuH/agent/commit/283c26151fc8e60ff5e3c46c4c9c746e8827b368))
-* **plugin:** show context status and sidebar settings in reports ([e38c5c0](https://github.com/FAZuH/agent/commit/e38c5c010df0585fadb62c26133e64a9fe97f3cb))
-* **plugin:** title prompt answers like the question card ([9403d76](https://github.com/FAZuH/agent/commit/9403d763c93bf64fe3c649020eeb0f7f4979d15f))
-
-
-### Bug Fixes
-
-* **plugin:** align the context watch line and poll its status ([d73691d](https://github.com/FAZuH/agent/commit/d73691de913f31b7c943bb7e0b69c05ea5cf60e4))
-* **plugin:** read fork markers written under the old aside key ([d211e7d](https://github.com/FAZuH/agent/commit/d211e7dd82cc7e5daff606f5ad4947509eea1e21))
-* **plugin:** title the context section Context Watch ([d2a9b79](https://github.com/FAZuH/agent/commit/d2a9b79e0983ee6824f680afd007602f37a11ceb))
 
