@@ -164,3 +164,43 @@ test("the shipped Watchdog page is gated off by default and never binds a secret
   expect(code).toContain("MISSING")
   expect(code).not.toMatch(/value[:=][^,;]{0,20}receiptsWebhook/i)
 })
+
+test("the shipped Watchdog page carries the review switch and the ask-routing control", () => {
+  const code = readFileSync(join(import.meta.dir, "../dist/gui-experimental.cjs"), "utf8")
+  // The two activation controls survive the build with their titles, the switch
+  // reading persisted state, and the routing options the page offers.
+  expect(code).toContain("Review chain")
+  expect(code).toContain("Ask routing")
+  expect(code).toContain("Judged")
+  expect(code).toContain("Immediate")
+  // The bindings travel too: a build from stale source can keep the literals and
+  // still bind the wrong field, so the switch must read the persisted value and
+  // the routing control the effective one.
+  expect(code).toContain("persisted.chain")
+  expect(code).toContain("effective.askMode")
+  // The gate state sentence and the off line are the page's own words: a build
+  // that dropped the new description would drop these literals too.
+  expect(code).toContain("Capability: not checked while the review switch is off.")
+  expect(code).toContain("Capability: the capability gate passed.")
+  expect(code).toContain("Review chain off: the review switch is off")
+  // A passed gate on an unwired host reads as not wired, not as available.
+  expect(code).toContain("Review chain not wired")
+  // The gate claim beside the note is guarded by the chain's status and reads
+  // `wired` as the registration: the built file must carry both, in that order.
+  // (The bundle at HEAD carries neither, so this pin fails on stale source.)
+  expect(code).toMatch(/"passed"&&[A-Za-z_$]+\.chain\.wired/)
+})
+
+test("the shipped Watchdog page lists pending human reviews, marks interrupted ones, and reopens through the contract", () => {
+  const code = readFileSync(join(import.meta.dir, "../dist/gui-experimental.cjs"), "utf8")
+  // The section, its two distinct empty states, and the row's own words survive
+  // the build: a stale bundle carries none of them.
+  expect(code).toContain("Pending human reviews")
+  expect(code).toContain("No pending human reviews.")
+  expect(code).toContain("this list may be incomplete, not empty")
+  expect(code).toContain("Interrupted by a restart")
+  expect(code).toContain("age unknown")
+  expect(code).toContain("Reopen card")
+  // The reopen is the contract method, not a locally posted card.
+  expect(code).toContain("reopenPendingReview")
+})

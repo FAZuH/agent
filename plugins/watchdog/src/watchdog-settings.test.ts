@@ -24,7 +24,7 @@ process.env.OPENCODE_JEV_SESSION_BAN_DIR = BAN_DIR
 const { loadState, saveState, readRawState, STATE_FILE, APPROVALS_FILE, DEFAULTS } = await import("../../../lib/jev/state.ts")
 const { recordApproval, readApprovals } = await import("../../../lib/jev/approve.ts")
 const { watchdogSnapshot, applyWatchdogSetting, applyWatchdogSecret, watchdogMigrationReport } = await import("./watchdog-settings.ts")
-const { watchdogLimits, watchdogNodes, watchdogEnvOverrides } = await import("./watchdog-config.ts")
+const { watchdogLimits, watchdogNodes, watchdogEnvOverrides, watchdogChain, watchdogAskMode } = await import("./watchdog-config.ts")
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
@@ -66,6 +66,8 @@ test("a stored watchdog scope is read back exactly as saved", () => {
     jevBatchMs: 50,
     supervisorBatchMax: 3,
     supervisorBatchMs: 60,
+    chain: true,
+    askMode: "immediate",
   }
   saveState({ watchdog: tuned })
   expect(loadState().watchdog).toEqual(tuned)
@@ -162,11 +164,11 @@ test("clearing a secret is a documented write, not a refusal", () => {
 })
 
 test("the migration report carries counts only: no values, no secrets", () => {
-  expect(watchdogMigrationReport(undefined)).toEqual({ present: false, stored: 0, defaulted: 8, invalid: 0 })
+  expect(watchdogMigrationReport(undefined)).toEqual({ present: false, stored: 0, defaulted: 10, invalid: 0 })
   const tuned = { ...DEFAULTS.watchdog, sessionCap: 9 }
-  expect(watchdogMigrationReport(tuned)).toEqual({ present: true, stored: 8, defaulted: 0, invalid: 0 })
-  expect(watchdogMigrationReport({ sessionCap: 9 })).toEqual({ present: true, stored: 1, defaulted: 7, invalid: 0 })
-  expect(watchdogMigrationReport({ sessionCap: -4, on: "yes" })).toEqual({ present: true, stored: 0, defaulted: 6, invalid: 2 })
+  expect(watchdogMigrationReport(tuned)).toEqual({ present: true, stored: 10, defaulted: 0, invalid: 0 })
+  expect(watchdogMigrationReport({ sessionCap: 9 })).toEqual({ present: true, stored: 1, defaulted: 9, invalid: 0 })
+  expect(watchdogMigrationReport({ sessionCap: -4, on: "yes" })).toEqual({ present: true, stored: 0, defaulted: 8, invalid: 2 })
 })
 
 test("effective values: env wins when set, the persisted value takes over when it is unset", () => {
@@ -241,7 +243,111 @@ test("timing precedence: a set environment value wins over the persisted value f
   }
 })
 
+test("chain activation persists as a boolean, defaults off, and validates its type", () => {
+  preEighteenState()
+  expect(readRawState()?.watchdog).toBeUndefined()
+  expect(loadState().watchdog.chain).toBe(false)
+  expect(applyWatchdogSetting({ key: "chain", value: "yes" }).ok).toBe(false)
+  expect(readRawState()?.watchdog).toBeUndefined()
+  expect(applyWatchdogSetting({ key: "chain", value: true }).ok).toBe(true)
+  expect(loadState().watchdog.chain).toBe(true)
+  expect(applyWatchdogSetting({ key: "chain", value: false }).ok).toBe(true)
+  expect(loadState().watchdog.chain).toBe(false)
+})
+
+test("ask routing persists as judged or immediate, defaults judged, and refuses other values", () => {
+  preEighteenState()
+  expect(loadState().watchdog.askMode).toBe("judged")
+  expect(applyWatchdogSetting({ key: "askMode", value: "sometimes" }).ok).toBe(false)
+  expect(applyWatchdogSetting({ key: "askMode", value: true }).ok).toBe(false)
+  expect(applyWatchdogSetting({ key: "askMode", value: "immediate" }).ok).toBe(true)
+  expect(loadState().watchdog.askMode).toBe("immediate")
+  expect(applyWatchdogSetting({ key: "askMode", value: "judged" }).ok).toBe(true)
+  expect(loadState().watchdog.askMode).toBe("judged")
+})
+
+test("chain and askMode migrate per field from a partial or corrupt scope", () => {
+  writeFileSync(
+    STATE_FILE,
+    JSON.stringify({ enabled: true, watchdog: { chain: "yes", askMode: "sometimes", sessionCap: 6 } }),
+  )
+  const watchdog = loadState().watchdog
+  expect(watchdog.chain).toBe(false)
+  expect(watchdog.askMode).toBe("judged")
+  expect(watchdog.sessionCap).toBe(6)
+  writeFileSync(
+    STATE_FILE,
+    JSON.stringify({ enabled: true, watchdog: { chain: true, askMode: "immediate" } }),
+  )
+  const kept = loadState().watchdog
+  expect(kept.chain).toBe(true)
+  expect(kept.askMode).toBe("immediate")
+})
+
+test("chain activation precedence: a set environment value wins, the persisted value takes over when unset", () => {
+  saveState({ watchdog: { ...DEFAULTS.watchdog, chain: true } })
+  expect(watchdogChain()).toBe(true)
+  expect(watchdogEnvOverrides()).not.toContain("chain")
+
+  try {
+    // Any set value wins: only the literal "1" means on.
+    process.env.WATCHDOG_CHAIN = "0"
+    expect(watchdogChain()).toBe(false)
+    process.env.WATCHDOG_CHAIN = ""
+    expect(watchdogChain()).toBe(false)
+    expect(watchdogEnvOverrides()).toContain("chain")
+    process.env.WATCHDOG_CHAIN = "1"
+    expect(watchdogChain()).toBe(true)
+  } finally {
+    delete process.env.WATCHDOG_CHAIN
+  }
+  expect(watchdogChain()).toBe(true)
+
+  saveState({ watchdog: { ...DEFAULTS.watchdog, chain: false } })
+  expect(watchdogChain()).toBe(false)
+})
+
+test("ask routing precedence: a set environment literal wins, an unusable value falls to the persisted one", () => {
+  saveState({ watchdog: { ...DEFAULTS.watchdog, askMode: "immediate" } })
+  expect(watchdogAskMode()).toBe("immediate")
+
+  try {
+    process.env.WATCHDOG_CHAIN_ASK_MODE = "judged"
+    expect(watchdogAskMode()).toBe("judged")
+    expect(watchdogEnvOverrides()).toContain("askMode")
+    process.env.WATCHDOG_CHAIN_ASK_MODE = "sometimes"
+    expect(watchdogAskMode()).toBe("immediate")
+  } finally {
+    delete process.env.WATCHDOG_CHAIN_ASK_MODE
+  }
+  expect(watchdogAskMode()).toBe("immediate")
+})
+
+test("the snapshot carries chain and askMode, persisted and effective, and marks their env overrides", () => {
+  saveState({ watchdog: { ...DEFAULTS.watchdog, chain: true, askMode: "immediate" } })
+  const snapshot = watchdogSnapshot()
+  expect(snapshot.persisted.chain).toBe(true)
+  expect(snapshot.persisted.askMode).toBe("immediate")
+  expect(snapshot.effective.chain).toBe(true)
+  expect(snapshot.effective.askMode).toBe("immediate")
+  expect(snapshot.envOverrides).not.toContain("chain")
+  expect(snapshot.envOverrides).not.toContain("askMode")
+
+  try {
+    process.env.WATCHDOG_CHAIN = "0"
+    process.env.WATCHDOG_CHAIN_ASK_MODE = "judged"
+    const overridden = watchdogSnapshot()
+    expect(overridden.effective.chain).toBe(false)
+    expect(overridden.effective.askMode).toBe("judged")
+    expect(overridden.envOverrides).toContain("chain")
+    expect(overridden.envOverrides).toContain("askMode")
+  } finally {
+    delete process.env.WATCHDOG_CHAIN
+    delete process.env.WATCHDOG_CHAIN_ASK_MODE
+  }
+})
+
 test("the snapshot's migration report matches what the state file actually holds", () => {
   preEighteenState()
-  expect(watchdogSnapshot().migration).toEqual({ present: false, stored: 0, defaulted: 8, invalid: 0 })
+  expect(watchdogSnapshot().migration).toEqual({ present: false, stored: 0, defaulted: 10, invalid: 0 })
 })

@@ -17,7 +17,7 @@
 
 import { loadState, type WatchdogSettings } from "../../../lib/jev/state.ts"
 import { normalizeAction } from "./actions.ts"
-import { CHAIN_DEFAULTS, type ChainLimits, type ChainNodes } from "./chain.ts"
+import { CHAIN_DEFAULTS, CHAIN_ENABLE_SWITCH, type ChainLimits, type ChainNodes } from "./chain.ts"
 
 /** Admission pacing, from the environment until the Watchdog page (#18) owns it. */
 export const CHAIN_CAP_ENV = "WATCHDOG_CHAIN_CAP"
@@ -30,6 +30,7 @@ export const CHAIN_REPAIR_MAX_ENV = "WATCHDOG_CHAIN_REPAIR_MAX"
 export const CHAIN_TRANSPORT_ATTEMPTS_ENV = "WATCHDOG_CHAIN_TRANSPORT_ATTEMPTS"
 export const CHAIN_TRANSPORT_BACKOFF_ENV = "WATCHDOG_CHAIN_TRANSPORT_BACKOFF_MS"
 export const CHAIN_NODES_ENV = "WATCHDOG_CHAIN_NODES"
+export const CHAIN_ASK_MODE_ENV = "WATCHDOG_CHAIN_ASK_MODE"
 
 /**
  * The chain's pacing settings. An unset or unusable variable falls to the
@@ -100,6 +101,29 @@ export function watchdogNodes(): ChainNodes {
   }
 }
 
+/**
+ * The chain's activation switch (#21). A set environment value wins — only the
+ * literal "1" means on, anything else set means off — and an unset variable
+ * falls to the persisted page value. The gate file stays the second condition
+ * and is read by the caller, not here.
+ */
+export function watchdogChain(): boolean {
+  if (process.env[CHAIN_ENABLE_SWITCH] !== undefined) return process.env[CHAIN_ENABLE_SWITCH] === "1"
+  return loadState().watchdog.chain
+}
+
+/**
+ * Ask routing (#21): judged runs jev, then the parent or supervisor stage, then
+ * the human card; immediate sends a host ask straight to the card. A set
+ * environment literal wins, an unusable value falls to the persisted page
+ * value, and the default routes every host ask through the stages.
+ */
+export function watchdogAskMode(): "judged" | "immediate" {
+  const env = process.env[CHAIN_ASK_MODE_ENV]?.trim()
+  if (env === "immediate" || env === "judged") return env
+  return loadState().watchdog.askMode
+}
+
 /** The env override names active right now, so the page can mark them. */
 export function watchdogEnvOverrides(): string[] {
   const pairs: Array<[string, string]> = [
@@ -110,8 +134,13 @@ export function watchdogEnvOverrides(): string[] {
     [CHAIN_BATCH_MAX_ENV, "supervisorBatchMax"],
     [CHAIN_BATCH_MS_ENV, "supervisorBatchMs"],
     [CHAIN_NODES_ENV, "nodes"],
+    [CHAIN_ASK_MODE_ENV, "askMode"],
   ]
-  return pairs.filter(([env]) => process.env[env]?.trim()).map(([, field]) => field)
+  const on = pairs.filter(([env]) => process.env[env]?.trim()).map(([, field]) => field)
+  // The switch wins whenever it is set, whatever it holds, so its marker is a
+  // defined check, not the trim check every value-carrying variable uses.
+  if (process.env[CHAIN_ENABLE_SWITCH] !== undefined) on.push("chain")
+  return on
 }
 
 /** The feature families. The Watchdog page owns these feature toggles. */
@@ -138,6 +167,10 @@ export function nextWatchdogSettings(stored: WatchdogSettings, key: string, valu
       return typeof value === "string" ? { ...stored, nodes: normalizeNodes(value) } : null
     case "timing":
       return value === "blocking" || value === "nonblocking" ? { ...stored, timing: value } : null
+    case "chain":
+      return typeof value === "boolean" ? { ...stored, chain: value } : null
+    case "askMode":
+      return value === "judged" || value === "immediate" ? { ...stored, askMode: value } : null
     case "sessionCap":
     case "jevBatchMax":
     case "jevBatchMs":

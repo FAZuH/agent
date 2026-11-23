@@ -11,6 +11,8 @@ import { readFileSync } from "node:fs"
 const gui = readFileSync(new URL("./gui.tsx", import.meta.url), "utf8")
 const controller = readFileSync(new URL("./watchdog-controller.ts", import.meta.url), "utf8")
 const families = readFileSync(new URL("./feature-families.ts", import.meta.url), "utf8")
+const { Contract } = await import("../../../lib/jev/rpc.ts")
+const { CHAIN_LOG_HOOKS, JEV_FEATURES, JEV_LOG_HOOKS, WATCHDOG_FEATURES } = await import("./feature-families.ts")
 
 test("the plugin registers two top-level panels and two menu launchers", () => {
   expect(gui).toContain('const TAB = { id: "jev-view-v1"')
@@ -37,6 +39,17 @@ test("the Jev page keeps only its family: no watchdog feature toggles or groups 
   expect(gui).not.toMatch(/title="Supervisor endpoint"[\s\S]*?putFeature\("hook_supervisor", "endpoint"/)
   expect(families).toContain('export const WATCHDOG_FEATURES = ["hook_session_ban", "hook_supervisor", "hook_abort_receipts"] as const')
   expect(families).toContain('export const JEV_FEATURES = ["hook_skill_pick", "hook_tool_risk", "hook_tool_standard"] as const')
+})
+
+test("every feature hook has a deliberate call-log home", () => {
+  // A Jev feature's rows are model calls, so the default `/jev-log` must show
+  // them; a watchdog feature writes audit rows, so it must not. A feature added
+  // on either side fails here until its log home is chosen.
+  for (const hook of JEV_FEATURES) expect(JEV_LOG_HOOKS).toContain(hook)
+  for (const hook of WATCHDOG_FEATURES) expect(JEV_LOG_HOOKS).not.toContain(hook)
+  for (const hook of [...JEV_FEATURES, ...WATCHDOG_FEATURES]) {
+    expect(CHAIN_LOG_HOOKS).not.toContain(hook)
+  }
 })
 
 test("off by default, and every control below the enablement switch is disabled while off", () => {
@@ -105,6 +118,93 @@ test("the page's secrets are presence-flag-only fields", () => {
   expect(gui).toMatch(/title="Receipts webhook"[\s\S]*?present=\{cfg\.receiptsWebhookPresent\}/)
   expect(gui).toMatch(/title="Supervisor endpoint"[\s\S]*?present=\{cfg\.supervisorEndpointPresent\}/)
   expect(gui).not.toMatch(/value=\{[^\n]*(receiptsWebhook|supervisorEndpoint)(Present)?/)
+})
+
+test("the page lists pending human reviews, empty-safe and unreadable-safe", () => {
+  expect(gui).toContain("Pending human reviews")
+  // The empty line claims absence only when the ledger was read: an unreadable
+  // ledger is a different operator fact and gets its own sentence.
+  expect(gui).toMatch(/when=\{!watch\?\.pending\.durableUnreadable && \(watch\?\.pending\.reviews \?\? \[\]\)\.length === 0\}/)
+  expect(gui).toContain("No pending human reviews.")
+  expect(gui).toContain("this list may be incomplete, not empty")
+  // A row is the display fields and an age.
+  expect(gui).toContain("{row.sessionID}")
+  expect(gui).toMatch(/\{row\.tool\} · \{row\.action\} · \{row\.stage\} · \{ageText\(row\.ageMs\)\}/)
+})
+
+test("an interrupted row is named and offers no reopen; a live row reopens through the controller", () => {
+  // A restart-reported review's call did not survive, so nothing can answer it.
+  expect(gui).toContain("Interrupted by a restart")
+  expect(gui).toMatch(/<Show when=\{row\.interrupted\}>[\s\S]{0,240}?Interrupted by a restart/)
+  expect(gui).toMatch(/<Show when=\{!row\.interrupted\}>[\s\S]{0,400}?controller\.reopen\(row\.id\)/)
+  // Reopening goes through the contract method, never a local card.
+  expect(gui).toMatch(/reopenPendingReview: \(input\) => rpc\.reopenPendingReview\(input\)/)
+  expect(controller).toContain("reopenPendingReview({ itemID })")
+})
+
+test("the chain switch and the ask routing are the page's two activation settings", () => {
+  // The switch is persisted state the page writes; the gate state beside it comes
+  // from the live status, never from the switch.
+  expect(gui).toMatch(/title="Review chain"[\s\S]{0,400}?checked=\{cfg\.persisted\.chain\}/)
+  expect(gui).toMatch(/title="Review chain"[\s\S]{0,500}?put\("chain", !cfg\.persisted\.chain\)/)
+  expect(gui).toMatch(/title="Review chain"[\s\S]{0,400}?chainGate\(\)/)
+  expect(gui).toMatch(/title="Ask routing"[\s\S]{0,400}?value=\{cfg\.effective\.askMode\}/)
+  expect(gui).toMatch(/options=\{\[\["judged", "Judged"\], \["immediate", "Immediate"\]\]\}/)
+  expect(gui).toMatch(/onSelect=\{\(v\) => put\("askMode", v\)\}/)
+  // Both sit under the page's own off state, like every other control.
+  const block = gui.slice(gui.indexOf('title="Review chain"'), gui.indexOf('title="Jev review node"'))
+  expect(block.match(/disabled=\{off\(\)\}/g) ?? []).toHaveLength(2)
+})
+
+test("the review line names the operator switch, and the gate state only when the switch lets it be read", () => {
+  // The switch is persisted now, so the off line cannot blame the environment.
+  expect(gui).toContain("Review chain off: the review switch is off")
+  expect(gui).toContain("Capability: not checked while the review switch is off.")
+  expect(gui).toContain("Capability: the capability gate passed.")
+})
+
+test("the chain note claims a passed gate only when the chain is enabled and wired", () => {
+  // `wired` reports the wrapper's registration, which exists with the switch off
+  // too. The note must not turn that into a gate claim while the gate is unread.
+  expect(gui).toMatch(/watch\?\.chain\?\.status === "passed" && watch\.chain\.wired \? " \(the capability gate passed\)"/)
+  expect(gui).not.toMatch(/watch\?\.chain && watch\.chain\.wired \?/)
+})
+
+test("the review line claims availability only when the host wired the wrapper", () => {
+  // `status` passed with `wired` false is a real state: the host refused the
+  // registration and the switch was turned on afterwards. Nothing is reviewed
+  // then, so the page must not say the chain is available.
+  expect(gui).toMatch(/if \(chain\.status === "passed"\) return chain\.wired \?/)
+  expect(gui).not.toMatch(/if \(chain\.status === "passed"\) return `Review chain available/)
+  expect(gui).toContain("Review chain not wired")
+})
+
+test("the settings contract carries the switch and the ask mode, persisted and effective", () => {
+  const settings = (Contract.methods.getWatchdogSettings.output.properties as any)
+  for (const side of ["persisted", "effective"]) {
+    expect(settings[side].properties.chain.type).toBe("boolean")
+    expect(settings[side].properties.askMode.enum).toEqual(["judged", "immediate"])
+    expect(settings[side].required).toContain("chain")
+    expect(settings[side].required).toContain("askMode")
+  }
+  const key = (Contract.methods.setWatchdogSetting.input.properties as any).key
+  expect(key.enum).toContain("chain")
+  expect(key.enum).toContain("askMode")
+})
+
+test("the status contract carries the pending review rows, and the contract has the reopen method", () => {
+  const pending = (Contract.methods.watchdogStatus.output.properties as any).pending
+  expect(pending.required).toContain("reviews")
+  const row = pending.properties.reviews.items
+  expect(row.required.slice().sort()).toEqual(["action", "ageMs", "id", "interrupted", "sessionID", "stage", "tool"])
+  expect(row.properties.ageMs.type).toEqual(["number", "null"])
+  expect(row.properties.interrupted.type).toBe("boolean")
+  expect(row.additionalProperties).toBe(false)
+  const reopen = (Contract.methods as any).reopenPendingReview
+  expect(reopen.input.required).toEqual(["itemID"])
+  expect(reopen.input.properties.itemID.type).toBe("string")
+  expect(reopen.output.required.slice().sort()).toEqual(["ok", "reopened"])
+  expect(reopen.output.properties.reason.type).toBe("string")
 })
 
 test("the page's status and controls come from the watchdog contract methods", () => {

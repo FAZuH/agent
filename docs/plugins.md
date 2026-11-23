@@ -110,9 +110,10 @@ install it yourself if you want that use case (see
 The plugin also ships a Watchdog review chain with its own top-level page
 (`gui.tsx`, `watchdog-controller.ts`). The page has independent enablement and
 fill-on-read migration (`watchdog-settings.ts`), separate from the Jev features
-above. Its behavior stays off until you set `WATCHDOG_CHAIN=1` and a real-host
-`chain-gate.json` passes the rollout gate. No record exists of the page being
-inspected on a rendered client. Read
+above. Its behavior stays off until you turn on the page's `Review chain`
+switch and a real-host `chain-gate.json` passes the rollout gate;
+`WATCHDOG_CHAIN` is an override of that switch. No record exists of the page
+being inspected on a rendered client. Read
 [Watchdog rollout status](watchdog-rollout-status.md) for coverage, blockers,
 and the commands that run the test seams.
 

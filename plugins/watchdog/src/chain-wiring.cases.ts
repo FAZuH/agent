@@ -30,6 +30,7 @@ const ENV_KEYS = [
   "WATCHDOG_CHAIN",
   "WATCHDOG_CHAIN_NODES",
   "WATCHDOG_CHAIN_HUMAN_ONLY",
+  "WATCHDOG_CHAIN_ASK_MODE",
   "WATCHDOG_CHAIN_CAP",
   "WATCHDOG_CHAIN_TIMING",
   "WATCHDOG_CHAIN_BATCH_MAX",
@@ -149,7 +150,7 @@ writeFileSync(join(XDG, "opencode", "service.json"), JSON.stringify({ url: `http
 const { default: plugin } = await import("./index.ts")
 const state = await import("../../../lib/jev/state.ts")
 const { banTool } = await import("../../../lib/jev/tool-ban.ts")
-const { chainStateHome, CHAIN_BUDGET_FILE, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
+const { budgetKey, chainStateHome, CHAIN_BUDGET_FILE, CHAIN_GATE_FILE, CHAIN_GATE_PASSED } = await import("./chain.ts")
 const { readAbortRecords, appendAbortRecord, resetAbortMarks, RELEASE_CONTINUE_TEXT } = await import("./abort.ts")
 const { setReceiptTransport, readDeliveryRows, DELIVERY_FILE } = await import("./delivery.ts")
 const { writeCapabilityGate, REQUIRED_CAPABILITIES } = await import("./capability-gate.ts")
@@ -159,6 +160,7 @@ const { resetOpenPrompts } = await import("./session-ban-host.ts")
 const { readSnapshot, parentPaths, writeSnapshot, writeSubtreeBan, removeParent } = await import("./session-ban-state.ts")
 const { fingerprint } = await import("./session-ban.ts")
 const { recordApproval } = await import("../../../lib/jev/approve.ts")
+const { applyWatchdogSetting } = await import("./watchdog-settings.ts")
 
 // Every path the shared library resolved must be inside this suite's scratch
 // home. Anything else belongs to another suite or to the real machine, and this
@@ -650,6 +652,18 @@ const latestGate = (hooks: Record<string, Array<(event: any) => any>>) => {
   return list[list.length - 1]
 }
 
+/**
+ * The question-card route's wrapper. The chain's own wrapper registers after it
+ * in every setup, so the newest card wrapper is the one before the newest chain
+ * wrapper — whatever the number of setups, the card route always precedes the
+ * chain within one.
+ */
+const latestCardGate = (hooks: Record<string, Array<(event: any) => any>>) => {
+  const list = hooks["execute.before"] ?? []
+  expect(list.length).toBeGreaterThanOrEqual(2)
+  return list[list.length - 2]
+}
+
 const idsIn = (text: string): string[] => [...String(text ?? "").matchAll(/wd_[0-9a-f]{24}(?:\.\d+)?/g)].map((match) => match[0])
 const itemIDOf = (text: string): string => idsIn(text)[0] ?? ""
 
@@ -707,12 +721,163 @@ describe("activation", () => {
     expect(host.calls.checks).toHaveLength(0)
   })
 
-  test("the gate file alone wires nothing", async () => {
+  test("the switch off makes the wrapper inert, not absent: the gate file alone activates nothing", async () => {
     gateVerdict()
     nodes("human")
     const host = fakeHost()
     await plugin.setup(host.ctx)
-    expect(host.hooks["execute.before"]).toBeUndefined()
+    // The wrapper attaches whenever the plugin runs, so the persisted switch can
+    // turn the chain on later without a relaunch (#21). While the switch is off
+    // it is inert: no row, no host check, no hold, no decision, no card — and
+    // nothing subscribed to the form feed.
+    const wrapper = gate(host.hooks)
+    await expect(wrapper({ sessionID: "ses_w58", tool: "shell", input: { command: "ls" }, id: "c58" })).resolves.toBeUndefined()
+    expect(since().some((row) => row.hook === "hook_watchdog_chain")).toBe(false)
+    expect(since().some((row) => row.event === "chain_stage" || row.event === "chain_decision")).toBe(false)
+    expect(announcements()).toHaveLength(0)
+    expect(host.calls.checks).toHaveLength(0)
+    expect(posted).toHaveLength(0)
+    expect(host.formFeeds()).toHaveLength(0)
+  })
+
+  test("a persisted switch turned on after setup activates the next call without a relaunch", async () => {
+    gateVerdict()
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const wrapper = gate(host.hooks)
+    await expect(wrapper({ sessionID: "ses_w70", tool: "shell", input: { command: "ls" }, id: "c70a" })).resolves.toBeUndefined()
+    expect(since().some((row) => row.event === "chain_stage")).toBe(false)
+    expect(posted).toHaveLength(0)
+
+    // The page's own writer is the operator action: no restart, no env edit.
+    expect(applyWatchdogSetting({ key: "chain", value: true }).ok).toBe(true)
+    const pending = settle(wrapper({ sessionID: "ses_w70", tool: "shell", input: { command: "ls" }, id: "c70b" }))
+    await cardsOpen(1)
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await pending).toBe("allowed")
+
+    // And turning it off again takes effect on the next call, inertly: the rows
+    // the on-call wrote stay, and the off-call adds none.
+    expect(applyWatchdogSetting({ key: "chain", value: false }).ok).toBe(true)
+    const chainRowsBefore = since().filter((row) => row.event === "chain_stage" || row.event === "chain_decision").length
+    const rowsBefore = since().length
+    await expect(wrapper({ sessionID: "ses_w70", tool: "shell", input: { command: "ls" }, id: "c70c" })).resolves.toBeUndefined()
+    expect(since()).toHaveLength(rowsBefore)
+    expect(since().filter((row) => row.event === "chain_stage" || row.event === "chain_decision")).toHaveLength(chainRowsBefore)
+  })
+
+  test("gate passed plus the switch off is not active: the gate file is the second condition", async () => {
+    gateVerdict()
+    nodes("supervisor")
+    const host = fakeHost({ generate: (request) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    expect(chainRow((entry) => entry.protection === "active")).toBeUndefined()
+    expect(await settle(gate(host.hooks)({ sessionID: "ses_w71", tool: "shell", input: { command: "ls" }, id: "c71" }))).toBe("allowed")
+    expect(host.calls.generate).toHaveLength(0)
+    expect(since().some((row) => row.event === "chain_stage")).toBe(false)
+  })
+
+  test("a persisted switch on with the gate blocked is not active", async () => {
+    gateVerdict("blocked")
+    nodes("human")
+    const host = fakeHost()
+    // Persisted on, env unset: the setup reads the state file.
+    expect(applyWatchdogSetting({ key: "chain", value: true }).ok).toBe(true)
+    await plugin.setup(host.ctx)
+    expect(announcements()).toHaveLength(1)
+    expect(announcements()[0].reason).toBe("the capability gate has not passed")
+    expect(chainRow((entry) => entry.protection === "active")).toBeUndefined()
+    await expect(gate(host.hooks)({ sessionID: "ses_w72", tool: "shell", input: { command: "ls" }, id: "c72" })).resolves.toBeUndefined()
+    expect(since().some((row) => row.event === "chain_stage")).toBe(false)
+    expect(host.calls.checks).toHaveLength(0)
+  })
+
+  test("a set environment switch wins over the persisted one", async () => {
+    gateVerdict()
+    nodes("human")
+    // Persisted on, environment off: the environment wins, so the wrapper is inert.
+    expect(applyWatchdogSetting({ key: "chain", value: true }).ok).toBe(true)
+    process.env.WATCHDOG_CHAIN = "0"
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    await expect(gate(host.hooks)({ sessionID: "ses_w73", tool: "shell", input: { command: "ls" }, id: "c73" })).resolves.toBeUndefined()
+    expect(since().some((row) => row.hook === "hook_watchdog_chain")).toBe(false)
+    expect(posted).toHaveLength(0)
+
+    // And the environment can arm a persisted-off deployment, as the wiring
+    // tests and headless runs do.
+    expect(applyWatchdogSetting({ key: "chain", value: false }).ok).toBe(true)
+    process.env.WATCHDOG_CHAIN = "1"
+    const armed = fakeHost()
+    await plugin.setup(armed.ctx)
+    expect(armed.hooks["execute.before"]).toHaveLength(1)
+    expect(chainRow((entry) => entry.protection === "active")).toBeDefined()
+  })
+
+  test("a call that lands on a stale wrapper during a setup passes through while the switch is off", async () => {
+    // The wrapper registers on every setup (#21), so the handover window every
+    // later setup opens now holds a chain callback. With the switch off that
+    // callback owns nothing: the call passes through exactly as it did before the
+    // wrapper existed, instead of being refused by a chain that is off.
+    delete process.env.WATCHDOG_CHAIN
+    gateVerdict()
+    nodes("human")
+    const host = fakeHost()
+    let openGate: (() => void) | null = null
+    let second: Promise<void> | null = null
+    try {
+      await plugin.setup(host.ctx)
+      const stale = gate(host.hooks)
+      await expect(stale({ sessionID: "ses_w90", tool: "shell", input: { command: "ls" }, id: "c90a" })).resolves.toBeUndefined()
+
+      // Setup two parks at its own chain registration: this generation's runtime
+      // is gone and no judge is live, so the callback the host holds is stale.
+      toolRegistrationGate = new Promise<void>((resolve) => {
+        openGate = resolve
+      })
+      second = plugin.setup(host.ctx)
+      for (let turn = 0; turn < 200 && !toolRegistrationParked; turn++) await tick()
+      expect(toolRegistrationParked).toBe(true)
+
+      await expect(stale({ sessionID: "ses_w90", tool: "shell", input: { command: "ls" }, id: "c90b" })).resolves.toBeUndefined()
+      expect(since().some((row) => row.hook === "hook_watchdog_chain")).toBe(false)
+
+      toolRegistrationGate = null
+      openGate!()
+      await second
+      await expect(stale({ sessionID: "ses_w90", tool: "shell", input: { command: "ls" }, id: "c90c" })).resolves.toBeUndefined()
+      expect(since().some((row) => row.hook === "hook_watchdog_chain")).toBe(false)
+    } finally {
+      // Never leave the queued setup parked: a hung attempt blocks every later
+      // setup in this process.
+      toolRegistrationGate = null
+      openGate?.()
+    }
+  })
+
+  test("a host that refuses the chain hook while the switch is off leaves setup whole and records nothing", async () => {
+    // Before #21 no chain wrapper existed with the switch off, so a host that
+    // refuses execute.before cost the chain nothing. The always-registered
+    // wrapper keeps that: the attempt completes, it registers nothing, it writes
+    // no chain row, and the wrapper the host still holds stays inert.
+    delete process.env.WATCHDOG_CHAIN
+    gateVerdict()
+    nodes("human")
+    const opts: any = {}
+    const host = fakeHost(opts)
+    await plugin.setup(host.ctx)
+    const stale = gate(host.hooks)
+    opts.rejectHook = (name: string) => name === "execute.before"
+    await expect(plugin.setup(host.ctx)).resolves.toBeUndefined()
+    // Only the first generation's wrapper is registered; the refused attempt
+    // added nothing.
+    expect(host.hooks["execute.before"]).toHaveLength(1)
+    expect(since().some((row) => row.hook === "hook_watchdog_chain")).toBe(false)
+    // A call the host dispatches to the older callback stays inert: the refused
+    // attempt left no fail-closed posture behind it.
+    await expect(stale({ sessionID: "ses_w91", tool: "shell", input: { command: "ls" }, id: "c91" })).resolves.toBeUndefined()
+    expect(since().some((row) => row.hook === "hook_watchdog_chain")).toBe(false)
   })
 
   test("a gate file written after setup activates the next call", async () => {
@@ -1072,9 +1237,11 @@ describe("the host's own rules", () => {
     expect(posted).toHaveLength(0)
   })
 
-  test("a host ask goes straight to the human, skipping the supervisor", async () => {
+  test("immediate routing: a host ask goes straight to the human, skipping the supervisor", async () => {
     arm()
     nodes("supervisor,human")
+    // Immediate keeps today's skip for a host ask (#21): the stages never run.
+    process.env.WATCHDOG_CHAIN_ASK_MODE = "immediate"
     const host = fakeHost({ effect: () => "ask" })
     await plugin.setup(host.ctx)
     const pending = gate(host.hooks)({ sessionID: "ses_w22", tool: "shell", input: { command: "ls" }, id: "call_22" })
@@ -1082,6 +1249,23 @@ describe("the host's own rules", () => {
     expect(host.calls.generate).toHaveLength(0)
     await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
     await pending
+  })
+
+  test("judged routing: a host ask runs the supervisor stage and still ends at the human card", async () => {
+    arm()
+    nodes("supervisor,human")
+    const host = fakeHost({ effect: () => "ask", generate: (request) => allowReply(request.prompt) })
+    await plugin.setup(host.ctx)
+    const pending = settle(gate(host.hooks)({ sessionID: "ses_w74", tool: "shell", input: { command: "ls" }, id: "call_74" }))
+    await cardsOpen(1)
+    // No automated stage authorized: the supervisor ran and its allow was
+    // withheld for the card, which decides.
+    expect(host.calls.generate.length).toBeGreaterThan(0)
+    const stages = since().filter((row) => row.event === "chain_stage").map((row) => `${row.stage}:${row.verdict}`)
+    expect(stages).toContain("supervisor:allow")
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "deny" } } })
+    // The card decided, not the withheld supervisor allow: denied, not allowed.
+    expect(await pending).toMatch(/denied/)
   })
 
   test("the host is rechecked at release, and a deny there stops the call", async () => {
@@ -2195,8 +2379,10 @@ describe("abort operation", () => {
 
       // Recovery could not restore the ban, and setup says so.
       expect(since().find((row) => row.event === "abort_recovery_unavailable")?.reason).toBe("reassert-failed")
-      // The chain never registered its gate wrapper, so nothing else can refuse.
-      expect(host.hooks["execute.before"]).toBeUndefined()
+      // The chain's wrapper exists whenever the plugin runs, but with the switch
+      // off it is inert: it passes calls through and never refuses, so nothing
+      // else can refuse this session on the chain's behalf.
+      expect(host.hooks["execute.before"] ?? []).toHaveLength(1)
       const evaluate = host.permissionHooks.evaluate
       expect(typeof evaluate).toBe("function")
 
@@ -2304,7 +2490,7 @@ describe("abort operation", () => {
       expect(String(event.message)).toContain("could not be restored")
 
       // And the card route refuses before it decides: no model call, no card.
-      const wrapper = latestGate(host.hooks)
+      const wrapper = latestCardGate(host.hooks)
       await expect(wrapper({ sessionID: CHILD, tool: "shell", input: { command: "ls" }, id: "call_card_2" })).rejects.toThrow(
         /could not be restored/,
       )
@@ -2348,7 +2534,7 @@ describe("abort operation", () => {
       expect(String(event.message)).toContain("an abort covers this session")
 
       // And the card route refuses before it decides: no model call, no card.
-      const wrapper = latestGate(host.hooks)
+      const wrapper = latestCardGate(host.hooks)
       await expect(wrapper({ sessionID: CHILD, tool: "shell", input: { command: "ls" }, id: "call_mark_2" })).rejects.toThrow(
         /an abort covers this session/,
       )
@@ -2640,7 +2826,7 @@ describe("abort operation", () => {
       const scored = decisions.length
       // Both consumers enter with no hold open.
       let cardSettled: string | null = null
-      const cardCall = latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls gap" }, id: "call_gap" }).then(
+      const cardCall = latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls gap" }, id: "call_gap" }).then(
         () => {
           cardSettled = "allowed"
         },
@@ -2684,7 +2870,7 @@ describe("abort operation", () => {
     const host = fakeHost(lineage())
     try {
       await plugin.setup(host.ctx)
-      const wrapper = latestGate(host.hooks)
+      const wrapper = latestCardGate(host.hooks)
       await expect(wrapper({ sessionID: CHILD, tool: "shell", input: { command: "ls" }, id: "call_ban_1" })).rejects.toThrow(
         /durable abort ban/,
       )
@@ -2719,7 +2905,7 @@ describe("abort operation", () => {
       await plugin.setup(host.ctx)
 
       // The card route refuses the covered session before it decides.
-      await expect(latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls" }, id: "call_par_1" })).rejects.toThrow(
+      await expect(latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls" }, id: "call_par_1" })).rejects.toThrow(
         /active session ban/,
       )
       expect(posted).toHaveLength(0)
@@ -2776,7 +2962,7 @@ describe("abort operation", () => {
     const host = fakeHost(lineage())
     try {
       await plugin.setup(host.ctx)
-      const held = latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_dec_1" }).then(
+      const held = latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_dec_1" }).then(
         () => "allowed",
         (error: Error) => error.message,
       )
@@ -2833,7 +3019,7 @@ describe("abort operation", () => {
     const host = fakeHost(lineage())
     try {
       await plugin.setup(host.ctx)
-      const held = settle(latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_card_abort" }))
+      const held = settle(latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_card_abort" }))
       await cardsOpen(1)
       await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "abort" } } })
       expect(await held).toContain("aborted")
@@ -2851,7 +3037,7 @@ describe("abort operation", () => {
         await feed.push({ type: "session.inbox.enqueued", data: { sessionID: CHILD, item: { type: "user" }, seq: 7 } })
       }
       expect(banOf(CHILD)?.kind).toBe("subtree")
-      const refused = await latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls b" }, id: "call_after" }).then(
+      const refused = await latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls b" }, id: "call_after" }).then(
         () => "allowed",
         (error: Error) => error.message,
       )
@@ -2933,7 +3119,9 @@ describe("abort operation", () => {
     const host = fakeHost({ ...lineage(), noPermissionHook: true })
     try {
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"] ?? []).toHaveLength(0)
+      // The chain's wrapper is registered whenever the plugin runs, but with the
+      // switch off it is inert; the posture below must still list no surface.
+      expect(host.hooks["execute.before"] ?? []).toHaveLength(1)
       const result = await host.calls.rpc[0].handlers.abortOperation({ sessionID: CHILD })
       expect(result.enforcedBy).toEqual([])
       expect(result.warning).toContain("not enforced")
@@ -3054,7 +3242,7 @@ describe("abort operation", () => {
     const host = fakeHost(lineage())
     try {
       await plugin.setup(host.ctx)
-      const held = settle(latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_qheld" }))
+      const held = settle(latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_qheld" }))
       await cardsOpen(1)
       // The card is open and the abort runs from the operator route.
       const result = await host.calls.rpc[0].handlers.abortOperation({ sessionID: CHILD })
@@ -4002,7 +4190,7 @@ describe("abort operation", () => {
     try {
       await plugin.setup(host.ctx)
       let settledAs: string | null = null
-      const held = latestGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_hold_1" }).then(
+      const held = latestCardGate(host.hooks)({ sessionID: CHILD, tool: "shell", input: { command: "ls a" }, id: "call_hold_1" }).then(
         () => {
           settledAs = "allowed"
         },
@@ -4595,17 +4783,19 @@ describe("repeated setup", () => {
     const host = fakeHost()
     try {
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(1)
+      // Each setup registers the card route, then the chain's own inert wrapper.
+      expect(host.hooks["execute.before"]).toHaveLength(2)
       const staleCard = host.hooks["execute.before"][0]
       const staleJev = host.permissionHistory.evaluate[0]
 
       // A second setup with the route still on replaces both callbacks.
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(2)
+      expect(host.hooks["execute.before"]).toHaveLength(4)
       expect(host.permissionHistory.evaluate).toHaveLength(2)
-      // Both replaced registrations were disposed, and the retired card feed was
+      // The replaced card route, the retired Jev hook and the chain's own wrapper
+      // (registered per setup) were all disposed, and the retired card feed was
       // ended through its own signal.
-      expect(host.disposed).toBe(2)
+      expect(host.disposed).toBe(3)
       expect(host.aborted).toBe(1)
 
       // The retired Jev hook answers nothing now that the handover is over.
@@ -4634,7 +4824,7 @@ describe("repeated setup", () => {
       // One call, both callbacks: the second replays the first judgement instead
       // of scoring the call again and opening a second card.
       const scoredAgain = decisions.length
-      const liveCard = host.hooks["execute.before"][1]
+      const liveCard = host.hooks["execute.before"][2]
       const both = liveCard({ sessionID: CHILD, tool: "shell", input: { command: "ls both" }, id: "call_both" }).then(
         () => "allowed",
         (error: Error) => error.message,
@@ -4709,9 +4899,10 @@ describe("repeated setup", () => {
       for (let turn = 0; turn < 400 && !arrived; turn++) await tick()
       expect(arrived).toBe(true)
 
-      // Retired while the decision is parked.
+      // Retired while the decision is parked. Each setup registers the card
+      // route, then the chain's own inert wrapper.
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(2)
+      expect(host.hooks["execute.before"]).toHaveLength(4)
       malformedAnswers = (payload) => {
         const id = Object.keys(payload?.questions ?? {})[0]
         return id ? { [id]: { type: "choice", choice: "deny", probabilities: { allow: 0.01, propagate: 0.02, deny: 0.96, abort: 0.01 } } } : {}
@@ -4782,7 +4973,8 @@ describe("repeated setup", () => {
       const live = state.loadState()
       state.saveState({ ...live, config: { ...live.config, hook_tool_risk: { ...live.config.hook_tool_risk, questionCards: false } } })
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(1)
+      // No live card route: the replacement registers only the chain's own wrapper.
+      expect(host.hooks["execute.before"]).toHaveLength(3)
       decisionGate = null
       releaseDecision!()
 
@@ -4845,7 +5037,7 @@ describe("repeated setup", () => {
       registrationGate = null
       openGate!()
       await second
-      expect(host.hooks["execute.before"]).toHaveLength(2)
+      expect(host.hooks["execute.before"]).toHaveLength(4)
       const after = { ...assertCall(CHILD, "msg_after", "call_after"), action: "shell" }
       await staleJev(after)
       expect(after.effect).toBe("allow")
@@ -4893,12 +5085,13 @@ describe("repeated setup", () => {
       openGate!()
       await Promise.all([first, second])
       expect(host.permissionHistory.evaluate).toHaveLength(4)
-      expect(host.hooks["execute.before"]).toHaveLength(2)
+      expect(host.hooks["execute.before"]).toHaveLength(4)
 
-      // One live judge per call: the newest wrapper decides, and the older one
-      // hands the call over instead of scoring it a second time.
+      // One live judge per call: the newest card route decides, and the older
+      // one hands the call over instead of scoring it a second time. Each
+      // setup's chain wrapper follows its card route.
       const scored = decisions.length
-      const newest = host.hooks["execute.before"][1]
+      const newest = host.hooks["execute.before"][2]
       const oldest = host.hooks["execute.before"][0]
       await newest({ sessionID: CHILD, tool: "shell", input: { command: "ls newest" }, id: "call_newest" })
       await oldest({ sessionID: CHILD, tool: "shell", input: { command: "ls oldest" }, id: "call_oldest" })
@@ -4954,7 +5147,7 @@ describe("repeated setup", () => {
       // Exactly the one registration the attempt made was dropped: nothing
       // half-attached stays behind with the host.
       expect(host.disposed).toBe(disposedBefore + 1)
-      expect(host.hooks["execute.before"]).toHaveLength(1)
+      expect(host.hooks["execute.before"]).toHaveLength(2)
 
       // No generation is live, so the callbacks the host still holds fail closed:
       // the Jev hook refuses, and the card route refuses instead of releasing the
@@ -4971,7 +5164,8 @@ describe("repeated setup", () => {
       // and clears the failed attempt's fail-closed posture.
       opts.rejectHook = null
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(2)
+      // Setup one's card route and chain wrapper, then the new setup's own pair.
+      expect(host.hooks["execute.before"]).toHaveLength(4)
       // Setup one's hook, the failed attempt's, and the new setup's: the queue ran
       // the third attempt, and only a completed setup retires a generation.
       expect(host.permissionHistory.evaluate).toHaveLength(3)
@@ -6480,7 +6674,8 @@ describe("repeated setup", () => {
     const host = fakeHost()
     try {
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(1)
+      // The card route's wrapper, then the chain's own inert wrapper.
+      expect(host.hooks["execute.before"]).toHaveLength(2)
       const opened = posted.length
       await expect(
         host.hooks["execute.before"]![0]({ sessionID: "ses_w68", tool: "shell", input: { command: "ls" } }),
@@ -6565,7 +6760,8 @@ describe("repeated setup", () => {
     const host = fakeHost()
     try {
       await plugin.setup(host.ctx)
-      expect(host.hooks["execute.before"]).toHaveLength(1)
+      // The card route's wrapper, then the chain's own inert wrapper.
+      expect(host.hooks["execute.before"]).toHaveLength(2)
       const retired = host.permissionHistory.evaluate[0]
 
       toolRegistrationGate = new Promise<void>((resolve) => {
@@ -6583,7 +6779,8 @@ describe("repeated setup", () => {
       toolRegistrationGate = null
       openGate!()
       await second
-      expect(host.hooks["execute.before"]).toHaveLength(2)
+      // Each generation adds its card route and its chain wrapper.
+      expect(host.hooks["execute.before"]).toHaveLength(4)
 
       // The handover is over: the same retired callback hands the call to the
       // live generation, which judges no risk here and leaves the host's effect.
@@ -6688,10 +6885,10 @@ describe("repeated setup", () => {
       await plugin.setup(host.ctx)
       expect(host.permissionHistory.evaluate).toHaveLength(4)
       // Everything the first setup registered was disposed through its own
-      // `dispose`: the provider's three hooks, plus the Jev permission hook the
-      // generation token retires (the card route is off here). The provider's
-      // feed ended through its signal.
-      expect(host.disposed).toBe(4)
+      // `dispose`: the provider's three hooks, the Jev permission hook the
+      // generation token retires, and the chain's own inert wrapper (the card
+      // route is off here). The provider's feed ended through its signal.
+      expect(host.disposed).toBe(5)
       expect(host.aborted).toBe(1)
       // Still exactly one live surface, not one per setup.
       expect(await posture(host, "ses_setup_b")).toEqual(["session-ban"])
@@ -6845,18 +7042,174 @@ describe("watchdog page settings (ticket #18)", () => {
     expect(settledStatus.pending.durable).toBe(0)
   })
 
-  test("an unarmed deployment reports the chain off, and a persisted switch is still only page state", async () => {
+  test("watchdogStatus lists a live pending human review, and its card can be reopened without authorizing anything", async () => {
+    arm()
+    nodes("human")
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+    const wrapper = gate(host.hooks)
+    const first = settle(wrapper(call("ses_w90", "c90a", "ls a")))
+    await cardsOpen(1)
+
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.reviews).toHaveLength(1)
+    const row = status.pending.reviews[0]
+    expect(row.sessionID).toBe("ses_w90")
+    expect(row.tool).toBe("shell")
+    expect(row.action).toBe("shell")
+    expect(row.stage).toBe("human")
+    expect(row.interrupted).toBe(false)
+    expect(typeof row.ageMs).toBe("number")
+    // The row is display fields and an age: nothing of the call's arguments.
+    expect(JSON.stringify(row)).not.toContain("ls a")
+
+    const reopened = await handlers.reopenPendingReview({ itemID: row.id })
+    expect(reopened).toEqual({ ok: true, reopened: true })
+    // The same form id is posted again, so the one waiter still answers it.
+    expect(posted).toHaveLength(2)
+    expect(posted[1].card.id).toBe(posted[0].card.id)
+    // Nothing was authorized: the call is still held until the human answers.
+    expect(since().some((entry) => entry.event === "chain_decision" && entry.itemID === row.id)).toBe(false)
+
+    await host.push({ type: "form.replied", data: { id: posted[0].card.id, answer: { decision: "allow" } } })
+    expect(await first).toBe("allowed")
+    const after = await handlers.watchdogStatus({})
+    expect(after.pending.reviews).toEqual([])
+  })
+
+  test("a review a restart reported is listed as interrupted, and no card can be reopened for it", async () => {
+    // A human review the previous process was holding. This process inherits the
+    // slot, reports it interrupted, and never offers a card nothing would answer.
+    process.env.WATCHDOG_CHAIN = "1"
+    gateVerdict()
+    nodes("human")
+    const key = budgetKey("ses_prev_90")
+    const home = chainStateHome()
+    mkdirSync(home, { recursive: true })
+    writeFileSync(
+      join(home, CHAIN_BUDGET_FILE),
+      JSON.stringify({ sessions: { [key]: [{ id: "wd_prev.1", stage: "human", tool: "shell", action: "shell", at: Date.now() - 60000 }] } }),
+    )
+    const host = fakeHost({ effect: () => "deny" })
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+
+    // Another session's call bootstraps the reconciliation; it denies at the
+    // host check, so the test never parks a card of its own.
+    expect(await settle(gate(host.hooks)(call("ses_new_90", "c90b", "ls b")))).not.toBe("allowed")
+
+    const status = await handlers.watchdogStatus({})
+    const row = status.pending.reviews.find((entry: any) => entry.id === "wd_prev.1")
+    expect(row).toBeDefined()
+    expect(row.interrupted).toBe(true)
+    expect(row.sessionID).toBe(`${key.slice(0, 9)}…`)
+    // An age survives the restart because the ledger records the admission time.
+    expect(row.ageMs).toBeGreaterThanOrEqual(60000)
+
+    const refused = await handlers.reopenPendingReview({ itemID: "wd_prev.1" })
+    expect(refused.ok).toBe(false)
+    expect(refused.reopened).toBe(false)
+    expect(String(refused.reason)).toContain("interrupted")
+    // The command names the interruption instead of promising a card.
+    const line = await commands["permission-latest"].execute({ sessionID: "ses_prev_90", prompt: { text: "" } })
+    expect(String(line.content)).toContain("interrupted")
+    expect(posted).toHaveLength(0)
+  })
+
+  test("permission-latest reads the durable ledger too, so a restart's interruption is named before any admit", async () => {
+    // A review the previous process held, with no call admitted yet in this one:
+    // the runtime has reconciled nothing, so only the ledger knows about it. The
+    // page already lists it; the command must give the same answer, never the
+    // plain "nothing pending" line.
+    process.env.WATCHDOG_CHAIN = "1"
+    gateVerdict()
+    nodes("human")
+    const key = budgetKey("ses_prev_91")
+    const home = chainStateHome()
+    mkdirSync(home, { recursive: true })
+    writeFileSync(
+      join(home, CHAIN_BUDGET_FILE),
+      JSON.stringify({ sessions: { [key]: [{ id: "wd_prev.2", stage: "human", tool: "shell", action: "shell", at: Date.now() - 60000 }] } }),
+    )
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const handlers = host.calls.rpc[0].handlers
+
+    const status = await handlers.watchdogStatus({})
+    expect(status.pending.reviews.some((row: any) => row.id === "wd_prev.2" && row.interrupted)).toBe(true)
+
+    const line = await commands["permission-latest"].execute({ sessionID: "ses_prev_91", prompt: { text: "" } })
+    expect(String(line.content)).toContain("interrupted")
+    // Reading the ledger grants nothing: no card is posted for it.
+    expect(posted).toHaveLength(0)
+  })
+
+  test("permission-latest reopens the newest pending review for the session, and says so plainly when there is none", async () => {
+    arm()
+    nodes("human")
+    process.env.WATCHDOG_CHAIN_CAP = "3"
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const command = commands["permission-latest"]
+    expect(command).toBeDefined()
+    const wrapper = gate(host.hooks)
+
+    const first = settle(wrapper(call("ses_w95", "c95a", "ls a")))
+    const second = settle(wrapper(call("ses_w95", "c95b", "ls b")))
+    await cardsOpen(2)
+
+    const reopened = await command.execute({ sessionID: "ses_w95", prompt: { text: "" } })
+    expect(String(reopened.content)).toContain("Reopened the newest pending human review")
+    expect(posted).toHaveLength(3)
+    // The newest review, not the first one posted.
+    expect(posted[2].card.id).toBe(posted[1].card.id)
+    // A session that holds nothing is told so, plainly, and no card is posted
+    // for it: another session's review is not its own to reopen.
+    const other = await command.execute({ sessionID: "ses_w96", prompt: { text: "" } })
+    expect(other.content).toBe("No pending human review to reopen.")
+    expect(posted).toHaveLength(3)
+
+    for (const card of [posted[0], posted[1]]) {
+      await host.push({ type: "form.replied", data: { id: card.card.id, answer: { decision: "allow" } } })
+    }
+    expect(await Promise.all([first, second])).toEqual(["allowed", "allowed"])
+    const none = await command.execute({ sessionID: "ses_w95", prompt: { text: "" } })
+    expect(none.content).toBe("No pending human review to reopen.")
+  })
+
+  test("a refused wrapper registration is not reported as wired, even once the switch is on", async () => {
+    // An off chain whose host refused execute.before has no wrapper. Turning the
+    // switch on afterwards makes the chain read as enabled, and the status must
+    // still say that nothing is wired: the operator needs that difference.
+    delete process.env.WATCHDOG_CHAIN
+    gateVerdict()
+    const opts: any = {}
+    const host = fakeHost(opts)
+    opts.rejectHook = (name: string) => name === "execute.before"
+    await plugin.setup(host.ctx)
+    expect(host.hooks["execute.before"]).toBeUndefined()
+    process.env.WATCHDOG_CHAIN = "1"
+    const status = await host.calls.rpc[0].handlers.watchdogStatus({})
+    expect(status.chain).toEqual({ status: "passed", reason: "the capability gate passed", wired: false })
+  })
+
+  test("an unarmed deployment reports the chain off, and the page's own switches are not activation gates", async () => {
     const base = state.loadState()
     state.saveState({ ...base, watchdog: { ...base.watchdog, on: true } })
     const host = fakeHost()
     await plugin.setup(host.ctx)
     const status = await host.calls.rpc[0].handlers.watchdogStatus({})
     expect(status.on).toBe(true)
-    expect(status.chain).toEqual({ status: "off", reason: "the capability switch is off", wired: false })
-    // The page's switch is not a third activation gate: with no operator switch
-    // and no gate file, the chain registers no wrapper at all, exactly as
-    // before the page existed.
-    expect(host.hooks["execute.before"] ?? []).toHaveLength(0)
+    // The switch is off, but the wrapper exists: `wired` reports the
+    // registration, not the switch, so an operator who turns the chain on gets a
+    // surface that can actually judge. `status` still says off.
+    expect(status.chain).toEqual({ status: "off", reason: "the capability switch is off", wired: true })
+    // The page's pair of switches is not a third activation gate: with the chain
+    // switch off and no gate file, the wrapper #21 always registers is inert —
+    // one wrapper that passes every call through, checks nothing, and holds
+    // nothing, exactly as before the page existed.
+    expect(host.hooks["execute.before"] ?? []).toHaveLength(1)
     expect(host.calls.checks).toHaveLength(0)
   })
 
@@ -6872,6 +7225,131 @@ describe("watchdog page settings (ticket #18)", () => {
     expect(outcome).toBeUndefined()
     const decision = since().find((row) => row.event === "chain_decision")
     expect(decision?.verdict).toBe("allow")
+  })
+})
+
+describe("the /jev-log families (ticket #23)", () => {
+  // The log is append-only across this suite: each case writes more rows than the
+  // 20-row window it asserts on, so an earlier case cannot leak into it.
+  const tag = () => `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+
+  async function logCommand(): Promise<any> {
+    const host = fakeHost()
+    await plugin.setup(host.ctx)
+    const command = commands["jev-log"]
+    expect(command).toBeDefined()
+    return command
+  }
+
+  function writeJev(prefix: string, n: number): void {
+    for (let i = 0; i < n; i++) {
+      state.logCall({ hook: "hook_tool_risk", tool: "shell", decisions: [{ id: `${prefix}jev${i}`, value: "allow", confident: true }], inputTokens: 10 })
+    }
+  }
+
+  function writeChain(prefix: string, n: number): void {
+    for (let i = 0; i < n; i++) state.logCall({ hook: "hook_watchdog_chain", error: `${prefix}chain${i}` })
+  }
+
+  test("the default answer shows only Jev rows and is not under-filled by a chain-heavy tail", async () => {
+    const command = await logCommand()
+    const p = tag()
+    writeJev(p, 21)
+    // A chain-heavy tail: the last 21 lines of the file are all chain rows.
+    writeChain(p, 21)
+    const text = String((await command.execute({ sessionID: "ses_log_1", prompt: { text: "" } })).content)
+    const lines = text.split("\n")
+    expect(lines).toHaveLength(20)
+    expect(text).toContain(`${p}jev20`)
+    expect(text).toContain(`${p}jev19`)
+    expect(text).not.toContain(`${p}jev0`)
+    expect(text).not.toContain(`${p}chain`)
+    expect(text).not.toContain("hook_watchdog_chain")
+  })
+
+  test("/jev-log chain shows chain audit rows even when Jev rows are the recent tail", async () => {
+    const command = await logCommand()
+    const p = tag()
+    writeChain(p, 21)
+    writeJev(p, 21)
+    // A command failure logs under the command's own name, not the chain family.
+    state.logCall({ hook: "jev-model", error: `${p}command` })
+    const text = String((await command.execute({ sessionID: "ses_log_2", prompt: { text: "chain" } })).content)
+    expect(text.split("\n")).toHaveLength(20)
+    expect(text).toContain(`${p}chain20`)
+    expect(text).toContain("hook_watchdog_chain")
+    expect(text).not.toContain(`${p}jev20`)
+    expect(text).not.toContain(`${p}command`)
+  })
+
+  test("/jev-log all shows the unfiltered tail, command-name rows included", async () => {
+    const command = await logCommand()
+    const p = tag()
+    writeJev(p, 1)
+    writeChain(p, 1)
+    state.logCall({ hook: "jev-model", error: `${p}command` })
+    const text = String((await command.execute({ sessionID: "ses_log_3", prompt: { text: "all" } })).content)
+    expect(text).toContain(`${p}jev0`)
+    expect(text).toContain(`${p}chain0`)
+    expect(text).toContain(`${p}command`)
+  })
+
+  test("an unknown argument answers with the accepted values instead of rows", async () => {
+    const command = await logCommand()
+    const p = tag()
+    writeJev(p, 1)
+    const text = String((await command.execute({ sessionID: "ses_log_4", prompt: { text: "bogus" } })).content)
+    expect(text).toContain("/jev-log chain")
+    expect(text).toContain("/jev-log all")
+    expect(text).not.toContain(`${p}jev0`)
+  })
+
+  test("/jev-log jev names the default explicitly, and an uppercase argument folds to it", async () => {
+    const command = await logCommand()
+    const p = tag()
+    writeJev(p, 21)
+    writeChain(p, 21)
+    for (const argument of ["jev", "JEV"]) {
+      const text = String((await command.execute({ sessionID: "ses_log_6", prompt: { text: argument } })).content)
+      expect(text.split("\n")).toHaveLength(20)
+      expect(text).toContain(`${p}jev20`)
+      expect(text).not.toContain(`${p}chain20`)
+    }
+  })
+
+  test("/jev-log chain renders a real audit row's fields and no fabricated cost", async () => {
+    // The chain logs stage and verdict rows, not model rows: no decisions, no
+    // token count. The line must carry the row's fields and no cost at all.
+    const command = await logCommand()
+    const p = tag()
+    state.logCall({
+      hook: "hook_watchdog_chain",
+      itemID: `${p}item`,
+      event: "chain_decision",
+      stage: "final",
+      verdict: "allow",
+      reason: `${p}reason`,
+    })
+    const text = String((await command.execute({ sessionID: "ses_log_5", prompt: { text: "chain" } })).content)
+    const line = text.split("\n")[0]
+    expect(line).toContain("hook_watchdog_chain")
+    expect(line).toContain("chain_decision")
+    expect(line).toContain("final")
+    expect(line).toContain("allow")
+    expect(line).toContain(`${p}reason`)
+    expect(line).not.toContain("undefined")
+    expect(line).not.toContain("NaN")
+    expect(line).not.toContain("tok")
+  })
+
+  test("a row without decisions is an audit row even when it carries a token count", async () => {
+    const command = await logCommand()
+    const p = tag()
+    state.logCall({ hook: "hook_skill_pick", event: `${p}event`, inputTokens: 7 })
+    const text = String((await command.execute({ sessionID: "ses_log_7", prompt: { text: "" } })).content)
+    const line = text.split("\n")[0]
+    expect(line).toContain(`${p}event`)
+    expect(line).not.toContain("tok")
   })
 })
 

@@ -240,6 +240,10 @@ export interface WatchdogSettings {
   /** Supervisor review batch: most items, and the collection window in ms. */
   supervisorBatchMax: number
   supervisorBatchMs: number
+  /** The review chain's activation switch. The gate file stays the second condition. */
+  chain: boolean
+  /** Ask routing: judged runs the stages before the human card, immediate skips to it. */
+  askMode: "judged" | "immediate"
 }
 
 /**
@@ -276,6 +280,8 @@ export const DEFAULTS: JevState = {
     jevBatchMs: 0,
     supervisorBatchMax: 1,
     supervisorBatchMs: 0,
+    chain: false,
+    askMode: "judged",
   },
   logMax: 500,
 }
@@ -326,6 +332,8 @@ export function watchdogMap(raw: unknown): WatchdogSettings {
     jevBatchMs: count(stored.jevBatchMs, DEFAULTS.watchdog.jevBatchMs, 0),
     supervisorBatchMax: count(stored.supervisorBatchMax, DEFAULTS.watchdog.supervisorBatchMax, 1),
     supervisorBatchMs: count(stored.supervisorBatchMs, DEFAULTS.watchdog.supervisorBatchMs, 0),
+    chain: stored.chain === true,
+    askMode: stored.askMode === "immediate" ? "immediate" : "judged",
   }
 }
 

@@ -3,13 +3,15 @@
  *
  * Constraints not visible in the code below:
  *
- * - Activation needs two independent conditions. `WATCHDOG_CHAIN=1` is the
- *   operator's own switch, and `chain-gate.json` in the Jev state directory must
- *   carry `{"gate":"passed"}`. Nothing in this repository writes that file, so a
- *   host that never hand-creates it stays inert; hand-creating it is explicit
- *   operator action outside Watchdog's threat model. The ticket #10 capability
- *   report is BLOCKED, so the ticket #19 verification routine owns the real
- *   writer and the Watchdog page (#18) owns the real control.
+ * - Activation needs two independent conditions: the Watchdog page's persisted
+ *   `watchdog.chain` switch, and `chain-gate.json` in the Jev state directory
+ *   carrying `{"gate":"passed"}`. `WATCHDOG_CHAIN` overrides the switch when it
+ *   is defined (`1` on, any other value off); both are read per call, so a page
+ *   toggle takes effect on the next call. Nothing in this repository writes the
+ *   gate file, so a host that never hand-creates it stays inert; hand-creating
+ *   it is explicit operator action outside Watchdog's threat model. The ticket
+ *   #10 capability report is BLOCKED, so the ticket #19 verification routine
+ *   owns the real writer.
  * - A subagent's LLM stage is its host-recorded direct Parent, generated on the
  *   Parent session so it inherits that session's projected context. A root
  *   session's LLM stage is Supervisor with the filtered user-only history. They
@@ -193,8 +195,26 @@ export interface LedgerEntry {
   stage: ChainStage | "admitted"
   tool: string
   action: string
+  /** Admission time, so a restored row can still show an age. Never an identifier. */
+  at?: number
   /** True once a restart reported this entry as interrupted. */
   reported?: boolean
+}
+
+/**
+ * One review waiting for its human, as the Watchdog page lists it. `sessionID`
+ * is the audit form for a live row and the ledger key, shortened, for a row a
+ * restart reported: the ledger stores hashes and nothing better exists there.
+ */
+export interface PendingReview {
+  key: string
+  id: string
+  sessionID: string
+  tool: string
+  action: string
+  stage: ChainStage
+  at: number | null
+  reported: boolean
 }
 
 /**
@@ -238,6 +258,12 @@ export interface ChainDeps {
   human: (item: ReviewItem, brief: string) => Promise<"allow" | "deny" | "abort" | "unavailable">
   /** Host rules, host asks and effective bans again, at the release boundary. */
   recheck: (item: ReviewItem) => Promise<HostCheck>
+  /**
+   * Ask routing (#21): judged runs the automated stages before the human card
+   * for a host ask, immediate skips the stages and goes straight to the card.
+   * Absent means judged, the documented default.
+   */
+  askMode?: () => "judged" | "immediate"
   /**
    * An abort operation has selected this session in this process, whether or not
    * this runtime was wired when it started. The abort-level mark outlives a
@@ -295,6 +321,11 @@ export interface ChainHandle {
    * and calls parked waiting for a producing session's slot.
    */
   stats(): { pending: number; waiting: number }
+  /**
+   * The reviews waiting for their human right now, live and restart-reported.
+   * Display fields only: no argument, prompt or model text is reachable here.
+   */
+  reviews(): PendingReview[]
   /**
    * Settle the outstanding reviews of one abort scope. `settled` counts queued
    * entries resolved unresolved; `started` counts generations already running,
@@ -374,6 +405,16 @@ export function auditSession(value: unknown): string {
  */
 export function budgetKey(sessionID: string): string {
   return `sess_${createHash("sha256").update(sessionID, "utf8").digest("hex").slice(0, 24)}`
+}
+
+/** The most a restored row can honestly show of its session: its hashed key. */
+export function shortKey(key: string): string {
+  return `${key.slice(0, 9)}…`
+}
+
+/** One ledger field as a row may show it: redacted, bounded, never empty. */
+export function reviewText(value: unknown): string {
+  return cleanIdent(value) || "unrecorded"
 }
 
 /** True when a name survives redaction, the charset and the bound unchanged. */
@@ -664,6 +705,9 @@ export function attachChain(deps: ChainDeps): ChainHandle {
   const capacityWaiters = new Map<string, Array<() => void>>()
   // Per-session admission counter: two identical calls are two distinct items.
   const callSeq = new Map<string, number>()
+  // The audit form of each admitted call's session, for the page's rows. Memory
+  // only: the ledger carries hashes, and this never reaches it.
+  const displays = new Map<string, string>()
   // Sessions an abort operation selected during this runtime's life. A review
   // already inside the chain must stop rather than advance to a stage that could
   // allow it; the durable ban is what refuses calls after the runtime is gone.
@@ -705,6 +749,7 @@ export function attachChain(deps: ChainDeps): ChainHandle {
   const exhausted = (key: string): boolean => held(key) >= limits().sessionCap && waiting(key) > 0
 
   const release = (key: string, id: string): void => {
+    displays.delete(id)
     const entries = owned.get(key)
     if (!entries) return
     const at = entries.findIndex((entry) => entry.id === id)
@@ -755,8 +800,9 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       const count = held(key)
       if (count < cap) {
         const entries = owned.get(key) ?? []
-        entries.push({ id: item.id, stage: "admitted", tool: item.display.tool, action: item.display.action })
+        entries.push({ id: item.id, stage: "admitted", tool: item.display.tool, action: item.display.action, at: Date.now() })
         owned.set(key, entries)
+        displays.set(item.id, item.display.sessionID)
         persist()
         return true
       }
@@ -811,6 +857,7 @@ export function attachChain(deps: ChainDeps): ChainHandle {
           stage: raw?.stage === "jev" || raw?.stage === "parent" || raw?.stage === "supervisor" || raw?.stage === "human" ? raw.stage : "admitted",
           tool: String(raw?.tool ?? "unrecorded"),
           action: String(raw?.action ?? "unrecorded"),
+          ...(typeof raw?.at === "number" && Number.isFinite(raw.at) ? { at: raw.at } : {}),
           reported: true,
         }
         list.push(entry)
@@ -1063,6 +1110,32 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       for (const list of capacityWaiters.values()) waiting += list.length
       return { pending, waiting }
     },
+    /**
+     * The reviews waiting for their human right now. A live row knows the audit
+     * form of its session; a row a restart reported has only the ledger's key,
+     * shortened, because the ledger deliberately carries no session.
+     */
+    reviews(): PendingReview[] {
+      const rows: PendingReview[] = []
+      for (const [key, entries] of owned) {
+        for (const entry of entries) {
+          if (entry.stage !== "human") continue
+          rows.push({
+            key,
+            id: entry.id,
+            sessionID: displays.get(entry.id) ?? shortKey(key),
+            // A restored entry's fields come from the ledger file, so the row
+            // sanitizes them here: the projection's own pass is belt and braces.
+            tool: reviewText(entry.tool),
+            action: reviewText(entry.action),
+            stage: "human",
+            at: typeof entry.at === "number" && Number.isFinite(entry.at) ? entry.at : null,
+            reported: entry.reported === true,
+          })
+        }
+      }
+      return rows
+    },
     markAborted(sessionIDs: string[]): void {
       for (const sessionID of sessionIDs) cancelled.add(budgetKey(sessionID))
     },
@@ -1230,6 +1303,14 @@ export function attachChain(deps: ChainDeps): ChainHandle {
 
       const nodes = deps.nodes()
       const humanOnly = pre.humanOnly === true || nodes.humanOnly.some((action) => normalizeAction(action) === item.action)
+      const judged = (deps.askMode?.() ?? "judged") !== "immediate"
+      /**
+       * A stage allow on a host ask in judged mode is not a decision: it is the
+       * instruction to carry the item to the human card. Returning it skips
+       * `finish`, so the slot stays held; if it ever escaped `review`, it reads
+       * as an unresolved refusal, the safe direction.
+       */
+      const toHuman: ChainDecision = { allow: false, verdict: "unresolved", itemID: item.id, message: messageFor(item, "unresolved") }
 
       // The human brief needs the same user-only task history the automated
       // stages need, so it is read once for every path.
@@ -1282,7 +1363,13 @@ export function attachChain(deps: ChainDeps): ChainHandle {
         if (!alive()) return finish("unresolved", "the review runtime was replaced")
         if (cancelledAtSource()) return finish("unresolved", "the session was aborted during review")
         if (!again.ok) return finish("deny", again.reason ?? "the call is no longer permitted")
-        if (again.humanOnly && by !== "human") return finish("deny", "the host requires human approval for this action")
+        if ((humanOnly || again.humanOnly) && by !== "human") {
+          // Immediate keeps the deny backstop: the stages may have run for an
+          // item whose ask appeared only at release, and no automated stage may
+          // authorize it. Judged advances to the human card instead.
+          if (!judged) return finish("deny", "the host requires human approval for this action")
+          return toHuman
+        }
         if (reviewItem(event, seq)?.id !== item.id) return finish("deny", "the call changed while it was held")
         if (!alive()) return finish("unresolved", "the review runtime was replaced")
         return finish("allow", `the ${by} stage allowed it`)
@@ -1301,9 +1388,14 @@ export function attachChain(deps: ChainDeps): ChainHandle {
       const review = async (): Promise<ChainDecision> => {
         const before = stopped()
         if (before) return before
-        if (humanOnly) {
-          notes.push("human-only action")
-        } else {
+        if (humanOnly) notes.push("human-only action")
+        // Immediate keeps today's skip for a host ask; judged runs the stages
+        // exactly like any other item, with only the human able to authorize.
+        // A withheld stage allow sets `withheld`: the remaining automated
+        // stages never run after one has allowed, because only the human may
+        // follow an allow.
+        let withheld = false
+        if (!humanOnly || judged) {
           if (!nodes.jev) notes.push("jev disabled")
           else if (unreviewable) notes.push(unreviewable)
           else {
@@ -1314,63 +1406,78 @@ export function attachChain(deps: ChainDeps): ChainHandle {
             if (verdict === "deny" || verdict === "abort") return decide(verdict, "jev")
             const after = stopped()
             if (after) return after
-            if (verdict === "allow") return decide("allow", "jev")
-            notes.push(`jev ${verdict}`)
+            if (verdict === "allow") {
+              const settled = await decide("allow", "jev")
+              if (settled !== toHuman) return settled
+              notes.push("the jev stage allowed it, but the host requires human approval for this action")
+              withheld = true
+            } else notes.push(`jev ${verdict}`)
           }
 
           // The LLM stage is the direct Parent for a subagent and Supervisor for
           // a root session. They are alternatives: a linkage that cannot be read
           // is an unavailable Parent and advances to the human, never to
-          // Supervisor, and an ancestor is never substituted.
-          let parentID: string | null = null
-          let linked = true
-          try {
-            parentID = (await deps.linkage(item.sessionID)).parentID
-          } catch {
-            linked = false
-          }
-          if (!linked) {
-            // The lineage read failed at routing, so the parent stage never
-            // started: the row records why, without entering the stage.
-            deps.audit({
-              event: "chain_stage",
-              itemID: item.id,
-              sessionID: item.display.sessionID,
-              tool: item.display.tool,
-              action: item.display.action,
-              stage: "parent",
-              verdict: "unavailable",
-              reason: "the host lineage could not be read",
-            })
-            notes.push("parent unavailable: the host linkage could not be read")
-          } else if (parentID) {
-            if (!nodes.parent) notes.push("parent disabled")
-            else if (unreviewable) notes.push(unreviewable)
-            else {
-              const verdict = await parentBatcher.join(item, history)
-              stage("parent", verdict)
+          // Supervisor, and an ancestor is never substituted. A withheld jev
+          // allow means no automated stage may follow: the card is next.
+          if (!withheld) {
+            let parentID: string | null = null
+            let linked = true
+            try {
+              parentID = (await deps.linkage(item.sessionID)).parentID
+            } catch {
+              linked = false
+            }
+            if (!linked) {
+              // The lineage read failed at routing, so the parent stage never
+              // started: the row records why, without entering the stage.
+              deps.audit({
+                event: "chain_stage",
+                itemID: item.id,
+                sessionID: item.display.sessionID,
+                tool: item.display.tool,
+                action: item.display.action,
+                stage: "parent",
+                verdict: "unavailable",
+                reason: "the host lineage could not be read",
+              })
+              notes.push("parent unavailable: the host linkage could not be read")
+            } else if (parentID) {
+              if (!nodes.parent) notes.push("parent disabled")
+              else if (unreviewable) notes.push(unreviewable)
+              else {
+                const verdict = await parentBatcher.join(item, history)
+                stage("parent", verdict)
+                // A refusal decides on its own. An allow waits: an abort that landed while
+                // this stage ran outranks it.
+                if (verdict === "deny" || verdict === "abort") return decide(verdict, "parent")
+                const after = stopped()
+                if (after) return after
+                if (verdict === "allow") {
+                  const settled = await decide("allow", "parent")
+                  if (settled !== toHuman) return settled
+                  notes.push("the parent stage allowed it, but the host requires human approval for this action")
+                  withheld = true
+                } else notes.push(`parent ${verdict}`)
+              }
+            } else if (!nodes.supervisor) {
+              notes.push("supervisor disabled")
+            } else if (unreviewable) {
+              notes.push(unreviewable)
+            } else {
+              const verdict = await supervisorBatcher.join(item, history)
+              stage("supervisor", verdict)
               // A refusal decides on its own. An allow waits: an abort that landed while
               // this stage ran outranks it.
-              if (verdict === "deny" || verdict === "abort") return decide(verdict, "parent")
+              if (verdict === "deny" || verdict === "abort") return decide(verdict, "supervisor")
               const after = stopped()
               if (after) return after
-              if (verdict === "allow") return decide("allow", "parent")
-              notes.push(`parent ${verdict}`)
+              if (verdict === "allow") {
+                const settled = await decide("allow", "supervisor")
+                if (settled !== toHuman) return settled
+                notes.push("the supervisor stage allowed it, but the host requires human approval for this action")
+                withheld = true
+              } else notes.push(`supervisor ${verdict}`)
             }
-          } else if (!nodes.supervisor) {
-            notes.push("supervisor disabled")
-          } else if (unreviewable) {
-            notes.push(unreviewable)
-          } else {
-            const verdict = await supervisorBatcher.join(item, history)
-            stage("supervisor", verdict)
-            // A refusal decides on its own. An allow waits: an abort that landed while
-            // this stage ran outranks it.
-            if (verdict === "deny" || verdict === "abort") return decide(verdict, "supervisor")
-            const after = stopped()
-            if (after) return after
-            if (verdict === "allow") return decide("allow", "supervisor")
-            notes.push(`supervisor ${verdict}`)
           }
         }
 

@@ -10,11 +10,24 @@
  * cannot disagree about what a release did.
  */
 
+/** One pending human review: display fields and an age, never the call's input. */
+export interface WatchdogPendingReview {
+  sessionID: string
+  id: string
+  tool: string
+  action: string
+  stage: string
+  ageMs: number | null
+  /** True when a restart reported it: its call did not survive, so no card can answer it. */
+  interrupted: boolean
+}
+
 export interface WatchdogPending {
   inFlight: number
   waiting: number
   durable: number
   durableUnreadable: boolean
+  reviews: WatchdogPendingReview[]
 }
 
 export interface WatchdogStatusInfo {
@@ -42,6 +55,8 @@ export interface WatchdogSettingsInfo {
     jevBatchMs: number
     supervisorBatchMax: number
     supervisorBatchMs: number
+    chain: boolean
+    askMode: "judged" | "immediate"
   }
   effective: {
     timing: "blocking" | "nonblocking"
@@ -51,6 +66,8 @@ export interface WatchdogSettingsInfo {
     supervisorBatchMax: number
     supervisorBatchMs: number
     nodes: { jev: boolean; parent: boolean; supervisor: boolean; human: boolean }
+    chain: boolean
+    askMode: "judged" | "immediate"
   }
   envOverrides: string[]
   receiptsWebhookPresent: boolean
@@ -91,6 +108,7 @@ export interface WatchdogRPC {
   setWatchdogSecret(input: { key: "receiptsWebhook" | "supervisorEndpoint"; value: string }): Promise<{ ok: boolean; error?: string }>
   abortOperations(input: Record<string, never>): Promise<{ ok: boolean; reason?: string; operations: WatchdogOperationInfo[]; deliveryReadable: boolean }>
   releaseOperation(input: { operationID: string; continue?: boolean }): Promise<ReleaseResult>
+  reopenPendingReview(input: { itemID: string }): Promise<{ ok: boolean; reopened: boolean; reason?: string }>
   subscribe(listener: (event: { reason: string }) => void): () => void
 }
 
@@ -209,6 +227,25 @@ export function createWatchdogView(rpc: WatchdogRPC, dialogs: WatchdogDialogs) {
         await load()
       } catch (error) {
         dialogs.error(`The release could not be confirmed: ${errorText(error)} Check the abort records before retrying.`)
+        await load()
+      } finally {
+        if (!disposed) update({ ...state, busy: undefined })
+      }
+    },
+    /**
+     * Re-open one pending review's card. It authorizes nothing: the item still
+     * resolves through the human answer alone, and a refused reopen says why.
+     */
+    reopen: async (itemID: string) => {
+      if (disposed) return
+      const key = `reopen:${itemID}`
+      update({ ...state, busy: key })
+      try {
+        const result = await rpc.reopenPendingReview({ itemID })
+        if (!result.ok) dialogs.error(result.reason ?? "That review could not be reopened.")
+        await load()
+      } catch (error) {
+        dialogs.error(errorText(error))
         await load()
       } finally {
         if (!disposed) update({ ...state, busy: undefined })
